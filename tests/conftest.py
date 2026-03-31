@@ -4,9 +4,12 @@ import subprocess
 
 import pytest
 import openpyxl
+from pathlib import Path
 
 from budget_planner.workbook import generate_workbook
 from budget_planner.reader import discover_layout
+
+SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 
 
 @pytest.fixture(scope="session")
@@ -21,24 +24,12 @@ def fresh_wb_path(tmp_path_factory):
 def recalc_result(fresh_wb_path):
     """Recalculate formulas via LibreOffice. Skips if unavailable."""
     result = subprocess.run(
-        ["python3", "scripts/recalc.py", fresh_wb_path],
+        ["python3", str(SCRIPTS_DIR / "recalc.py"), fresh_wb_path],
         capture_output=True, text=True
     )
     if result.returncode != 0:
         pytest.skip("LibreOffice not available")
     return json.loads(result.stdout)
-
-
-@pytest.fixture(scope="session")
-def wb(fresh_wb_path, recalc_result):
-    """Workbook loaded with calculated values (requires LibreOffice)."""
-    return openpyxl.load_workbook(fresh_wb_path, data_only=True)
-
-
-@pytest.fixture(scope="session")
-def wb_formulas(fresh_wb_path):
-    """Workbook loaded with formulas (no recalc needed)."""
-    return openpyxl.load_workbook(fresh_wb_path, data_only=False)
 
 
 @pytest.fixture

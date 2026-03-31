@@ -111,7 +111,7 @@ def read_workbook(filepath: str) -> dict:
                 # Skip formula cells and empty/greyed cells
                 if val is not None and isinstance(val, str) and val.startswith("="):
                     values.append(None)
-                elif val is None or val == "" or val == "":
+                elif val is None or val == "":
                     values.append(None)
                 else:
                     values.append(val)

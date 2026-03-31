@@ -263,18 +263,11 @@ def _build_month_block(ws, start_row, block_title, config_first_wp_row,
                    fmt="0.00").value = f"=SUM({sum_range})"
         style_cell(ws, row, VAL_COL_BUDGET, font=GREEN_XREF,
                    fmt="0.00").value = f"=C{config_row}"
-        if is_actuals:
-            style_cell(ws, row, VAL_COL_DIFF, font=BLACK_FORMULA,
-                       fmt="0.00").value = (
-                f"={col_letter(VAL_COL_BUDGET)}{row}"
-                f"-{col_letter(VAL_COL_SUM)}{row}"
-            )
-        else:
-            style_cell(ws, row, VAL_COL_DIFF, font=BLACK_FORMULA,
-                       fmt="0.00").value = (
-                f"={col_letter(VAL_COL_BUDGET)}{row}"
-                f"-{col_letter(VAL_COL_SUM)}{row}"
-            )
+        style_cell(ws, row, VAL_COL_DIFF, font=BLACK_FORMULA,
+                   fmt="0.00").value = (
+            f"={col_letter(VAL_COL_BUDGET)}{row}"
+            f"-{col_letter(VAL_COL_SUM)}{row}"
+        )
 
     last_wp_row = first_wp_row + NUM_WPS - 1
     r = last_wp_row + 1

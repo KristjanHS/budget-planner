@@ -2,9 +2,9 @@
 Budget Planner — Project Configuration
 
 Edit this file to change project-specific data.
-The build script (build_budget.py) imports from here.
+All builder modules import from here.
 
-After editing, re-run: python build_budget.py && python scripts/recalc.py output/budget_plan.xlsx
+After editing, re-run: python -m budget_planner && pytest tests/ -v
 """
 
 from datetime import datetime

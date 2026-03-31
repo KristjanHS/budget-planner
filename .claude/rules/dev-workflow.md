@@ -5,8 +5,10 @@ paths: "**/*.py"
 
 ## Build + Test
 After code changes: `pytest tests/ -v`
-Recalc tests need LibreOffice — auto-skip if unavailable.
+LibreOffice is a required dependency — install it, don't skip recalc tests.
+Use uv for venv and dependency management.
 Run pytest once per step. Never re-run to "confirm".
+Always verify via pytest, not ad-hoc `python3 -c` scripts.
 
 ## Update mode
 When testing workbook updates, always inject realistic actuals

@@ -7,6 +7,9 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 ## Key Commands
 
 ```bash
+# Set up dev environment
+uv venv && uv pip install -e ".[dev]"
+
 # Generate the workbook
 python -m budget_planner
 
@@ -16,7 +19,7 @@ python -m budget_planner --update output/budget_plan.xlsx
 # Recalculate formulas (MANDATORY after any generation)
 python scripts/recalc.py output/budget_plan.xlsx
 
-# Run full test suite (50 tests including recalc + structural checks)
+# Run full test suite (58 tests including recalc + structural checks)
 pytest tests/ -v
 ```
 
@@ -71,7 +74,7 @@ scripts/
 
 ## Testing Approach
 
-Run `pytest tests/ -v` after every change. The 50 tests cover:
+Run `pytest tests/ -v` after every change. The 58 tests cover:
 
 1. Formula recalculation (0 errors via LibreOffice)
 2. Sheet existence (_META, Plan, Summary)

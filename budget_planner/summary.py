@@ -35,6 +35,7 @@ def build_summary_sheet(wb, layout):
     summary.sheet_properties.tabColor = "008000"
 
     r = 1
+    summary.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
     style_cell(summary, r, 1, "ANNUAL BUDGET SUMMARY", font=TITLE_FONT, border=False)
     r += 2
 
@@ -165,9 +166,4 @@ def build_summary_sheet(wb, layout):
     ))
 
     # Column widths
-    summary.column_dimensions["A"].width = 10
-    summary.column_dimensions["B"].width = 28
-    for c in range(YEAR_GROUP_START, TOTAL_GROUP_START + TOTAL_COLS + 1):
-        summary.column_dimensions[col_letter(c)].width = 12
-
     summary.freeze_panes = f"C{SUMMARY_FIRST_WP_ROW}"

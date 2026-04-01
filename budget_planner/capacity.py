@@ -364,15 +364,6 @@ def build_capacity_sheet(ws, wb, team_layout, preserved_data=None, mode="demo"):
             "remaining_row": remaining_row,
         }
 
-    # ── COLUMN WIDTHS ──
-    ws.column_dimensions["A"].width = 10
-    ws.column_dimensions["B"].width = 28
-    for mi in range(PROJECT_MONTHS):
-        ws.column_dimensions[col_letter(MONTH_COL_START + mi)].width = 8
-    ws.column_dimensions[col_letter(VAL_COL_SUM)].width = 12
-    ws.column_dimensions[col_letter(VAL_COL_BUDGET)].width = 12
-    ws.column_dimensions[col_letter(VAL_COL_DIFF)].width = 12
-
     # Freeze panes
     ws.freeze_panes = f"C{first_person_header_row + 1}"
 

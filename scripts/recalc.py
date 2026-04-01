@@ -23,6 +23,28 @@ RECALCULATE_MACRO = """<?xml version="1.0" encoding="UTF-8"?>
 <script:module xmlns:script="http://openoffice.org/2000/script" script:name="Module1" script:language="StarBasic">
     Sub RecalculateAndSave()
       ThisComponent.calculateAll()
+
+      ' Auto-fit column widths on all sheets except _META
+      Dim oSheets As Object
+      oSheets = ThisComponent.getSheets()
+      Dim i As Long
+      For i = 0 To oSheets.getCount() - 1
+        Dim oSheet As Object
+        oSheet = oSheets.getByIndex(i)
+        If oSheet.getName() &lt;&gt; "_META" Then
+          Dim oCols As Object
+          oCols = oSheet.getColumns()
+          Dim j As Long
+          For j = 0 To oCols.getCount() - 1
+            Dim oCol As Object
+            oCol = oCols.getByIndex(j)
+            oCol.OptimalWidth = True
+            ' Add padding (150 = 1.5mm in 1/100mm units)
+            oCol.Width = oCol.Width + 150
+          Next j
+        End If
+      Next i
+
       ThisComponent.store()
       ThisComponent.close(True)
     End Sub

@@ -25,7 +25,10 @@ def main():
         return
 
     mode = "skeleton" if args.skeleton else "demo"
-    generate_workbook(output_path=args.output, existing_path=args.update, mode=mode)
+    output_path = args.output
+    if args.skeleton and output_path == "output/budget_plan.xlsx":
+        output_path = "output/budget_plan_skeleton.xlsx"
+    generate_workbook(output_path=output_path, existing_path=args.update, mode=mode)
 
 
 if __name__ == "__main__":

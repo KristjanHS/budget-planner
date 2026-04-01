@@ -104,13 +104,6 @@ def build_team_sheet(ws, wb, team_data=None):
             formula=[f"ABS({cell_ref}-1)>0.001"], fill=YELLOW_FILL,
         ))
 
-    # ── COLUMN WIDTHS ──
-    ws.column_dimensions["A"].width = 20
-    ws.column_dimensions["B"].width = 10
-    for wp in WORK_PACKAGES:
-        col = share_wp_columns[wp["id"]]
-        ws.column_dimensions[col_letter(col)].width = 10
-
     # Freeze panes: freeze header rows
     ws.freeze_panes = "A3"
 

@@ -70,6 +70,7 @@ def build_plan_sheet(ws, wb, preserved_data=None):
 
     # ── GLOBAL PARAMETERS (rows 1-2) ──
     style_cell(ws, r, 1, "Project Title:", font=HEADER_FONT, border=False)
+    ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=7)
     style_cell(ws, r, 2, PROJECT_TITLE,
                font=Font(name="Arial", bold=True, size=14, color="0000FF"),
                border=False)
@@ -155,15 +156,6 @@ def build_plan_sheet(ws, wb, preserved_data=None):
         is_actuals=True,
         preserved_data=preserved_data,
     )
-
-    # ── COLUMN WIDTHS ──
-    ws.column_dimensions["A"].width = 10
-    ws.column_dimensions["B"].width = 28
-    for m in range(PROJECT_MONTHS):
-        ws.column_dimensions[col_letter(MONTH_COL_START + m)].width = 8
-    ws.column_dimensions[col_letter(VAL_COL_SUM)].width = 12
-    ws.column_dimensions[col_letter(VAL_COL_BUDGET)].width = 12
-    ws.column_dimensions[col_letter(VAL_COL_DIFF)].width = 12
 
     # Freeze panes: freeze WP ID/Name columns and header rows for planned block
     ws.freeze_panes = f"C{planned['first_wp_row']}"

@@ -85,7 +85,7 @@ def test_actual_fte_zeros(workbook, layout, wp_idx):
 
 # ── Check 11: Inactive months empty ──
 
-@pytest.mark.parametrize("wp_idx", [0, 2])
+@pytest.mark.parametrize("wp_idx", [1, 2])
 def test_inactive_months_empty(workbook, layout, wp_idx):
     plan = workbook["Plan"]
     wp = WORK_PACKAGES[wp_idx]

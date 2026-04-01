@@ -19,6 +19,8 @@ Excel workbook for tracking planned and actual FTE allocation per work package (
 |-------|---------|-----------|
 | `_META` | AI-agent-readable documentation of workbook structure, conventions, modification instructions | Red |
 | `Plan` | Operational sheet: config + planned FTE + actual FTE | Blue |
+| `Team` | Team roster (name, max FTE) + WP share seed matrix | Orange |
+| `Capacity` | Per-person monthly FTE allocation grid with overcommitment detection | Purple |
 | `Summary` | Annual aggregation with budget health indicators | Green |
 
 ### Plan Sheet — Block Layout
@@ -59,6 +61,29 @@ Row M+2:   ACTUAL FTE block (monthly grid, remaining budget validation)
 | Budget FTE | Cross-ref to config Total FTE | Cross-ref to config Total FTE |
 | Variance/Remaining | Budget - Sum (yellow if ≠ 0) | Budget - Sum (red if < 0) |
 
+### Team Sheet
+
+- **Block 1: Team Roster** — Person name (blue input), Max FTE (blue input)
+- **Block 2: WP Share Seeds** — Matrix of person × WP with fractional shares (e.g. 0.25)
+  - Person names reference roster via formula
+  - Validation row: SUM per WP column, yellow if ≠ 1.0
+  - Shares define what fraction of each WP's total FTE a person is responsible for
+
+### Capacity Sheet
+
+- **Config Block: External Commitments** — Person, Project, Total FTE, Start/End month (all blue inputs)
+- **Per-Person Groups** (one group per team member):
+  - Header row: person name (cross-ref to Team roster)
+  - WP rows: monthly FTE allocation cells (blue input), inactive months greyed out
+    - WP ID/Name reference Plan config via green cross-sheet formula
+    - Validation: Sum, Budget (share × WP total FTE via cross-sheet formula), Variance
+  - External project rows: same structure for non-programme commitments
+  - TOTAL row: SUM of all rows per month (formula)
+  - REMAINING row: Max FTE (from Team) minus TOTAL per month (formula)
+  - Conditional formatting: amber when TOTAL > 80% of Max FTE, red when > 100%
+- **Demo vs Skeleton mode**: Demo pre-fills monthly cells with `share × WP FTE ÷ active months`; skeleton leaves them empty for manual entry
+- Plan Planned FTE block derives its values from Capacity via cross-sheet SUM formulas (aggregating all persons' allocations per WP per month)
+
 ### Summary Sheet
 
 - Rows = WPs
@@ -95,10 +120,20 @@ Row M+2:   ACTUAL FTE block (monthly grid, remaining budget validation)
 - `project_start` → `Plan!$B$2`
 - `fte_rate` → `Plan!$E$2`
 
+### CLI Modes
+
+| Flag | Description |
+|------|-------------|
+| *(default)* | Demo mode: generates with seed allocations in Capacity |
+| `--skeleton` | Production skeleton: empty Capacity cells for manual entry |
+| `--update PATH` | Round-trip: preserves user data from existing workbook across all sheets |
+| `--snapshot PATH` | Save a copy as `<stem>.snapshot.xlsx` for scenario comparison |
+| `--restore PATH` | Restore from snapshot (backs up current file first) |
+| `-o PATH` | Custom output path (default: `output/budget_plan.xlsx`) |
+
 ## Known Limitations / Future Work
 
 - **Rounding**: Even distribution produces tiny variance (~0.001 FTE) when Total FTE doesn't divide evenly by Active Months. User can manually adjust one cell to zero it out. A future version could auto-correct the last month.
-- **No per-person breakdown**: Currently tracks WP-level FTE only. Could add a per-team-member layer.
 - **No cost categories**: Only personnel costs (FTE-based). Travel, equipment, subcontracting are not modeled.
 - **No reporting period alignment**: Months are calendar months from project start. If reporting periods don't align with calendar years, Summary grouping would need adjustment.
 - **No data validation dropdowns**: WP start/end months are free-entry. Could add data validation to constrain range.

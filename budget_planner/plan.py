@@ -17,7 +17,44 @@ from budget_planner.config import (
 )
 
 
-def build_plan_sheet(ws, wb, preserved_data={}):
+def _apply_planned_formulas(ws, layout, capacity_layout):
+    """Overwrite planned FTE cells with cross-sheet SUM formulas from Capacity.
+
+    Called after build_capacity_sheet() so that capacity row positions are known.
+    Replaces seed values in the planned block with formulas referencing Capacity.
+
+    Args:
+        ws: The Plan worksheet.
+        layout: Layout dict returned by build_plan_sheet().
+        capacity_layout: Layout dict returned by build_capacity_sheet().
+    """
+    for i, wp in enumerate(WORK_PACKAGES):
+        row = layout["planned_first_wp_row"] + i
+        wp_id = wp["id"]
+
+        # Find all Capacity rows for this WP across all persons
+        cap_rows = []
+        for person_name, group in capacity_layout["person_groups"].items():
+            if wp_id in group["wp_rows"]:
+                cap_rows.append(group["wp_rows"][wp_id])
+        cap_rows.sort()  # deterministic order
+
+        for m in range(PROJECT_MONTHS):
+            c = MONTH_COL_START + m
+            month_num = m + 1
+
+            if wp["start"] <= month_num <= wp["end"] and cap_rows:
+                cl = col_letter(c)
+                refs = ",".join(f"Capacity!{cl}{cr}" for cr in cap_rows)
+                cell = style_cell(ws, row, c, font=BLACK_FORMULA, fmt="0.00")
+                cell.value = f"=SUM({refs})"
+            else:
+                # Inactive month: empty + grey fill
+                style_cell(ws, row, c, "", font=BLACK_FORMULA, fill=GREY_FILL,
+                           fmt="0.00")
+
+
+def build_plan_sheet(ws, wb, preserved_data=None):
     """Build the entire Plan sheet: globals, config table, planned + actual blocks.
 
     Args:
@@ -149,7 +186,7 @@ def build_plan_sheet(ws, wb, preserved_data={}):
 
 
 def _build_month_block(ws, start_row, block_title, config_first_wp_row,
-                        is_actuals=False, preserved_data={}):
+                        is_actuals=False, preserved_data=None):
     """Build a planned or actual FTE month block.
 
     Args:
@@ -165,6 +202,8 @@ def _build_month_block(ws, start_row, block_title, config_first_wp_row,
         total_row, next_row.
     """
     r = start_row
+    if preserved_data is None:
+        preserved_data = {}
     block_key = "actual" if is_actuals else "planned"
     block_preserved = preserved_data.get(block_key, {})
 

@@ -22,6 +22,11 @@ Subagents create dead code — verify after each task.
 Suggest review before committing.
 Move completed plans to docs/plans/old_already_implemented/.
 
+## Architecture
+Don't propose subpackages or abstractions for codebases under ~2K LOC.
+Before splitting a module, verify each resulting file has >50 lines of logic.
+Prefer flat packages over nested. Don't build generic iteration for N=2.
+
 ## Invariants
 - Excel formulas only — never hardcode calculated values
 - Font color: Blue=input, Black=formula, Green=cross-sheet

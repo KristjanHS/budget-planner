@@ -57,13 +57,31 @@ Plan FTE budget per work package per month across a 5+ year EU-funded project. T
 
 **Rationale**: User explicitly requested the spreadsheet be self-documenting for AI agents as primary audience, to enable iterative improvement.
 
+### 8. Per-Person Capacity Planning (v2)
+
+**Decision**: Team sheet for roster + WP share seeds, Capacity sheet for per-person monthly FTE allocation with cross-sheet aggregation back to Plan.
+
+**Rationale**: The manager needs to see individual overcommitment before it happens. WP-level totals hide the constraint that each person has a fixed monthly FTE capacity across all projects (programme + external).
+
+**Key design choices**:
+- Team roster is a separate sheet so shares can be edited without touching allocation data
+- Capacity groups WP rows + external project rows per person, with TOTAL and REMAINING summary rows
+- Conditional formatting: amber at >80% utilization, red at >100%
+- Plan Planned FTE is now derived via cross-sheet SUM formulas from Capacity (not manually entered)
+- Demo mode seeds values from `share × WP FTE ÷ active months`; skeleton mode leaves empty
+
+### 9. CLI Modes — Skeleton, Snapshot, Restore
+
+**Decision**: `--skeleton` for production use (empty Capacity), `--snapshot`/`--restore` for scenario comparison.
+
+**Rationale**: Demo mode with pre-filled values is useful for first-time exploration, but production users need a blank slate. Snapshot/restore enables "what-if" scenario comparison without manual file copying.
+
 ## Open Items for Future Iterations
 
-1. Per-person FTE breakdown (who works on which WP)
-2. Non-personnel cost categories (travel, equipment, subcontracting)
-3. Auto-correction of rounding variance in last active month
-4. Timesheet import automation
-5. Dashboard/charts sheet
-6. Sheet protection with unlocked input cells
-7. Data validation on start/end month fields
-8. Reporting period alignment (if not calendar-year based)
+1. Non-personnel cost categories (travel, equipment, subcontracting)
+2. Auto-correction of rounding variance in last active month
+3. Timesheet import automation
+4. Dashboard/charts sheet
+5. Sheet protection with unlocked input cells
+6. Data validation on start/end month fields
+7. Reporting period alignment (if not calendar-year based)

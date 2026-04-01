@@ -26,7 +26,7 @@ python -m budget_planner --restore output/budget_plan.xlsx
 # Recalculate formulas (MANDATORY after any generation)
 python scripts/recalc.py output/budget_plan.xlsx
 
-# Run full test suite (165 tests including recalc + structural checks)
+# Run full test suite (62 tests including recalc + structural checks)
 pytest tests/ -v
 ```
 
@@ -55,18 +55,17 @@ budget_planner/
   reader.py            # discover_layout() + read_workbook() for round-trip (v1 + v2)
   workbook.py          # Orchestrator: create + update + snapshot/restore modes
 tests/
-  conftest.py          # Fixtures: fresh wb, recalc, wb_with_actuals
-  test_workbook.py     # Structural checks (parametrized per WP)
-  test_roundtrip.py    # Reader + update preserves actuals
+  conftest.py          # Fixtures: fresh wb, recalc
+  test_workbook.py     # Structural invariants (sheets, params, inactive months)
   test_recalc.py       # LibreOffice formula verification
   test_team.py         # Team sheet roster + share matrix
-  test_capacity.py     # Capacity sheet per-person groups + conditional formatting
-  test_plan_v2.py      # Plan ↔ Capacity cross-sheet formulas
-  test_reader_v2.py    # Reader v2 format (Team, Capacity, config)
+  test_capacity.py     # Capacity sheet per-person groups, blue input, inactive months
+  test_plan_v2.py      # Plan ↔ Capacity cross-sheet formula linkage + font color
+  test_reader_v2.py    # Reader v2: config, team, capacity extraction
   test_cli.py          # CLI flags (--skeleton, --snapshot, --restore)
-  test_config.py       # Config validation (TEAM, EXTERNAL_COMMITMENTS)
-  test_integration.py  # Multi-sheet round-trip integration
-  test_e2e.py          # End-to-end generation + recalc
+  test_config.py       # Config referential integrity (WP refs, person refs)
+  test_integration.py  # Cross-sheet data flow + round-trip preservation
+  test_e2e.py          # End-to-end generation + LibreOffice recalc
 scripts/
   recalc.py            # LibreOffice recalculation script
   office/              # LibreOffice helpers (unchanged)
@@ -97,22 +96,18 @@ scripts/
 
 ## Testing Approach
 
-Run `pytest tests/ -v` after every change. The 165 tests cover:
+Run `pytest tests/ -v` after every change. The 62 tests cover:
 
 1. Formula recalculation (0 errors via LibreOffice)
-2. Sheet existence (_META, Plan, Team, Capacity, Summary)
-3. Global parameters (project start date, FTE rate)
-4. Named ranges (project_start, fte_rate)
-5. Config table structure and data validity (parametrized per WP)
-6. Planned FTE: cross-sheet SUM formulas from Capacity sheet
-7. Actual FTE block (zeros in fresh workbook)
-8. Inactive month cells (empty outside WP active periods)
-9. Summary sheet WP count matches config
-10. _META sheet has documentation content
-11. Team sheet: roster structure, WP share matrix, validation sums
-12. Capacity sheet: per-person groups, external commitments, conditional formatting
-13. Config validation: TEAM references valid WPs, EXTERNAL_COMMITMENTS valid persons
-14. CLI: --skeleton mode (empty Capacity), --snapshot/--restore
-15. Reader v2: discovers Team + Capacity layout, extracts values
-16. Integration: multi-sheet round-trip preserves all user data
-17. E2E: full generation + LibreOffice recalc verification
+2. Structural invariants: sheets, global params, named ranges, config table
+3. Inactive month cells empty (Plan + Capacity, with grey fill check)
+4. Actual FTE zeros in fresh workbook
+5. Font color: black for formulas (Plan), blue for input (Capacity, Team)
+6. Plan ↔ Capacity cross-sheet SUM formula linkage
+7. Capacity: per-person groups, TOTAL/REMAINING formulas, external rows
+8. Team: roster, share matrix, validation sums
+9. Config referential integrity (WP refs, person refs)
+10. CLI: --skeleton, --snapshot/--restore
+11. Reader v2: config, team, capacity extraction
+12. Integration: round-trip preserves actuals, capacity edits, team roster
+13. E2E: demo + skeleton generation with LibreOffice recalc

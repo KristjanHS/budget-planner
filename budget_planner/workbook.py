@@ -61,9 +61,9 @@ def generate_workbook(output_path: str = "output/budget_plan.xlsx",
     plan_ws = wb.create_sheet("Plan")
     layout = build_plan_sheet(plan_ws, wb, preserved_data=preserved)
 
-    # Team sheet — use preserved team data if v2 workbook
+    # Team sheet — use preserved data from --update if available
     team_data = None
-    if preserved.get("version") == 2 and preserved.get("team"):
+    if preserved.get("team"):
         reader_team = preserved["team"]
         team_data = []
         for person in reader_team["roster"]:
@@ -77,14 +77,11 @@ def generate_workbook(output_path: str = "output/budget_plan.xlsx",
     team_ws = wb.create_sheet("Team")
     team_layout = build_team_sheet(team_ws, wb, team_data=team_data)
 
-    # Capacity sheet — use preserved capacity data if v2 workbook
-    cap_preserved = None
-    if preserved.get("version") == 2 and preserved.get("capacity"):
-        cap_preserved = preserved["capacity"]
-
+    # Capacity sheet — use preserved data from --update if available
     capacity_ws = wb.create_sheet("Capacity")
     capacity_layout = build_capacity_sheet(
-        capacity_ws, wb, team_layout, preserved_data=cap_preserved, mode=mode
+        capacity_ws, wb, team_layout,
+        preserved_data=preserved.get("capacity"), mode=mode,
     )
 
     # Overwrite planned FTE with cross-sheet formulas from Capacity

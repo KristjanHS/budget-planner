@@ -17,7 +17,7 @@ python -m budget_planner --skeleton
 # Recalculate formulas (requires LibreOffice)
 python scripts/recalc.py output/budget_plan.xlsx
 
-# Run tests (165 tests)
+# Run tests
 pytest tests/ -v
 ```
 
@@ -51,7 +51,7 @@ budget-planner/
 │   ├── meta.py               # _META sheet builder
 │   ├── reader.py             # Round-trip reader (v1 + v2 format)
 │   └── workbook.py           # Orchestrator (create/update/snapshot/restore)
-├── tests/                    # 165 tests (pytest)
+├── tests/                    # pytest suite
 ├── scripts/
 │   ├── recalc.py             # LibreOffice formula recalculator
 │   └── office/               # LibreOffice helpers

@@ -4,13 +4,6 @@ import re
 import openpyxl
 
 
-def detect_version(wb) -> int:
-    """Return 2 if both Team and Capacity sheets exist, else 1."""
-    names = wb.sheetnames
-    if "Team" in names and "Capacity" in names:
-        return 2
-    return 1
-
 
 def read_plan_config(ws, layout) -> list[dict]:
     """Read WP definitions from Plan config table."""
@@ -418,15 +411,10 @@ def read_workbook(filepath: str) -> dict:
                     values.append(val)
             result[block_key][i] = values
 
-    # v2 extensions
-    version = detect_version(wb)
-    result["version"] = version
-
-    if version == 2:
-        result["config_wps"] = read_plan_config(ws, layout)
-        result["team"] = read_team_sheet(wb["Team"])
-        result["capacity"] = read_capacity_sheet(wb["Capacity"],
-                                                  result["config_wps"])
+    result["config_wps"] = read_plan_config(ws, layout)
+    result["team"] = read_team_sheet(wb["Team"])
+    result["capacity"] = read_capacity_sheet(wb["Capacity"],
+                                              result["config_wps"])
 
     wb.close()
     return result

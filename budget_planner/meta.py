@@ -229,6 +229,20 @@ Row/column indices are documented in comments within the spreadsheet.
 SCENARIO PLANNING:
   Use --snapshot to save current state, edit Capacity freely, --restore to revert.
   No dedicated draft sheet — file-level snapshots provide safe replanning.
+
+═══ KNOWN LIMITATIONS ═══
+
+1. WP DEFINITIONS ARE NOT READ FROM EXCEL ON --update.
+   The config table (WP IDs, names, FTE budgets, start/end months) is always
+   sourced from config.py, not from the Excel file. If you edit the config table
+   in Excel and run --update, your changes will be overwritten by config.py values.
+   Workaround: edit config.py to match your desired WPs, then run --update.
+
+2. MANUAL ROW INSERTION BREAKS PLAN FORMULAS.
+   If you manually insert or delete rows in the Capacity sheet (e.g., add an
+   external project), Plan Planned FTE formulas will NOT auto-adjust (openpyxl
+   does not update formulas like Excel does). Run --update to rebuild all
+   formula sheets from the current Capacity layout.
 """.format(
         date=datetime.now().strftime("%Y-%m-%d"),
         config_end=config_end,

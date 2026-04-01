@@ -30,6 +30,10 @@ Don't propose subpackages or abstractions for codebases under ~2K LOC.
 Before splitting a module, verify each resulting file has >50 lines of logic.
 Prefer flat packages over nested. Don't build generic iteration for N=2.
 
+## openpyxl Patterns
+`wb.active` can return None — always `assert ws is not None` before use.
+Later conditional formatting rules override earlier ones — add lower-priority fills first (e.g., amber before red).
+
 ## Invariants
 - Excel formulas only — never hardcode calculated values
 - Font color: Blue=input, Black=formula, Green=cross-sheet

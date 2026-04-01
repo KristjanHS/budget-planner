@@ -33,13 +33,9 @@ def test_sheets_exist(workbook):
         assert name in workbook.sheetnames, f"Missing sheet: {name}"
 
 
-def test_project_start_date(workbook):
+def test_global_params(workbook):
     plan = workbook["Plan"]
     assert plan["B2"].value is not None, "Plan!B2 (project_start) is empty"
-
-
-def test_fte_rate(workbook):
-    plan = workbook["Plan"]
     val = plan["E2"].value
     assert val is not None and val > 0, f"Plan!E2 (fte_rate) is invalid: {val}"
 

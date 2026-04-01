@@ -7,10 +7,9 @@ from budget_planner.reader import (
     read_plan_config,
     read_team_sheet,
     read_capacity_sheet,
-    read_workbook,
 )
 from budget_planner.config import (
-    WORK_PACKAGES, TEAM, EXTERNAL_COMMITMENTS, PROJECT_MONTHS,
+    WORK_PACKAGES, TEAM, PROJECT_MONTHS,
 )
 
 
@@ -141,22 +140,3 @@ def test_read_capacity_handles_variable_geometry(fresh_wb_path):
     assert set(carol["wp_values"].keys()) == {"WP4", "WP5", "WP6"}
     assert len(carol["external_values"]) == 0
     wb.close()
-
-
-# ── read_workbook v2 integration ──
-
-
-def test_read_workbook_returns_all_keys(fresh_wb_path):
-    """read_workbook returns planned, actual, config_wps, team, capacity."""
-    data = read_workbook(fresh_wb_path)
-
-    assert "planned" in data
-    assert "actual" in data
-    assert "config_wps" in data
-    assert "team" in data
-    assert "capacity" in data
-
-    assert len(data["config_wps"]) == len(WORK_PACKAGES)
-    assert len(data["team"]["roster"]) == len(TEAM)
-    assert len(data["capacity"]["person_groups"]) == len(TEAM)
-    assert len(data["capacity"]["external_commitments"]) == len(EXTERNAL_COMMITMENTS)

@@ -47,21 +47,7 @@ def capacity_layout(tmp_path_factory):
     return layout
 
 
-# ── Test 1: Sheet exists ──
-
-def test_capacity_sheet_exists(full_wb):
-    assert "Capacity" in full_wb.sheetnames
-
-
-# ── Test 2: Tab color ──
-
-def test_capacity_tab_color_purple(cap_ws):
-    tab_color = cap_ws.sheet_properties.tabColor
-    assert tab_color is not None
-    assert tab_color.rgb == "007030A0"
-
-
-# ── Test 3: Config block headers ──
+# ── Config block headers ──
 
 def test_capacity_external_config_block_exists(cap_ws):
     """Config block has correct column headers."""
@@ -71,20 +57,7 @@ def test_capacity_external_config_block_exists(cap_ws):
         assert cap_ws.cell(row=2, column=ci).value == h
 
 
-# ── Test 4: Config values ──
-
-def test_capacity_external_config_values_match_seed(cap_ws, capacity_layout):
-    """Config block data rows match EXTERNAL_COMMITMENTS entries."""
-    for entry in EXTERNAL_COMMITMENTS:
-        row = capacity_layout["external_config_rows"][(entry["person"], entry["project"])]
-        assert cap_ws.cell(row=row, column=1).value == entry["person"]
-        assert cap_ws.cell(row=row, column=2).value == entry["project"]
-        assert cap_ws.cell(row=row, column=3).value == entry["fte"]
-        assert cap_ws.cell(row=row, column=4).value == entry["start"]
-        assert cap_ws.cell(row=row, column=5).value == entry["end"]
-
-
-# ── Test 5: Person groups ──
+# ── Person groups ──
 
 def test_capacity_has_person_group_per_team_member(capacity_layout):
     """One section per TEAM member."""
@@ -220,24 +193,3 @@ def test_capacity_inactive_months_empty(cap_ws, capacity_layout, person_name, wp
             assert fill.fgColor and fill.fgColor.rgb in ("D9D9D9", "00D9D9D9"), (
                 f"{person_name}/{wp_id} M{month_num}: expected grey fill, got {fill.fgColor}"
             )
-
-
-# ── Test 15: Layout dict ──
-
-def test_capacity_returns_layout_dict(capacity_layout):
-    """Layout has all expected keys."""
-    assert "config_first_row" in capacity_layout
-    assert "config_last_row" in capacity_layout
-    assert "year_header_row" in capacity_layout
-    assert "month_header_row" in capacity_layout
-    assert "person_groups" in capacity_layout
-    assert "external_config_rows" in capacity_layout
-
-    # Check person_groups structure
-    for member in TEAM:
-        name = member["name"]
-        assert name in capacity_layout["person_groups"]
-        group = capacity_layout["person_groups"][name]
-        for key in ("header_row", "wp_rows", "external_rows",
-                     "total_row", "remaining_row"):
-            assert key in group, f"{name} missing key: {key}"

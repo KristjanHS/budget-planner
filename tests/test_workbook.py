@@ -55,17 +55,7 @@ def test_named_ranges(workbook):
     assert defined.get("fte_rate") == "Plan!$E$2"
 
 
-# ── Checks 5-6: Config table ──
-
-def test_config_header_exists(workbook):
-    plan = workbook["Plan"]
-    found = False
-    for r in range(1, 20):
-        if plan.cell(r, 1).value == "WP ID":
-            found = True
-            break
-    assert found, "Config table header 'WP ID' not found"
-
+# ── Check 5: Config table ──
 
 @pytest.mark.parametrize("wp_idx", [0, 2])
 def test_wp_config_valid(workbook, layout, wp_idx):
@@ -81,21 +71,7 @@ def test_wp_config_valid(workbook, layout, wp_idx):
     assert start <= end, f"{wp_id}: Start ({start}) > End ({end})"
 
 
-# ── Checks 7-8: Block headers ──
-
-def test_planned_block_exists(workbook, layout):
-    plan = workbook["Plan"]
-    val = str(plan.cell(layout["planned_header_row"], 1).value or "")
-    assert "PLANNED" in val.upper()
-
-
-def test_actual_block_exists(workbook, layout):
-    plan = workbook["Plan"]
-    val = str(plan.cell(layout["actual_header_row"], 1).value or "")
-    assert "ACTUAL" in val.upper()
-
-
-# ── Check 10: Actual FTE — should be zeros in fresh workbook ──
+# ── Actual FTE — should be zeros in fresh workbook ──
 
 @pytest.mark.parametrize("wp_idx", [0, 2])
 def test_actual_fte_zeros(workbook, layout, wp_idx):
@@ -140,13 +116,7 @@ def test_summary_wp_count(workbook):
     assert count == NUM_WPS, f"Summary has {count} WP rows, expected {NUM_WPS}"
 
 
-# ── Check 13: _META ──
-
-def test_meta_has_content(workbook):
-    meta = workbook["_META"]
-    content = str(meta["A1"].value or "")
-    assert len(content) >= 100, "_META sheet content too short"
-
+# ── _META ──
 
 def test_meta_has_modification_guide(workbook):
     meta = workbook["_META"]

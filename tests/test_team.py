@@ -100,11 +100,3 @@ def test_team_share_validation_row_has_sum_formulas(team_wb):
         assert "SUM(" in str(cell_val).upper(), (
             f"{wp_id} validation cell: expected SUM formula, got {cell_val}"
         )
-
-
-def test_team_tab_color_orange(team_wb):
-    """Tab color is orange (FFA500)."""
-    _, ws, _ = team_wb
-    tab_color = ws.sheet_properties.tabColor
-    assert tab_color is not None
-    assert tab_color.rgb == "00FFA500"

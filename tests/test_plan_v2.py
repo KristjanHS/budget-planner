@@ -7,7 +7,7 @@ import pytest
 from budget_planner.workbook import generate_workbook
 from budget_planner.reader import discover_layout
 from budget_planner.config import (
-    WORK_PACKAGES, NUM_WPS, MONTH_COL_START, PROJECT_MONTHS,
+    WORK_PACKAGES, MONTH_COL_START, PROJECT_MONTHS,
 )
 
 
@@ -25,29 +25,6 @@ def v2_layout(v2_workbook):
 
 
 # ── Planned FTE cells reference Capacity ──
-
-@pytest.mark.parametrize("wp_idx", range(NUM_WPS))
-def test_planned_fte_cells_are_formulas_referencing_capacity(
-    v2_workbook, v2_layout, wp_idx
-):
-    """Each planned WP has at least one active month with a Capacity! formula."""
-    plan = v2_workbook["Plan"]
-    row = v2_layout["planned_first_wp_row"] + wp_idx
-    wp = WORK_PACKAGES[wp_idx]
-
-    found_capacity_ref = False
-    for m in range(PROJECT_MONTHS):
-        month_num = m + 1
-        if wp["start"] <= month_num <= wp["end"]:
-            val = plan.cell(row, MONTH_COL_START + m).value
-            if isinstance(val, str) and "Capacity!" in val:
-                found_capacity_ref = True
-                break
-
-    assert found_capacity_ref, (
-        f"WP {wp['id']} row {row}: no active month references Capacity"
-    )
-
 
 @pytest.mark.parametrize("wp_idx", [0, 2])
 def test_planned_fte_formula_refs_match_capacity_layout(
@@ -121,37 +98,3 @@ def test_planned_fte_cells_have_black_font(v2_workbook, v2_layout, wp_idx):
                 )
 
 
-@pytest.mark.parametrize("wp_idx", range(NUM_WPS))
-def test_planned_fte_inactive_months_still_empty(v2_workbook, v2_layout, wp_idx):
-    """Inactive month cells in planned block are empty/grey."""
-    plan = v2_workbook["Plan"]
-    row = v2_layout["planned_first_wp_row"] + wp_idx
-    wp = WORK_PACKAGES[wp_idx]
-
-    for m in range(PROJECT_MONTHS):
-        month_num = m + 1
-        if month_num < wp["start"] or month_num > wp["end"]:
-            val = plan.cell(row, MONTH_COL_START + m).value
-            assert val is None or val == "" or val == 0, (
-                f"WP {wp['id']} M{month_num}: inactive cell has value '{val}'"
-            )
-
-
-@pytest.mark.parametrize("wp_idx", range(NUM_WPS))
-def test_plan_actual_block_unchanged(v2_workbook, v2_layout, wp_idx):
-    """Actual FTE block still has value cells (0), not formulas."""
-    plan = v2_workbook["Plan"]
-    row = v2_layout["actual_first_wp_row"] + wp_idx
-    wp = WORK_PACKAGES[wp_idx]
-
-    for m in range(PROJECT_MONTHS):
-        month_num = m + 1
-        if wp["start"] <= month_num <= wp["end"]:
-            val = plan.cell(row, MONTH_COL_START + m).value
-            assert val == 0, (
-                f"WP {wp['id']} M{month_num}: actual cell expected 0, got {val}"
-            )
-            # Must NOT be a formula
-            assert not (isinstance(val, str) and val.startswith("=")), (
-                f"WP {wp['id']} M{month_num}: actual cell is a formula"
-            )

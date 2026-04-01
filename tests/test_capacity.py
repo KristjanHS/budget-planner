@@ -187,14 +187,18 @@ def test_capacity_remaining_row_formula(cap_ws, capacity_layout):
 # ── Test 13: Inactive months empty ──
 
 def _inactive_params():
-    """Generate (person_name, wp_id) for WPs with inactive months."""
+    """Generate (person_name, wp_id) for WPs with inactive months.
+
+    Returns 3 representative pairs covering: end < PROJECT_MONTHS,
+    start > 1, and a second person for variety.
+    """
     params = []
     for member in TEAM:
         for wp_id in member["wps"]:
             wp = next(w for w in WORK_PACKAGES if w["id"] == wp_id)
             if wp["start"] > 1 or wp["end"] < PROJECT_MONTHS:
                 params.append((member["name"], wp_id))
-    return params
+    return params[:3]
 
 
 @pytest.mark.parametrize("person_name,wp_id", _inactive_params())

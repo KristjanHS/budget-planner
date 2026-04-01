@@ -22,6 +22,9 @@ Subagents create dead code — verify after each task.
 Suggest review before committing.
 Move completed plans to docs/plans/old_already_implemented/.
 
+## Worktrees
+Before starting work in a worktree, verify it's up to date with main: `git log --oneline -1 HEAD` vs `git log --oneline -1 main`. Merge if behind.
+
 ## Architecture
 Don't propose subpackages or abstractions for codebases under ~2K LOC.
 Before splitting a module, verify each resulting file has >50 lines of logic.

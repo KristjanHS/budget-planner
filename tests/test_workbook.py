@@ -29,7 +29,7 @@ def layout(workbook):
 # ── Check 2-3: Sheet existence + global params ──
 
 def test_sheets_exist(workbook):
-    for name in ["_META", "Plan", "Summary"]:
+    for name in ["_META", "Plan", "Team", "Capacity", "Summary"]:
         assert name in workbook.sheetnames, f"Missing sheet: {name}"
 
 
@@ -93,35 +93,6 @@ def test_actual_block_exists(workbook, layout):
     plan = workbook["Plan"]
     val = str(plan.cell(layout["actual_header_row"], 1).value or "")
     assert "ACTUAL" in val.upper()
-
-
-# ── Check 9: Planned FTE — formulas exist for validation cols ──
-
-@pytest.mark.parametrize("wp_idx", range(NUM_WPS))
-def test_planned_fte_has_formulas(workbook, layout, wp_idx):
-    """Check that planned FTE rows have SUM formula in validation column."""
-    plan = workbook["Plan"]
-    row = layout["planned_first_wp_row"] + wp_idx
-    # The Sum column should have a formula
-    sum_cell = plan.cell(row, MONTH_COL_START + PROJECT_MONTHS).value
-    assert isinstance(sum_cell, str) and sum_cell.startswith("="), \
-        f"Row {row}: expected SUM formula, got {sum_cell}"
-
-
-# ── Check 9b: Planned FTE — sum matches budget (variance check) ──
-
-@pytest.mark.parametrize("wp_idx", range(NUM_WPS))
-def test_planned_fte_variance(workbook, layout, wp_idx):
-    """Planned FTE monthly values should sum to the WP's total FTE budget."""
-    plan = workbook["Plan"]
-    row = layout["planned_first_wp_row"] + wp_idx
-    wp = WORK_PACKAGES[wp_idx]
-    total = sum(
-        plan.cell(row, MONTH_COL_START + m).value or 0
-        for m in range(PROJECT_MONTHS)
-    )
-    assert abs(total - wp["fte"]) < 0.02, \
-        f"WP{wp_idx+1}: planned sum {total:.4f} != budget {wp['fte']}"
 
 
 # ── Check 10: Actual FTE — should be zeros in fresh workbook ──

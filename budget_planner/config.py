@@ -32,6 +32,22 @@ WORK_PACKAGES = [
     {"id": "WP8", "name": "Exploitation",           "fte": 5.0,  "start": 25, "end": 60},
 ]
 
+# ── TEAM ──
+# Seed data only — Excel Team sheet is primary after first generation
+TEAM = [
+    {"name": "Alice", "max_fte": 1.0, "wps": {"WP1": 0.25, "WP2": 0.50, "WP3": 0.25}},
+    {"name": "Bob",   "max_fte": 1.0, "wps": {"WP1": 0.25, "WP3": 0.50, "WP7": 0.25}},
+    {"name": "Carol", "max_fte": 1.0, "wps": {"WP4": 0.40, "WP5": 0.40, "WP6": 0.20}},
+    {"name": "Dave",  "max_fte": 1.0, "wps": {"WP3": 0.25, "WP4": 0.60, "WP8": 0.15}},
+]
+
+# ── EXTERNAL COMMITMENTS ──
+# Seed data only — Excel Capacity sheet is primary after first generation
+EXTERNAL_COMMITMENTS = [
+    {"person": "Alice", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 11},
+    {"person": "Bob",   "project": "ProjectX", "fte": 2.0, "start": 1, "end": 60},
+]
+
 # ── LAYOUT CONSTANTS ──
 # Column where month data starts (C = 3). A = WP ID, B = WP Name.
 MONTH_COL_START = 3

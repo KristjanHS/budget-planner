@@ -15,6 +15,7 @@ GREY_FILL = PatternFill("solid", fgColor="D9D9D9")
 LIGHT_BLUE_FILL = PatternFill("solid", fgColor="D6E4F0")
 LIGHT_GREEN_FILL = PatternFill("solid", fgColor="E2EFDA")
 YELLOW_FILL = PatternFill("solid", fgColor="FFFF00")
+AMBER_FILL = PatternFill("solid", fgColor="FFD966")
 RED_FILL = PatternFill("solid", fgColor="FFC7CE")
 WHITE_FILL = PatternFill("solid", fgColor="FFFFFF")
 

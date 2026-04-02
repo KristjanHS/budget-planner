@@ -10,20 +10,17 @@ from budget_planner.styles import (
 from budget_planner.config import TEAM, WORK_PACKAGES
 
 
-def build_team_sheet(ws, wb, team_data=None):
+def build_team_sheet(ws, wb):
     """Build the Team sheet: roster + WP share seed matrix.
 
     Args:
         ws: The Team worksheet to populate.
         wb: The parent Workbook (needed for potential named ranges).
-        team_data: Optional preserved team data from reader. If provided,
-                   uses this instead of config.py TEAM. Format:
-                   [{"name": "Alice", "max_fte": 1.0, "wps": {"WP1": 0.25}}, ...]
 
     Returns:
         team_layout dict with row/column positions for all key elements.
     """
-    team = team_data if team_data is not None else TEAM
+    team = TEAM
 
     ws.sheet_properties.tabColor = "FFA500"
     r = 1

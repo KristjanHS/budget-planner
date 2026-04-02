@@ -6,10 +6,10 @@ Excel workbook for tracking planned and actual FTE allocation per work package (
 
 ## Business Context
 
-- **User**: Manages an R&D team's FTE across EU project work packages
+- **User**: Manages R&D team's FTE across EU project work packages
 - **Funder constraint**: Total FTE per WP must stay within budget. Auditors flag time logged to a WP outside its active period. Annual planned-vs-actual is informational, not strictly enforced.
 - **Primary unit**: FTE (person-months). Euros are derived internally (FTE × monthly rate), not reported to funder.
-- **Single org**: Only the organisation's share is tracked. No multi-partner view needed.
+- **Single org**: Only our partner's share is tracked. No multi-partner view needed.
 
 ## Architecture
 

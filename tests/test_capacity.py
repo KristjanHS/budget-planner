@@ -6,8 +6,10 @@ import openpyxl
 from budget_planner.workbook import generate_workbook
 from budget_planner.config import (
     TEAM, WORK_PACKAGES, EXTERNAL_COMMITMENTS,
-    MONTH_COL_START, PROJECT_MONTHS,
+    MONTH_COL_START, MONTH_COL_END, PROJECT_MONTHS,
+    VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
 )
+from budget_planner.styles import col_letter
 from budget_planner.capacity import build_capacity_sheet
 
 
@@ -192,4 +194,104 @@ def test_capacity_inactive_months_empty(cap_ws, capacity_layout, person_name, wp
             fill = cap_ws.cell(row=row, column=c).fill
             assert fill.fgColor and fill.fgColor.rgb in ("D9D9D9", "00D9D9D9"), (
                 f"{person_name}/{wp_id} M{month_num}: expected grey fill, got {fill.fgColor}"
+            )
+
+
+# ── Test 14: WP row Sum formula spans MONTH_COL_START:MONTH_COL_END ──
+
+def test_capacity_wp_row_sum_formula(cap_ws, capacity_layout):
+    """programme WP rows have Sum = SUM(C{row}:BJ{row})."""
+    start_cl = col_letter(MONTH_COL_START)
+    end_cl = col_letter(MONTH_COL_END)
+    for member in TEAM:
+        group = capacity_layout["person_groups"][member["name"]]
+        for wp_id, row in group["wp_rows"].items():
+            val = cap_ws.cell(row=row, column=VAL_COL_SUM).value
+            expected = f"=SUM({start_cl}{row}:{end_cl}{row})"
+            assert val == expected, (
+                f"{member['name']}/{wp_id} Sum: expected {expected}, got {val}"
+            )
+
+
+# ── Test 15: WP row Budget formula = Team share × Plan FTE ──
+
+def test_capacity_wp_row_budget_formula(cap_ws, capacity_layout):
+    """programme WP rows have Budget = Team!{share_col}{share_row} * Plan!C{config_row}."""
+    # Rebuild share_wp_columns and share_first_row from a fresh team build
+    from budget_planner.team import build_team_sheet as _bts
+    from openpyxl import Workbook as _WB
+
+    tmp_wb = _WB()
+    tmp_meta = tmp_wb.active
+    assert tmp_meta is not None
+    tmp_meta.title = "_META"
+    tmp_team_ws = tmp_wb.create_sheet("Team")
+    team_layout = _bts(tmp_team_ws, tmp_wb)
+    share_wp_columns = team_layout["share_wp_columns"]
+    share_first_row = team_layout["share_first_row"]
+
+    for person_idx, member in enumerate(TEAM):
+        group = capacity_layout["person_groups"][member["name"]]
+        share_row = share_first_row + person_idx
+        for wp_id, row in group["wp_rows"].items():
+            share_cl = col_letter(share_wp_columns[wp_id])
+            from budget_planner.capacity import _wp_config_row
+            config_row = _wp_config_row(wp_id)
+            val = cap_ws.cell(row=row, column=VAL_COL_BUDGET).value
+            expected = f"=Team!{share_cl}{share_row}*Plan!C{config_row}"
+            assert val == expected, (
+                f"{member['name']}/{wp_id} Budget: expected {expected}, got {val}"
+            )
+
+
+# ── Test 16: WP row Variance formula = Budget − Sum ──
+
+def test_capacity_wp_row_variance_formula(cap_ws, capacity_layout):
+    """programme WP rows have Variance = {budget_col}{row} - {sum_col}{row}."""
+    budget_cl = col_letter(VAL_COL_BUDGET)
+    sum_cl = col_letter(VAL_COL_SUM)
+    for member in TEAM:
+        group = capacity_layout["person_groups"][member["name"]]
+        for wp_id, row in group["wp_rows"].items():
+            val = cap_ws.cell(row=row, column=VAL_COL_DIFF).value
+            expected = f"={budget_cl}{row}-{sum_cl}{row}"
+            assert val == expected, (
+                f"{member['name']}/{wp_id} Variance: expected {expected}, got {val}"
+            )
+
+
+# ── Test 17: External row Sum/Budget/Variance formulas ──
+
+def test_capacity_external_row_validation_formulas(cap_ws, capacity_layout):
+    """External rows: Sum same SUM pattern, Budget refs config Total FTE, Variance same."""
+    start_cl = col_letter(MONTH_COL_START)
+    end_cl = col_letter(MONTH_COL_END)
+    budget_cl = col_letter(VAL_COL_BUDGET)
+    sum_cl = col_letter(VAL_COL_SUM)
+
+    ext_config_rows = capacity_layout["external_config_rows"]
+
+    for member in TEAM:
+        group = capacity_layout["person_groups"][member["name"]]
+        for project, row in group["external_rows"].items():
+            # Sum
+            sum_val = cap_ws.cell(row=row, column=VAL_COL_SUM).value
+            expected_sum = f"=SUM({start_cl}{row}:{end_cl}{row})"
+            assert sum_val == expected_sum, (
+                f"{member['name']}/{project} Sum: expected {expected_sum}, got {sum_val}"
+            )
+
+            # Budget: =C{ext_config_row}
+            ext_config_row = ext_config_rows[(member["name"], project)]
+            budget_val = cap_ws.cell(row=row, column=VAL_COL_BUDGET).value
+            expected_budget = f"=C{ext_config_row}"
+            assert budget_val == expected_budget, (
+                f"{member['name']}/{project} Budget: expected {expected_budget}, got {budget_val}"
+            )
+
+            # Variance: Budget - Sum
+            var_val = cap_ws.cell(row=row, column=VAL_COL_DIFF).value
+            expected_var = f"={budget_cl}{row}-{sum_cl}{row}"
+            assert var_val == expected_var, (
+                f"{member['name']}/{project} Variance: expected {expected_var}, got {var_val}"
             )

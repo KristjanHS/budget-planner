@@ -10,17 +10,13 @@ Use uv for venv and dependency management.
 Run pytest once per step. Never re-run to "confirm".
 Always verify via pytest, not ad-hoc `python3 -c` scripts.
 
-## Update mode
-When testing workbook updates, always inject realistic actuals
-into the test fixture — don't just test fresh generation.
-
 ## Linting
-Run pyright before committing. Fix all errors.
+Run `pyright` (full project, not just changed files) before committing. Fix all errors.
 Subagents create dead code — verify after each task.
 
 ## Code Review
 Suggest review before committing.
-Move completed plans to docs/plans/old_already_implemented/.
+Before executing a plan, move completed/superseded plans to docs/plans/old_already_implemented/.
 
 ## Worktrees
 Before starting work in a worktree, verify it's up to date with main: `git log --oneline -1 HEAD` vs `git log --oneline -1 main`. Merge if behind.
@@ -38,4 +34,5 @@ Later conditional formatting rules override earlier ones — add lower-priority 
 - Excel formulas only — never hardcode calculated values
 - Font color: Blue=input, Black=formula, Green=cross-sheet
 - _META sheet must reflect current workbook structure
-- Block builders must accept preserved_data for round-trip safety
+- When updating meta.py, verify text against the actual builder (e.g., count summary columns in summary.py, not the plan)
+- Generation is config-only — no round-trip. Do not add preserved_data parameters to builders.

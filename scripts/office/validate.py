@@ -19,7 +19,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from validators import DOCXSchemaValidator, PPTXSchemaValidator, RedliningValidator
+from validators import DOCXSchemaValidator, PPTXSchemaValidator, RedliningValidator  # type: ignore[reportAttributeAccessIssue]
 
 
 def main():

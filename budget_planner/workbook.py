@@ -8,9 +8,9 @@ from openpyxl import Workbook
 from budget_planner.plan import build_plan_sheet, _apply_planned_formulas
 from budget_planner.team import build_team_sheet
 from budget_planner.capacity import build_capacity_sheet
+from budget_planner.actuals import build_actuals_sheet
 from budget_planner.summary import build_summary_sheet
 from budget_planner.meta import build_meta_sheet
-from budget_planner.reader import read_workbook
 
 
 def snapshot_workbook(filepath: str) -> str:
@@ -45,11 +45,8 @@ def restore_workbook(filepath: str) -> str:
 
 
 def generate_workbook(output_path: str = "output/budget_plan.xlsx",
-                      existing_path: str | None = None,
                       mode: str = "demo") -> str:
-    """Generate workbook. If existing_path given, preserve user data."""
-    preserved = read_workbook(existing_path) if existing_path else {}
-
+    """Generate workbook."""
     wb = Workbook()
 
     # _META is the first sheet (default active sheet)
@@ -59,42 +56,31 @@ def generate_workbook(output_path: str = "output/budget_plan.xlsx",
 
     # Plan sheet
     plan_ws = wb.create_sheet("Plan")
-    layout = build_plan_sheet(plan_ws, wb, preserved_data=preserved)
+    layout = build_plan_sheet(plan_ws, wb)
 
-    # Team sheet — use preserved data from --update if available
-    team_data = None
-    if preserved.get("team"):
-        reader_team = preserved["team"]
-        team_data = []
-        for person in reader_team["roster"]:
-            shares = reader_team.get("shares", {}).get(person["name"], {})
-            team_data.append({
-                "name": person["name"],
-                "max_fte": person["max_fte"],
-                "wps": shares,
-            })
-
+    # Team sheet
     team_ws = wb.create_sheet("Team")
-    team_layout = build_team_sheet(team_ws, wb, team_data=team_data)
+    team_layout = build_team_sheet(team_ws, wb)
 
-    # Capacity sheet — use preserved data from --update if available
+    # Capacity sheet
     capacity_ws = wb.create_sheet("Capacity")
     capacity_layout = build_capacity_sheet(
-        capacity_ws, wb, team_layout,
-        preserved_data=preserved.get("capacity"), mode=mode,
+        capacity_ws, wb, team_layout, mode=mode,
     )
 
     # Overwrite planned FTE with cross-sheet formulas from Capacity
     _apply_planned_formulas(plan_ws, layout, capacity_layout)
 
+    # Actuals sheet
+    actuals_layout = build_actuals_sheet(wb, layout)
+
     # Summary sheet
-    build_summary_sheet(wb, layout)
+    build_summary_sheet(wb, layout, actuals_layout)
 
     # _META sheet (needs layout for row references)
     build_meta_sheet(meta_ws, layout)
 
-    # Sheets are already in correct order: _META, Plan, Team, Capacity, Summary
-    # (created in that order above)
+    # Sheets created in order: _META, Plan, Team, Capacity, Actuals, Summary
     wb.move_sheet("_META", offset=0)
 
     # Ensure output directory exists

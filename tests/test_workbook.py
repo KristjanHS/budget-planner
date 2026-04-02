@@ -1,4 +1,6 @@
 """Structural checks for the generated workbook — maps from verify.py."""
+import re
+
 import pytest
 import openpyxl
 
@@ -29,15 +31,15 @@ def layout(workbook):
 # ── Check 2-3: Sheet existence + global params ──
 
 def test_sheets_exist(workbook):
-    for name in ["_META", "Plan", "Team", "Capacity", "Summary"]:
+    for name in ["_META", "Plan", "Team", "Capacity", "Actuals", "Summary"]:
         assert name in workbook.sheetnames, f"Missing sheet: {name}"
 
 
 def test_global_params(workbook):
     plan = workbook["Plan"]
     assert plan["B2"].value is not None, "Plan!B2 (project_start) is empty"
-    val = plan["E2"].value
-    assert val is not None and val > 0, f"Plan!E2 (fte_rate) is invalid: {val}"
+    val = plan["B3"].value
+    assert val is not None and val > 0, f"Plan!B3 (fte_rate) is invalid: {val}"
 
 
 # ── Check 4: Named ranges ──
@@ -48,7 +50,8 @@ def test_named_ranges(workbook):
         dn = workbook.defined_names[name]
         defined[dn.name] = dn.attr_text
     assert defined.get("project_start") == "Plan!$B$2"
-    assert defined.get("fte_rate") == "Plan!$E$2"
+    assert defined.get("fte_rate") == "Plan!$B$3"
+    assert defined.get("partner_ceiling") == "Plan!$B$4"
 
 
 # ── Check 5: Config table ──
@@ -67,37 +70,20 @@ def test_wp_config_valid(workbook, layout, wp_idx):
     assert start <= end, f"{wp_id}: Start ({start}) > End ({end})"
 
 
-# ── Actual FTE — should be zeros in fresh workbook ──
-
-@pytest.mark.parametrize("wp_idx", [0, 2])
-def test_actual_fte_zeros(workbook, layout, wp_idx):
-    """Fresh workbook actual FTE cells should be 0 in active months."""
-    plan = workbook["Plan"]
-    row = layout["actual_first_wp_row"] + wp_idx
-    wp = WORK_PACKAGES[wp_idx]
-    for m in range(PROJECT_MONTHS):
-        month_num = m + 1
-        col = MONTH_COL_START + m
-        val = plan.cell(row, col).value
-        if wp["start"] <= month_num <= wp["end"]:
-            assert val == 0, f"WP{wp_idx+1} M{month_num}: expected 0, got {val}"
-
-
 # ── Check 11: Inactive months empty ──
 
 @pytest.mark.parametrize("wp_idx", [1, 2])
 def test_inactive_months_empty(workbook, layout, wp_idx):
     plan = workbook["Plan"]
     wp = WORK_PACKAGES[wp_idx]
-    for block_key in ["planned_first_wp_row", "actual_first_wp_row"]:
-        row = layout[block_key] + wp_idx
-        for m in range(PROJECT_MONTHS):
-            month_num = m + 1
-            col = MONTH_COL_START + m
-            if month_num < wp["start"] or month_num > wp["end"]:
-                val = plan.cell(row, col).value
-                assert val is None or val == "" or val == 0, \
-                    f"WP{wp_idx+1} M{month_num} row {row}: '{val}' in inactive month"
+    row = layout["planned_first_wp_row"] + wp_idx
+    for m in range(PROJECT_MONTHS):
+        month_num = m + 1
+        col = MONTH_COL_START + m
+        if month_num < wp["start"] or month_num > wp["end"]:
+            val = plan.cell(row, col).value
+            assert val is None or val == "" or val == 0, \
+                f"WP{wp_idx+1} M{month_num} row {row}: '{val}' in inactive month"
 
 
 # ── Check 12: Summary ──
@@ -118,3 +104,70 @@ def test_meta_has_modification_guide(workbook):
     meta = workbook["_META"]
     content = str(meta["A1"].value or "")
     assert "MODIFICATION GUIDE" in content
+
+
+# ── Freeze panes ──
+
+
+def _parse_freeze_panes(fp: str) -> tuple[str, int]:
+    """Parse a freeze_panes string like 'C12' into (column, row)."""
+    m = re.match(r"^([A-Z]+)(\d+)$", fp)
+    assert m is not None, f"freeze_panes '{fp}' doesn't match expected pattern"
+    return m.group(1), int(m.group(2))
+
+
+@pytest.mark.parametrize("sheet_name", ["Plan", "Capacity", "Actuals", "Summary"])
+def test_freeze_panes_set_at_column_c(workbook, sheet_name):
+    """All data sheets freeze columns A-B (WP ID + Name) at column C."""
+    ws = workbook[sheet_name]
+    fp = ws.freeze_panes
+    assert fp is not None, f"{sheet_name} has no freeze_panes set"
+    col, row = _parse_freeze_panes(fp)
+    assert col == "C", f"{sheet_name} freeze_panes column is '{col}', expected 'C'"
+    assert row > 1, f"{sheet_name} freeze_panes row {row} should be > 1"
+    assert row <= ws.max_row, (
+        f"{sheet_name} freeze_panes row {row} exceeds max_row {ws.max_row}"
+    )
+
+
+def test_freeze_panes_plan_exact(workbook, layout):
+    """Plan freeze_panes is exactly C{planned_first_wp_row}."""
+    plan = workbook["Plan"]
+    expected = f"C{layout['planned_first_wp_row']}"
+    assert plan.freeze_panes == expected, (
+        f"Plan freeze_panes is '{plan.freeze_panes}', expected '{expected}'"
+    )
+
+
+def test_freeze_panes_actuals_at_first_wp(workbook):
+    """Actuals freeze_panes row matches the first WP data row."""
+    ws = workbook["Actuals"]
+    fp = ws.freeze_panes
+    assert fp is not None
+    _, freeze_row = _parse_freeze_panes(fp)
+    # WP rows have cross-sheet formulas like =Plan!A{row} in column A
+    for r in range(1, ws.max_row + 1):
+        val = ws.cell(r, 1).value
+        if isinstance(val, str) and val.startswith("=Plan!A"):
+            assert freeze_row == r, (
+                f"Actuals freeze row {freeze_row} != first WP row {r}"
+            )
+            return
+    pytest.fail("Could not find first WP formula row in Actuals column A")
+
+
+def test_freeze_panes_summary_at_first_wp(workbook):
+    """Summary freeze_panes row matches the first WP data row."""
+    ws = workbook["Summary"]
+    fp = ws.freeze_panes
+    assert fp is not None
+    _, freeze_row = _parse_freeze_panes(fp)
+    # Summary WP rows have formulas referencing Plan WP IDs in column A
+    for r in range(1, ws.max_row + 1):
+        val = ws.cell(r, 1).value
+        if val is not None and isinstance(val, str) and val.startswith("=Plan!A"):
+            assert freeze_row == r, (
+                f"Summary freeze row {freeze_row} != first WP row {r}"
+            )
+            return
+    pytest.fail("Could not find first WP formula row in Summary column A")

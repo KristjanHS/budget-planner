@@ -1,4 +1,4 @@
-"""Plan sheet builder — globals, config table, planned + actual FTE blocks."""
+"""Plan sheet builder — globals, config table, planned FTE block."""
 
 from openpyxl.styles import Font
 from openpyxl.workbook.defined_name import DefinedName
@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FONT, SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    YELLOW_FILL, RED_FILL, CENTER, style_cell, col_letter,
+    YELLOW_FILL, CENTER, style_cell, col_letter,
 )
 from budget_planner.config import (
     PROJECT_TITLE, PROJECT_START, PROJECT_MONTHS, DEFAULT_RATE,
@@ -54,39 +54,41 @@ def _apply_planned_formulas(ws, layout, capacity_layout):
                            fmt="0.00")
 
 
-def build_plan_sheet(ws, wb, preserved_data=None):
-    """Build the entire Plan sheet: globals, config table, planned + actual blocks.
+def build_plan_sheet(ws, wb):
+    """Build the entire Plan sheet: globals, config table, planned FTE block.
 
     Args:
         ws: The Plan worksheet to populate.
         wb: The parent Workbook (needed for named ranges).
-        preserved_data: Optional dict with "planned" and/or "actual" keys,
-            each mapping WP index -> list of 60 values (None = use default).
 
     Returns:
         Layout dict with row numbers for all key positions.
     """
     r = 1
 
-    # ── GLOBAL PARAMETERS (rows 1-2) ──
+    # ── GLOBAL PARAMETERS (rows 1–4, columns A–B only) ──
     style_cell(ws, r, 1, "Project Title:", font=HEADER_FONT, border=False)
-    ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=7)
     style_cell(ws, r, 2, PROJECT_TITLE,
                font=Font(name="Arial", bold=True, size=14, color="0000FF"),
                border=False)
     r += 1
-    style_cell(ws, r, 1, "Project Start Date:", font=HEADER_FONT, border=False)
+    style_cell(ws, r, 1, "Project Start:", font=HEADER_FONT, border=False)
     style_cell(ws, r, 2, PROJECT_START, font=BLUE_INPUT, border=False,
                fmt="MMM YYYY")
-    style_cell(ws, r, 4, "Monthly FTE Rate (\u20ac):", font=HEADER_FONT,
-               border=False)
-    style_cell(ws, r, 5, DEFAULT_RATE, font=BLUE_INPUT, border=False,
+    r += 1
+    style_cell(ws, r, 1, "FTE Rate (\u20ac):", font=HEADER_FONT, border=False)
+    style_cell(ws, r, 2, DEFAULT_RATE, font=BLUE_INPUT, border=False,
                fmt="\u20ac#,##0")
+    r += 1
+    # Personnel Ceiling — formula filled after config table rows are known
+    ceiling_row = r
+    style_cell(ws, r, 1, "Personnel Ceiling:", font=HEADER_FONT, border=False)
     r += 1
 
     # Named ranges
     wb.defined_names.add(DefinedName("project_start", attr_text="Plan!$B$2"))
-    wb.defined_names.add(DefinedName("fte_rate", attr_text="Plan!$E$2"))
+    wb.defined_names.add(DefinedName("fte_rate", attr_text="Plan!$B$3"))
+    # partner_ceiling added after config table is built
 
     # ── CONFIG TABLE ──
     r += 1
@@ -101,7 +103,7 @@ def build_plan_sheet(ws, wb, preserved_data=None):
     config_col_headers_row = r
     config_headers = [
         "WP ID", "WP Name", "Total FTE (PM)", "Start Month",
-        "End Month", "Active Months", "Budget (\u20ac)",
+        "End Month", "Active Months", "Personnel Ceiling (\u20ac)",
     ]
     for ci, h in enumerate(config_headers, 1):
         style_cell(ws, r, ci, h, font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
@@ -120,7 +122,7 @@ def build_plan_sheet(ws, wb, preserved_data=None):
             f"=E{row}-D{row}+1"
         )
         style_cell(ws, row, 7, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-            f"=C{row}*$E$2"
+            f"=C{row}*fte_rate"
         )
     config_last_wp_row = config_first_wp_row + NUM_WPS - 1
     r = config_last_wp_row + 1
@@ -139,22 +141,20 @@ def build_plan_sheet(ws, wb, preserved_data=None):
                fmt="\u20ac#,##0").value = (
         f"=SUM(G{config_first_wp_row}:G{config_last_wp_row})"
     )
+
+    # Fill Personnel Ceiling global param
+    style_cell(ws, ceiling_row, 2, font=BLACK_FORMULA, border=False,
+               fmt="\u20ac#,##0").value = (
+        f"=SUM(G{config_first_wp_row}:G{config_last_wp_row})"
+    )
+    wb.defined_names.add(DefinedName("partner_ceiling", attr_text="Plan!$B$4"))
+
     r += 2
 
     # ── PLANNED FTE BLOCK ──
     planned = _build_month_block(
         ws, r, "PLANNED FTE (PERSON-MONTHS)",
         config_first_wp_row=config_first_wp_row,
-        is_actuals=False,
-        preserved_data=preserved_data,
-    )
-
-    # ── ACTUAL FTE BLOCK ──
-    actuals = _build_month_block(
-        ws, planned["next_row"], "ACTUAL FTE (PERSON-MONTHS)",
-        config_first_wp_row=config_first_wp_row,
-        is_actuals=True,
-        preserved_data=preserved_data,
     )
 
     # Freeze panes: freeze WP ID/Name columns and header rows for planned block
@@ -170,34 +170,23 @@ def build_plan_sheet(ws, wb, preserved_data=None):
         "planned_first_wp_row": planned["first_wp_row"],
         "planned_last_wp_row": planned["last_wp_row"],
         "planned_total_row": planned["total_row"],
-        "actual_header_row": actuals["header_row"],
-        "actual_first_wp_row": actuals["first_wp_row"],
-        "actual_last_wp_row": actuals["last_wp_row"],
-        "actual_total_row": actuals["total_row"],
     }
 
 
-def _build_month_block(ws, start_row, block_title, config_first_wp_row,
-                        is_actuals=False, preserved_data=None):
-    """Build a planned or actual FTE month block.
+def _build_month_block(ws, start_row, block_title, config_first_wp_row):
+    """Build a planned FTE month block.
 
     Args:
         ws: The Plan worksheet.
         start_row: Row to start writing at.
         block_title: Section header text.
         config_first_wp_row: First WP row in the config table (for cross-refs).
-        is_actuals: True for the actual block, False for planned.
-        preserved_data: Optional dict with "planned"/"actual" -> {wp_idx: [values]}.
 
     Returns:
         Dict with header_row, year_row, month_row, first_wp_row, last_wp_row,
         total_row, next_row.
     """
     r = start_row
-    if preserved_data is None:
-        preserved_data = {}
-    block_key = "actual" if is_actuals else "planned"
-    block_preserved = preserved_data.get(block_key, {})
 
     # Section header
     merge_end = VAL_COL_DIFF
@@ -233,8 +222,7 @@ def _build_month_block(ws, start_row, block_title, config_first_wp_row,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
     style_cell(ws, r, VAL_COL_BUDGET, "Budget FTE", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    label = "Remaining" if is_actuals else "Variance"
-    style_cell(ws, r, VAL_COL_DIFF, label, font=HEADER_FONT,
+    style_cell(ws, r, VAL_COL_DIFF, "Variance", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
     r += 1
     month_row = r
@@ -266,23 +254,12 @@ def _build_month_block(ws, start_row, block_title, config_first_wp_row,
         active_months = wp["end"] - wp["start"] + 1
         even_fte = round(wp["fte"] / active_months, 4) if active_months > 0 else 0
 
-        wp_preserved = block_preserved.get(i)
-
         for m in range(PROJECT_MONTHS):
             c = MONTH_COL_START + m
             month_num = m + 1
 
-            # Check for preserved value
-            preserved_val = None
-            if wp_preserved is not None and m < len(wp_preserved):
-                preserved_val = wp_preserved[m]
-
             if wp["start"] <= month_num <= wp["end"]:
-                if preserved_val is not None:
-                    val = preserved_val
-                else:
-                    val = even_fte if not is_actuals else 0
-                style_cell(ws, row, c, val, font=BLUE_INPUT, fmt="0.00")
+                style_cell(ws, row, c, even_fte, font=BLUE_INPUT, fmt="0.00")
             else:
                 style_cell(ws, row, c, "", font=BLUE_INPUT, fill=GREY_FILL,
                            fmt="0.00")
@@ -326,18 +303,12 @@ def _build_month_block(ws, start_row, block_title, config_first_wp_row,
     style_cell(ws, r, VAL_COL_DIFF, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="0.00").value = f"=SUM({diff_range})"
 
-    # Conditional formatting: red fill on variance/remaining if negative (actuals)
-    # or nonzero (planned)
+    # Conditional formatting: yellow fill on variance if nonzero
     diff_col_l = col_letter(VAL_COL_DIFF)
     cell_range = f"{diff_col_l}{first_wp_row}:{diff_col_l}{last_wp_row}"
-    if is_actuals:
-        ws.conditional_formatting.add(cell_range, FormulaRule(
-            formula=[f"{diff_col_l}{first_wp_row}<0"], fill=RED_FILL,
-        ))
-    else:
-        ws.conditional_formatting.add(cell_range, FormulaRule(
-            formula=[f"ABS({diff_col_l}{first_wp_row})>0.01"], fill=YELLOW_FILL,
-        ))
+    ws.conditional_formatting.add(cell_range, FormulaRule(
+        formula=[f"ABS({diff_col_l}{first_wp_row})>0.01"], fill=YELLOW_FILL,
+    ))
 
     return {
         "header_row": start_row,

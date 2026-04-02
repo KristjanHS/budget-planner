@@ -20,9 +20,7 @@ def build_meta_sheet(ws, layout):
     layout : dict
         Row-number mapping produced by the plan-sheet builder.  Keys used:
         config_total_row, config_last_wp_row, planned_header_row,
-        planned_first_wp_row, planned_last_wp_row, planned_total_row,
-        actual_header_row, actual_first_wp_row, actual_last_wp_row,
-        actual_total_row.
+        planned_first_wp_row, planned_last_wp_row, planned_total_row.
     """
     # Derive row numbers from layout dict
     config_end = layout["config_total_row"]
@@ -34,10 +32,6 @@ def build_meta_sheet(ws, layout):
     plan_first_wp = layout["planned_first_wp_row"]
     plan_last_wp = layout["planned_last_wp_row"]
     plan_total = layout["planned_total_row"]
-    act_header = layout["actual_header_row"]
-    act_first_wp = layout["actual_first_wp_row"]
-    act_last_wp = layout["actual_last_wp_row"]
-    act_total = layout["actual_total_row"]
 
     # Summary sheet references
     sum_last_wp = 4 + NUM_WPS
@@ -56,16 +50,17 @@ def build_meta_sheet(ws, layout):
     val_diff_col = col_letter(VAL_COL_DIFF)
 
     meta_text = """WORKBOOK: Programme Project Budget Planner
-VERSION: 2.0
+VERSION: 3.0
 CREATED: {date}
-PURPOSE: Track planned and actual FTE allocation per work package per month for an EU-funded (programme) project. Per-person capacity planning with cross-project visibility. Derive euro amounts from FTE using a configurable rate.
+PURPOSE: Track planned FTE allocation and actual EUR spend per work package per month for an EU-funded (programme) project. Per-person capacity planning with cross-project visibility. Derive planned euro amounts from FTE using a configurable rate. Record actual EUR from accountant reports on a separate sheet.
 
 ═══ SHEET INDEX ═══
 1. _META        — This sheet. AI-agent-readable documentation of workbook structure, conventions, and modification instructions.
-2. Plan         — Config table + Planned FTE (formulas from Capacity) + Actual FTE (input).
+2. Plan         — Global parameters + config table + Planned FTE (formulas from Capacity).
 3. Team         — Person roster + WP share seeds for initial allocation.
 4. Capacity     — Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects.
-5. Summary      — Annual aggregation. Planned vs Actual FTE and EUR per WP per year. Budget health indicators.
+5. Actuals      — EUR actuals per WP per month (input from accountant). Tab color: Blue.
+6. Summary      — Annual aggregation. Plan FTE, Plan EUR, Actual EUR, Variance EUR per WP per year. Budget overview.
 
 ═══ TEAM SHEET STRUCTURE ═══
 
@@ -110,15 +105,16 @@ SHEET: CAPACITY (primary planning surface)
 
 ═══ PLAN SHEET STRUCTURE ═══
 
-BLOCK 1: GLOBAL PARAMETERS (Rows 1-2)
+BLOCK 1: GLOBAL PARAMETERS (Rows 1-4, columns A-B only)
   B1 = Project title (text, input)
   B2 = Project start date (date, input). All month columns derive calendar dates from this.
-  E2 = Monthly FTE rate in EUR (number, input). Used to derive euro amounts.
+  B3 = Monthly FTE rate in EUR (number, input). Used to derive euro amounts.
+  B4 = Personnel Ceiling (formula: SUM of config column G). Total budget in EUR.
 
-BLOCK 2: CONFIGURATION TABLE (Rows 4-{config_end})
-  Row 4 = Section header "CONFIGURATION"
-  Row 5 = Column headers
-  Rows 6-{wp_last_config} = One row per WP
+BLOCK 2: CONFIGURATION TABLE (Rows 6-{config_end})
+  Row 6 = Section header "CONFIGURATION"
+  Row 7 = Column headers
+  Rows 8-{wp_last_config} = One row per WP
   Columns:
     A = WP ID (text, input)
     B = WP Name (text, input)
@@ -126,7 +122,7 @@ BLOCK 2: CONFIGURATION TABLE (Rows 4-{config_end})
     D = Start month number 1-{pm} (integer, input)
     E = End month number 1-{pm} (integer, input)
     F = Active months (formula: E-D+1)
-    G = Budget EUR (formula: C * $E$2)
+    G = Personnel Ceiling (€) (formula: C * fte_rate)
   Row {config_total} = Totals row
 
 BLOCK 3: PLANNED FTE (Rows {plan_header}-{plan_total})
@@ -144,22 +140,38 @@ BLOCK 3: PLANNED FTE (Rows {plan_header}-{plan_total})
     Col {val_diff_col} = Variance: Budget - Sum (formula). Zero = OK, nonzero = WARNING.
   Row {plan_total} = Column totals (SUM formula per month)
 
-BLOCK 4: ACTUAL FTE (Rows {act_header}-{act_total})
-  Same structure as PLANNED block.
-  Monthly cells start at 0 (input, blue text). User enters logged FTE here.
-  Validation columns:
-    {val_sum_col} = Cumulative actual (SUM formula)
-    {val_budget_col} = Budget FTE from config (formula, green cross-ref)
-    {val_diff_col} = Remaining: Budget - Cumulative (formula). Negative = OVERRUN.
-  Row {act_total} = Column totals
+═══ ACTUALS SHEET STRUCTURE ═══
+
+SHEET: ACTUALS (EUR actuals from accountant)
+  Tab color: Blue (0000FF)
+
+  Row 1 = Section header "ACTUAL EUR"
+  Row 2 = Year labels (merged per 12 months, same layout as Plan)
+  Row 3 = Month headers (M1..M{pm}) in columns {first_mcol}..{last_mcol}
+  Rows 4-{act_last_wp} = One row per WP
+    Col A = WP ID (formula, cross-ref to Plan config via =Plan!A{{config_row}})
+    Col B = WP Name (formula, cross-ref to Plan config via =Plan!B{{config_row}})
+    Cols {first_mcol}-{last_mcol} = EUR amount per month (input, blue text, €#,##0 format)
+      - Active months initialized to 0
+      - Inactive months greyed out and empty (same WP active period as Plan)
+    Col {val_sum_col} = Sum of monthly EUR (formula: SUM)
+    Col {val_budget_col} = Ceiling EUR from Plan config column G (formula, green cross-ref)
+    Col {val_diff_col} = Variance: Ceiling - Sum (formula). Negative = OVERRUN.
+  TOTAL row:
+    Monthly columns = SUM per column across WP rows
+    {val_sum_col} = SUM of WP sums
+    {val_budget_col} = partner_ceiling named range (total project ceiling)
+    {val_diff_col} = Ceiling - Sum
+  Conditional formatting: red fill on negative variance
 
 ═══ SUMMARY SHEET STRUCTURE ═══
   Row 1 = Title
-  Row 3 = Year group headers (Year 1..Year 5), each spanning 5 sub-columns + Project Total group
-  Row 4 = Sub-headers per year: Planned FTE, Actual FTE, Variance FTE, Planned EUR, Actual EUR
-  Rows 5-{sum_last_wp} = One row per WP (all formulas referencing Plan sheet)
+  Row 3 = Year group headers (Year 1..Year N), each spanning 4 sub-columns + Project Total group
+  Row 4 = Sub-headers per year: Plan FTE, Plan €, Act €, Var €
+  Rows 5-{sum_last_wp} = One row per WP (all formulas referencing Plan and Actuals sheets)
   Row {sum_total} = Totals
-  Right-most group (Project Total): aggregates across all years + Remaining FTE, Remaining EUR, % Consumed
+  Right-most group (Project Total): aggregates across all years (Plan FTE, Plan €, Act €, Var €)
+  Budget overview: per-WP Planned EUR, Actual EUR, Remaining EUR derived from Plan config and Actuals
 
 ═══ CONVENTIONS ═══
   FONT COLORS (financial model standard):
@@ -174,75 +186,76 @@ BLOCK 4: ACTUAL FTE (Rows {act_header}-{act_total})
     Amber (FFEB9C)   = Approaching limit (Capacity TOTAL > 0.8 x Max FTE)
   NUMBER FORMATS:
     FTE values: 0.00
-    EUR values: #,##0
+    EUR values: €#,##0
     Percentages: 0.0%
 
 ═══ DATA FLOW ═══
+  Team → Capacity → Plan ← Actuals → Summary (no circular refs)
+
   Team roster (names, Max FTE) --> Capacity person headers + REMAINING formulas
   Team WP shares --> Capacity seed values (generation-time only)
   Capacity monthly FTE (input) --> Plan Planned FTE (SUM formulas across people)
-  Plan Planned FTE --> Summary annual aggregation
-  Plan Actual FTE (input) --> Summary actual aggregation
+  Plan config (WP budgets) --> Actuals ceiling validation
+  Actuals monthly EUR (input) --> Summary actual EUR aggregation
+  Plan Planned FTE --> Summary planned FTE/EUR aggregation
 
   PRIMARY PLANNING SURFACE: Capacity sheet. Edit monthly FTE per person there.
   Plan Planned FTE is formula-driven — do not edit directly.
+  Actuals sheet is the input surface for EUR spend — enter accountant figures there.
+
+═══ BUILD ORDER ═══
+  Plan → Team → Capacity → patch Plan (cross-sheet formulas) → Actuals → Summary
+  _META is populated last with row references from the built layout.
+
+═══ NAMED RANGES ═══
+  project_start   = Plan!$B$2   (project start date)
+  fte_rate         = Plan!$B$3   (monthly EUR rate per person-month)
+  partner_ceiling  = Plan!$B$4   (total personnel ceiling in EUR)
+
+FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for month iterations.
 
 ═══ MODIFICATION GUIDE (for AI agents) ═══
 
 TO ADD A WORK PACKAGE:
-  1. Insert a row in the config table (rows 6-{wp_last_config}), update totals row
-  2. Insert a WP row in each person's group on the Capacity sheet
-  3. Plan PLANNED block rows {plan_first_wp}-{plan_last_wp} are rebuilt automatically on --update
-  4. Insert a corresponding row in ACTUAL block (rows {act_first_wp}-{act_last_wp})
-  5. Insert a row in Summary sheet (rows 5-{sum_last_wp})
-  6. Update Team sheet share matrix columns
-  7. Regeneration via --update is recommended (rebuilds formula sheets)
+  1. Add to WORK_PACKAGES in config.py
+  2. Regenerate: python -m budget_planner
+  3. This rebuilds all sheets: config table, Capacity WP rows, Planned FTE, Actuals, Summary
+  4. Affected sheets: Plan (config + planned), Capacity (WP rows per person), Actuals (WP row), Summary (WP row), Team (share matrix column)
 
 TO ADD A TEAM MEMBER:
-  1. Add a row to Team sheet roster (rows 3-{roster_last})
-  2. Add a row to Team sheet share matrix
-  3. Add a person group to Capacity sheet (header + WP rows + external rows + TOTAL + REMAINING)
-  4. Plan Planned FTE formulas are rebuilt on --update to include the new person
+  1. Add to TEAM in config.py
+  2. Regenerate: python -m budget_planner
+  3. Adds person to Team roster, Capacity person group, and updates Plan Planned FTE formulas
 
 TO CHANGE PROJECT DURATION:
-  1. Add/remove month columns in Capacity and Plan sheets (cols {first_mcol}-{last_mcol})
-  2. Update year header merges
-  3. Update validation SUM ranges
-  4. Update Summary sheet year ranges
-  5. Update month number headers
+  1. Update PROJECT_MONTHS in config.py
+  2. Regenerate: python -m budget_planner
+  3. Adds/removes month columns in Plan, Capacity, Actuals; updates year headers and Summary ranges
 
 TO CHANGE FTE RATE:
-  Edit cell E2 on Plan sheet. All EUR calculations update automatically.
+  Edit cell B3 on Plan sheet. All EUR calculations update automatically via the fte_rate named range.
 
 TO REPLACE EXAMPLE DATA:
-  Edit config rows 6-{wp_last_config}: change WP IDs, names, FTE budgets, start/end months.
-  Edit Team roster and share matrix. Edit Capacity monthly values.
-  Recommended: use --update mode to regenerate formula sheets from edited data.
-
-NAMED RANGES:
-  project_start = Plan!$B$2
-  fte_rate = Plan!$E$2
-
-FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for month iterations.
-Row/column indices are documented in comments within the spreadsheet.
+  Edit config.py: WORK_PACKAGES (WP IDs, names, FTE budgets, start/end months),
+  TEAM (roster and share seeds), EXTERNAL_COMMITMENTS. Then regenerate.
 
 SCENARIO PLANNING:
-  Use --snapshot to save current state, edit Capacity freely, --restore to revert.
+  Use --snapshot to save current state, edit Capacity/Actuals freely, --restore to revert.
   No dedicated draft sheet — file-level snapshots provide safe replanning.
 
 ═══ KNOWN LIMITATIONS ═══
 
-1. WP DEFINITIONS ARE NOT READ FROM EXCEL ON --update.
-   The config table (WP IDs, names, FTE budgets, start/end months) is always
-   sourced from config.py, not from the Excel file. If you edit the config table
-   in Excel and run --update, your changes will be overwritten by config.py values.
-   Workaround: edit config.py to match your desired WPs, then run --update.
+1. GENERATION IS FROM config.py ONLY.
+   All WP definitions, team roster, and external commitments are sourced from
+   config.py. There is no round-trip — Excel edits to the config table or
+   Team sheet are not read back. To change project structure, edit config.py
+   and regenerate.
 
-2. MANUAL ROW INSERTION BREAKS PLAN FORMULAS.
+2. MANUAL ROW INSERTION BREAKS FORMULAS.
    If you manually insert or delete rows in the Capacity sheet (e.g., add an
    external project), Plan Planned FTE formulas will NOT auto-adjust (openpyxl
-   does not update formulas like Excel does). Run --update to rebuild all
-   formula sheets from the current Capacity layout.
+   does not update formulas like Excel does). Regenerate from config.py to
+   rebuild all formula sheets.
 """.format(
         date=datetime.now().strftime("%Y-%m-%d"),
         config_end=config_end,
@@ -255,10 +268,7 @@ SCENARIO PLANNING:
         plan_first_wp=plan_first_wp,
         plan_last_wp=plan_last_wp,
         plan_total=plan_total,
-        act_header=act_header,
-        act_first_wp=act_first_wp,
-        act_last_wp=act_last_wp,
-        act_total=act_total,
+        act_last_wp=4 + NUM_WPS - 1,
         first_mcol=first_mcol,
         last_mcol=last_mcol,
         val_sum_col=val_sum_col,

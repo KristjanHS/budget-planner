@@ -18,7 +18,7 @@ from budget_planner.config import (
 )
 
 
-def _wp_config_row(wp_id, config_first_wp_row=6):
+def _wp_config_row(wp_id, config_first_wp_row=8):
     """Return the Plan config table row for a WP ID."""
     for i, wp in enumerate(WORK_PACKAGES):
         if wp["id"] == wp_id:
@@ -26,14 +26,13 @@ def _wp_config_row(wp_id, config_first_wp_row=6):
     raise ValueError(f"Unknown WP ID: {wp_id}")
 
 
-def build_capacity_sheet(ws, wb, team_layout, preserved_data=None, mode="demo"):
+def build_capacity_sheet(ws, wb, team_layout, mode="demo"):
     """Build the Capacity sheet: external commitments config + per-person groups.
 
     Args:
         ws: The Capacity worksheet to populate.
         wb: The parent Workbook.
         team_layout: dict from build_team_sheet with person_rows, share_wp_columns, etc.
-        preserved_data: Optional dict with capacity data to preserve on --update.
         mode: "demo" seeds monthly cells with calculated values;
               "skeleton" leaves them empty for manual entry.
 
@@ -150,11 +149,6 @@ def build_capacity_sheet(ws, wb, team_layout, preserved_data=None, mode="demo"):
         person_idx = next(i for i, m in enumerate(TEAM) if m["name"] == name)
         share_row = share_first_row + person_idx
 
-        # Look up preserved capacity data for this person
-        person_preserved = None
-        if preserved_data and name in preserved_data.get("person_groups", {}):
-            person_preserved = preserved_data["person_groups"][name]
-
         first_wp_row_for_person = True
         for wp_id, share in member["wps"].items():
             wp = next(w for w in WORK_PACKAGES if w["id"] == wp_id)
@@ -173,31 +167,14 @@ def build_capacity_sheet(ws, wb, team_layout, preserved_data=None, mode="demo"):
             else:
                 seed_value = round(share * wp["fte"] / active_months, 4) if active_months > 0 else 0
 
-            # Get preserved WP values for this person-WP pair
-            wp_preserved = None
-            if person_preserved is not None:
-                wp_preserved = person_preserved.get("wp_values", {}).get(wp_id)
-
             comment_added = False
             for mi in range(PROJECT_MONTHS):
                 c = MONTH_COL_START + mi
                 month_num = mi + 1
 
-                # Check for preserved value
-                cap_preserved = None
-                if wp_preserved and mi < len(wp_preserved) and wp_preserved[mi] is not None:
-                    cap_preserved = wp_preserved[mi]
-
                 if wp["start"] <= month_num <= wp["end"]:
-                    if cap_preserved is not None:
-                        val = cap_preserved
-                    elif seed_value is not None:
-                        val = seed_value
-                    else:
-                        val = None
-
-                    if val is not None:
-                        style_cell(ws, r, c, val, font=BLUE_INPUT, fmt="0.00")
+                    if seed_value is not None:
+                        style_cell(ws, r, c, seed_value, font=BLUE_INPUT, fmt="0.00")
                     else:
                         style_cell(ws, r, c, font=BLUE_INPUT, fmt="0.00")
                     # Add comment on first active cell of first WP row per person
@@ -255,30 +232,13 @@ def build_capacity_sheet(ws, wb, team_layout, preserved_data=None, mode="demo"):
             else:
                 ext_seed = round(entry["fte"] / active_months, 4) if active_months > 0 else 0
 
-            # Get preserved external values for this person-project pair
-            ext_preserved = None
-            if person_preserved is not None:
-                ext_preserved = person_preserved.get("external_values", {}).get(entry["project"])
-
             for mi in range(PROJECT_MONTHS):
                 c = MONTH_COL_START + mi
                 month_num = mi + 1
 
-                # Check for preserved value
-                ext_cap_preserved = None
-                if ext_preserved and mi < len(ext_preserved) and ext_preserved[mi] is not None:
-                    ext_cap_preserved = ext_preserved[mi]
-
                 if entry["start"] <= month_num <= entry["end"]:
-                    if ext_cap_preserved is not None:
-                        val = ext_cap_preserved
-                    elif ext_seed is not None:
-                        val = ext_seed
-                    else:
-                        val = None
-
-                    if val is not None:
-                        style_cell(ws, r, c, val, font=BLUE_INPUT, fmt="0.00")
+                    if ext_seed is not None:
+                        style_cell(ws, r, c, ext_seed, font=BLUE_INPUT, fmt="0.00")
                     else:
                         style_cell(ws, r, c, font=BLUE_INPUT, fmt="0.00")
                 else:

@@ -193,3 +193,29 @@ def test_cli_restore_no_snapshot_raises_error(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="No snapshot found"):
         restore_workbook(str(src))
+
+
+# ── Test 9: Generate creates timestamped backup when file exists ──
+
+def test_generate_creates_backup_when_file_exists(tmp_path):
+    """Second generate_workbook() to same path creates a timestamped backup."""
+    out = tmp_path / "budget.xlsx"
+    generate_workbook(str(out))  # first generation
+    files_before = set(tmp_path.iterdir())
+    generate_workbook(str(out))  # second generation should create backup
+    files_after = set(tmp_path.iterdir())
+    new_files = files_after - files_before
+    assert len(new_files) == 1, f"Expected 1 new backup file, got {new_files}"
+    backup = new_files.pop()
+    assert backup.suffix == ".xlsx"
+    assert "budget." in backup.name
+    assert backup.name != "budget.xlsx"
+
+
+# ── Test 10: Generate creates output directory if missing ──
+
+def test_generate_creates_output_directory(tmp_path):
+    """generate_workbook() creates intermediate directories for output path."""
+    out = tmp_path / "subdir" / "deep" / "budget.xlsx"
+    generate_workbook(str(out))
+    assert out.exists()

@@ -1,0 +1,64 @@
+%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#555'}}}%%
+
+flowchart LR
+    subgraph TEAM_SHEET["Team Sheet"]
+        T_ROSTER["Roster<br/>name, max_fte"]
+        T_SEEDS["WP Share Seeds<br/>person × WP %"]
+    end
+
+    subgraph CAPACITY_SHEET["Capacity Sheet"]
+        C_PERSON["Per-Person Grids<br/>monthly FTE per WP"]
+        C_EXT["External Commitments<br/>other project FTE"]
+        C_REMAINING["Remaining FTE<br/>= max − allocated"]
+    end
+
+    subgraph PLAN_SHEET["Plan Sheet"]
+        P_CONFIG["Global Config<br/>title, start, rate,<br/>partner_ceiling"]
+        P_WP["WP Config<br/>ID, name, PM budget,<br/>start/end, ceiling"]
+        P_FTE["Planned FTE Grid<br/>WP × month matrix"]
+    end
+
+    subgraph ACTUALS_SHEET["Actuals Sheet"]
+        A_EUR["EUR Input Grid<br/>WP × month matrix<br/><i>blue input</i>"]
+        A_VAL["Validation<br/>sum, ceiling, variance"]
+    end
+
+    subgraph SUMMARY_SHEET["Summary Sheet"]
+        S_ANNUAL["Annual Table<br/>Plan FTE | Plan EUR |<br/>Actual EUR | Variance"]
+        S_BUDGET["Budget Overview<br/>Personnel Actual<br/>Claimable (+25%)<br/>Ceiling | Remaining<br/>% Consumed"]
+    end
+
+    %% Team → Capacity
+    T_ROSTER -->|"names, max_fte"| C_PERSON
+    T_SEEDS -.->|"initial seed only"| C_PERSON
+
+    %% Plan ↔ Capacity
+    P_WP -->|"WP names"| C_PERSON
+    C_PERSON -->|"SUM per WP<br/>across people"| P_FTE
+
+    %% Plan → Actuals
+    P_WP -->|"WP structure,<br/>month range"| A_EUR
+    P_WP -->|"per-WP ceiling"| A_VAL
+
+    %% Plan → Summary
+    P_FTE -->|"Plan FTE,<br/>Plan EUR"| S_ANNUAL
+    P_CONFIG -->|"partner_ceiling"| S_BUDGET
+
+    %% Actuals → Summary
+    A_EUR -->|"Actual EUR<br/>per year"| S_ANNUAL
+    A_EUR -->|"Total Actual EUR"| S_BUDGET
+
+    %% Internal
+    C_PERSON --> C_REMAINING
+    A_EUR --> A_VAL
+
+    %% Styling
+    classDef inputNode fill:#D4E6F1,stroke:#2C5F8A,color:#1a1a1a
+    classDef formulaNode fill:#E8DAEF,stroke:#7D3C98,color:#1a1a1a
+    classDef outputNode fill:#D5F5E3,stroke:#27AE60,color:#1a1a1a
+    classDef configNode fill:#F2F3F4,stroke:#95A5A6,color:#1a1a1a
+
+    class T_ROSTER,T_SEEDS,A_EUR,C_EXT inputNode
+    class C_PERSON,C_REMAINING,P_FTE,A_VAL formulaNode
+    class S_ANNUAL,S_BUDGET outputNode
+    class P_CONFIG,P_WP configNode

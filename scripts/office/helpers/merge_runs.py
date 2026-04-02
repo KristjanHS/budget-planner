@@ -164,7 +164,8 @@ def _can_merge(run1, run2) -> bool:
         return False
     if rpr1 is None:
         return True
-    return rpr1.toxml() == rpr2.toxml()  
+    assert rpr2 is not None  # guaranteed by (rpr1 is None) != (rpr2 is None) guard
+    return rpr1.toxml() == rpr2.toxml()
 
 
 def _merge_run_content(target, source):

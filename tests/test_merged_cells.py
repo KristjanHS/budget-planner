@@ -1,0 +1,177 @@
+"""Tests for merged cell ranges across sheets."""
+import pytest
+import openpyxl
+
+from budget_planner.workbook import generate_workbook
+from budget_planner.config import (
+    PROJECT_MONTHS, MONTH_COL_START,
+    VAL_COL_DIFF,
+)
+
+
+# ── Fixtures ──
+
+@pytest.fixture(scope="module")
+def fresh_path(tmp_path_factory):
+    out = tmp_path_factory.mktemp("merge") / "test.xlsx"
+    generate_workbook(str(out))
+    return str(out)
+
+
+@pytest.fixture(scope="module")
+def workbook(fresh_path):
+    return openpyxl.load_workbook(fresh_path, data_only=False)
+
+
+# ── Helpers ──
+
+def _year_merges_on_row(ws, row: int) -> list[tuple[int, int]]:
+    """Return sorted (min_col, max_col) for all merges on the given row
+    whose min_col >= MONTH_COL_START (i.e. year header merges, not section
+    headers)."""
+    result = []
+    for rng in ws.merged_cells.ranges:
+        if rng.min_row == row and rng.max_row == row and rng.min_col >= MONTH_COL_START:
+            result.append((rng.min_col, rng.max_col))
+    return sorted(result)
+
+
+def _find_section_merge(ws, text: str) -> tuple[int, int, int] | None:
+    """Find the merged range whose top-left cell contains *text*.
+
+    Returns (row, min_col, max_col) or None.
+    """
+    for rng in ws.merged_cells.ranges:
+        cell = ws.cell(row=rng.min_row, column=rng.min_col)
+        if cell.value and text in str(cell.value):
+            return (rng.min_row, rng.min_col, rng.max_col)
+    return None
+
+
+def _expected_year_spans() -> list[tuple[int, int]]:
+    """Compute expected (min_col, max_col) for 12-month year header merges."""
+    spans = []
+    m = 0
+    while m < PROJECT_MONTHS:
+        year_start_col = MONTH_COL_START + m
+        months_left = PROJECT_MONTHS - m
+        span = min(12, months_left)
+        year_end_col = year_start_col + span - 1
+        if span > 1:
+            spans.append((year_start_col, year_end_col))
+        m += span
+    return spans
+
+
+# ── Tests ──
+
+class TestPlanYearHeaders:
+    """Plan year headers merge exactly 12 cells per year (or fewer for final year)."""
+
+    def test_plan_year_header_merges(self, workbook):
+        ws = workbook["Plan"]
+        expected = _expected_year_spans()
+
+        # The year header row is one row below the PLANNED FTE section header.
+        info = _find_section_merge(ws, "PLANNED FTE")
+        assert info is not None, "PLANNED FTE section header not found"
+        year_row = info[0] + 1
+
+        actual = _year_merges_on_row(ws, year_row)
+        assert actual == expected, (
+            f"Plan year header merges mismatch.\n"
+            f"  Expected: {expected}\n"
+            f"  Actual:   {actual}"
+        )
+
+
+class TestCapacityYearHeaders:
+    """Capacity year headers merge correctly — same 12-col pattern."""
+
+    def test_capacity_year_header_merges(self, workbook):
+        ws = workbook["Capacity"]
+        expected = _expected_year_spans()
+
+        # Capacity year headers are on the row right after the external
+        # commitments config block + gap row.  Find by scanning for a merge
+        # whose top-left value starts with "Year 1".
+        year_row = None
+        for rng in ws.merged_cells.ranges:
+            cell = ws.cell(row=rng.min_row, column=rng.min_col)
+            if cell.value and str(cell.value).startswith("Year 1"):
+                year_row = rng.min_row
+                break
+        assert year_row is not None, "Capacity year header row not found"
+
+        actual = _year_merges_on_row(ws, year_row)
+        assert actual == expected, (
+            f"Capacity year header merges mismatch.\n"
+            f"  Expected: {expected}\n"
+            f"  Actual:   {actual}"
+        )
+
+
+class TestSummaryYearHeaders:
+    """Summary year headers merge across 4 columns per year group."""
+
+    def test_summary_year_header_merges(self, workbook):
+        ws = workbook["Summary"]
+        num_years = (PROJECT_MONTHS + 11) // 12
+        YEAR_GROUP_START = 3
+        COLS_PER_YEAR = 4
+
+        # Build expected year group merges
+        expected_year = []
+        for y in range(num_years):
+            start_col = YEAR_GROUP_START + y * COLS_PER_YEAR
+            end_col = start_col + COLS_PER_YEAR - 1
+            expected_year.append((start_col, end_col))
+
+        # PROJECT TOTAL merge
+        total_start = YEAR_GROUP_START + num_years * COLS_PER_YEAR
+        total_end = total_start + 3  # 4 columns
+        expected_total = (total_start, total_end)
+
+        # Find the year header row — look for the "Year 1" merge
+        year_row = None
+        for rng in ws.merged_cells.ranges:
+            cell = ws.cell(row=rng.min_row, column=rng.min_col)
+            if cell.value and str(cell.value).startswith("Year 1"):
+                year_row = rng.min_row
+                break
+        assert year_row is not None, "Summary year header row not found"
+
+        # Collect all merges on that row with col >= YEAR_GROUP_START
+        actual = []
+        for rng in ws.merged_cells.ranges:
+            if rng.min_row == year_row and rng.max_row == year_row and rng.min_col >= YEAR_GROUP_START:
+                actual.append((rng.min_col, rng.max_col))
+        actual.sort()
+
+        # Expected: all year merges + PROJECT TOTAL merge
+        all_expected = sorted(expected_year + [expected_total])
+        assert actual == all_expected, (
+            f"Summary year header merges mismatch.\n"
+            f"  Expected: {all_expected}\n"
+            f"  Actual:   {actual}"
+        )
+
+
+class TestSectionHeaders:
+    """Section headers span the correct column range."""
+
+    @pytest.mark.parametrize("sheet_name,header_text,expected_cols", [
+        ("Plan", "CONFIGURATION", (1, 7)),
+        ("Plan", "PLANNED FTE", (1, VAL_COL_DIFF)),
+        ("Capacity", "EXTERNAL COMMITMENTS", (1, 5)),
+        ("Actuals", "ACTUAL EUR", (1, VAL_COL_DIFF)),
+    ])
+    def test_section_header_span(self, workbook, sheet_name, header_text, expected_cols):
+        ws = workbook[sheet_name]
+        info = _find_section_merge(ws, header_text)
+        assert info is not None, f"Section header '{header_text}' not found in {sheet_name}"
+        _, min_col, max_col = info
+        assert (min_col, max_col) == expected_cols, (
+            f"{sheet_name} '{header_text}' merge spans cols {min_col}-{max_col}, "
+            f"expected {expected_cols[0]}-{expected_cols[1]}"
+        )

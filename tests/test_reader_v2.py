@@ -9,7 +9,7 @@ from budget_planner.reader import (
     read_capacity_sheet,
 )
 from budget_planner.config import (
-    WORK_PACKAGES, TEAM, PROJECT_MONTHS,
+    WORK_PACKAGES, TEAM, PROJECT_MONTHS, EXTERNAL_COMMITMENTS,
 )
 
 
@@ -139,4 +139,55 @@ def test_read_capacity_handles_variable_geometry(fresh_wb_path):
     carol = cap["person_groups"]["Carol"]
     assert set(carol["wp_values"].keys()) == {"WP4", "WP5", "WP6"}
     assert len(carol["external_values"]) == 0
+    wb.close()
+
+
+def test_read_capacity_external_commitments_round_trip(fresh_wb_path):
+    """read_capacity_sheet extracts external_commitments matching config."""
+    import openpyxl
+    wb = openpyxl.load_workbook(fresh_wb_path)
+    layout = discover_layout(wb["Plan"])
+    config_wps = read_plan_config(wb["Plan"], layout)
+    cap = read_capacity_sheet(wb["Capacity"], config_wps)
+
+    ext = cap["external_commitments"]
+    assert len(ext) == len(EXTERNAL_COMMITMENTS)
+    for got, expected in zip(ext, EXTERNAL_COMMITMENTS):
+        assert got["person"] == expected["person"]
+        assert got["project"] == expected["project"]
+        assert got["fte"] == pytest.approx(expected["fte"])
+        assert got["start"] == expected["start"]
+        assert got["end"] == expected["end"]
+    wb.close()
+
+
+# ── Skeleton mode round-trip ──
+
+
+def test_skeleton_capacity_all_monthly_values_none(skeleton_wb_path):
+    """Skeleton workbook has all-None monthly values for every person/WP."""
+    import openpyxl
+    wb = openpyxl.load_workbook(skeleton_wb_path)
+    layout = discover_layout(wb["Plan"])
+    config_wps = read_plan_config(wb["Plan"], layout)
+    cap = read_capacity_sheet(wb["Capacity"], config_wps)
+
+    assert len(cap["person_groups"]) > 0, "Should discover at least one person"
+
+    for name, group in cap["person_groups"].items():
+        for wp_id, values in group["wp_values"].items():
+            assert len(values) == PROJECT_MONTHS, (
+                f"{name} {wp_id}: expected {PROJECT_MONTHS} values, got {len(values)}")
+            assert all(v is None for v in values), (
+                f"{name} {wp_id}: expected all None in skeleton, "
+                f"got non-None at indices "
+                f"{[i for i, v in enumerate(values) if v is not None]}")
+        for ext_name, values in group["external_values"].items():
+            assert len(values) == PROJECT_MONTHS, (
+                f"{name} {ext_name}: expected {PROJECT_MONTHS} values, "
+                f"got {len(values)}")
+            assert all(v is None for v in values), (
+                f"{name} {ext_name}: expected all None in skeleton, "
+                f"got non-None at indices "
+                f"{[i for i, v in enumerate(values) if v is not None]}")
     wb.close()

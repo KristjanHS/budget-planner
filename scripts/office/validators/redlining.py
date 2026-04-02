@@ -73,9 +73,9 @@ class RedliningValidator:
                 )
                 return False
 
-            try:
-                import xml.etree.ElementTree as ET
+            import xml.etree.ElementTree as ET
 
+            try:
                 modified_tree = ET.parse(modified_file)
                 modified_root = modified_tree.getroot()
                 original_tree = ET.parse(original_file)

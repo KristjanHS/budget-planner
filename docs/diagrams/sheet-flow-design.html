@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Budget Planner — Sheet Flow Design</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Source+Code+Pro:wght@400;600;700&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: #FAFAF8;
+      color: #1a1a1a;
+      padding: 24px 16px;
+      min-height: 100vh;
+    }
+
+    .container { max-width: 760px; margin: 0 auto; }
+
+    /* Header */
+    .header { margin-bottom: 28px; }
+    .header .kicker {
+      font-family: 'Source Code Pro', monospace;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.12em; color: #888;
+      text-transform: uppercase; margin-bottom: 4px;
+    }
+    .header h1 {
+      font-size: 24px; font-weight: 700;
+      color: #1a1a1a; line-height: 1.2; margin-bottom: 6px;
+    }
+    .header .subtitle {
+      font-size: 14px; color: #666; line-height: 1.4;
+    }
+
+    /* Controls */
+    .controls { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .controls button {
+      padding: 6px 14px; font-size: 12px;
+      font-family: 'DM Sans', sans-serif; font-weight: 600;
+      border: 1px solid #ccc; border-radius: 6px;
+      background: #fff; cursor: pointer; color: #333;
+      transition: background 0.15s;
+    }
+    .controls button:hover { background: #f0f0f0; }
+
+    /* Legend */
+    .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .legend-badge {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.08em; padding: 2px 7px;
+      border-radius: 3px;
+      font-family: 'Source Code Pro', monospace;
+    }
+
+    /* Sheet cards */
+    .sheet-card {
+      border-radius: 12px; overflow: hidden;
+      background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      margin-bottom: 16px; position: relative;
+    }
+    .sheet-card .connector {
+      position: absolute; left: 24px; top: -16px;
+      width: 2px; height: 16px; background: #ccc;
+    }
+    .sheet-card:first-child .connector { display: none; }
+
+    .sheet-header {
+      width: 100%; display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; border: none; cursor: pointer;
+      text-align: left; font-family: inherit;
+    }
+    .sheet-header .icon { font-size: 22px; flex-shrink: 0; }
+    .sheet-header .info { flex: 1; }
+    .sheet-header .label {
+      font-family: 'Source Code Pro', monospace;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.12em; margin-bottom: 2px;
+    }
+    .sheet-header .summary {
+      font-size: 13px; color: #555;
+    }
+    .sheet-header .toggle {
+      font-size: 18px; font-weight: 700;
+      transition: transform 0.2s ease;
+    }
+    .sheet-header .toggle.open { transform: rotate(180deg); }
+
+    .sheet-body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+    .sheet-body.collapsed { display: none; }
+
+    /* Detail cards */
+    .detail-card {
+      border-radius: 8px; padding: 12px 14px;
+      display: flex; gap: 12px; align-items: flex-start;
+    }
+    .detail-card .num {
+      min-width: 26px; height: 26px; border-radius: 50%;
+      background: #fff; display: flex; align-items: center;
+      justify-content: center; font-family: 'Source Code Pro', monospace;
+      font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+    }
+    .detail-card .content { flex: 1; min-width: 0; }
+    .detail-card .content .title-row {
+      display: flex; align-items: center; gap: 8px;
+      flex-wrap: wrap; margin-bottom: 4px;
+    }
+    .detail-card .content .title-row .name {
+      font-weight: 700; font-size: 14px; color: #1a1a1a;
+    }
+    .detail-card .content .title-row .badge {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.08em; padding: 2px 6px;
+      border-radius: 3px; font-family: 'Source Code Pro', monospace;
+    }
+    .detail-card .content p {
+      font-size: 13px; color: #4a4a4a; line-height: 1.45;
+    }
+    .detail-card .content code {
+      display: inline-block; margin-top: 6px;
+      padding: 4px 10px; background: rgba(0,0,0,0.06);
+      border-radius: 4px; font-size: 12px;
+      font-family: 'Source Code Pro', monospace;
+      color: #333; letter-spacing: 0.02em;
+    }
+    .detail-card .content .cell-table {
+      margin-top: 8px; font-size: 12px; width: 100%;
+      border-collapse: collapse;
+    }
+    .detail-card .content .cell-table th,
+    .detail-card .content .cell-table td {
+      padding: 4px 8px; text-align: left;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    .detail-card .content .cell-table th {
+      font-weight: 600; color: #666;
+      font-family: 'Source Code Pro', monospace; font-size: 10px;
+      letter-spacing: 0.05em; text-transform: uppercase;
+    }
+    .detail-card .content .cell-table .type-input { color: #1565c0; font-weight: 600; }
+    .detail-card .content .cell-table .type-formula { color: #1a1a1a; font-weight: 600; }
+
+    /* Data flow SVG section */
+    .flow-section {
+      margin: 28px 0; padding: 20px;
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .flow-section .section-kicker {
+      font-family: 'Source Code Pro', monospace;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.1em; color: #888;
+      text-transform: uppercase; margin-bottom: 8px;
+    }
+    .flow-section h2 {
+      font-size: 18px; font-weight: 700;
+      margin-bottom: 16px; color: #1a1a1a;
+    }
+
+    /* Key decisions */
+    .decisions-section {
+      margin: 24px 0; padding: 16px 18px;
+      background: #FFF8E1; border: 2px solid #FFD54F;
+      border-radius: 10px;
+    }
+    .decisions-section .kicker {
+      font-family: 'Source Code Pro', monospace;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.1em; color: #F57F17;
+      margin-bottom: 10px;
+    }
+    .decisions-section ul {
+      list-style: none; padding: 0;
+    }
+    .decisions-section li {
+      font-size: 14px; color: #333; line-height: 1.5;
+      padding: 6px 0; border-bottom: 1px solid rgba(245,127,23,0.15);
+    }
+    .decisions-section li:last-child { border-bottom: none; }
+    .decisions-section li strong { color: #1a1a1a; }
+
+    /* Out of scope */
+    .oos-section {
+      margin: 20px 0; padding: 14px 16px;
+      background: #F2F2F2; border: 1px solid #ccc;
+      border-radius: 10px;
+    }
+    .oos-section .kicker {
+      font-family: 'Source Code Pro', monospace;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.1em; color: #888; margin-bottom: 6px;
+    }
+    .oos-section ul {
+      list-style: none; padding: 0;
+      display: flex; flex-wrap: wrap; gap: 6px;
+    }
+    .oos-section li {
+      font-size: 12px; color: #666;
+      background: #e5e5e5; padding: 3px 10px;
+      border-radius: 4px;
+    }
+
+    .footer {
+      margin-top: 20px; font-size: 11px; color: #999;
+      font-family: 'Source Code Pro', monospace;
+      text-align: center; padding-bottom: 20px;
+    }
+
+    /* SVG styles */
+    .flow-svg text { font-family: 'DM Sans', system-ui, sans-serif; }
+    .flow-svg .box-label {
+      font-family: 'Source Code Pro', monospace;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
+    }
+    .flow-svg .box-sub { font-size: 10px; fill: #fff; opacity: 0.85; }
+    .flow-svg .arrow-label {
+      font-size: 9px; fill: #888;
+      font-family: 'Source Code Pro', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="kicker">Programme Actual-Cost Model</div>
+      <h1>Sheet Flow Design</h1>
+      <div class="subtitle">
+        Workbook architecture for personnel FTE planning and EUR ceiling tracking
+        within our partner envelope. Covers programme phases 2&ndash;7.
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <span class="legend-badge" style="background:#6c757d;color:#fff;">CONFIG</span>
+      <span class="legend-badge" style="background:#1565c0;color:#fff;">INPUT</span>
+      <span class="legend-badge" style="background:#f57f17;color:#fff;">FORMULA</span>
+      <span class="legend-badge" style="background:#2e7d32;color:#fff;">CROSS-SHEET</span>
+      <span class="legend-badge" style="background:#c62828;color:#fff;">CONSTRAINT</span>
+      <span class="legend-badge" style="background:#6a1b9a;color:#fff;">NEW</span>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button onclick="expandAll()">Expand all</button>
+      <button onclick="collapseAll()">Collapse all</button>
+    </div>
+
+    <!-- Data Flow Diagram -->
+    <div class="flow-section">
+      <div class="section-kicker">Data Flow</div>
+      <h2>Sheet Dependencies</h2>
+      <svg class="flow-svg" viewBox="0 0 700 380" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L8,3 L0,6" fill="#999"/>
+          </marker>
+          <filter id="shadow">
+            <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.1"/>
+          </filter>
+        </defs>
+
+        <!-- Team box -->
+        <rect x="30" y="30" width="140" height="60" rx="8" fill="#E8751A" filter="url(#shadow)"/>
+        <text x="100" y="55" text-anchor="middle" fill="#fff" class="box-label">TEAM</text>
+        <text x="100" y="70" text-anchor="middle" class="box-sub">Roster + WP seeds</text>
+
+        <!-- Capacity box -->
+        <rect x="280" y="30" width="140" height="60" rx="8" fill="#7B2D8E" filter="url(#shadow)"/>
+        <text x="350" y="55" text-anchor="middle" fill="#fff" class="box-label">CAPACITY</text>
+        <text x="350" y="70" text-anchor="middle" class="box-sub">Monthly FTE/person</text>
+
+        <!-- Plan box -->
+        <rect x="280" y="160" width="140" height="70" rx="8" fill="#3A7CA5" filter="url(#shadow)"/>
+        <text x="350" y="188" text-anchor="middle" fill="#fff" class="box-label">PLAN</text>
+        <text x="350" y="204" text-anchor="middle" class="box-sub">Config + FTE grid</text>
+
+        <!-- Actuals box -->
+        <rect x="530" y="160" width="140" height="70" rx="8" fill="#1565C0" filter="url(#shadow)"/>
+        <text x="600" y="188" text-anchor="middle" fill="#fff" class="box-label">ACTUALS</text>
+        <text x="600" y="204" text-anchor="middle" class="box-sub">EUR from accountant</text>
+
+        <!-- Summary box -->
+        <rect x="400" y="300" width="160" height="60" rx="8" fill="#2E7D32" filter="url(#shadow)"/>
+        <text x="480" y="325" text-anchor="middle" fill="#fff" class="box-label">SUMMARY</text>
+        <text x="480" y="340" text-anchor="middle" class="box-sub">Aggregation + overview</text>
+
+        <!-- _META box (small, aside) -->
+        <rect x="30" y="160" width="110" height="44" rx="6" fill="#C62828" filter="url(#shadow)"/>
+        <text x="85" y="180" text-anchor="middle" fill="#fff" class="box-label" style="font-size:10px;">_META</text>
+        <text x="85" y="193" text-anchor="middle" class="box-sub" style="font-size:9px;">AI-agent docs</text>
+
+        <!-- Arrows: Team → Capacity -->
+        <line x1="170" y1="60" x2="275" y2="60" stroke="#999" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="222" y="52" text-anchor="middle" class="arrow-label">names, max FTE</text>
+
+        <!-- Arrows: Capacity → Plan (SUM formulas) -->
+        <line x1="350" y1="95" x2="350" y2="155" stroke="#999" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="362" y="130" class="arrow-label">SUM FTE/WP</text>
+
+        <!-- Arrows: Plan → Capacity (WP names, up-left) -->
+        <path d="M285,175 L240,175 L240,70 L275,70" fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow)"/>
+        <text x="215" y="128" text-anchor="end" class="arrow-label">WP names</text>
+
+        <!-- Arrows: Plan → Actuals -->
+        <line x1="420" y1="195" x2="525" y2="195" stroke="#999" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="472" y="188" text-anchor="middle" class="arrow-label">WP structure,</text>
+        <text x="472" y="198" text-anchor="middle" class="arrow-label">ceilings</text>
+
+        <!-- Arrows: Plan → Summary -->
+        <path d="M350,230 L350,270 L430,295" fill="none" stroke="#999" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="350" y="268" text-anchor="middle" class="arrow-label">Plan FTE, Plan EUR</text>
+
+        <!-- Arrows: Actuals → Summary -->
+        <path d="M600,230 L600,270 L535,295" fill="none" stroke="#999" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="610" y="268" class="arrow-label">Actual EUR</text>
+
+        <!-- Build order note -->
+        <text x="30" y="370" class="arrow-label" style="font-size:10px;fill:#aaa;">
+          Build order: Plan → Team → Capacity → patch Plan → Actuals → Summary
+        </text>
+      </svg>
+    </div>
+
+    <!-- Sheet Cards -->
+    <div id="sheets"></div>
+
+    <!-- Key Decisions -->
+    <div class="decisions-section">
+      <div class="kicker">Key Decisions</div>
+      <ul>
+        <li><strong>Actuals in EUR, not FTE</strong> &mdash; accountant provides EUR; converting back to FTE adds noise and no value.</li>
+        <li><strong>Separate Actuals sheet</strong> &mdash; Plan stays purely about planning. No source-of-truth confusion.</li>
+        <li><strong>Personnel ceiling only</strong> &mdash; 25% indirect is a separate grant budget line. Ceiling comparison is personnel-to-personnel.</li>
+        <li><strong>No reporting periods</strong> &mdash; monthly granularity in Actuals allows ad-hoc slicing when needed.</li>
+        <li><strong>Global params in A&ndash;B only</strong> &mdash; prevents auto-fit from widening month columns.</li>
+        <li><strong>Per-WP ceiling in config area</strong> &mdash; next to Active Months. Keeps related WP properties together.</li>
+      </ul>
+    </div>
+
+    <!-- Out of scope -->
+    <div class="oos-section">
+      <div class="kicker">Out of Scope</div>
+      <ul>
+        <li>Multi-partner consortium view</li>
+        <li>Non-personnel cost tracking</li>
+        <li>Reporting period configuration</li>
+        <li>Grant amendment tracking</li>
+        <li>Per-person actual time logging</li>
+      </ul>
+    </div>
+
+    <div class="footer">Innovation Action &middot; Budget &amp; Resource Scheduling</div>
+  </div>
+
+  <script>
+    const sheets = [
+      {
+        id: "meta",
+        label: "_META",
+        icon: "\uD83D\uDCD5",
+        color: "#C62828",
+        bgColor: "#FBE8E8",
+        borderColor: "#C62828",
+        summary: "AI-agent documentation sheet",
+        phase: "\u2014",
+        details: [
+          {
+            title: "Purpose",
+            detail: "Machine-readable documentation for AI agents. Updated whenever workbook structure changes. Primary documentation source for future sessions.",
+            type: "config"
+          }
+        ]
+      },
+      {
+        id: "plan",
+        label: "PLAN",
+        icon: "\uD83D\uDCCB",
+        color: "#3A7CA5",
+        bgColor: "#E4EDF4",
+        borderColor: "#3A7CA5",
+        summary: "Project config + Planned FTE grid + personnel ceilings",
+        phase: "Phases 2\u20133",
+        defaultOpen: true,
+        details: [
+          {
+            title: "Global params (rows 1\u20134, cols A\u2013B)",
+            detail: "Project Title, Project Start, FTE Rate (EUR), Personnel Ceiling. Named ranges: project_start \u2192 B2, fte_rate \u2192 B3, partner_ceiling \u2192 B4.",
+            type: "config",
+            cells: [
+              ["A1: Project Title", "B1: [Project Name]", "input"],
+              ["A2: Project Start", "B2: [2026-01-01]", "input"],
+              ["A3: FTE Rate (EUR)", "B3: [6500]", "input"],
+              ["A4: Personnel Ceiling", "B4: =SUM of WP ceilings", "formula"]
+            ]
+          },
+          {
+            title: "WP config table (rows 6+)",
+            detail: "Columns A\u2013B: WP ID, WP Name. Dense config columns (C\u2013H): FTE Budget (PM), Start Month, End Month, Active Months (formula), Personnel Ceiling EUR (= FTE Budget \u00d7 fte_rate).",
+            type: "formula",
+            formula: "personnel_ceiling_wp = fte_budget \u00d7 fte_rate"
+          },
+          {
+            title: "Planned FTE grid (below config)",
+            detail: "Year/month labels + one row per WP + TOTAL. Monthly cells are SUM formulas referencing Capacity. Validation columns: Sum, Budget, Variance.",
+            type: "cross-sheet"
+          },
+          {
+            title: "Change from current: Actual FTE block removed",
+            detail: "Removes source-of-truth confusion. Actuals now live on their own sheet in EUR (not FTE).",
+            type: "constraint"
+          }
+        ]
+      },
+      {
+        id: "team",
+        label: "TEAM",
+        icon: "\uD83D\uDC65",
+        color: "#E8751A",
+        bgColor: "#FDF0E2",
+        borderColor: "#E8751A",
+        summary: "Team roster + WP share seed matrix",
+        phase: "Phase 3",
+        details: [
+          {
+            title: "Team roster",
+            detail: "Name and max FTE per team member. Feeds into Capacity sheet for per-person allocation.",
+            type: "input"
+          },
+          {
+            title: "WP share seeds",
+            detail: "Matrix of initial WP allocation percentages per person. Used to pre-fill Capacity in demo mode.",
+            type: "input"
+          },
+          {
+            title: "No changes planned",
+            detail: "This sheet remains unchanged in the new design.",
+            type: "config"
+          }
+        ]
+      },
+      {
+        id: "capacity",
+        label: "CAPACITY",
+        icon: "\uD83D\uDCC5",
+        color: "#7B2D8E",
+        bgColor: "#F0E6F6",
+        borderColor: "#7B2D8E",
+        summary: "Per-person monthly FTE allocation grids",
+        phase: "Phases 3\u20134",
+        details: [
+          {
+            title: "Person allocation blocks",
+            detail: "One block per team member. Monthly FTE values (blue input) allocated across WPs. Max FTE constraint from Team sheet.",
+            type: "input"
+          },
+          {
+            title: "Feeds Plan sheet",
+            detail: "SUM formulas on Plan aggregate all person allocations per WP per month. This is the core planning data flow.",
+            type: "cross-sheet",
+            formula: "Plan!FTE[wp,month] = \u03a3 Capacity!FTE[person,wp,month]"
+          },
+          {
+            title: "No changes planned",
+            detail: "This sheet remains unchanged in the new design.",
+            type: "config"
+          }
+        ]
+      },
+      {
+        id: "actuals",
+        label: "ACTUALS",
+        icon: "\uD83D\uDCB6",
+        color: "#1565C0",
+        bgColor: "#E3F2FD",
+        borderColor: "#1565C0",
+        summary: "EUR actuals per WP per month (from accountant)",
+        phase: "Phases 4\u20135",
+        isNew: true,
+        defaultOpen: true,
+        details: [
+          {
+            title: "Monthly EUR grid",
+            detail: "Row 1: header (merged). Row 2\u20133: year/month labels. Row 4+: one row per WP with blue input cells for EUR values from accountant. Row N: TOTAL (SUM).",
+            type: "input"
+          },
+          {
+            title: "Validation columns",
+            detail: "Sum (row total per WP), Ceiling (formula ref to Plan's per-WP Personnel Ceiling), Variance (Ceiling \u2212 Sum). Red conditional formatting if negative.",
+            type: "formula",
+            formula: "variance = ceiling \u2212 sum_actuals"
+          },
+          {
+            title: "Month alignment",
+            detail: "Month columns start at the same column position as Plan (column C onward). Inactive months greyed out using the same convention.",
+            type: "constraint"
+          },
+          {
+            title: "Pure input sheet",
+            detail: "Nothing feeds into Actuals except WP structure from Plan. No circular references possible.",
+            type: "config"
+          }
+        ]
+      },
+      {
+        id: "summary",
+        label: "SUMMARY",
+        icon: "\uD83D\uDCCA",
+        color: "#2E7D32",
+        bgColor: "#E8F5E9",
+        borderColor: "#2E7D32",
+        summary: "Annual FTE/EUR aggregation + budget overview",
+        phase: "Phases 4\u20137",
+        details: [
+          {
+            title: "Annual table (revised)",
+            detail: "Per-year column groups: Plan FTE, Plan EUR, Actual EUR (new, from Actuals), Variance EUR (new, Plan minus Actual). One row per WP + TOTAL. Project Total columns aggregate all years.",
+            type: "cross-sheet"
+          },
+          {
+            title: "Variance conditional formatting",
+            detail: "Red if negative (actuals exceed plan). Gives immediate visual signal when a WP is overspending.",
+            type: "constraint"
+          },
+          {
+            title: "Budget overview (new section)",
+            detail: "Personnel Actual, Total Claimable (+25%), Personnel Ceiling, Remaining, % Consumed. Conditional formatting: red if Remaining < 0, amber if < 10% of ceiling.",
+            type: "formula",
+            formula: "total_claimable = personnel_actual \u00d7 1.25"
+          },
+          {
+            title: "Cross-sheet references",
+            detail: "Personnel Actual = Actuals!TOTAL sum. Personnel Ceiling = Plan!partner_ceiling. All formulas, no manual entry.",
+            type: "cross-sheet"
+          }
+        ]
+      }
+    ];
+
+    const typeStyles = {
+      config:      { bg: "#f8f9fa", border: "#dee2e6", badge: "#6c757d", badgeText: "#fff", label: "CONFIG" },
+      input:       { bg: "#e3f2fd", border: "#90caf9", badge: "#1565c0", badgeText: "#fff", label: "INPUT" },
+      formula:     { bg: "#fff8e1", border: "#ffe082", badge: "#f57f17", badgeText: "#fff", label: "FORMULA" },
+      "cross-sheet": { bg: "#e8f5e9", border: "#a5d6a7", badge: "#2e7d32", badgeText: "#fff", label: "CROSS-SHEET" },
+      constraint:  { bg: "#fce4ec", border: "#ef9a9a", badge: "#c62828", badgeText: "#fff", label: "CONSTRAINT" }
+    };
+
+    function renderSheets() {
+      const container = document.getElementById("sheets");
+      container.innerHTML = sheets.map((sheet, idx) => {
+        const isOpen = sheet.defaultOpen || false;
+        return `
+          <div class="sheet-card" style="border: 2px solid ${sheet.borderColor};">
+            ${idx > 0 ? '<div class="connector"></div>' : ''}
+            <button class="sheet-header" style="background:${sheet.bgColor};" onclick="toggleSheet('${sheet.id}')">
+              <span class="icon">${sheet.icon}</span>
+              <div class="info">
+                <div class="label" style="color:${sheet.color};">
+                  ${sheet.label}
+                  ${sheet.isNew ? '<span style="font-size:9px;background:#6a1b9a;color:#fff;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;">NEW</span>' : ''}
+                  <span style="font-size:9px;color:#999;font-weight:400;margin-left:6px;">${sheet.phase}</span>
+                </div>
+                <div class="summary">${sheet.summary}</div>
+              </div>
+              <span class="toggle ${isOpen ? 'open' : ''}" id="toggle-${sheet.id}">\u25BE</span>
+            </button>
+            <div class="sheet-body ${isOpen ? '' : 'collapsed'}" id="body-${sheet.id}">
+              ${sheet.details.map((d, i) => renderDetail(d, i)).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderDetail(d, i) {
+      const style = typeStyles[d.type] || typeStyles.config;
+      let extra = '';
+
+      if (d.formula) {
+        extra += `<code>${d.formula}</code>`;
+      }
+      if (d.cells) {
+        extra += `
+          <table class="cell-table">
+            <tr><th>Cell</th><th>Value</th><th>Type</th></tr>
+            ${d.cells.map(c => `
+              <tr>
+                <td style="font-family:'Source Code Pro',monospace;font-size:11px;">${c[0]}</td>
+                <td style="font-family:'Source Code Pro',monospace;font-size:11px;">${c[1]}</td>
+                <td class="type-${c[2]}">${c[2]}</td>
+              </tr>
+            `).join('')}
+          </table>
+        `;
+      }
+
+      return `
+        <div class="detail-card" style="background:${style.bg};border:1px solid ${style.border};">
+          <div class="num" style="border:2px solid ${style.border};color:${style.badge};">${i + 1}</div>
+          <div class="content">
+            <div class="title-row">
+              <span class="name">${d.title}</span>
+              <span class="badge" style="background:${style.badge};color:${style.badgeText};">${style.label}</span>
+            </div>
+            <p>${d.detail}</p>
+            ${extra}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleSheet(id) {
+      const body = document.getElementById('body-' + id);
+      const toggle = document.getElementById('toggle-' + id);
+      body.classList.toggle('collapsed');
+      toggle.classList.toggle('open');
+    }
+
+    function expandAll() {
+      sheets.forEach(s => {
+        document.getElementById('body-' + s.id).classList.remove('collapsed');
+        document.getElementById('toggle-' + s.id).classList.add('open');
+      });
+    }
+
+    function collapseAll() {
+      sheets.forEach(s => {
+        document.getElementById('body-' + s.id).classList.add('collapsed');
+        document.getElementById('toggle-' + s.id).classList.remove('open');
+      });
+    }
+
+    renderSheets();
+  </script>
+</body>
+</html>

@@ -7,7 +7,7 @@
 1. **Biggest pain point**: Planning phase — distributing FTE across WPs and months
 2. **Planning approach**: Bottom-up (people's availability) + milestone-driven (deliverable deadlines)
 3. **Team**: 4 people, all cross-cutting multiple WPs
-4. **Deliverable deadlines**: In Kristjan's head/emails + grant agreement (DoA)
+4. **Deliverable deadlines**: In the planner's head/emails + grant agreement (DoA)
 5. **Key insight**: All 4 people work across MULTIPLE projects with competing deadlines — planning one project in isolation is insufficient
 6. **Project load**: Varies — some people on 2 projects, others on 5+
 7. **Redmine**: Used as task management tool but currently has only WP/task structure — no content, sizing, or deadlines defined yet
@@ -22,7 +22,7 @@ Additionally, the Redmine instance is underutilized — it has structure but no 
 
 1. **Visibility** — single view of per-person load across all projects, spot conflicts early
 2. **Compliance** — spreadsheet satisfies auditors and funders
-3. **Redmine guidance** — no automation, but help Kristjan think through what data should go into Redmine (deadlines, effort estimates, etc.)
+3. **Redmine guidance** — no automation, but help the planner think through what data should go into Redmine (deadlines, effort estimates, etc.)
 
 ### Replanning Frequency
 
@@ -32,7 +32,7 @@ Additionally, the Redmine instance is underutilized — it has structure but no 
 
 ### Core Tension
 
-The tool generates a nice compliant spreadsheet, but the PLANNING INPUTS (who is available when, which deadlines are shifting) live in Kristjan's head. Every replan means mentally recalculating 4 people × N projects × shifting deadlines, then manually updating the spreadsheet.
+The tool generates a nice compliant spreadsheet, but the PLANNING INPUTS (who is available when, which deadlines are shifting) live in the planner's head. Every replan means mentally recalculating 4 people × N projects × shifting deadlines, then manually updating the spreadsheet.
 
 ### Ideation Results
 
@@ -40,7 +40,7 @@ The tool generates a nice compliant spreadsheet, but the PLANNING INPUTS (who is
 
 1. **The unit of planning is the person, not the WP.** The tool organizes around WP×month (compliance artifact), but the actual constraint is person×month capacity. The person-load view isn't a reporting feature — it's the missing planning surface.
 
-2. **The scratchpad lives in Kristjan's head.** The bottleneck isn't editing speed — it's fear of overwriting a valid plan with an unvalidated one. A draft/baseline toggle externalizes the working memory that currently lives nowhere.
+2. **The scratchpad lives in the planner's head.** The bottleneck isn't editing speed — it's fear of overwriting a valid plan with an unvalidated one. A draft/baseline toggle externalizes the working memory that currently lives nowhere.
 
 3. **Deadline slips are invisible at decision time.** When a WP date shifts, the FTE redistribution cost is never made concrete. Showing the cell-level diff at change time converts abstract risk into a visible decision.
 
@@ -90,4 +90,4 @@ The tool generates a nice compliant spreadsheet, but the PLANNING INPUTS (who is
 - **Planner**: Person-centric Load sheet with remaining capacity per month, red on >1.0 FTE
 - **Team member**: Per-person commitment card they can review and flag conflicts on
 - **Auditor**: _SOURCES sheet with evidence chain + completeness flags for missing actuals
-- **Future Kristjan**: Replan log capturing what changed, when, and why (_LOG sheet + --note flag)
+- **Future planner**: Replan log capturing what changed, when, and why (_LOG sheet + --note flag)

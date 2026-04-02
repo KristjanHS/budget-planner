@@ -3,11 +3,12 @@ import re
 
 import openpyxl
 import pytest
+from openpyxl.utils import get_column_letter
 
-from budget_planner.workbook import generate_workbook
-from budget_planner.reader import discover_layout, read_workbook, read_capacity_sheet, read_plan_config
+from budget_planner.reader import discover_layout, read_capacity_sheet, read_plan_config
 from budget_planner.config import (
     WORK_PACKAGES, TEAM, MONTH_COL_START, PROJECT_MONTHS,
+    NUM_WPS, VAL_COL_SUM,
 )
 
 
@@ -109,183 +110,257 @@ def test_team_shares_to_capacity_seed_values(fresh_wb_path):
     wb.close()
 
 
-# ── Round-trip preservation ──
+# ── Helpers for Summary sheet layout discovery ──
 
-def test_roundtrip_capacity_edits_preserved(tmp_path):
-    """Capacity cell edits survive --update round-trip."""
-    # Generate fresh
-    path = str(tmp_path / "test.xlsx")
-    generate_workbook(path)
-
-    # Load and edit a Capacity cell
-    wb = openpyxl.load_workbook(path)
-    cap = wb["Capacity"]
-
-    # Find a cell with the seed value for Alice/WP1:
-    # share=0.25, FTE=12.0, active_months=60 -> seed = 0.05
-    edit_row = None
-    for r in range(1, cap.max_row + 1):
-        val = cap.cell(r, MONTH_COL_START).value
-        if val is not None and isinstance(val, (int, float)) and abs(val - 0.05) < 0.001:
-            edit_row = r
-            break
-
-    assert edit_row is not None, "Could not find a cell with seed value 0.05"
-
-    cap.cell(edit_row, MONTH_COL_START, 0.99)
-    wb.save(path)
-    wb.close()
-
-    # Update
-    updated = str(tmp_path / "updated.xlsx")
-    generate_workbook(output_path=updated, existing_path=path)
-
-    # Verify the edited value survived
-    wb2 = openpyxl.load_workbook(updated)
-    cap2 = wb2["Capacity"]
-    assert cap2.cell(edit_row, MONTH_COL_START).value == pytest.approx(0.99), (
-        "Capacity edit was not preserved on --update"
-    )
-    wb2.close()
+# Summary layout constants (must match summary.py)
+_COLS_PER_YEAR = 4  # Plan FTE, Plan EUR, Act EUR, Var EUR
+_YEAR_GROUP_START = 3
+_NUM_YEARS = (PROJECT_MONTHS + 11) // 12
+_TOTAL_GROUP_START = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
 
 
-def test_roundtrip_actuals_still_preserved(tmp_path):
-    """Actuals survive --update in v2 workbook (regression guard)."""
-    # Generate fresh
-    path = str(tmp_path / "test.xlsx")
-    generate_workbook(path)
+def _find_summary_first_wp_row(summary_ws):
+    """Find the first WP data row by scanning for formula refs in col A."""
+    for r in range(1, summary_ws.max_row + 1):
+        val = summary_ws.cell(r, 1).value
+        if isinstance(val, str) and val.startswith("=Plan!A"):
+            return r
+    raise ValueError("Cannot find Summary first WP row")
 
-    # Inject actuals
-    wb = openpyxl.load_workbook(path)
+
+def _find_summary_budget_overview(summary_ws, after_row):
+    """Find Budget Overview rows by scanning for known labels after WP block."""
+    labels: dict[str, int] = {}
+    for r in range(after_row, summary_ws.max_row + 1):
+        val = summary_ws.cell(r, 1).value
+        if isinstance(val, str):
+            labels[val] = r
+    return labels
+
+
+# ── Summary ← Plan + Actuals cross-sheet formula tests ──
+
+def test_summary_plan_fte_formulas_reference_plan_planned_rows(fresh_wb_path):
+    """Summary year Plan FTE formulas reference Plan planned block rows."""
+    wb = openpyxl.load_workbook(fresh_wb_path)
     plan = wb["Plan"]
     layout = discover_layout(plan)
-    row = layout["actual_first_wp_row"]
-    plan.cell(row, MONTH_COL_START, 0.15)      # WP1, M1
-    plan.cell(row, MONTH_COL_START + 1, 0.20)  # WP1, M2
-    wb.save(path)
+    summary = wb["Summary"]
+    first_wp = _find_summary_first_wp_row(summary)
+
+    for i, wp in enumerate(WORK_PACKAGES):
+        row = first_wp + i
+        plan_wp_row = layout["planned_first_wp_row"] + i
+
+        for y in range(_NUM_YEARS):
+            sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
+            cell_val = summary.cell(row, sc).value
+
+            m_start = y * 12
+            m_end = min((y + 1) * 12, PROJECT_MONTHS) - 1
+            first_col_l = get_column_letter(MONTH_COL_START + m_start)
+            last_col_l = get_column_letter(MONTH_COL_START + m_end)
+
+            expected = f"=SUM(Plan!{first_col_l}{plan_wp_row}:{last_col_l}{plan_wp_row})"
+            assert cell_val == expected, (
+                f"{wp['id']} Y{y+1}: expected {expected}, got {cell_val}"
+            )
+
     wb.close()
 
-    # Update
-    updated = str(tmp_path / "updated.xlsx")
-    generate_workbook(output_path=updated, existing_path=path)
 
-    # Verify actuals survived
-    wb2 = openpyxl.load_workbook(updated)
-    plan2 = wb2["Plan"]
-    layout2 = discover_layout(plan2)
-    row2 = layout2["actual_first_wp_row"]
-    assert plan2.cell(row2, MONTH_COL_START).value == pytest.approx(0.15), (
-        "Actual M1 not preserved"
-    )
-    assert plan2.cell(row2, MONTH_COL_START + 1).value == pytest.approx(0.20), (
-        "Actual M2 not preserved"
-    )
-    wb2.close()
+def test_summary_actual_eur_formulas_reference_actuals_rows(fresh_wb_path):
+    """Summary year Actual EUR formulas reference Actuals WP rows."""
+    wb = openpyxl.load_workbook(fresh_wb_path)
+    summary = wb["Summary"]
+    first_wp = _find_summary_first_wp_row(summary)
 
-
-def test_roundtrip_capacity_external_edits_preserved(tmp_path):
-    """External project capacity edits survive --update round-trip."""
-    path = str(tmp_path / "test.xlsx")
-    generate_workbook(path)
-
-    # Read to find an external project row
-    wb = openpyxl.load_workbook(path)
-    cap = wb["Capacity"]
-    plan = wb["Plan"]
-    layout = discover_layout(plan)
-    config_wps = read_plan_config(plan, layout)
-    cap_data = read_capacity_sheet(cap, config_wps)
-
-    # Find Alice's ProjectX external row — seeded external commitment
-    alice_ext = cap_data["person_groups"]["Alice"]["external_values"]
-    assert "ProjectX" in alice_ext, "Alice should have ProjectX external"
-
-    # Find the row in the sheet by scanning for "ProjectX" in col A
-    ext_edit_row = None
-    for r in range(1, cap.max_row + 1):
-        if cap.cell(r, 1).value == "ProjectX":
-            ext_edit_row = r
+    # Discover actuals layout by finding its first WP row
+    actuals = wb["Actuals"]
+    actuals_first_wp = None
+    for r in range(1, actuals.max_row + 1):
+        val = actuals.cell(r, 1).value
+        if isinstance(val, str) and val.startswith("=Plan!A"):
+            actuals_first_wp = r
             break
+    assert actuals_first_wp is not None, "Cannot find Actuals first WP row"
 
-    assert ext_edit_row is not None, "Could not find ProjectX row in Capacity"
+    for i, wp in enumerate(WORK_PACKAGES):
+        row = first_wp + i
+        actuals_wp_row = actuals_first_wp + i
 
-    cap.cell(ext_edit_row, MONTH_COL_START, 0.77)
-    wb.save(path)
+        for y in range(_NUM_YEARS):
+            sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
+            # Actual EUR is at sc + 2
+            cell_val = summary.cell(row, sc + 2).value
+
+            m_start = y * 12
+            m_end = min((y + 1) * 12, PROJECT_MONTHS) - 1
+            first_col_l = get_column_letter(MONTH_COL_START + m_start)
+            last_col_l = get_column_letter(MONTH_COL_START + m_end)
+
+            expected = f"=SUM(Actuals!{first_col_l}{actuals_wp_row}:{last_col_l}{actuals_wp_row})"
+            assert cell_val == expected, (
+                f"{wp['id']} Y{y+1}: expected {expected}, got {cell_val}"
+            )
+
     wb.close()
 
-    # Update
-    updated = str(tmp_path / "updated.xlsx")
-    generate_workbook(output_path=updated, existing_path=path)
 
-    # Verify
-    wb2 = openpyxl.load_workbook(updated)
-    cap2 = wb2["Capacity"]
-    assert cap2.cell(ext_edit_row, MONTH_COL_START).value == pytest.approx(0.77), (
-        "External project capacity edit was not preserved"
-    )
-    wb2.close()
+def test_summary_plan_eur_equals_fte_times_rate(fresh_wb_path):
+    """Summary Plan EUR = Plan FTE * fte_rate for each WP and year."""
+    wb = openpyxl.load_workbook(fresh_wb_path)
+    summary = wb["Summary"]
+    first_wp = _find_summary_first_wp_row(summary)
 
+    for i in range(NUM_WPS):
+        row = first_wp + i
+        for y in range(_NUM_YEARS):
+            sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
+            fte_col_l = get_column_letter(sc)
+            # Plan EUR is at sc + 1
+            cell_val = summary.cell(row, sc + 1).value
+            expected = f"={fte_col_l}{row}*fte_rate"
+            assert cell_val == expected, (
+                f"WP row {row} Y{y+1}: expected {expected}, got {cell_val}"
+            )
 
-# ── Guard rails ──
-
-def test_update_refuses_empty_config_table(tmp_path):
-    """read_workbook raises ValueError when config table has no WP IDs."""
-    path = str(tmp_path / "test.xlsx")
-    generate_workbook(path)
-
-    # Manually delete all WP ID values from config rows
-    wb = openpyxl.load_workbook(path)
-    plan = wb["Plan"]
-    layout = discover_layout(plan)
-
-    for r in range(layout["config_first_wp_row"], layout["config_last_wp_row"] + 1):
-        plan.cell(r, 1).value = None
-
-    wb.save(path)
     wb.close()
 
-    with pytest.raises(ValueError, match="zero WP rows"):
-        read_workbook(path)
+
+def test_summary_variance_eur_equals_plan_minus_actual(fresh_wb_path):
+    """Summary Variance EUR = Plan EUR - Actual EUR for each WP and year."""
+    wb = openpyxl.load_workbook(fresh_wb_path)
+    summary = wb["Summary"]
+    first_wp = _find_summary_first_wp_row(summary)
+
+    for i in range(NUM_WPS):
+        row = first_wp + i
+        for y in range(_NUM_YEARS):
+            sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
+            plan_eur_col_l = get_column_letter(sc + 1)
+            act_eur_col_l = get_column_letter(sc + 2)
+            # Variance EUR is at sc + 3
+            cell_val = summary.cell(row, sc + 3).value
+            expected = f"={plan_eur_col_l}{row}-{act_eur_col_l}{row}"
+            assert cell_val == expected, (
+                f"WP row {row} Y{y+1}: expected {expected}, got {cell_val}"
+            )
+
+    wb.close()
 
 
-def test_roundtrip_team_roster_preserved(tmp_path):
-    """Team roster data survives --update round-trip."""
-    path = str(tmp_path / "test.xlsx")
-    generate_workbook(path)
+def test_summary_project_totals_sum_across_years(fresh_wb_path):
+    """Summary project total columns sum year columns via addition formulas."""
+    wb = openpyxl.load_workbook(fresh_wb_path)
+    summary = wb["Summary"]
+    first_wp = _find_summary_first_wp_row(summary)
 
-    # Edit Team sheet: change Alice's max_fte
-    wb = openpyxl.load_workbook(path)
-    team = wb["Team"]
+    for i in range(NUM_WPS):
+        row = first_wp + i
 
-    # Find Alice's row (roster starts at row 3: row 1 section header, row 2 column headers)
-    alice_row = None
-    for r in range(1, team.max_row + 1):
-        if team.cell(r, 1).value == "Alice":
-            alice_row = r
+        # Plan FTE total (tc+0): sum of year Plan FTE cols
+        plan_fte_cols = [
+            get_column_letter(_YEAR_GROUP_START + y * _COLS_PER_YEAR)
+            for y in range(_NUM_YEARS)
+        ]
+        expected_fte = "=" + "+".join(f"{cl}{row}" for cl in plan_fte_cols)
+        assert summary.cell(row, _TOTAL_GROUP_START).value == expected_fte, (
+            f"Row {row} total Plan FTE: expected {expected_fte}, "
+            f"got {summary.cell(row, _TOTAL_GROUP_START).value}"
+        )
+
+        # Plan EUR total (tc+1): sum of year Plan EUR cols
+        plan_eur_cols = [
+            get_column_letter(_YEAR_GROUP_START + y * _COLS_PER_YEAR + 1)
+            for y in range(_NUM_YEARS)
+        ]
+        expected_eur = "=" + "+".join(f"{cl}{row}" for cl in plan_eur_cols)
+        assert summary.cell(row, _TOTAL_GROUP_START + 1).value == expected_eur, (
+            f"Row {row} total Plan EUR: expected {expected_eur}, "
+            f"got {summary.cell(row, _TOTAL_GROUP_START + 1).value}"
+        )
+
+        # Actual EUR total (tc+2): sum of year Actual EUR cols
+        act_eur_cols = [
+            get_column_letter(_YEAR_GROUP_START + y * _COLS_PER_YEAR + 2)
+            for y in range(_NUM_YEARS)
+        ]
+        expected_act = "=" + "+".join(f"{cl}{row}" for cl in act_eur_cols)
+        assert summary.cell(row, _TOTAL_GROUP_START + 2).value == expected_act, (
+            f"Row {row} total Actual EUR: expected {expected_act}, "
+            f"got {summary.cell(row, _TOTAL_GROUP_START + 2).value}"
+        )
+
+        # Variance total (tc+3): Plan EUR total - Actual EUR total
+        tc_plan_eur_l = get_column_letter(_TOTAL_GROUP_START + 1)
+        tc_act_eur_l = get_column_letter(_TOTAL_GROUP_START + 2)
+        expected_var = f"={tc_plan_eur_l}{row}-{tc_act_eur_l}{row}"
+        assert summary.cell(row, _TOTAL_GROUP_START + 3).value == expected_var, (
+            f"Row {row} total Variance: expected {expected_var}, "
+            f"got {summary.cell(row, _TOTAL_GROUP_START + 3).value}"
+        )
+
+    wb.close()
+
+
+def test_summary_budget_overview_references(fresh_wb_path):
+    """Budget Overview section refs: Actuals total, partner_ceiling, Remaining, % Consumed."""
+    wb = openpyxl.load_workbook(fresh_wb_path)
+    summary = wb["Summary"]
+    first_wp = _find_summary_first_wp_row(summary)
+    last_wp = first_wp + NUM_WPS - 1
+    # Totals row is right after WP rows, then budget overview starts after a gap
+    labels = _find_summary_budget_overview(summary, last_wp + 1)
+
+    assert "Personnel Actual" in labels, "Missing 'Personnel Actual' label"
+    assert "Personnel Ceiling" in labels, "Missing 'Personnel Ceiling' label"
+    assert "Remaining" in labels, "Missing 'Remaining' label"
+    assert "% Consumed" in labels, "Missing '% Consumed' label"
+
+    actual_row = labels["Personnel Actual"]
+    ceiling_row = labels["Personnel Ceiling"]
+    remaining_row = labels["Remaining"]
+    consumed_row = labels["% Consumed"]
+
+    # Discover actuals total row
+    actuals = wb["Actuals"]
+    actuals_total_row = None
+    for r in range(1, actuals.max_row + 1):
+        val = actuals.cell(r, 2).value
+        if isinstance(val, str) and val.upper() == "TOTAL":
+            actuals_total_row = r
             break
+    assert actuals_total_row is not None, "Cannot find Actuals TOTAL row"
 
-    assert alice_row is not None, "Could not find Alice in Team roster"
+    val_col_l = get_column_letter(VAL_COL_SUM)
 
-    team.cell(alice_row, 2, 0.75)  # Change max_fte from 1.0 to 0.75
-    wb.save(path)
+    # Personnel Actual = Actuals!{VAL_COL_SUM}{total_row}
+    actual_formula = summary.cell(actual_row, 2).value
+    expected_actual = f"=Actuals!{val_col_l}{actuals_total_row}"
+    assert actual_formula == expected_actual, (
+        f"Personnel Actual: expected {expected_actual}, got {actual_formula}"
+    )
+
+    # Personnel Ceiling = partner_ceiling
+    ceiling_formula = summary.cell(ceiling_row, 2).value
+    assert ceiling_formula == "=partner_ceiling", (
+        f"Personnel Ceiling: expected =partner_ceiling, got {ceiling_formula}"
+    )
+
+    # Remaining = Ceiling - Actual
+    remaining_formula = summary.cell(remaining_row, 2).value
+    expected_remaining = f"=B{ceiling_row}-B{actual_row}"
+    assert remaining_formula == expected_remaining, (
+        f"Remaining: expected {expected_remaining}, got {remaining_formula}"
+    )
+
+    # % Consumed = IF(ceiling=0,0,actual/ceiling)
+    consumed_formula = summary.cell(consumed_row, 2).value
+    expected_consumed = f"=IF(B{ceiling_row}=0,0,B{actual_row}/B{ceiling_row})"
+    assert consumed_formula == expected_consumed, (
+        f"% Consumed: expected {expected_consumed}, got {consumed_formula}"
+    )
+
     wb.close()
 
-    # Update
-    updated = str(tmp_path / "updated.xlsx")
-    generate_workbook(output_path=updated, existing_path=path)
-
-    # Verify Alice's max_fte survived
-    wb2 = openpyxl.load_workbook(updated)
-    team2 = wb2["Team"]
-
-    alice_row2 = None
-    for r in range(1, team2.max_row + 1):
-        if team2.cell(r, 1).value == "Alice":
-            alice_row2 = r
-            break
-
-    assert alice_row2 is not None
-    assert team2.cell(alice_row2, 2).value == pytest.approx(0.75), (
-        "Alice's max_fte was not preserved on --update"
-    )
-    wb2.close()

@@ -4,7 +4,7 @@ Captured from Claude.ai brainstorming session, March 2026.
 
 ## Problem Statement
 
-Plan FTE budget per work package per month across a 5+ year EU-funded project. Track actuals against plan to prevent budget overruns. Single organisation (the organisation) share only.
+Plan FTE budget per work package per month across a 5+ year EU-funded project. Track actuals against plan to prevent budget overruns. Single organisation share only.
 
 ## Key Decisions Made
 
@@ -61,7 +61,7 @@ Plan FTE budget per work package per month across a 5+ year EU-funded project. T
 
 **Decision**: Team sheet for roster + WP share seeds, Capacity sheet for per-person monthly FTE allocation with cross-sheet aggregation back to Plan.
 
-**Rationale**: The manager needs to see individual overcommitment before it happens. WP-level totals hide the constraint that each person has a fixed monthly FTE capacity across all projects (programme + external).
+**Rationale**: The planner needs to see individual overcommitment before it happens. WP-level totals hide the constraint that each person has a fixed monthly FTE capacity across all projects (programme + external).
 
 **Key design choices**:
 - Team roster is a separate sheet so shares can be edited without touching allocation data

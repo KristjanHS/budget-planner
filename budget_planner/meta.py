@@ -6,6 +6,7 @@ from budget_planner.styles import WRAP, col_letter
 from budget_planner.config import (
     PROJECT_MONTHS, NUM_WPS, MONTH_COL_START, MONTH_COL_END,
     VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
+    VAL_COL_CUM, VAL_COL_PCT_CEIL, VAL_COL_BREACH,
     TEAM, EXTERNAL_COMMITMENTS,
 )
 
@@ -48,6 +49,9 @@ def build_meta_sheet(ws, layout):
     val_sum_col = col_letter(VAL_COL_SUM)
     val_budget_col = col_letter(VAL_COL_BUDGET)
     val_diff_col = col_letter(VAL_COL_DIFF)
+    val_cum_col = col_letter(VAL_COL_CUM)
+    val_pct_col = col_letter(VAL_COL_PCT_CEIL)
+    val_breach_col = col_letter(VAL_COL_BREACH)
 
     meta_text = """WORKBOOK: Programme Project Budget Planner
 VERSION: 3.0
@@ -61,6 +65,7 @@ PURPOSE: Track planned FTE allocation and actual EUR spend per work package per 
 4. Capacity     — Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects.
 5. Actuals      — EUR actuals per WP per month (input from accountant). Tab color: Blue.
 6. Summary      — Annual aggregation. Plan FTE, Plan EUR, Actual EUR, Variance EUR per WP per year. Budget overview.
+7. Trends       — WP burn rate & exhaustion, cumulative EUR chart, person load. Tab color: Gold (FFD700).
 
 ═══ TEAM SHEET STRUCTURE ═══
 
@@ -157,12 +162,19 @@ SHEET: ACTUALS (EUR actuals from accountant)
     Col {val_sum_col} = Sum of monthly EUR (formula: SUM)
     Col {val_budget_col} = Ceiling EUR from Plan config column G (formula, green cross-ref)
     Col {val_diff_col} = Variance: Ceiling - Sum (formula). Negative = OVERRUN.
+    Col {val_cum_col} = Cum. EUR: SUMPRODUCT cumulative up to current_month (formula)
+    Col {val_pct_col} = % Ceiling: Cum. EUR / Ceiling (formula, 0.0% format)
+    Col {val_breach_col} = Breach In: months until ceiling exhausted at current rate (formula)
   TOTAL row:
     Monthly columns = SUM per column across WP rows
     {val_sum_col} = SUM of WP sums
     {val_budget_col} = partner_ceiling named range (total project ceiling)
     {val_diff_col} = Ceiling - Sum
-  Conditional formatting: red fill on negative variance
+    {val_cum_col}, {val_pct_col}, {val_breach_col} = same formulas on TOTAL row
+  Conditional formatting:
+    - Red fill on negative variance
+    - % Ceiling: amber >85%, red >100%
+    - Breach In: amber <12 months, red <6 months
 
 ═══ SUMMARY SHEET STRUCTURE ═══
   Row 1 = Title
@@ -172,6 +184,43 @@ SHEET: ACTUALS (EUR actuals from accountant)
   Row {sum_total} = Totals
   Right-most group (Project Total): aggregates across all years (Plan FTE, Plan €, Act €, Var €)
   Budget overview: per-WP Planned EUR, Actual EUR, Remaining EUR derived from Plan config and Actuals
+
+═══ TRENDS SHEET STRUCTURE ═══
+
+SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
+  Tab color: Gold (FFD700)
+
+  Row 1: Current Month label (A1) + input value (B1, blue, named range current_month)
+  Row 2: (blank)
+
+  BLOCK 1: WP BURN RATE & EXHAUSTION (rows 3-13)
+    Row 3 = Section header "WP BURN RATE & EXHAUSTION" (merged A-G)
+    Row 4 = Column headers: WP ID, WP Name, % Time Elapsed, % Budget EUR, Burn Delta, Status, Exhaustion Mo.
+    Rows 5-12 = One row per WP (formulas referencing Plan config + Actuals cumulative columns)
+      - All cells show "—" for WPs not yet started (current_month < wp_start)
+      - Burn Delta = % Budget EUR - % Time Elapsed (positive = overspending)
+      - Status = text RAG: OK, WATCH, OVER, SLOW
+      - Exhaustion Mo. = projected month when ceiling is hit at current rate
+    Row 13 = TOTAL (weighted average burn delta by WP ceiling share)
+    Conditional formatting: green/amber/red on Burn Delta, Status, Exhaustion Mo.
+
+  BLOCK 2: Cumulative EUR Chart (anchored at A15, ~15 rows tall)
+    LineChart: Planned (blue) vs Actual (red) vs Ceiling (grey dashed)
+    Data from hidden helper rows 40-43
+
+  BLOCK 3: PERSON LOAD (rows 32-37)
+    Row 32 = Section header "PERSON LOAD" (merged A-E)
+    Row 33 = Column headers: Person, Avg FTE (to date), Avg FTE (remaining), Peak Month FTE, Status
+    Rows 34-37 = One row per team member ({num_team} people)
+      - Formulas reference Capacity TOTAL rows and Team roster
+      - Status = OVER/WATCH/OK based on remaining avg vs max_fte
+    Conditional formatting: green/amber/red on Status and Peak Month
+
+  HIDDEN HELPER ROWS (40-43):
+    Row 40 = Cumulative planned EUR per month (running sum of Plan FTE * fte_rate)
+    Row 41 = Cumulative actual EUR per month (running sum of Actuals TOTAL row)
+    Row 42 = Ceiling line (partner_ceiling repeated)
+    Row 43 = Month labels M1-M{pm} for chart X-axis
 
 ═══ CONVENTIONS ═══
   FONT COLORS (financial model standard):
@@ -191,6 +240,7 @@ SHEET: ACTUALS (EUR actuals from accountant)
 
 ═══ DATA FLOW ═══
   Team → Capacity → Plan ← Actuals → Summary (no circular refs)
+                                  ↘ Trends ↙
 
   Team roster (names, Max FTE) --> Capacity person headers + REMAINING formulas
   Team WP shares --> Capacity seed values (generation-time only)
@@ -198,19 +248,25 @@ SHEET: ACTUALS (EUR actuals from accountant)
   Plan config (WP budgets) --> Actuals ceiling validation
   Actuals monthly EUR (input) --> Summary actual EUR aggregation
   Plan Planned FTE --> Summary planned FTE/EUR aggregation
+  Actuals cumulative columns + Plan config --> Trends burn rate & exhaustion
+  Capacity TOTAL rows + Team roster --> Trends person load
+  Plan Planned FTE + Actuals TOTAL --> Trends cumulative chart
 
   PRIMARY PLANNING SURFACE: Capacity sheet. Edit monthly FTE per person there.
   Plan Planned FTE is formula-driven — do not edit directly.
   Actuals sheet is the input surface for EUR spend — enter accountant figures there.
+  Trends sheet is read-only formulas — set current_month (Trends!B1) to update.
 
 ═══ BUILD ORDER ═══
-  Plan → Team → Capacity → patch Plan (cross-sheet formulas) → Actuals → Summary
-  _META is populated last with row references from the built layout.
+  Plan → Team → Capacity → patch Plan → Trends skeleton → Actuals → Summary → Trends → _META
+  Trends skeleton (B1 + named range) created before Actuals so current_month is available.
+  Trends content populated after Actuals/Summary so their layouts are known.
 
 ═══ NAMED RANGES ═══
-  project_start   = Plan!$B$2   (project start date)
-  fte_rate         = Plan!$B$3   (monthly EUR rate per person-month)
-  partner_ceiling  = Plan!$B$4   (total personnel ceiling in EUR)
+  project_start   = Plan!$B$2     (project start date)
+  fte_rate         = Plan!$B$3     (monthly EUR rate per person-month)
+  partner_ceiling  = Plan!$B$4     (total personnel ceiling in EUR)
+  current_month    = Trends!$B$1   (last month with completed actuals, blue input)
 
 FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for month iterations.
 
@@ -274,6 +330,9 @@ SCENARIO PLANNING:
         val_sum_col=val_sum_col,
         val_budget_col=val_budget_col,
         val_diff_col=val_diff_col,
+        val_cum_col=val_cum_col,
+        val_pct_col=val_pct_col,
+        val_breach_col=val_breach_col,
         sum_last_wp=sum_last_wp,
         sum_total=sum_total,
         roster_last=roster_last,

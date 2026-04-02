@@ -1,6 +1,7 @@
 """Trends sheet builder — WP burn rate, cumulative chart, person load."""
 
 from openpyxl.chart import LineChart, Reference
+from openpyxl.chart.series import SeriesLabel
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import PatternFill
@@ -384,7 +385,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
                             max_row=helper_row_planned)
     chart.add_data(planned_ref, titles_from_data=False)
     s_planned = chart.series[0]
-    s_planned.title = "Planned"
+    s_planned.tx = SeriesLabel(v="Planned")
     s_planned.graphicalProperties.line.solidFill = "4472C4"
 
     # Series 2: Cumulative actual (red solid)
@@ -393,7 +394,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
                            max_row=helper_row_actual)
     chart.add_data(actual_ref, titles_from_data=False)
     s_actual = chart.series[1]
-    s_actual.title = "Actual"
+    s_actual.tx = SeriesLabel(v="Actual")
     s_actual.graphicalProperties.line.solidFill = "FF0000"
 
     # Series 3: Ceiling (grey dashed)
@@ -402,7 +403,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
                             max_row=helper_row_ceiling)
     chart.add_data(ceiling_ref, titles_from_data=False)
     s_ceiling = chart.series[2]
-    s_ceiling.title = "Ceiling"
+    s_ceiling.tx = SeriesLabel(v="Ceiling")
     s_ceiling.graphicalProperties.line.solidFill = "808080"
     s_ceiling.graphicalProperties.line.dashStyle = "dash"
 

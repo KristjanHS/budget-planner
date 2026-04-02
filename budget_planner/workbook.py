@@ -12,7 +12,9 @@ from budget_planner.team import build_team_sheet
 from budget_planner.capacity import build_capacity_sheet
 from budget_planner.actuals import build_actuals_sheet
 from budget_planner.summary import build_summary_sheet
+from budget_planner.trends import build_trends_sheet
 from budget_planner.meta import build_meta_sheet
+from budget_planner.styles import BLUE_INPUT, HEADER_FONT, style_cell
 
 
 def snapshot_workbook(filepath: str) -> str:
@@ -73,10 +75,9 @@ def generate_workbook(output_path: str = "output/budget_plan.xlsx",
     # Overwrite planned FTE with cross-sheet formulas from Capacity
     _apply_planned_formulas(plan_ws, layout, capacity_layout)
 
-    # Trends sheet skeleton + current_month named range (populated by trends builder)
+    # Trends sheet skeleton + current_month named range
     trends_ws = wb.create_sheet("Trends")
     trends_ws.sheet_properties.tabColor = "FFD700"
-    from budget_planner.styles import BLUE_INPUT, HEADER_FONT, style_cell
     style_cell(trends_ws, 1, 1, "Current Month:", font=HEADER_FONT, border=False)
     style_cell(trends_ws, 1, 2, 1, font=BLUE_INPUT, border=False)
     trends_ws["B1"].comment = Comment(
@@ -91,10 +92,14 @@ def generate_workbook(output_path: str = "output/budget_plan.xlsx",
     # Summary sheet
     build_summary_sheet(wb, layout, actuals_layout)
 
+    # Trends sheet (populate after Actuals and Summary so layouts are available)
+    build_trends_sheet(trends_ws, wb, layout, actuals_layout,
+                       capacity_layout, team_layout)
+
     # _META sheet (needs layout for row references)
     build_meta_sheet(meta_ws, layout)
 
-    # Sheets created in order: _META, Plan, Team, Capacity, Actuals, Summary
+    # Sheets: _META, Plan, Team, Capacity, Actuals, Summary, Trends
     wb.move_sheet("_META", offset=0)
 
     # Ensure output directory exists

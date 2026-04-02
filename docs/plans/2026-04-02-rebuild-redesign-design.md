@@ -307,9 +307,47 @@ All existing CF rules unchanged.
 
 - `config.py` — stays as seed for `init`, untouched
 
+### Documentation updates
+
+These files must be updated as part of implementation — they contain claims that will be stale after the rebuild is built.
+
+**README.md:**
+- Quick Start: add `init` and `rebuild` commands, keep `--skeleton` and `--snapshot`/`--restore`
+- Features: add Config sheet, cell protection, column grouping to feature list
+- Project Structure: add `config_sheet.py` to tree
+- Modifying section: rewrite — no longer "edit config.py"; now "edit Config sheet + Team sheet + run rebuild"
+- Design Decisions: add Config sheet as living source, round-trip preservation, cell protection
+
+**CLAUDE.md:**
+- Key Commands: add `python -m budget_planner init`, `python -m budget_planner rebuild`, `rebuild --skeleton`
+- Critical Rule #5: named ranges `project_start` and `fte_rate` move from Plan!$B$2/Plan!$E$2 to Config sheet
+- Add critical rule: cell protection — all sheets protected, blue cells unlocked, password "grant"
+
+**CONVENTIONS.md:**
+- Cross-Sheet Reference Map: add Config -> Plan refs (named ranges), note that Plan globals are now formula refs to Config
+- Add section on cell protection (locked by default, blue input cells unlocked via `Protection(locked=False)`)
+- Add section on column grouping (outline level 1 by year, auto-collapse)
+- Conditional Formatting: add Config sheet CF rules (yellow if WP start > end)
+
+**.claude/rules/architecture.md:**
+- Add `config_sheet.py` to file tree with description
+- Update `__main__.py` description: `init`, `rebuild`, `rebuild --skeleton` subcommands
+- Update `reader.py` description: add Config sheet reader, Actuals reader, parameterized constants
+- Update `workbook.py` description: `init_workbook()` + `rebuild_workbook()` orchestration
+
+**.claude/rules/common-tasks.md:**
+- "Replace example WPs": edit tbl_WorkPackages on Config sheet, run `rebuild`
+- "Replace example team": edit Team sheet roster + shares, run `rebuild`
+- Add "Add a new work package": add row to tbl_WorkPackages, run `rebuild`
+- Add "Add a team member": add row to Team sheet roster, add share seeds, run `rebuild`
+- "Adjust team member WP shares": edit Team sheet share matrix (blue cells), run `rebuild` if structure changed
+
+**.claude/rules/dev-workflow.md:**
+- Invariants: replace "Generation is config-only — no round-trip. Do not add preserved_data parameters to builders." with rebuild-aware invariant: "On rebuild, all config data comes from the existing workbook (Config sheet + Team sheet + Capacity config block), never from config.py. Builders receive config as function parameters."
+
 ### Total new/changed code
 
-~600 lines production + ~300 lines tests
+~600 lines production + ~300 lines tests + doc updates across 6 files
 
 ## Kaizen Review Findings (2026-04-02)
 

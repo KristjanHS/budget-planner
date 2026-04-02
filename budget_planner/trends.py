@@ -167,34 +167,35 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         formula=[f'{f_ref}="OVER"'], fill=_RED_CF_FILL,
     ))
 
-    # -- Conditional formatting: Exhaustion Month (col G, rows 5-12) --
-    g_range = f"G{first_wp_data_row}:G{last_wp_data_row}"
-    g_ref = f"G{first_wp_data_row}"
-    # We need the WP end month for comparison. Config row for the first WP:
-    first_config_row = layout["config_first_wp_row"]
-
-    # Green first: exhaustion >= wp_end (on budget or better)
-    ws.conditional_formatting.add(g_range, FormulaRule(
-        formula=[f'AND(ISNUMBER({g_ref}),{g_ref}>=Plan!E{first_config_row})'],
-        fill=_GREEN_CF_FILL,
-    ))
-    # Amber: exhaustion within 3 months of wp_end
-    ws.conditional_formatting.add(g_range, FormulaRule(
-        formula=[
-            f'AND(ISNUMBER({g_ref}),'
-            f'{g_ref}<Plan!E{first_config_row},'
-            f'{g_ref}>=Plan!E{first_config_row}-3)'
-        ],
-        fill=_AMBER_CF_FILL,
-    ))
-    # Red: exhaustion < wp_end - 3 (will exhaust well before WP ends)
-    ws.conditional_formatting.add(g_range, FormulaRule(
-        formula=[
-            f'AND(ISNUMBER({g_ref}),'
-            f'{g_ref}<Plan!E{first_config_row}-3)'
-        ],
-        fill=_RED_CF_FILL,
-    ))
+    # -- Conditional formatting: Exhaustion Month (col G) — per WP row --
+    # Each WP has a different end month, so CF must reference the correct config row
+    for i in range(NUM_WPS):
+        row = first_wp_data_row + i
+        config_row = layout["config_first_wp_row"] + i
+        g_cell = f"G{row}:G{row}"
+        g_ref = f"G{row}"
+        # Green first: exhaustion >= wp_end
+        ws.conditional_formatting.add(g_cell, FormulaRule(
+            formula=[f'AND(ISNUMBER({g_ref}),{g_ref}>=Plan!E{config_row})'],
+            fill=_GREEN_CF_FILL,
+        ))
+        # Amber: exhaustion within 3 months of wp_end
+        ws.conditional_formatting.add(g_cell, FormulaRule(
+            formula=[
+                f'AND(ISNUMBER({g_ref}),'
+                f'{g_ref}<Plan!E{config_row},'
+                f'{g_ref}>=Plan!E{config_row}-3)'
+            ],
+            fill=_AMBER_CF_FILL,
+        ))
+        # Red: exhaustion < wp_end - 3
+        ws.conditional_formatting.add(g_cell, FormulaRule(
+            formula=[
+                f'AND(ISNUMBER({g_ref}),'
+                f'{g_ref}<Plan!E{config_row}-3)'
+            ],
+            fill=_RED_CF_FILL,
+        ))
 
     # -- TOTAL row (row 13) --
     total_row = last_wp_data_row + 1
@@ -205,10 +206,11 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
                fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 3, "", fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 4, "", fill=LIGHT_GREEN_FILL)
-    # Weighted average burn delta
+    # Weighted average burn delta (ISNUMBER guard for WPs showing "—")
     style_cell(ws, total_row, 5, font=BLACK_FORMULA,
                fill=LIGHT_GREEN_FILL, fmt="0.0%").value = (
-        f"=SUMPRODUCT(E{first_wp_data_row}:E{last_wp_data_row},"
+        f"=SUMPRODUCT(IF(ISNUMBER(E{first_wp_data_row}:E{last_wp_data_row}),"
+        f"E{first_wp_data_row}:E{last_wp_data_row},0),"
         f"Actuals!{ceiling_col_letter}{act_first}"
         f":{ceiling_col_letter}{act_last})"
         f"/partner_ceiling"
@@ -284,33 +286,33 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
 
     person_last_row = person_first_row + len(TEAM) - 1
 
-    # -- Conditional formatting: Person Status (col E) based on col C --
-    pe_range = f"E{person_first_row}:E{person_last_row}"
-    # Use first person's roster row for the CF formula reference
-    first_roster_row = person_rows_map[TEAM[0]["name"]]
+    # -- Conditional formatting: Person Status (col E) + Peak (col D) — per person --
+    # Each person has a different max_fte, so CF must use the correct roster row
+    for pi, member in enumerate(TEAM):
+        row = person_first_row + pi
+        roster_row = person_rows_map[member["name"]]
+        e_cell = f"E{row}:E{row}"
+        d_cell = f"D{row}:D{row}"
 
-    # Green first: Avg Remaining <= 0.8 * max_fte
-    ws.conditional_formatting.add(pe_range, FormulaRule(
-        formula=[f'C{person_first_row}<=0.8*Team!$B${first_roster_row}'],
-        fill=_GREEN_CF_FILL,
-    ))
-    # Amber: Avg Remaining > 0.8 * max_fte
-    ws.conditional_formatting.add(pe_range, FormulaRule(
-        formula=[f'C{person_first_row}>0.8*Team!$B${first_roster_row}'],
-        fill=_AMBER_CF_FILL,
-    ))
-    # Red: Avg Remaining > max_fte
-    ws.conditional_formatting.add(pe_range, FormulaRule(
-        formula=[f'C{person_first_row}>Team!$B${first_roster_row}'],
-        fill=_RED_CF_FILL,
-    ))
+        # Status CF (green/amber/red based on col C vs max_fte)
+        ws.conditional_formatting.add(e_cell, FormulaRule(
+            formula=[f'C{row}<=0.8*Team!$B${roster_row}'],
+            fill=_GREEN_CF_FILL,
+        ))
+        ws.conditional_formatting.add(e_cell, FormulaRule(
+            formula=[f'C{row}>0.8*Team!$B${roster_row}'],
+            fill=_AMBER_CF_FILL,
+        ))
+        ws.conditional_formatting.add(e_cell, FormulaRule(
+            formula=[f'C{row}>Team!$B${roster_row}'],
+            fill=_RED_CF_FILL,
+        ))
 
-    # -- Conditional formatting: Peak Month (col D) — red if > max_fte --
-    pd_range = f"D{person_first_row}:D{person_last_row}"
-    ws.conditional_formatting.add(pd_range, FormulaRule(
-        formula=[f'D{person_first_row}>Team!$B${first_roster_row}'],
-        fill=_RED_CF_FILL,
-    ))
+        # Peak Month CF (red if > max_fte)
+        ws.conditional_formatting.add(d_cell, FormulaRule(
+            formula=[f'D{row}>Team!$B${roster_row}'],
+            fill=_RED_CF_FILL,
+        ))
 
     # ================================================================
     # Section 3: Cumulative LineChart + hidden helper rows

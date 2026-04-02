@@ -292,60 +292,62 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
   Trends sheet is read-only formulas — set current_month (Trends!B1) to update.
 
 ═══ BUILD ORDER ═══
-  Plan → Team → Capacity → patch Plan → Trends skeleton → Actuals → Summary → Trends → _META
+  Config → Plan → Team → Capacity → patch Plan → Trends skeleton → Actuals → Summary → Trends → _META
+  Config sheet created first so named ranges are available for Plan formulas.
   Trends skeleton (B1 + named range) created before Actuals so current_month is available.
   Trends content populated after Actuals/Summary so their layouts are known.
 
 ═══ NAMED RANGES ═══
-  project_start   = Plan!$B$2     (project start date)
-  fte_rate         = Plan!$B$3     (monthly EUR rate per person-month)
+  project_start   = Config!$B$2   (project start date)
+  fte_rate         = Config!$B$4   (monthly EUR rate per person-month)
   partner_ceiling  = Plan!$B$4     (total personnel ceiling in EUR)
   current_month    = Trends!$B$1   (last month with completed actuals, blue input)
 
 FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for month iterations.
 
-═══ MODIFICATION GUIDE (for AI agents) ═══
+═══ MODIFICATION GUIDE (for AI agents and PMs) ═══
 
 TO ADD A WORK PACKAGE:
-  1. Add to WORK_PACKAGES in config.py
-  2. Regenerate: python -m budget_planner
-  3. This rebuilds all sheets: config table, Capacity WP rows, Planned FTE, Actuals, Summary
-  4. Affected sheets: Plan (config + planned), Capacity (WP rows per person), Actuals (WP row), Summary (WP row), Team (share matrix column)
+  1. Add a row to tbl_WorkPackages on the Config sheet (WP ID, Name, FTE, Start, End)
+  2. Run: python -m budget_planner rebuild
+  3. Rebuild regenerates all sheets. Existing Capacity FTE and Actuals EUR are preserved.
 
 TO ADD A TEAM MEMBER:
-  1. Add to TEAM in config.py
-  2. Regenerate: python -m budget_planner
-  3. Adds person to Team roster, Capacity person group, and updates Plan Planned FTE formulas
+  1. Add a row to the Team sheet roster (Name, Max FTE)
+  2. Add share seeds in the WP Share Seeds matrix
+  3. Run: python -m budget_planner rebuild
 
 TO CHANGE PROJECT DURATION:
-  1. Update PROJECT_MONTHS in config.py
-  2. Regenerate: python -m budget_planner
-  3. Adds/removes month columns in Plan, Capacity, Actuals; updates year headers and Summary ranges
+  1. Edit Project Months on the Config sheet (cell B3)
+  2. Run: python -m budget_planner rebuild
+  3. Adds/removes month columns. Existing data for months within the new range is preserved.
 
 TO CHANGE FTE RATE:
-  Edit cell B3 on Plan sheet. All EUR calculations update automatically via the fte_rate named range.
+  Edit cell B4 on Config sheet. All EUR calculations update via the fte_rate named range.
 
 TO REPLACE EXAMPLE DATA:
-  Edit config.py: WORK_PACKAGES (WP IDs, names, FTE budgets, start/end months),
-  TEAM (roster and share seeds), EXTERNAL_COMMITMENTS. Then regenerate.
+  Edit Config sheet (WPs), Team sheet (roster + shares), Capacity config block
+  (external commitments). Then run: python -m budget_planner rebuild
 
 SCENARIO PLANNING:
   Use --snapshot to save current state, edit Capacity/Actuals freely, --restore to revert.
-  No dedicated draft sheet — file-level snapshots provide safe replanning.
+
+═══ CELL PROTECTION ═══
+  All sheets are password-protected (password: "grant").
+  Only blue input cells are unlocked for editing.
+  Formula cells (black/green font) are locked — do not overwrite.
 
 ═══ KNOWN LIMITATIONS ═══
 
-1. GENERATION IS FROM config.py ONLY.
-   All WP definitions, team roster, and external commitments are sourced from
-   config.py. There is no round-trip — Excel edits to the config table or
-   Team sheet are not read back. To change project structure, edit config.py
-   and regenerate.
-
-2. MANUAL ROW INSERTION BREAKS FORMULAS.
+1. MANUAL ROW INSERTION BREAKS FORMULAS.
    If you manually insert or delete rows in the Capacity sheet (e.g., add an
    external project), Plan Planned FTE formulas will NOT auto-adjust (openpyxl
-   does not update formulas like Excel does). Regenerate from config.py to
-   rebuild all formula sheets.
+   does not update formulas like Excel does). Use rebuild to regenerate.
+
+2. RENAMED WP IDs LOSE PRESERVED DATA.
+   If you rename a WP ID on the Config sheet, rebuild cannot match old Capacity
+   and Actuals data to the new ID. Orphaned data is logged in the LAST REBUILD
+   LOG section below.
 """.format(
         date=datetime.now().strftime("%Y-%m-%d"),
         config_end=config_end,

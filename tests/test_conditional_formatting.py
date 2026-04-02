@@ -39,13 +39,14 @@ def _collect_cf_rules(ws):
 # ── Capacity sheet conditional formatting ──
 
 class TestCapacityConditionalFormatting:
-    """Capacity sheet has 3 CF rules per person (amber TOTAL, red TOTAL, red REMAINING)."""
+    """Capacity sheet CF: yellow per WP variance + 3 per person (amber/red TOTAL, red REMAINING)."""
 
     def test_capacity_rule_count(self, workbook):
-        """3 rules per person x len(TEAM) persons = expected total."""
+        """Yellow per WP row + 3 per person = expected total."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        expected = 3 * len(TEAM)
+        total_wp_rows = sum(len(m["wps"]) for m in TEAM)
+        expected = total_wp_rows + 3 * len(TEAM)
         assert len(rules) == expected, (
             f"Expected {expected} CF rules on Capacity, got {len(rules)}"
         )
@@ -55,15 +56,17 @@ class TestCapacityConditionalFormatting:
         """Each person's TOTAL row has an amber fill for >0.8 * Max FTE."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        # Rules are added in order: amber TOTAL, red TOTAL, red REMAINING per person
-        rule_idx = person_idx * 3  # amber is first of each triple
-        sqref, formulas, fg_color = rules[rule_idx]
-        assert len(formulas) == 1
+        # Rules per person: N yellow (one per WP row) + amber TOTAL + red TOTAL + red REMAINING
+        # Find the amber rule by scanning for FFD966 fill with >0.8 pattern
+        amber_rules = [(i, r) for i, r in enumerate(rules)
+                        if r[2] is not None and r[2].endswith("FFD966")
+                        and any(">0.8*Team!$B$" in f for f in r[1])]
+        assert len(amber_rules) >= person_idx + 1, (
+            f"Expected at least {person_idx + 1} amber TOTAL rules, got {len(amber_rules)}"
+        )
+        _, (sqref, formulas, fg_color) = amber_rules[person_idx]
         assert ">0.8*Team!$B$" in formulas[0], (
             f"Amber formula should reference >0.8*Team!$B$<row>, got: {formulas[0]}"
-        )
-        assert fg_color is not None and fg_color.endswith("FFD966"), (
-            f"Expected AMBER_FILL (FFD966), got: {fg_color}"
         )
 
     @pytest.mark.parametrize("person_idx", range(len(TEAM)))
@@ -71,34 +74,33 @@ class TestCapacityConditionalFormatting:
         """Each person's TOTAL row has a red fill for > Max FTE."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        rule_idx = person_idx * 3 + 1  # red TOTAL is second of each triple
-        sqref, formulas, fg_color = rules[rule_idx]
-        assert len(formulas) == 1
-        assert ">Team!$B$" in formulas[0], (
-            f"Red TOTAL formula should reference >Team!$B$<row>, got: {formulas[0]}"
+        # Find red TOTAL rules: FFC7CE fill with >Team! pattern (no 0.8)
+        red_total_rules = [(i, r) for i, r in enumerate(rules)
+                           if r[2] is not None and r[2].endswith("FFC7CE")
+                           and any(">Team!$B$" in f for f in r[1])
+                           and not any("0.8" in f for f in r[1])]
+        assert len(red_total_rules) >= person_idx + 1, (
+            f"Expected at least {person_idx + 1} red TOTAL rules, got {len(red_total_rules)}"
         )
-        # Must NOT contain the 0.8 multiplier (that's the amber rule)
-        assert "0.8" not in formulas[0], (
-            f"Red TOTAL formula should not have 0.8 multiplier: {formulas[0]}"
-        )
-        assert fg_color is not None and fg_color.endswith("FFC7CE"), (
-            f"Expected RED_FILL (FFC7CE), got: {fg_color}"
-        )
+        _, (sqref, formulas, fg_color) = red_total_rules[person_idx]
+        assert ">Team!$B$" in formulas[0]
+        assert "0.8" not in formulas[0]
 
     @pytest.mark.parametrize("person_idx", range(len(TEAM)))
     def test_capacity_remaining_red_rule(self, workbook, person_idx):
         """Each person's REMAINING row has a red fill for < 0."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        rule_idx = person_idx * 3 + 2  # red REMAINING is third of each triple
-        sqref, formulas, fg_color = rules[rule_idx]
-        assert len(formulas) == 1
-        assert "<0" in formulas[0], (
-            f"REMAINING formula should contain '<0', got: {formulas[0]}"
+        # Find red REMAINING rules: FFC7CE fill with <0 pattern
+        red_remaining_rules = [(i, r) for i, r in enumerate(rules)
+                               if r[2] is not None and r[2].endswith("FFC7CE")
+                               and any("<0" in f for f in r[1])
+                               and not any("Team" in f for f in r[1])]
+        assert len(red_remaining_rules) >= person_idx + 1, (
+            f"Expected at least {person_idx + 1} red REMAINING rules, got {len(red_remaining_rules)}"
         )
-        assert fg_color is not None and fg_color.endswith("FFC7CE"), (
-            f"Expected RED_FILL (FFC7CE), got: {fg_color}"
-        )
+        _, (sqref, formulas, fg_color) = red_remaining_rules[person_idx]
+        assert "<0" in formulas[0]
 
 
 # ── Summary sheet conditional formatting ──

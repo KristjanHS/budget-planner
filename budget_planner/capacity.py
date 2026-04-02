@@ -8,15 +8,12 @@ from dateutil.relativedelta import relativedelta
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FONT, SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    AMBER_FILL, RED_FILL, CENTER, style_cell, col_letter,
+    YELLOW_FILL, AMBER_FILL, RED_FILL, CENTER, style_cell, col_letter,
 )
 
 
-def _wp_config_row(wp_id, work_packages=None, config_first_wp_row=8):
+def _wp_config_row(wp_id, work_packages, config_first_wp_row=8):
     """Return the Plan config table row for a WP ID."""
-    if work_packages is None:
-        from budget_planner.config import WORK_PACKAGES
-        work_packages = WORK_PACKAGES
     for i, wp in enumerate(work_packages):
         if wp["id"] == wp_id:
             return config_first_wp_row + i
@@ -253,6 +250,13 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
                        fmt="0.00").value = (
                 f"={col_letter(val_col_budget)}{r}"
                 f"-{col_letter(val_col_sum)}{r}"
+            )
+
+            # CF: yellow if Sum > Budget (variance < 0)
+            diff_cl = col_letter(val_col_diff)
+            ws.conditional_formatting.add(
+                f"{diff_cl}{r}:{diff_cl}{r}",
+                FormulaRule(formula=[f"{diff_cl}{r}<0"], fill=YELLOW_FILL),
             )
 
             wp_rows[wp_id] = r

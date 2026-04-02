@@ -236,7 +236,8 @@ def test_capacity_wp_row_budget_formula(cap_ws, capacity_layout):
         for wp_id, row in group["wp_rows"].items():
             share_cl = col_letter(share_wp_columns[wp_id])
             from budget_planner.capacity import _wp_config_row
-            config_row = _wp_config_row(wp_id)
+            from budget_planner.config import WORK_PACKAGES
+            config_row = _wp_config_row(wp_id, WORK_PACKAGES)
             val = cap_ws.cell(row=row, column=VAL_COL_BUDGET).value
             expected = f"=Team!{share_cl}{share_row}*Plan!C{config_row}"
             assert val == expected, (

@@ -1,6 +1,6 @@
 """Plan sheet builder — globals, config table, planned FTE block."""
 
-from openpyxl.styles import Font
+from openpyxl.styles import Font, Protection
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.formatting.rule import FormulaRule
 from dateutil.relativedelta import relativedelta
@@ -61,10 +61,13 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
                 refs = ",".join(f"Capacity!{cl}{cr}" for cr in cap_rows)
                 cell = style_cell(ws, row, c, font=BLACK_FORMULA, fmt="0.00")
                 cell.value = f"=SUM({refs})"
+                # Re-lock: _build_month_block wrote these with BLUE_INPUT first
+                cell.protection = Protection(locked=True)
             else:
                 # Inactive month: empty + grey fill
-                style_cell(ws, row, c, "", font=BLACK_FORMULA, fill=GREY_FILL,
-                           fmt="0.00")
+                cell = style_cell(ws, row, c, "", font=BLACK_FORMULA,
+                                  fill=GREY_FILL, fmt="0.00")
+                cell.protection = Protection(locked=True)
 
 
 def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None):

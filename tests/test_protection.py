@@ -49,6 +49,15 @@ def test_formula_cells_locked(tmp_path):
     assert cell.protection.locked is not False, \
         "Plan!B4 (formula) should be locked"
 
+    # PLANNED FTE cells are overwritten by _apply_planned_formulas with
+    # BLACK_FORMULA SUM formulas — they must be re-locked
+    from budget_planner.reader import discover_layout
+    layout = discover_layout(plan)
+    first_wp = layout["planned_first_wp_row"]
+    planned_cell = plan.cell(first_wp, 3)  # Col C = first month
+    assert planned_cell.protection.locked is not False, \
+        f"Planned FTE cell (row {first_wp}, col C) should be locked"
+
     wb.close()
 
 

@@ -31,15 +31,18 @@ def layout(workbook):
 # ── Check 2-3: Sheet existence + global params ──
 
 def test_sheets_exist(workbook):
-    for name in ["_META", "Plan", "Team", "Capacity", "Actuals", "Summary"]:
+    for name in ["_META", "Config", "Plan", "Team", "Capacity", "Actuals", "Summary"]:
         assert name in workbook.sheetnames, f"Missing sheet: {name}"
 
 
 def test_global_params(workbook):
+    # Plan globals now reference Config sheet via formulas
     plan = workbook["Plan"]
-    assert plan["B2"].value is not None, "Plan!B2 (project_start) is empty"
-    val = plan["B3"].value
-    assert val is not None and val > 0, f"Plan!B3 (fte_rate) is invalid: {val}"
+    assert plan["B2"].value is not None, "Plan!B2 (project_start ref) is empty"
+    # B3 is now a formula =Config!B4 (FTE rate), check Config directly
+    config = workbook["Config"]
+    val = config["B4"].value
+    assert val is not None and val > 0, f"Config!B4 (fte_rate) is invalid: {val}"
 
 
 # ── Check 4: Named ranges ──
@@ -49,8 +52,8 @@ def test_named_ranges(workbook):
     for name in workbook.defined_names:
         dn = workbook.defined_names[name]
         defined[dn.name] = dn.attr_text
-    assert defined.get("project_start") == "Plan!$B$2"
-    assert defined.get("fte_rate") == "Plan!$B$3"
+    assert defined.get("project_start") == "Config!$B$2"
+    assert defined.get("fte_rate") == "Config!$B$4"
     assert defined.get("partner_ceiling") == "Plan!$B$4"
 
 

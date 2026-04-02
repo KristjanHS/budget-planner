@@ -40,9 +40,23 @@ def style_cell(ws, row, col, value=None, font=None, fill=None, alignment=None, f
         cell.number_format = fmt
     if border:
         cell.border = THIN_BORDER
-    if unlocked:
+    # Auto-unlock blue input cells for sheet protection
+    if unlocked or _is_blue_font(font):
         cell.protection = Protection(locked=False)
     return cell
+
+
+def _is_blue_font(font):
+    """Check if font color is blue (0000FF), indicating a user input cell."""
+    if font is None:
+        return False
+    color = getattr(font, 'color', None)
+    if color is None:
+        return False
+    rgb = getattr(color, 'rgb', None)
+    if rgb is None:
+        return False
+    return str(rgb).upper().endswith('0000FF')
 
 
 def col_letter(c):

@@ -6,6 +6,7 @@ from budget_planner.workbook import generate_workbook
 from budget_planner.config import (
     WORK_PACKAGES, NUM_WPS, MONTH_COL_START,
     VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
+    VAL_COL_CUM, VAL_COL_PCT_CEIL, VAL_COL_BREACH,
 )
 from budget_planner.styles import col_letter
 
@@ -140,3 +141,95 @@ def test_actuals_total_ceiling_uses_named_range(actuals_workbook):
     assert total_row is not None
     cell = ws.cell(total_row, VAL_COL_BUDGET)
     assert "partner_ceiling" in str(cell.value)
+
+
+# ── Cumulative columns ──
+
+
+def _find_first_wp_row(ws):
+    """Find the first WP data row (row after 'WP ID' header)."""
+    for r in range(1, ws.max_row + 1):
+        if ws.cell(r, 1).value == "WP ID":
+            return r + 1
+    return None
+
+
+def _find_total_row(ws):
+    """Find the TOTAL row."""
+    for r in range(1, ws.max_row + 1):
+        if ws.cell(r, 2).value == "TOTAL":
+            return r
+    return None
+
+
+def _find_year_row(ws):
+    """Find the year header row (row before the month header row)."""
+    for r in range(1, ws.max_row + 1):
+        if ws.cell(r, 1).value == "WP ID":
+            return r - 1
+    return None
+
+
+def test_actuals_cum_eur_formula(actuals_workbook):
+    """First WP row at VAL_COL_CUM has SUMPRODUCT formula with current_month."""
+    ws = actuals_workbook["Actuals"]
+    first_wp_row = _find_first_wp_row(ws)
+    assert first_wp_row is not None
+    cell = ws.cell(first_wp_row, VAL_COL_CUM)
+    formula = str(cell.value)
+    assert "SUMPRODUCT" in formula
+    assert "current_month" in formula
+
+
+def test_actuals_pct_ceiling_formula(actuals_workbook):
+    """First WP row at VAL_COL_PCT_CEIL divides cum by ceiling."""
+    ws = actuals_workbook["Actuals"]
+    first_wp_row = _find_first_wp_row(ws)
+    assert first_wp_row is not None
+    cell = ws.cell(first_wp_row, VAL_COL_PCT_CEIL)
+    formula = str(cell.value)
+    cum_l = col_letter(VAL_COL_CUM)
+    ceil_l = col_letter(VAL_COL_BUDGET)
+    assert cum_l in formula and ceil_l in formula
+
+
+def test_actuals_breach_formula(actuals_workbook):
+    """First WP row at VAL_COL_BREACH has IF formula."""
+    ws = actuals_workbook["Actuals"]
+    first_wp_row = _find_first_wp_row(ws)
+    assert first_wp_row is not None
+    cell = ws.cell(first_wp_row, VAL_COL_BREACH)
+    formula = str(cell.value)
+    assert "IF" in formula
+    assert "current_month" in formula
+
+
+def test_actuals_cum_headers(actuals_workbook):
+    """Year row has Cum. EUR, % Ceiling, Breach In headers."""
+    ws = actuals_workbook["Actuals"]
+    year_row = _find_year_row(ws)
+    assert year_row is not None
+    assert ws.cell(year_row, VAL_COL_CUM).value == "Cum. EUR"
+    assert ws.cell(year_row, VAL_COL_PCT_CEIL).value == "% Ceiling"
+    assert ws.cell(year_row, VAL_COL_BREACH).value == "Breach In"
+
+
+def test_actuals_total_cum_formula(actuals_workbook):
+    """TOTAL row at VAL_COL_CUM has SUMPRODUCT formula."""
+    ws = actuals_workbook["Actuals"]
+    total_row = _find_total_row(ws)
+    assert total_row is not None
+    cell = ws.cell(total_row, VAL_COL_CUM)
+    formula = str(cell.value)
+    assert "SUMPRODUCT" in formula
+    assert "current_month" in formula
+
+
+def test_actuals_total_pct_ceiling_uses_partner_ceiling(actuals_workbook):
+    """TOTAL row at VAL_COL_PCT_CEIL references partner_ceiling."""
+    ws = actuals_workbook["Actuals"]
+    total_row = _find_total_row(ws)
+    assert total_row is not None
+    cell = ws.cell(total_row, VAL_COL_PCT_CEIL)
+    formula = str(cell.value)
+    assert "partner_ceiling" in formula

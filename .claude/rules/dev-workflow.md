@@ -29,6 +29,10 @@ Prefer flat packages over nested. Don't build generic iteration for N=2.
 ## openpyxl Patterns
 `wb.active` can return None — always `assert ws is not None` before use.
 Later conditional formatting rules override earlier ones — add lower-priority fills first (e.g., amber before red).
+When a design specifies Excel formulas, verify assumptions against a generated workbook (e.g. `python3 -c` probes) before committing the design. Check: cell value types (text vs number), whether referenced cells exist, whether values are static or cumulative.
+Chart series titles require SeriesLabel: `series.tx = SeriesLabel(v="Name")`, not `series.title = "Name"`.
+When CF formulas reference external data varying per row (e.g., different WP end months), apply per-row rules — a range-wide rule with absolute refs uses the same value for all rows.
+SUMPRODUCT with mixed text/number arrays returns #VALUE!. Guard with `IF(ISNUMBER(range),range,0)` when cells may contain text like "—".
 
 ## Invariants
 - Excel formulas only — never hardcode calculated values

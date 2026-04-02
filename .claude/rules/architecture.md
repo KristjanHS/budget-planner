@@ -15,6 +15,7 @@ budget_planner/
   summary.py           # Summary sheet: budget overview + annual aggregation
   meta.py              # _META sheet: AI-agent-readable documentation
   actuals.py           # Actuals sheet: EUR per WP per month from accountant
+  trends.py            # Trends sheet: burn rate, cumulative chart, person load
   reader.py            # discover_layout() for layout detection (v1 + v2)
   workbook.py          # Orchestrator: create + update + snapshot/restore modes
 tests/
@@ -28,28 +29,10 @@ tests/
   test_cli.py          # CLI flags (--skeleton, --snapshot, --restore)
   test_config.py       # Config referential integrity (WP refs, person refs)
   test_integration.py  # Cross-sheet data flow + round-trip preservation
+  test_trends.py       # Trends sheet: burn rate, chart, person load, CF
   test_e2e.py          # End-to-end generation + LibreOffice recalc
 scripts/
   recalc.py            # LibreOffice recalculation script
   office/              # LibreOffice helpers
 ```
 
-## References
-
-- `SPEC.md` — Full specification with business context, design decisions, and known limitations.
-- `CONVENTIONS.md` — Spreadsheet formatting and structural conventions.
-
-## Test Coverage
-
-1. Formula recalculation (0 errors via LibreOffice)
-2. Structural invariants: sheets, global params, named ranges, config table
-3. Inactive month cells empty (Plan + Capacity, with grey fill check)
-4. Font color: black for formulas (Plan), blue for input (Capacity, Team)
-5. Plan <-> Capacity cross-sheet SUM formula linkage
-6. Capacity: per-person groups, TOTAL/REMAINING formulas, external rows
-7. Team: roster, share matrix, validation sums
-8. Config referential integrity (WP refs, person refs)
-9. CLI: --skeleton, --snapshot/--restore
-10. Reader v2: config, team, capacity extraction
-11. Actuals: WP rows, EUR input, ceiling refs, variance formulas
-12. E2E: demo + skeleton generation with LibreOffice recalc

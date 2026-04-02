@@ -3,15 +3,10 @@ from openpyxl.styles import Font
 from datetime import datetime
 
 from budget_planner.styles import WRAP, col_letter
-from budget_planner.config import (
-    PROJECT_MONTHS, NUM_WPS, MONTH_COL_START, MONTH_COL_END,
-    VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
-    VAL_COL_CUM, VAL_COL_PCT_CEIL, VAL_COL_BREACH,
-    TEAM, EXTERNAL_COMMITMENTS,
-)
 
 
-def build_meta_sheet(ws, layout):
+def build_meta_sheet(ws, layout, *, project_params=None, work_packages=None,
+                     team=None, external_commitments=None, rebuild_warnings=None):
     """Populate the _META worksheet with structural documentation.
 
     Parameters
@@ -22,7 +17,46 @@ def build_meta_sheet(ws, layout):
         Row-number mapping produced by the plan-sheet builder.  Keys used:
         config_total_row, config_last_wp_row, planned_header_row,
         planned_first_wp_row, planned_last_wp_row, planned_total_row.
+    project_params : dict or None
+        Dict with keys title, start, months, rate. Falls back to config.
+    work_packages : list or None
+        List of WP dicts. Falls back to config.
+    team : list or None
+        List of team member dicts. Falls back to config.
+    external_commitments : list or None
+        List of external commitment dicts. Falls back to config.
+    rebuild_warnings : list or None
+        List of warning strings to append to meta text.
     """
+    if any(v is None for v in [project_params, work_packages, team, external_commitments]):
+        from budget_planner import config
+        if project_params is None:
+            project_params = {
+                "title": config.PROJECT_TITLE, "start": config.PROJECT_START,
+                "months": config.PROJECT_MONTHS, "rate": config.DEFAULT_RATE,
+            }
+        if work_packages is None:
+            work_packages = config.WORK_PACKAGES
+        if team is None:
+            team = config.TEAM
+        if external_commitments is None:
+            external_commitments = config.EXTERNAL_COMMITMENTS
+
+    assert project_params is not None
+    assert work_packages is not None
+    assert team is not None
+    assert external_commitments is not None
+
+    month_col_start = 3
+    num_wps = len(work_packages)
+    month_col_end = month_col_start + project_params["months"] - 1
+    val_col_sum = month_col_end + 1
+    val_col_budget = month_col_end + 2
+    val_col_diff = month_col_end + 3
+    val_col_cum = val_col_diff + 1
+    val_col_pct_ceil = val_col_diff + 2
+    val_col_breach = val_col_diff + 3
+
     # Derive row numbers from layout dict
     config_end = layout["config_total_row"]
     wp_last_config = layout["config_last_wp_row"]
@@ -35,23 +69,23 @@ def build_meta_sheet(ws, layout):
     plan_total = layout["planned_total_row"]
 
     # Summary sheet references
-    sum_last_wp = 4 + NUM_WPS
-    sum_total = 5 + NUM_WPS
+    sum_last_wp = 4 + num_wps
+    sum_total = 5 + num_wps
 
     # Team sheet references
-    num_team = len(TEAM)
+    num_team = len(team)
     roster_last = 2 + num_team  # header rows 1-2, data starts row 3
-    num_ext = len(EXTERNAL_COMMITMENTS)
+    num_ext = len(external_commitments)
 
     # Column letters
-    first_mcol = col_letter(MONTH_COL_START)
-    last_mcol = col_letter(MONTH_COL_END)
-    val_sum_col = col_letter(VAL_COL_SUM)
-    val_budget_col = col_letter(VAL_COL_BUDGET)
-    val_diff_col = col_letter(VAL_COL_DIFF)
-    val_cum_col = col_letter(VAL_COL_CUM)
-    val_pct_col = col_letter(VAL_COL_PCT_CEIL)
-    val_breach_col = col_letter(VAL_COL_BREACH)
+    first_mcol = col_letter(month_col_start)
+    last_mcol = col_letter(month_col_end)
+    val_sum_col = col_letter(val_col_sum)
+    val_budget_col = col_letter(val_col_budget)
+    val_diff_col = col_letter(val_col_diff)
+    val_cum_col = col_letter(val_col_cum)
+    val_pct_col = col_letter(val_col_pct_ceil)
+    val_breach_col = col_letter(val_col_breach)
 
     meta_text = """WORKBOOK: Programme Project Budget Planner
 VERSION: 3.0
@@ -317,14 +351,14 @@ SCENARIO PLANNING:
         config_end=config_end,
         wp_last_config=wp_last_config,
         config_total=config_total,
-        pm=PROJECT_MONTHS,
+        pm=project_params["months"],
         plan_header=plan_header,
         plan_year_row=plan_year_row,
         plan_month_row=plan_month_row,
         plan_first_wp=plan_first_wp,
         plan_last_wp=plan_last_wp,
         plan_total=plan_total,
-        act_last_wp=4 + NUM_WPS - 1,
+        act_last_wp=4 + num_wps - 1,
         first_mcol=first_mcol,
         last_mcol=last_mcol,
         val_sum_col=val_sum_col,
@@ -339,6 +373,13 @@ SCENARIO PLANNING:
         num_team=num_team,
         num_ext=num_ext,
     )
+
+    if rebuild_warnings:
+        meta_text += "\n═══ LAST REBUILD LOG ═══\n"
+        meta_text += f"Rebuild date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+        for warning in rebuild_warnings:
+            meta_text += f"  WARNING: {warning}\n"
+        meta_text += "\n"
 
     ws["A1"] = meta_text
     ws["A1"].font = Font(name="Consolas", size=10)

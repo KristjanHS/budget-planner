@@ -9,15 +9,9 @@ from budget_planner.styles import (
     SECTION_FONT, SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     RED_FILL, AMBER_FILL, CENTER, style_cell, col_letter,
 )
-from budget_planner.config import (
-    PROJECT_START, PROJECT_MONTHS, WORK_PACKAGES, NUM_WPS,
-    MONTH_COL_START, MONTH_COL_END,
-    VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
-    VAL_COL_CUM, VAL_COL_PCT_CEIL, VAL_COL_BREACH,
-)
 
 
-def build_actuals_sheet(wb, layout):
+def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, preserved=None):
     """Build the Actuals sheet for EUR actuals per WP per month.
 
     Args:
@@ -28,6 +22,28 @@ def build_actuals_sheet(wb, layout):
         Layout dict with keys: header_row, year_row, month_row,
         first_wp_row, last_wp_row, total_row.
     """
+    if project_params is None or work_packages is None:
+        from budget_planner import config
+        if project_params is None:
+            project_params = {
+                "title": config.PROJECT_TITLE,
+                "start": config.PROJECT_START,
+                "months": config.PROJECT_MONTHS,
+                "rate": config.DEFAULT_RATE,
+            }
+        if work_packages is None:
+            work_packages = config.WORK_PACKAGES
+
+    month_col_start = 3
+    num_wps = len(work_packages)
+    month_col_end = month_col_start + project_params["months"] - 1
+    val_col_sum = month_col_end + 1
+    val_col_budget = month_col_end + 2
+    val_col_diff = month_col_end + 3
+    val_col_cum = val_col_diff + 1
+    val_col_pct_ceil = val_col_diff + 2
+    val_col_breach = val_col_diff + 3
+
     config_first_wp_row = layout["config_first_wp_row"]
 
     ws = wb.create_sheet("Actuals")
@@ -36,7 +52,7 @@ def build_actuals_sheet(wb, layout):
     r = 1
 
     # -- Section header --
-    merge_end = VAL_COL_BREACH
+    merge_end = val_col_breach
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=merge_end)
     style_cell(ws, r, 1, "ACTUAL EUR", font=SECTION_FONT, fill=SECTION_FILL,
                alignment=CENTER)
@@ -49,12 +65,12 @@ def build_actuals_sheet(wb, layout):
     style_cell(ws, r, 1, "", fill=LIGHT_BLUE_FILL)
     style_cell(ws, r, 2, "", fill=LIGHT_BLUE_FILL)
     m = 0
-    while m < PROJECT_MONTHS:
-        year_start_col = MONTH_COL_START + m
-        months_left = PROJECT_MONTHS - m
+    while m < project_params["months"]:
+        year_start_col = month_col_start + m
+        months_left = project_params["months"] - m
         span = min(12, months_left)
         year_end_col = year_start_col + span - 1
-        cal_date = PROJECT_START + relativedelta(months=m)
+        cal_date = project_params["start"] + relativedelta(months=m)
         year_label = f"Year {m // 12 + 1} ({cal_date.year})"
         if span > 1:
             ws.merge_cells(start_row=r, start_column=year_start_col,
@@ -65,17 +81,17 @@ def build_actuals_sheet(wb, layout):
             style_cell(ws, r, c2, fill=LIGHT_BLUE_FILL)
         m += span
     # Validation headers
-    style_cell(ws, r, VAL_COL_SUM, "Sum", font=HEADER_FONT,
+    style_cell(ws, r, val_col_sum, "Sum", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, VAL_COL_BUDGET, "Ceiling", font=HEADER_FONT,
+    style_cell(ws, r, val_col_budget, "Ceiling", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, VAL_COL_DIFF, "Variance", font=HEADER_FONT,
+    style_cell(ws, r, val_col_diff, "Variance", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, VAL_COL_CUM, "Cum. EUR", font=HEADER_FONT,
+    style_cell(ws, r, val_col_cum, "Cum. EUR", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, VAL_COL_PCT_CEIL, "% Ceiling", font=HEADER_FONT,
+    style_cell(ws, r, val_col_pct_ceil, "% Ceiling", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, VAL_COL_BREACH, "Breach In", font=HEADER_FONT,
+    style_cell(ws, r, val_col_breach, "Breach In", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
     r += 1
     month_row = r
@@ -85,116 +101,125 @@ def build_actuals_sheet(wb, layout):
                alignment=CENTER)
     style_cell(ws, r, 2, "WP Name", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
                alignment=CENTER)
-    for m_idx in range(PROJECT_MONTHS):
-        c = MONTH_COL_START + m_idx
-        cal_date = PROJECT_START + relativedelta(months=m_idx)
+    for m_idx in range(project_params["months"]):
+        c = month_col_start + m_idx
+        cal_date = project_params["start"] + relativedelta(months=m_idx)
         mlabel = f"M{m_idx + 1}\n{cal_date.strftime('%b %y')}"
         style_cell(ws, r, c, mlabel, font=Font(name="Arial", size=8),
                    fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, VAL_COL_SUM, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, VAL_COL_BUDGET, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, VAL_COL_DIFF, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, VAL_COL_CUM, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, VAL_COL_PCT_CEIL, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, VAL_COL_BREACH, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, r, val_col_sum, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, r, val_col_budget, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, r, val_col_diff, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, r, val_col_cum, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, r, val_col_pct_ceil, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, r, val_col_breach, "", fill=LIGHT_BLUE_FILL)
     r += 1
     first_wp_row = r
 
     # -- WP rows (blue input EUR cells) --
-    for i, wp in enumerate(WORK_PACKAGES):
+    for i, wp in enumerate(work_packages):
         row = r + i
         config_row = config_first_wp_row + i
         # Cross-sheet refs to Plan config
         style_cell(ws, row, 1, font=GREEN_XREF).value = f"=Plan!A{config_row}"
         style_cell(ws, row, 2, font=GREEN_XREF).value = f"=Plan!B{config_row}"
 
-        for m_idx in range(PROJECT_MONTHS):
-            c = MONTH_COL_START + m_idx
+        # Get preserved monthly values if available
+        preserved_values = None
+        if preserved and wp["id"] in preserved:
+            preserved_values = preserved[wp["id"]]
+
+        for m_idx in range(project_params["months"]):
+            c = month_col_start + m_idx
             month_num = m_idx + 1
             if wp["start"] <= month_num <= wp["end"]:
-                style_cell(ws, row, c, 0, font=BLUE_INPUT, fmt="\u20ac#,##0")
+                if preserved_values is not None and m_idx < len(preserved_values) and preserved_values[m_idx] is not None:
+                    eur_value = preserved_values[m_idx]
+                else:
+                    eur_value = 0
+                style_cell(ws, row, c, eur_value, font=BLUE_INPUT, fmt="\u20ac#,##0")
             else:
                 style_cell(ws, row, c, "", font=BLUE_INPUT, fill=GREY_FILL,
                            fmt="\u20ac#,##0")
 
         # Validation: Sum
-        sum_range = (f"{col_letter(MONTH_COL_START)}{row}:"
-                     f"{col_letter(MONTH_COL_END)}{row}")
-        style_cell(ws, row, VAL_COL_SUM, font=BLACK_FORMULA,
+        sum_range = (f"{col_letter(month_col_start)}{row}:"
+                     f"{col_letter(month_col_end)}{row}")
+        style_cell(ws, row, val_col_sum, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = f"=SUM({sum_range})"
         # Validation: Ceiling (from Plan Personnel Ceiling column G)
-        style_cell(ws, row, VAL_COL_BUDGET, font=GREEN_XREF,
+        style_cell(ws, row, val_col_budget, font=GREEN_XREF,
                    fmt="\u20ac#,##0").value = f"=Plan!G{config_row}"
         # Validation: Variance = Ceiling - Sum
-        style_cell(ws, row, VAL_COL_DIFF, font=BLACK_FORMULA,
+        style_cell(ws, row, val_col_diff, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = (
-            f"={col_letter(VAL_COL_BUDGET)}{row}"
-            f"-{col_letter(VAL_COL_SUM)}{row}"
+            f"={col_letter(val_col_budget)}{row}"
+            f"-{col_letter(val_col_sum)}{row}"
         )
 
         # Cumulative EUR (up to current_month)
-        ms = col_letter(MONTH_COL_START)
-        me = col_letter(MONTH_COL_END)
-        style_cell(ws, row, VAL_COL_CUM, font=BLACK_FORMULA,
+        ms = col_letter(month_col_start)
+        me = col_letter(month_col_end)
+        style_cell(ws, row, val_col_cum, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = (
             f"=SUMPRODUCT((COLUMN({ms}{row}:{me}{row})"
             f"-COLUMN(${ms}$1)+1<=current_month)"
             f"*({ms}{row}:{me}{row}))"
         )
         # % Ceiling = Cum. EUR / Ceiling
-        cum_l = col_letter(VAL_COL_CUM)
-        ceil_l = col_letter(VAL_COL_BUDGET)
-        style_cell(ws, row, VAL_COL_PCT_CEIL, font=BLACK_FORMULA,
+        cum_l = col_letter(val_col_cum)
+        ceil_l = col_letter(val_col_budget)
+        style_cell(ws, row, val_col_pct_ceil, font=BLACK_FORMULA,
                    fmt="0.0%").value = f"={cum_l}{row}/{ceil_l}{row}"
         # Breach In = months until ceiling exhausted at current rate
-        style_cell(ws, row, VAL_COL_BREACH, font=BLACK_FORMULA,
+        style_cell(ws, row, val_col_breach, font=BLACK_FORMULA,
                    fmt="0").value = (
             f'=IF({cum_l}{row}=0,"\u2014",'
             f"({ceil_l}{row}-{cum_l}{row})"
             f"/({cum_l}{row}/current_month))"
         )
 
-    last_wp_row = first_wp_row + NUM_WPS - 1
+    last_wp_row = first_wp_row + num_wps - 1
     r = last_wp_row + 1
 
     # -- TOTAL row --
     total_row = r
     style_cell(ws, r, 1, "", fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
-    for m_idx in range(PROJECT_MONTHS):
-        c = MONTH_COL_START + m_idx
+    for m_idx in range(project_params["months"]):
+        c = month_col_start + m_idx
         col_range = f"{col_letter(c)}{first_wp_row}:{col_letter(c)}{last_wp_row}"
         style_cell(ws, r, c, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                    fmt="\u20ac#,##0").value = f"=SUM({col_range})"
     # TOTAL Sum
-    sum_range = (f"{col_letter(VAL_COL_SUM)}{first_wp_row}:"
-                 f"{col_letter(VAL_COL_SUM)}{last_wp_row}")
-    style_cell(ws, r, VAL_COL_SUM, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+    sum_range = (f"{col_letter(val_col_sum)}{first_wp_row}:"
+                 f"{col_letter(val_col_sum)}{last_wp_row}")
+    style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="\u20ac#,##0").value = f"=SUM({sum_range})"
     # TOTAL Ceiling = partner_ceiling named range
-    style_cell(ws, r, VAL_COL_BUDGET, font=GREEN_XREF, fill=LIGHT_GREEN_FILL,
+    style_cell(ws, r, val_col_budget, font=GREEN_XREF, fill=LIGHT_GREEN_FILL,
                fmt="\u20ac#,##0").value = "=partner_ceiling"
     # TOTAL Variance = Ceiling - Sum
-    style_cell(ws, r, VAL_COL_DIFF, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+    style_cell(ws, r, val_col_diff, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="\u20ac#,##0").value = (
-        f"={col_letter(VAL_COL_BUDGET)}{r}"
-        f"-{col_letter(VAL_COL_SUM)}{r}"
+        f"={col_letter(val_col_budget)}{r}"
+        f"-{col_letter(val_col_sum)}{r}"
     )
     # TOTAL Cumulative EUR
-    ms = col_letter(MONTH_COL_START)
-    me = col_letter(MONTH_COL_END)
-    style_cell(ws, r, VAL_COL_CUM, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+    ms = col_letter(month_col_start)
+    me = col_letter(month_col_end)
+    style_cell(ws, r, val_col_cum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="\u20ac#,##0").value = (
         f"=SUMPRODUCT((COLUMN({ms}{r}:{me}{r})"
         f"-COLUMN(${ms}$1)+1<=current_month)"
         f"*({ms}{r}:{me}{r}))"
     )
     # TOTAL % Ceiling = Cum. EUR / partner_ceiling
-    cum_l = col_letter(VAL_COL_CUM)
-    style_cell(ws, r, VAL_COL_PCT_CEIL, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+    cum_l = col_letter(val_col_cum)
+    style_cell(ws, r, val_col_pct_ceil, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="0.0%").value = f"={cum_l}{r}/partner_ceiling"
     # TOTAL Breach In
-    style_cell(ws, r, VAL_COL_BREACH, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+    style_cell(ws, r, val_col_breach, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="0").value = (
         f'=IF({cum_l}{r}=0,"\u2014",'
         f"(partner_ceiling-{cum_l}{r})"
@@ -202,14 +227,14 @@ def build_actuals_sheet(wb, layout):
     )
 
     # -- Conditional formatting: red on negative variance --
-    diff_col_l = col_letter(VAL_COL_DIFF)
+    diff_col_l = col_letter(val_col_diff)
     cell_range = f"{diff_col_l}{first_wp_row}:{diff_col_l}{last_wp_row}"
     ws.conditional_formatting.add(cell_range, FormulaRule(
         formula=[f"{diff_col_l}{first_wp_row}<0"], fill=RED_FILL,
     ))
 
     # -- Conditional formatting: % Ceiling column (amber >85%, red >100%) --
-    pct_col_l = col_letter(VAL_COL_PCT_CEIL)
+    pct_col_l = col_letter(val_col_pct_ceil)
     pct_range = f"{pct_col_l}{first_wp_row}:{pct_col_l}{last_wp_row}"
     # Amber first (lower priority), then red overrides
     ws.conditional_formatting.add(pct_range, FormulaRule(
@@ -220,7 +245,7 @@ def build_actuals_sheet(wb, layout):
     ))
 
     # -- Conditional formatting: Breach In column (amber <12, red <6) --
-    breach_col_l = col_letter(VAL_COL_BREACH)
+    breach_col_l = col_letter(val_col_breach)
     breach_range = f"{breach_col_l}{first_wp_row}:{breach_col_l}{last_wp_row}"
     # Amber first (lower priority), then red overrides
     ws.conditional_formatting.add(breach_range, FormulaRule(
@@ -240,7 +265,7 @@ def build_actuals_sheet(wb, layout):
         "first_wp_row": first_wp_row,
         "last_wp_row": last_wp_row,
         "total_row": total_row,
-        "cum_col": VAL_COL_CUM,
-        "pct_ceiling_col": VAL_COL_PCT_CEIL,
-        "breach_col": VAL_COL_BREACH,
+        "cum_col": val_col_cum,
+        "pct_ceiling_col": val_col_pct_ceil,
+        "breach_col": val_col_breach,
     }

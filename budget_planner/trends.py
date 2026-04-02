@@ -11,10 +11,6 @@ from budget_planner.styles import (
     SECTION_FONT, SECTION_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     CENTER, style_cell, col_letter,
 )
-from budget_planner.config import (
-    PROJECT_MONTHS, WORK_PACKAGES, NUM_WPS, TEAM,
-    MONTH_COL_START, MONTH_COL_END, VAL_COL_BUDGET,
-)
 
 # Local fill constants for conditional formatting
 _GREEN_CF_FILL = PatternFill("solid", fgColor="E2EFDA")
@@ -22,7 +18,8 @@ _AMBER_CF_FILL = PatternFill("solid", fgColor="FFD966")
 _RED_CF_FILL = PatternFill("solid", fgColor="FFC7CE")
 
 
-def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_layout):
+def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_layout, *,
+                       project_params=None, work_packages=None, team=None):
     """Build the Trends sheet: WP burn rate, cumulative chart, person load.
 
     Args:
@@ -32,11 +29,35 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         actuals_layout: Actuals layout dict (first_wp_row, cum_col, etc).
         capacity_layout: Capacity layout dict (person_groups with total_row per person).
         team_layout: Team layout dict (person_rows mapping name->row).
+        project_params: Dict with keys title, start, months, rate. Falls back to config.
+        work_packages: List of WP dicts. Falls back to config.
+        team: List of team member dicts. Falls back to config.
     """
+    if any(v is None for v in [project_params, work_packages, team]):
+        from budget_planner import config
+        if project_params is None:
+            project_params = {
+                "title": config.PROJECT_TITLE, "start": config.PROJECT_START,
+                "months": config.PROJECT_MONTHS, "rate": config.DEFAULT_RATE,
+            }
+        if work_packages is None:
+            work_packages = config.WORK_PACKAGES
+        if team is None:
+            team = config.TEAM
+
+    assert project_params is not None
+    assert work_packages is not None
+    assert team is not None
+
+    month_col_start = 3
+    num_wps = len(work_packages)
+    month_col_end = month_col_start + project_params["months"] - 1
+    val_col_budget = month_col_end + 2
+
     cum_col_letter = col_letter(actuals_layout["cum_col"])
-    ceiling_col_letter = col_letter(VAL_COL_BUDGET)
-    ms = col_letter(MONTH_COL_START)
-    me = col_letter(MONTH_COL_END)
+    ceiling_col_letter = col_letter(val_col_budget)
+    ms = col_letter(month_col_start)
+    me = col_letter(month_col_end)
 
     # ================================================================
     # Section 1: WP Burn Rate & Exhaustion Table (rows 3-13)
@@ -68,9 +89,9 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
 
     # WP data rows (rows 5-12)
     first_wp_data_row = 5
-    last_wp_data_row = first_wp_data_row + NUM_WPS - 1
+    last_wp_data_row = first_wp_data_row + num_wps - 1
 
-    for i, wp in enumerate(WORK_PACKAGES):
+    for i, wp in enumerate(work_packages):
         row = first_wp_data_row + i
         config_row = layout["config_first_wp_row"] + i
         actuals_row = actuals_layout["first_wp_row"] + i
@@ -169,7 +190,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
 
     # -- Conditional formatting: Exhaustion Month (col G) — per WP row --
     # Each WP has a different end month, so CF must reference the correct config row
-    for i in range(NUM_WPS):
+    for i in range(num_wps):
         row = first_wp_data_row + i
         config_row = layout["config_first_wp_row"] + i
         g_cell = f"G{row}:G{row}"
@@ -244,7 +265,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     person_groups = capacity_layout["person_groups"]
     person_rows_map = team_layout["person_rows"]
 
-    for pi, member in enumerate(TEAM):
+    for pi, member in enumerate(team):
         name = member["name"]
         row = person_first_row + pi
         tr = person_groups[name]["total_row"]
@@ -266,11 +287,11 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
 
         # Col C: Avg FTE (remaining)
         style_cell(ws, row, 3, font=BLACK_FORMULA, fmt="0.00").value = (
-            f"=IF(current_month>={PROJECT_MONTHS},0,"
+            f"=IF(current_month>={project_params['months']},0,"
             f"SUMPRODUCT((COLUMN(Capacity!{ms}{tr}:{me}{tr})"
             f"-COLUMN(Capacity!${ms}$1)+1>current_month)"
             f"*(Capacity!{ms}{tr}:{me}{tr}))"
-            f"/({PROJECT_MONTHS}-current_month))"
+            f"/({project_params['months']}-current_month))"
         )
 
         # Col D: Peak Month FTE
@@ -284,11 +305,11 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
             f'IF(C{row}>0.8*Team!B{roster_row},"WATCH","OK"))'
         )
 
-    person_last_row = person_first_row + len(TEAM) - 1
+    person_last_row = person_first_row + len(team) - 1
 
     # -- Conditional formatting: Person Status (col E) + Peak (col D) — per person --
     # Each person has a different max_fte, so CF must use the correct roster row
-    for pi, member in enumerate(TEAM):
+    for pi, member in enumerate(team):
         row = person_first_row + pi
         roster_row = person_rows_map[member["name"]]
         e_cell = f"E{row}:E{row}"
@@ -326,8 +347,8 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     plan_last_wp = layout["planned_last_wp_row"]
     act_total = actuals_layout["total_row"]
 
-    for m_idx in range(PROJECT_MONTHS):
-        c = MONTH_COL_START + m_idx
+    for m_idx in range(project_params["months"]):
+        c = month_col_start + m_idx
         cl = col_letter(c)
 
         # Helper Row 1: Cumulative planned EUR
@@ -378,8 +399,8 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     chart.y_axis.numFmt = "\u20ac#,##0"
 
     # Data references (columns C through BJ = cols 3..62)
-    min_col = MONTH_COL_START
-    max_col = MONTH_COL_END
+    min_col = month_col_start
+    max_col = month_col_end
 
     # Series 1: Cumulative planned (blue solid)
     planned_ref = Reference(ws, min_col=min_col, max_col=max_col,
@@ -412,8 +433,8 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     # X-axis categories: M1..M60 labels
     # Create labels in a helper area (row 43, hidden)
     helper_row_labels = 43
-    for m_idx in range(PROJECT_MONTHS):
-        c = MONTH_COL_START + m_idx
+    for m_idx in range(project_params["months"]):
+        c = month_col_start + m_idx
         ws.cell(row=helper_row_labels, column=c, value=f"M{m_idx + 1}")
     ws.row_dimensions[helper_row_labels].hidden = True
 

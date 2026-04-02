@@ -8,13 +8,9 @@ from budget_planner.styles import (
     SECTION_FONT, SECTION_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     AMBER_FILL, RED_FILL, CENTER, style_cell, col_letter,
 )
-from budget_planner.config import (
-    PROJECT_START, PROJECT_MONTHS, WORK_PACKAGES, NUM_WPS,
-    MONTH_COL_START, VAL_COL_SUM,
-)
 
 
-def build_summary_sheet(wb, layout, actuals_layout):
+def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work_packages=None):
     """Create the Summary sheet with annual budget view and budget overview.
 
     Parameters
@@ -24,7 +20,27 @@ def build_summary_sheet(wb, layout, actuals_layout):
         From build_plan_sheet(): config_first_wp_row, planned_first_wp_row.
     actuals_layout : dict
         From build_actuals_sheet(): first_wp_row, total_row.
+    project_params : dict, optional
+        Keys: title, start, months, rate. Lazy-imports from config if None.
+    work_packages : list[dict], optional
+        List of WP dicts. Lazy-imports from config if None.
     """
+    if project_params is None or work_packages is None:
+        from budget_planner import config
+        if project_params is None:
+            project_params = {
+                "title": config.PROJECT_TITLE,
+                "start": config.PROJECT_START,
+                "months": config.PROJECT_MONTHS,
+                "rate": config.DEFAULT_RATE,
+            }
+        if work_packages is None:
+            work_packages = config.WORK_PACKAGES
+
+    month_col_start = 3
+    num_wps = len(work_packages)
+    month_col_end = month_col_start + project_params["months"] - 1
+    val_col_sum = month_col_end + 1
     config_first_wp_row = layout["config_first_wp_row"]
     planned_first_wp_row = layout["planned_first_wp_row"]
     actuals_first_wp_row = actuals_layout["first_wp_row"]
@@ -39,7 +55,7 @@ def build_summary_sheet(wb, layout, actuals_layout):
     r += 2
 
     # Calculate years
-    num_years = (PROJECT_MONTHS + 11) // 12
+    num_years = (project_params["months"] + 11) // 12
 
     # Year group headers
     YEAR_GROUP_START = 3
@@ -55,7 +71,7 @@ def build_summary_sheet(wb, layout, actuals_layout):
     for y in range(num_years):
         start_col = YEAR_GROUP_START + y * COLS_PER_YEAR
         end_col = start_col + COLS_PER_YEAR - 1
-        cal_year = PROJECT_START.year + y
+        cal_year = project_params["start"].year + y
         summary.merge_cells(start_row=r, start_column=start_col, end_row=r, end_column=end_col)
         style_cell(summary, r, start_col, f"Year {y+1} ({cal_year})", font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
         for c2 in range(start_col + 1, end_col + 1):
@@ -85,7 +101,7 @@ def build_summary_sheet(wb, layout, actuals_layout):
     SUMMARY_FIRST_WP_ROW = r
 
     # WP data rows
-    for i, wp in enumerate(WORK_PACKAGES):
+    for i, wp in enumerate(work_packages):
         row = r + i
         config_row = config_first_wp_row + i
         style_cell(summary, row, 1, font=GREEN_XREF).value = f"=Plan!A{config_row}"
@@ -93,9 +109,9 @@ def build_summary_sheet(wb, layout, actuals_layout):
 
         for y in range(num_years):
             m_start = y * 12
-            m_end = min((y + 1) * 12, PROJECT_MONTHS) - 1
-            first_col_l = col_letter(MONTH_COL_START + m_start)
-            last_col_l = col_letter(MONTH_COL_START + m_end)
+            m_end = min((y + 1) * 12, project_params["months"]) - 1
+            first_col_l = col_letter(month_col_start + m_start)
+            last_col_l = col_letter(month_col_start + m_end)
 
             sc = YEAR_GROUP_START + y * COLS_PER_YEAR
             plan_wp_row = planned_first_wp_row + i
@@ -137,7 +153,7 @@ def build_summary_sheet(wb, layout, actuals_layout):
             f"={col_letter(tc + 1)}{row}-{col_letter(tc + 2)}{row}"
         )
 
-    SUMMARY_LAST_WP_ROW = SUMMARY_FIRST_WP_ROW + NUM_WPS - 1
+    SUMMARY_LAST_WP_ROW = SUMMARY_FIRST_WP_ROW + num_wps - 1
     totals_row = SUMMARY_LAST_WP_ROW + 1
 
     # Totals row
@@ -186,7 +202,7 @@ def build_summary_sheet(wb, layout, actuals_layout):
     style_cell(summary, r, 1, "Personnel Actual", font=HEADER_FONT, border=False)
     style_cell(summary, r, 2, font=GREEN_XREF, fmt="\u20ac#,##0",
                border=False).value = (
-        f"=Actuals!{col_letter(VAL_COL_SUM)}{actuals_total_row}"
+        f"=Actuals!{col_letter(val_col_sum)}{actuals_total_row}"
     )
     r += 1
 

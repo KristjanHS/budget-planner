@@ -2,6 +2,40 @@
 import re
 
 
+def read_config_sheet(ws) -> tuple[dict, list[dict]]:
+    """Read Config sheet -> (project_params, work_packages).
+
+    Returns:
+        Tuple of (project_params, work_packages) where:
+        - project_params: dict with keys 'title', 'start', 'months', 'rate'
+        - work_packages: list of dicts with keys 'id', 'name', 'fte',
+          'start', 'end'
+    """
+    project_params = {
+        "title": ws.cell(1, 2).value,
+        "start": ws.cell(2, 2).value,
+        "months": int(ws.cell(3, 2).value or 60),
+        "rate": float(ws.cell(4, 2).value or 7500),
+    }
+
+    # Work packages start at row 8 (row 6 = section header, row 7 = headers)
+    work_packages: list[dict] = []
+    r = 8
+    while r <= ws.max_row:
+        wp_id = ws.cell(r, 1).value
+        if wp_id is None or str(wp_id).strip() == "":
+            break
+        work_packages.append({
+            "id": str(wp_id),
+            "name": str(ws.cell(r, 2).value or ""),
+            "fte": float(ws.cell(r, 3).value or 0),
+            "start": int(ws.cell(r, 4).value or 1),
+            "end": int(ws.cell(r, 5).value or 1),
+        })
+        r += 1
+
+    return project_params, work_packages
+
 
 def read_plan_config(ws, layout) -> list[dict]:
     """Read WP definitions from Plan config table."""
@@ -103,12 +137,16 @@ def read_team_sheet(ws) -> dict:
     return {"roster": roster, "shares": shares}
 
 
-def read_capacity_sheet(ws, config_wps) -> dict:
+def read_capacity_sheet(ws, config_wps, project_months=None,
+                        month_col_start=3) -> dict:
     """Read Capacity sheet person groups.
 
     Args:
         ws: Capacity worksheet
         config_wps: list of WP dicts from read_plan_config (used to classify rows)
+        project_months: Number of project months. If None, falls back to
+            config.PROJECT_MONTHS for backward compatibility.
+        month_col_start: First month column (default 3 = col C).
 
     Returns:
         {
@@ -123,7 +161,9 @@ def read_capacity_sheet(ws, config_wps) -> dict:
             }
         }
     """
-    from budget_planner.config import MONTH_COL_START, PROJECT_MONTHS
+    if project_months is None:
+        from budget_planner.config import PROJECT_MONTHS
+        project_months = PROJECT_MONTHS
 
     # Build WP ID lookup from config_wps: plan config row -> WP ID
     # config_first_wp_row is typically 6 (row 5 is header "WP ID")
@@ -182,6 +222,23 @@ def read_capacity_sheet(ws, config_wps) -> dict:
             fg = str(fill.fgColor.rgb).upper()
         if font.bold and "2F5496" in fg:
             person_headers.append(r)
+
+    # Fallback: pattern-based detection (scan for TOTAL rows, person header
+    # is above each group)
+    if not person_headers:
+        for r in range(month_header_row + 1, ws.max_row + 1):
+            if (ws.cell(r, 2).value
+                    and str(ws.cell(r, 2).value).upper() == "TOTAL"):
+                # Scan backward to find group start
+                for rr in range(r - 1, month_header_row, -1):
+                    cell_a = ws.cell(rr, 1).value
+                    if cell_a is not None and ws.cell(rr, 2).value is None:
+                        # Person header (merged cells: col A has name,
+                        # col B is None/empty from merge)
+                        if rr not in person_headers:
+                            person_headers.append(rr)
+                        break
+        person_headers.sort()
 
     # ── Parse each person group ──
     person_groups: dict[str, dict] = {}
@@ -252,8 +309,8 @@ def read_capacity_sheet(ws, config_wps) -> dict:
             resolved_wp = _resolve_wp_id(col_a)
             if resolved_wp is not None:
                 # Programme WP row
-                monthly = _read_monthly_values(ws, dr, MONTH_COL_START,
-                                               PROJECT_MONTHS)
+                monthly = _read_monthly_values(ws, dr, month_col_start,
+                                               project_months)
                 wp_values[resolved_wp] = monthly
             elif col_a is not None:
                 # Check if it's an external project (literal string, not formula
@@ -261,8 +318,8 @@ def read_capacity_sheet(ws, config_wps) -> dict:
                 col_a_str = str(col_a)
                 if not col_a_str.startswith("="):
                     # External project row
-                    monthly = _read_monthly_values(ws, dr, MONTH_COL_START,
-                                                   PROJECT_MONTHS)
+                    monthly = _read_monthly_values(ws, dr, month_col_start,
+                                                   project_months)
                     external_values[col_a_str] = monthly
 
         person_groups[name] = {
@@ -346,5 +403,67 @@ def discover_layout(ws) -> dict:
         "planned_last_wp_row": planned_last_wp_row,
         "planned_total_row": planned_total_row,
     }
+
+
+def read_actuals_values(ws, project_months, month_col_start=3) -> dict[str, list]:
+    """Read Actuals EUR values for round-trip preservation.
+
+    Args:
+        ws: Actuals worksheet.
+        project_months: Number of project months.
+        month_col_start: First month column (default 3 = col C).
+
+    Returns:
+        Dict keyed by WP ID string -> list of monthly values (float or None).
+        Only includes rows with at least one non-None value.
+    """
+    values: dict[str, list] = {}
+    wb = ws.parent
+    plan_ws = wb["Plan"] if "Plan" in wb.sheetnames else None
+
+    # WP rows start at row 4 (row 1 = section header, row 2 = year headers,
+    # row 3 = month headers)
+    first_wp_row = 4
+    r = first_wp_row
+    while r <= ws.max_row:
+        col_a = ws.cell(r, 1).value
+        col_b = ws.cell(r, 2).value
+
+        # Stop at TOTAL row or empty
+        if col_b and str(col_b).upper() == "TOTAL":
+            break
+        if col_a is None:
+            break
+
+        # Resolve WP ID (may be a =Plan!A{n} formula)
+        wp_id = _resolve_plan_ref(col_a, plan_ws)
+        if wp_id is None:
+            r += 1
+            continue
+
+        monthly = _read_monthly_values(ws, r, month_col_start, project_months)
+
+        # Only include if there's at least one non-None value
+        if any(v is not None for v in monthly):
+            values[wp_id] = monthly
+
+        r += 1
+
+    return values
+
+
+def _resolve_plan_ref(cell_value, plan_ws):
+    """Resolve a cell value that might be a =Plan!A{n} formula."""
+    if cell_value is None:
+        return None
+    val = str(cell_value)
+    m = re.match(r"=Plan!A(\d+)", val)
+    if m and plan_ws:
+        plan_row = int(m.group(1))
+        resolved = plan_ws.cell(plan_row, 1).value
+        return str(resolved) if resolved else None
+    if not val.startswith("="):
+        return val
+    return None
 
 

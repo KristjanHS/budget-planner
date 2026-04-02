@@ -1,5 +1,5 @@
 """Spreadsheet styling constants and helpers."""
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, Protection
 from openpyxl.utils import get_column_letter
 
 # Font color convention: Blue = input, Black = formula, Green = cross-sheet ref
@@ -27,7 +27,7 @@ CENTER = Alignment(horizontal="center", vertical="center")
 WRAP = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
 
-def style_cell(ws, row, col, value=None, font=None, fill=None, alignment=None, fmt=None, border=True):
+def style_cell(ws, row, col, value=None, font=None, fill=None, alignment=None, fmt=None, border=True, unlocked=False):
     """Apply styling to a worksheet cell."""
     cell = ws.cell(row=row, column=col, value=value)
     if font:
@@ -40,9 +40,49 @@ def style_cell(ws, row, col, value=None, font=None, fill=None, alignment=None, f
         cell.number_format = fmt
     if border:
         cell.border = THIN_BORDER
+    if unlocked:
+        cell.protection = Protection(locked=False)
     return cell
 
 
 def col_letter(c):
     """Wrapper for get_column_letter."""
     return get_column_letter(c)
+
+
+def apply_year_groups(ws, month_col_start, project_months, current_month=None):
+    """Apply column grouping by year (outline level 1).
+
+    Groups 12 month columns per year. If current_month is provided,
+    expand the group containing that month and collapse others.
+    If current_month is None, expand year 1 and collapse rest.
+
+    Args:
+        ws: Worksheet to apply grouping to.
+        month_col_start: First month column number (typically 3 = column C).
+        project_months: Total number of project months.
+        current_month: 1-based month number to keep visible (optional).
+    """
+    m = 0
+    while m < project_months:
+        year_start_col = month_col_start + m
+        span = min(12, project_months - m)
+        year_end_col = year_start_col + span - 1
+        year_num = m // 12 + 1
+
+        # Determine if this year's group should be collapsed
+        if current_month is not None:
+            # Expand the year containing current_month
+            expand = (m < current_month <= m + span)
+        else:
+            # Default: expand year 1
+            expand = (year_num == 1)
+
+        ws.column_dimensions.group(
+            col_letter(year_start_col),
+            col_letter(year_end_col),
+            outline_level=1,
+            hidden=not expand,
+        )
+
+        m += span

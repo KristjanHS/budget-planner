@@ -2,6 +2,7 @@
 
 **Date**: 2026-04-02
 **Status**: Approved design, not yet implemented
+**Revised**: 2026-04-02 (Kaizen Muda review — fixed 7 findings)
 
 ## Goals
 
@@ -23,12 +24,12 @@ Solve five interconnected problems in one integrated redesign:
 | Navigation solution | Column grouping by year, auto-collapse to current year |
 | Protection model | All sheets protected, blue input cells unlocked, password "grant" |
 | Validation approach | Hard errors at rebuild time + CF warnings in workbook |
-| config.py fate | Seed for `init` only; Config sheet is living source of truth after that |
-| Config sheet structure | Single sheet: labeled cells for params, Excel Tables for WP/Team/External |
+| config.py fate | Seed for `init` only; Config sheet + existing sheets are living source of truth |
+| Config sheet structure | Single sheet: labeled cells for params, one Excel Table for work packages |
 
 ## Chosen Approach: Thin Rebuild Layer
 
-Add `rebuild` mode that reads the existing workbook, extracts preserved data, regenerates all sheets from the Config sheet, and re-injects preserved values. Minimal changes to existing builders (optional `preserved` parameter). Column grouping and cell protection applied as post-generation decorators.
+Add `rebuild` mode that reads the existing workbook, extracts preserved data, regenerates all sheets from the Config sheet + existing Team/Capacity data, and re-injects preserved values. Minimal changes to existing builders (optional `preserved` parameter, config passed as parameters instead of module imports). Column grouping and cell protection applied as post-generation decorators.
 
 **Why this over alternatives:**
 - **Patch-in-place** (modify existing workbook surgically) rejected: openpyxl can't auto-adjust formula references on row insert, making this extremely fragile (~500 lines of formula-shifting code)
@@ -39,7 +40,7 @@ Add `rebuild` mode that reads the existing workbook, extracts preserved data, re
 ### `python -m budget_planner init`
 
 - Creates a fresh workbook from `config.py` seed data
-- Builds Config sheet with Excel Tables + all other sheets
+- Builds Config sheet with project params + WP Table, plus all other sheets
 - Only time `config.py` is read
 - Replaces current `python -m budget_planner` for first-time generation
 
@@ -47,22 +48,52 @@ Add `rebuild` mode that reads the existing workbook, extracts preserved data, re
 
 - Reads existing workbook (default: `output/budget_plan.xlsx`)
 - Prints timestamp: `Reading from: budget_plan.xlsx (modified 2026-03-15 14:30)`
-- Extracts: Config sheet -> project structure, Capacity -> FTE values, Actuals -> EUR values
-- Validates Config (hard errors abort, warnings logged)
-- Regenerates all sheets from Config sheet data (not config.py)
+- Extracts: Config sheet -> project params + WPs, Team sheet -> roster + shares, Capacity sheet -> external commitments + FTE values, Actuals sheet -> EUR values
+- Validates extracted data (hard errors abort, warnings logged)
+- Regenerates all sheets from extracted data (not config.py)
 - Re-injects preserved Capacity + Actuals values matched by WP ID + person name + month index
 - Applies protection, column grouping, CF warnings
 - Backs up original file with timestamp before overwriting
-- Writes orphaned data to `_REBUILD_LOG` sheet
+- Writes rebuild warnings to _META sheet
+
+### `python -m budget_planner rebuild --skeleton [path]`
+
+- Same as `rebuild` but leaves Capacity monthly cells empty for re-entry
+- Preserves Actuals data but clears Capacity allocations
+
+### `python -m budget_planner --skeleton` (legacy)
+
+- Empty Capacity for manual entry, reads config.py
+- Only useful before `init` has been run
 
 ### Unchanged
 
-- `python -m budget_planner --skeleton` — empty Capacity, reads config.py
 - `--snapshot` / `--restore` — file copy as before
+
+## Where Each Data Source Lives
+
+A key design invariant: on `rebuild`, **no data comes from config.py**. Each piece of project data has exactly one source.
+
+| Data | Source on `init` | Source on `rebuild` |
+|---|---|---|
+| Project title, start, months, rate | config.py | Config sheet (labeled cells) |
+| Work packages (ID, name, FTE, start, end) | config.py | Config sheet (tbl_WorkPackages) |
+| Team roster (name, max FTE) | config.py | Team sheet (roster block, blue cells) |
+| WP share seeds | config.py | Team sheet (share matrix, blue cells) |
+| External commitments | config.py | Capacity sheet (config block, blue cells) |
+| Monthly FTE allocations | Computed from seeds | Capacity sheet (blue cells, preserved) |
+| Monthly EUR actuals | Empty (zero) | Actuals sheet (blue cells, preserved) |
+| Layout constants (MONTH_COL_START) | config.py | Computed in Python from extracted params |
+
+**Why team/external data is NOT on the Config sheet:**
+- The Team sheet already has blue input cells for roster + share seeds (reader.py can parse them via `read_team_sheet()`)
+- The Capacity sheet already has a config block for external commitments (reader.py can parse via `read_capacity_sheet()`)
+- Duplicating this data on a Config sheet creates a "which is the source of truth?" problem
+- Removing duplication also eliminates the "PM must manually add WP column to Team Table" gap — on rebuild, the Team sheet's share matrix is read as-is
 
 ## Config Sheet Layout
 
-Single sheet with three sections stacked vertically.
+Single sheet with two sections. Simpler than original design — only project-level parameters and work package definitions.
 
 ### Section A: Project Parameters (rows 1-5)
 
@@ -89,25 +120,14 @@ Excel Table named `tbl_WorkPackages`:
 
 PM adds a row to the Table, Excel auto-expands, run `rebuild`.
 
-### Section C: Team Table (~rows 18-25)
+### What's NOT on the Config sheet
 
-Excel Table named `tbl_Team`:
+- **Team roster + shares** — lives on Team sheet (blue input cells)
+- **External commitments** — lives on Capacity sheet config block (blue input cells)
 
-| Person | Max FTE | WP1 | WP2 | WP3 | ... |
-|---|---|---|---|---|---|
-| Alice | 1.0 | 0.25 | 0.50 | 0.25 | ... |
+Both are read by reader.py during rebuild. The PM edits them in their natural location.
 
-WP columns match WP IDs from tbl_WorkPackages. When a WP is added, PM manually adds a column here.
-
-### Section D: External Commitments Table (~rows 28-32)
-
-Excel Table named `tbl_External`:
-
-| Person | Project | Total FTE | Start Month | End Month |
-|---|---|---|---|---|
-| Alice | ProjectX | 3.0 | 1 | 11 |
-
-### Reading Tables in Python
+### Reading the Table in Python
 
 Read Table data by cell position, not Table object. Recreate Table objects on every generation — openpyxl has known quirks round-tripping Table objects.
 
@@ -116,32 +136,50 @@ Read Table data by cell position, not Table object. Recreate Table objects on ev
 ### Step 1: Extract from existing workbook
 
 ```
-read_config_sheet()     -> project params + WP list + team list + external commitments
-read_capacity_values()  -> {("Alice", "WP1"): [0.08, 0.08, ..., 0.0], ...}
-read_actuals_values()   -> {("WP1",): [0, 0, ..., 500, ...], ...}
+read_config_sheet()       -> project params + WP list
+read_team_sheet()         -> roster + share seeds (already exists in reader.py)
+read_capacity_sheet()     -> external commitments + FTE values (already exists)
+read_capacity_values()    -> {("Alice", "WP1"): [0.08, 0.08, ..., 0.0], ...}
+read_actuals_values()     -> {("WP1",): [0, 0, ..., 500, ...], ...}  (new)
 ```
 
 All data keyed by stable identifiers (WP ID + person name + month index), never cell addresses.
 
-### Step 2: Validate extracted Config
+**Important:** reader.py functions must receive `project_months` and `month_col_start` as parameters, not import them from config.py. These values come from the Config sheet during rebuild.
 
-**Hard errors (abort):** duplicate WP IDs, empty tables, zero/negative rate or months, external person not in team.
+### Step 2: Validate extracted data
 
-**Warnings (log):** WP start > end, FTE <= 0, shares don't sum to ~1.0, orphaned preserved data, truncated monthly data.
+**Hard errors (abort):**
+- Duplicate WP IDs in tbl_WorkPackages
+- PROJECT_MONTHS <= 0 or > 120
+- FTE rate <= 0
+- tbl_WorkPackages is empty
+- Team roster is empty
+- External commitment person not found in team roster
+
+**Warnings (log):**
+- WP start > end
+- WP FTE budget <= 0
+- Share seeds for a person don't sum to ~1.0 (tolerance +/-0.05)
+- Orphaned preserved Capacity data (WP ID or person removed)
+- Orphaned preserved Actuals data (WP ID removed)
+- Truncated monthly data (PROJECT_MONTHS shrank, non-zero values dropped)
 
 ### Step 3: Generate fresh workbook
 
-Calls existing builders with extracted config data instead of config.py imports:
+All builders receive config data as function parameters. No builder imports from config.py.
 
 ```
-build_config_sheet()
-build_plan_sheet()
-build_team_sheet()
-build_capacity_sheet(..., preserved=capacity_data)
-build_actuals_sheet(..., preserved=actuals_data)
-build_summary_sheet()
-build_trends_sheet()
-build_meta_sheet()
+build_config_sheet(ws, project_params, work_packages)
+build_plan_sheet(ws, wb, project_params, work_packages)
+build_team_sheet(ws, wb, team, work_packages)
+build_capacity_sheet(ws, wb, team_layout, project_params, work_packages,
+                     team, external_commitments, preserved=capacity_data)
+build_actuals_sheet(wb, layout, project_params, work_packages, preserved=actuals_data)
+build_summary_sheet(wb, layout, actuals_layout, project_params, work_packages)
+build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_layout,
+                   project_params, work_packages, team)
+build_meta_sheet(ws, layout, project_params, work_packages, team, external_commitments)
 ```
 
 ### Step 4: Re-injection logic
@@ -157,9 +195,11 @@ else:
     seed_value = round(share * wp["fte"] / active_months, 4)
 ```
 
+Same pattern for actuals.py.
+
 ### Step 5: Handle orphaned data
 
-Orphaned keys (WP IDs or person names in preserved data but not in new Config) written to `_REBUILD_LOG` sheet with counts and context. Never silently dropped.
+Orphaned keys (WP IDs or person names in preserved data but not in new Config/Team) written to the _META sheet under a `═══ LAST REBUILD LOG ═══` section. Never silently dropped.
 
 ### Month count changes
 
@@ -182,15 +222,14 @@ All sheets protected after generation. Only blue input cells unlocked.
 
 | Sheet | Unlocked cells |
 |---|---|
-| Config | All input cells (params, Table data) |
+| Config | Project param values, tbl_WorkPackages data cells |
 | Plan | None (formula-driven) |
-| Team | Roster values, share seed matrix |
-| Capacity | Monthly FTE cells, external project cells |
+| Team | Roster values (name, max FTE), share seed matrix |
+| Capacity | Monthly FTE cells, external project cells, external config block |
 | Actuals | Monthly EUR cells |
 | Summary | None (formula-driven) |
 | Trends | B1 (current_month) only |
 | _META | None |
-| _REBUILD_LOG | None |
 
 Implementation:
 - `style_cell()` gains `unlocked` parameter; set `cell.protection = Protection(locked=False)` for blue input cells
@@ -201,11 +240,11 @@ Implementation:
 
 ### Rebuild-time validation (Python)
 
-**Hard errors (abort):** duplicate WP ID, PROJECT_MONTHS <= 0 or > 120, FTE rate <= 0, external person not in team, empty WP or team tables.
+**Hard errors (abort):** duplicate WP ID, PROJECT_MONTHS <= 0 or > 120, FTE rate <= 0, external person not in team, empty WP table or team roster.
 
 **Warnings (generate but log):** WP start > end, FTE budget <= 0, shares don't sum to ~1.0, orphaned preserved data, truncated monthly data.
 
-Warnings printed to terminal and written to `_REBUILD_LOG` sheet.
+Warnings printed to terminal and written to _META sheet rebuild log section.
 
 ### CF warnings in workbook
 
@@ -213,7 +252,7 @@ Three new rules extending existing CF:
 
 - **Capacity**: Yellow if Sum > Budget in per-person WP validation column
 - **Config**: Yellow if WP start > end (`=D7>E7`)
-- **Config**: Yellow if team share row doesn't sum to ~1.0 (helper SUM column)
+- **Team**: Yellow if share row doesn't sum to ~1.0 (helper SUM column, already has this CF)
 
 All existing CF rules unchanged.
 
@@ -222,10 +261,12 @@ All existing CF rules unchanged.
 | Risk | Mitigation |
 |---|---|
 | openpyxl corrupts Excel Tables on round-trip | Read cell data, recreate Table objects on every generation |
-| PM renames WP ID, loses Capacity data | Rebuild emits WARNING, writes orphaned data to _REBUILD_LOG |
+| PM renames WP ID, loses Capacity data | Rebuild emits WARNING, writes orphaned data to _META rebuild log |
 | reader.py misidentifies person headers after resave | Dual detection: style-based primary, pattern-based fallback (scan for TOTAL rows) |
 | PM forgets to save Excel before rebuild | CLI prints source file last-modified timestamp |
 | Formula references break on row count change | Match by WP ID + person name, never by row number |
+| Builder still imports config.py | All builders receive config as parameters; no module-level config imports in rebuild path |
+| reader.py uses config.py constants | All reader functions receive project_months and month_col_start as parameters |
 
 ## Impact on Existing Code
 
@@ -233,40 +274,56 @@ All existing CF rules unchanged.
 
 | File | Purpose | ~Lines |
 |---|---|---|
-| `budget_planner/config_sheet.py` | Build + read Config sheet (Tables + labeled cells) | ~150 |
+| `budget_planner/config_sheet.py` | Build Config sheet (params + tbl_WorkPackages) + read Config sheet back | ~100 |
 
 ### Modified files
 
 | File | Change | ~Delta |
 |---|---|---|
-| `workbook.py` | `init_workbook()` + `rebuild_workbook()` orchestration | +80 |
-| `__main__.py` | `init` and `rebuild` subcommands, timestamp print | +20 |
-| `capacity.py` | `preserved` optional parameter, one `if` branch | +15 |
-| `actuals.py` | `preserved` optional parameter, one `if` branch | +15 |
-| `reader.py` | `read_config_sheet()`, `read_actuals_values()`, hardened person-header detection | +80 |
+| `workbook.py` | `init_workbook()` + `rebuild_workbook()` orchestration, config parameter passing | +100 |
+| `__main__.py` | `init` and `rebuild` subcommands (with `--skeleton`), timestamp print | +25 |
+| `capacity.py` | Accept config as params (not imports), `preserved` optional parameter | +25 |
+| `actuals.py` | Accept config as params, `preserved` optional parameter | +20 |
+| `plan.py` | Accept config as params, named ranges point to Config sheet | +20 |
+| `team.py` | Accept config as params | +15 |
+| `summary.py` | Accept config as params | +15 |
+| `trends.py` | Accept config as params | +20 |
+| `reader.py` | `read_config_sheet()`, `read_actuals_values()`, parameterize constants, hardened person-header detection | +100 |
 | `styles.py` | `apply_year_groups()`, `unlocked` parameter on `style_cell()` | +30 |
-| `plan.py` | Named ranges point to Config sheet, globals become formula refs | +10 |
-| `meta.py` | Document Config sheet, rebuild workflow, protection, _REBUILD_LOG | +20 |
-| `team.py` | Read from passed-in config data instead of config.py import | ~5 |
+| `meta.py` | Accept config as params, document Config sheet, rebuild log section | +30 |
 
 ### New tests (~40)
 
-- Config sheet round-trip (write Tables, save, reopen, read back)
-- Rebuild preservation (generate, modify values, rebuild, verify preserved)
-- Orphaned data (remove WP, rebuild, check _REBUILD_LOG)
-- Validation (bad Config -> hard error with message)
+- Config sheet round-trip (write Table, save, reopen, read back)
+- Rebuild preservation (generate, modify Capacity values, rebuild with new WP, old values preserved)
+- Orphaned data (remove WP from Config, rebuild, check _META rebuild log)
+- Validation (bad Config data -> hard error with clear message)
 - Column grouping (groups exist, correct collapse state)
 - Cell protection (formula cells locked, blue cells unlocked)
 - CF warnings (overallocation highlighted on Config sheet)
+- Builder parameterization (no builder imports config.py at module level in rebuild path)
 
 ### Unchanged
 
-- `summary.py`, `trends.py`, `config.py` — no changes
-- All 146 existing tests pass (builders get optional params with None defaults)
+- `config.py` — stays as seed for `init`, untouched
 
 ### Total new/changed code
 
-~425 lines production + ~300 lines tests
+~600 lines production + ~300 lines tests
+
+## Kaizen Review Findings (2026-04-02)
+
+Muda analysis identified 7 issues in the original design. All addressed in this revision:
+
+| # | Type | Finding | Resolution |
+|---|---|---|---|
+| 1 | Overproduction | Config tbl_Team/tbl_External duplicated Team/Capacity sheets | Removed from Config; read from existing sheets |
+| 2 | Defect | summary.py/trends.py still imported config.py | All 7 builders decoupled; receive config as params |
+| 3 | Defect | reader.py imported config.py constants | Reader functions parameterized |
+| 4 | Over-processing | _REBUILD_LOG as separate sheet | Merged into _META as rebuild log section |
+| 5 | Waiting | Manual WP column in Team Table | Eliminated by fix #1 (no tbl_Team) |
+| 6 | Inventory | Stale --skeleton after init | Added `rebuild --skeleton` mode |
+| 7 | Motion | LOC estimate too low (~425) | Updated to ~600 |
 
 ## Out of Scope
 

@@ -56,12 +56,25 @@ Every monthly grid block has three validation columns at the right edge:
 
 ### Year Grouping
 
-Month columns are grouped into years via merged header cells. Each year spans up to 12 columns. The calendar dates are derived from the `project_start` named range (Plan!$B$2).
+Month columns are grouped into years via merged header cells. Each year spans up to 12 columns. The calendar dates are derived from the `project_start` named range (Config!$B$2).
+
+### Column Grouping
+
+Month columns on Plan, Capacity, and Actuals sheets are grouped by year at outline level 1. On `rebuild`, the group containing the current month is expanded and all others are collapsed. On `init`, Year 1 is expanded and the rest are collapsed. This reduces horizontal scrolling across 60+ month columns.
+
+### Cell Protection
+
+All sheets are protected with password "grant". By default, all cells are locked. Only blue input cells are unlocked via `Protection(locked=False)`. This prevents accidental formula overwrites while allowing PMs to edit input values freely. The password is documented in the _META sheet.
 
 ## Cross-Sheet Reference Map
 
 | Target Cell | References | Via |
 |-------------|-----------|-----|
+| **Config → Plan** | | |
+| Named range `project_start` | Config!$B$2 | Named range definition |
+| Named range `fte_rate` | Config!$B$4 | Named range definition |
+| **Plan → Config** | | |
+| Plan global cells (project start, rate) | Config sheet params | Formula refs to Config (green formula) |
 | **Plan → Capacity** | | |
 | Plan Planned FTE (monthly) | Capacity per-person WP rows for that month | `=SUM(Capacity!{cells})` (green formula) |
 | **Capacity → Plan** | | |
@@ -92,6 +105,9 @@ Month columns are grouped into years via merged header cells. Each year spans up
 ### Capacity Sheet
 - **TOTAL row per person**: Amber fill when `TOTAL > 0.8 × Max FTE`, Red fill when `TOTAL > Max FTE`
 - **REMAINING row per person**: Red fill when `REMAINING < 0`
+
+### Config Sheet
+- **WP start/end columns**: Yellow fill when WP start month > end month
 
 ### Summary Sheet
 - **Remaining EUR column**: Red fill when `value < 0`

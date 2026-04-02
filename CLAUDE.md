@@ -10,10 +10,19 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 # Set up dev environment
 uv venv && uv pip install -e ".[dev]"
 
-# Generate the workbook (demo mode — pre-filled with seed allocations)
+# Create a fresh workbook from config.py seed data
+python -m budget_planner init
+
+# Rebuild from existing workbook (preserves Capacity FTE + Actuals EUR)
+python -m budget_planner rebuild
+
+# Rebuild but clear Capacity allocations (keeps Actuals)
+python -m budget_planner rebuild --skeleton
+
+# Legacy: generate workbook (demo mode — pre-filled with seed allocations)
 python -m budget_planner
 
-# Generate skeleton workbook (empty Capacity for manual entry)
+# Legacy: generate skeleton workbook (empty Capacity for manual entry)
 python -m budget_planner --skeleton
 
 # Snapshot / restore for scenario comparison
@@ -33,5 +42,6 @@ pytest tests/ -v
 2. **After every generation, run `pytest tests/ -v`** and verify all pass before presenting to user.
 3. **Font color convention is sacred**: Blue = input, Black = formula, Green = cross-sheet ref. Never mix these.
 4. **Inactive month cells must be greyed out and empty.** Auditors flag time logged outside WP active periods.
-5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Plan!$B$2 and Plan!$E$2.
+5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
 6. **_META sheet must be updated** whenever you change the workbook structure. It's the primary documentation for future AI agents.
+7. **Cell protection**: All sheets are protected (password "grant"). Only blue input cells are unlocked. Never remove protection or change the password without updating _META.

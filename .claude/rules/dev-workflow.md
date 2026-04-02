@@ -17,6 +17,7 @@ Subagents create dead code — verify after each task.
 ## Code Review
 Suggest review before committing.
 Before executing a plan, move completed/superseded plans to docs/plans/old_already_implemented/.
+When a plan claims a module is "unchanged", grep its imports to verify no coupling to changed modules.
 
 ## Worktrees
 Before starting work in a worktree, verify it's up to date with main: `git log --oneline -1 HEAD` vs `git log --oneline -1 main`. Merge if behind.
@@ -39,4 +40,4 @@ SUMPRODUCT with mixed text/number arrays returns #VALUE!. Guard with `IF(ISNUMBE
 - Font color: Blue=input, Black=formula, Green=cross-sheet
 - _META sheet must reflect current workbook structure
 - When updating meta.py, verify text against the actual builder (e.g., count summary columns in summary.py, not the plan)
-- Generation is config-only — no round-trip. Do not add preserved_data parameters to builders.
+- On rebuild, all config data comes from the existing workbook (Config sheet + Team sheet + Capacity config block), never from config.py. Builders receive config as function parameters.

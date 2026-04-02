@@ -8,10 +8,19 @@ Excel workbook generator for tracking planned FTE allocation and actual EUR spen
 # Install (requires Python 3.10+)
 uv venv && uv pip install -e ".[dev]"
 
-# Generate workbook (demo mode -- pre-filled with seed allocations)
+# Create a fresh workbook from config.py seed data
+python -m budget_planner init
+
+# Rebuild from existing workbook (preserves Capacity FTE + Actuals EUR)
+python -m budget_planner rebuild
+
+# Rebuild but clear Capacity allocations (keeps Actuals)
+python -m budget_planner rebuild --skeleton
+
+# Legacy: generate workbook (demo mode -- pre-filled with seed allocations)
 python -m budget_planner
 
-# Generate skeleton workbook (empty Capacity for manual entry)
+# Legacy: generate skeleton workbook (empty Capacity for manual entry)
 python -m budget_planner --skeleton
 
 # Snapshot / restore for scenario comparison
@@ -27,6 +36,7 @@ pytest tests/ -v
 
 ## Features
 
+- **Config sheet**: Project parameters + WP definitions in an Excel Table (`tbl_WorkPackages`); the living source of truth for rebuilds
 - **Plan sheet**: WP config table, planned FTE grid (derived from Capacity via cross-sheet SUM)
 - **Team sheet**: Team roster (name, max FTE) and WP share seed matrix
 - **Capacity sheet**: Per-person monthly FTE allocation across WPs and external projects, with TOTAL/REMAINING rows and overcommitment alerts (amber >80%, red >100%)
@@ -34,6 +44,9 @@ pytest tests/ -v
 - **Trends sheet**: Burn rate analysis, cumulative spend chart, person load overview
 - **Summary sheet**: Annual aggregation with budget health indicators
 - **_META sheet**: Self-documenting AI-agent-readable workbook structure
+- **Round-trip rebuild**: `rebuild` reads Config/Team/Capacity/Actuals from the existing workbook and regenerates all sheets, preserving manual Capacity FTE and Actuals EUR entries
+- **Cell protection**: All sheets protected (password "grant"), only blue input cells are unlocked for editing
+- **Column grouping**: Month columns grouped by year with auto-collapse; current year expanded on rebuild
 - **Scenario comparison**: `--snapshot` / `--restore` for before/after comparison
 
 ## Business Context
@@ -53,9 +66,10 @@ budget-planner/
 ├── CONVENTIONS.md            # Spreadsheet formatting, structural patterns, cross-sheet refs
 ├── CLAUDE.md                 # Claude Code project instructions
 ├── budget_planner/
-│   ├── __main__.py           # CLI entry point
-│   ├── config.py             # WPs, team, external commitments, constants
-│   ├── styles.py             # Font/fill/border constants
+│   ├── __main__.py           # CLI: init, rebuild, rebuild --skeleton subcommands
+│   ├── config.py             # WPs, team, external commitments, constants (seed for init)
+│   ├── config_sheet.py       # Config sheet builder + reader
+│   ├── styles.py             # Font/fill/border constants, column grouping
 │   ├── plan.py               # Plan sheet builder
 │   ├── team.py               # Team sheet builder
 │   ├── capacity.py           # Capacity sheet builder
@@ -63,8 +77,8 @@ budget-planner/
 │   ├── trends.py             # Trends sheet builder
 │   ├── summary.py            # Summary sheet builder
 │   ├── meta.py               # _META sheet builder
-│   ├── reader.py             # Round-trip reader (v1 + v2 format)
-│   └── workbook.py           # Orchestrator (create/update/snapshot/restore)
+│   ├── reader.py             # Round-trip reader (Config, Team, Capacity, Actuals)
+│   └── workbook.py           # Orchestrator: init_workbook() + rebuild_workbook()
 ├── tests/                    # pytest suite
 ├── scripts/
 │   ├── recalc.py             # LibreOffice formula recalculator
@@ -75,17 +89,22 @@ budget-planner/
 
 ## Modifying
 
-1. Edit `config.py` for WP data, team roster, external commitments, project duration, rates
-2. Re-run: `python -m budget_planner && python scripts/recalc.py output/budget_plan.xlsx`
-3. Verify: `pytest tests/ -v`
+1. Edit the **Config sheet** (project params, work packages) or **Team sheet** (roster, WP shares) in Excel
+2. Run: `python -m budget_planner rebuild && python scripts/recalc.py output/budget_plan.xlsx`
+3. Capacity FTE allocations and Actuals EUR values are preserved across rebuilds
+4. Verify: `pytest tests/ -v`
 
 ## Design Decisions
 
+- **Config sheet is the living source of truth** -- project params and WP definitions live in Excel, not Python; `config.py` is only used as seed data for `init`
+- **Round-trip preservation** -- `rebuild` reads the existing workbook and re-injects Capacity FTE and Actuals EUR values, matched by WP ID + person name + month index
+- **Cell protection** -- all sheets protected (password "grant"), only blue input cells unlocked; prevents accidental formula overwrites
+- **Column grouping** -- month columns grouped by year with auto-collapse for easier navigation of 60-column grids
 - Plan sheet has a single Planned FTE block; actuals are tracked in a separate Actuals sheet (EUR from accountant)
 - Plan Planned FTE is derived from Capacity via cross-sheet SUM formulas
 - Team + Capacity sheets for per-person FTE breakdown with overcommitment detection
 - Even FTE spread across active months as default, with manual override per cell
-- Single FTE rate -- all EUR derived from FTE x rate (cell E2)
+- Single FTE rate -- all EUR derived from FTE x rate
 - Inactive months greyed out and empty to prevent audit issues
 - Demo mode seeds with calculated allocations; skeleton mode leaves cells empty
 - `_META` sheet inside the workbook documents structure for AI agents

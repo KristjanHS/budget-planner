@@ -4,6 +4,8 @@ import shutil
 from datetime import datetime
 
 from openpyxl import Workbook
+from openpyxl.comments import Comment
+from openpyxl.workbook.defined_name import DefinedName
 
 from budget_planner.plan import build_plan_sheet, _apply_planned_formulas
 from budget_planner.team import build_team_sheet
@@ -70,6 +72,18 @@ def generate_workbook(output_path: str = "output/budget_plan.xlsx",
 
     # Overwrite planned FTE with cross-sheet formulas from Capacity
     _apply_planned_formulas(plan_ws, layout, capacity_layout)
+
+    # Trends sheet skeleton + current_month named range (populated by trends builder)
+    trends_ws = wb.create_sheet("Trends")
+    trends_ws.sheet_properties.tabColor = "FFD700"
+    from budget_planner.styles import BLUE_INPUT, HEADER_FONT, style_cell
+    style_cell(trends_ws, 1, 1, "Current Month:", font=HEADER_FONT, border=False)
+    style_cell(trends_ws, 1, 2, 1, font=BLUE_INPUT, border=False)
+    trends_ws["B1"].comment = Comment(
+        "Set to the last month with completed actuals (e.g., 12 for end of Year 1)",
+        "Programme Budget Tool",
+    )
+    wb.defined_names.add(DefinedName("current_month", attr_text="Trends!$B$1"))
 
     # Actuals sheet
     actuals_layout = build_actuals_sheet(wb, layout)

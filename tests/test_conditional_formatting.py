@@ -200,8 +200,9 @@ class TestActualsConditionalFormatting:
         """Actuals variance column has red fill for negative values."""
         ws = workbook["Actuals"]
         rules = _collect_cf_rules(ws)
-        # Actuals has exactly 1 CF rule (red on variance)
-        assert len(rules) == 1, f"Expected 1 CF rule on Actuals, got {len(rules)}"
+        # Actuals has 5 CF rules: variance red, %ceiling amber/red, breach amber/red
+        assert len(rules) == 5, f"Expected 5 CF rules on Actuals, got {len(rules)}"
+        # First rule is variance red
         sqref, formulas, fg_color = rules[0]
         assert len(formulas) == 1
         assert "<0" in formulas[0], (

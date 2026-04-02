@@ -5,7 +5,7 @@ import openpyxl
 from budget_planner.workbook import generate_workbook
 from budget_planner.config import (
     PROJECT_MONTHS, MONTH_COL_START,
-    VAL_COL_DIFF,
+    VAL_COL_DIFF, VAL_COL_BREACH,
 )
 
 
@@ -164,7 +164,7 @@ class TestSectionHeaders:
         ("Plan", "CONFIGURATION", (1, 7)),
         ("Plan", "PLANNED FTE", (1, VAL_COL_DIFF)),
         ("Capacity", "EXTERNAL COMMITMENTS", (1, 5)),
-        ("Actuals", "ACTUAL EUR", (1, VAL_COL_DIFF)),
+        ("Actuals", "ACTUAL EUR", (1, VAL_COL_BREACH)),
     ])
     def test_section_header_span(self, workbook, sheet_name, header_text, expected_cols):
         ws = workbook[sheet_name]

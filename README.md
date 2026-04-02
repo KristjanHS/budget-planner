@@ -1,6 +1,6 @@
 # Budget Planner
 
-Excel workbook generator for tracking planned and actual FTE allocation per work package across a multi-year EU-funded project. Includes per-person capacity planning with overcommitment detection.
+Excel workbook generator for tracking planned FTE allocation and actual EUR spend per work package across a multi-year EU-funded project. Includes per-person capacity planning with overcommitment detection.
 
 ## Quick Start
 
@@ -13,9 +13,6 @@ python -m budget_planner
 
 # Generate skeleton workbook (empty Capacity for manual entry)
 python -m budget_planner --skeleton
-
-# Update existing workbook (preserves user-entered data across all sheets)
-python -m budget_planner --update output/budget_plan.xlsx
 
 # Snapshot / restore for scenario comparison
 python -m budget_planner --snapshot output/budget_plan.xlsx
@@ -37,7 +34,6 @@ pytest tests/ -v
 - **Trends sheet**: Burn rate analysis, cumulative spend chart, person load overview
 - **Summary sheet**: Annual aggregation with budget health indicators
 - **_META sheet**: Self-documenting AI-agent-readable workbook structure
-- **Round-trip updates**: `--update` preserves all user-entered data across regeneration
 - **Scenario comparison**: `--snapshot` / `--restore` for before/after comparison
 
 ## Business Context
@@ -54,7 +50,7 @@ This tool tracks a single organisation's share of a multi-partner EU-funded (pro
 ```
 budget-planner/
 ├── README.md                 # This file
-├── CONVENTIONS.md            # Spreadsheet conventions and AI-agent instructions
+├── CONVENTIONS.md            # Spreadsheet formatting, structural patterns, cross-sheet refs
 ├── CLAUDE.md                 # Claude Code project instructions
 ├── budget_planner/
 │   ├── __main__.py           # CLI entry point
@@ -85,7 +81,7 @@ budget-planner/
 
 ## Design Decisions
 
-- Single flat Plan sheet with separate Planned/Actual blocks (not stacked rows per WP)
+- Plan sheet has a single Planned FTE block; actuals are tracked in a separate Actuals sheet (EUR from accountant)
 - Plan Planned FTE is derived from Capacity via cross-sheet SUM formulas
 - Team + Capacity sheets for per-person FTE breakdown with overcommitment detection
 - Even FTE spread across active months as default, with manual override per cell

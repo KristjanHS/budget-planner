@@ -16,9 +16,6 @@ python -m budget_planner
 # Generate skeleton workbook (empty Capacity for manual entry)
 python -m budget_planner --skeleton
 
-# Update existing workbook (preserves user-entered data across all sheets)
-python -m budget_planner --update output/budget_plan.xlsx
-
 # Snapshot / restore for scenario comparison
 python -m budget_planner --snapshot output/budget_plan.xlsx
 python -m budget_planner --restore output/budget_plan.xlsx

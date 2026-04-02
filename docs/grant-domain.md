@@ -137,6 +137,11 @@ The difference (`eligible_costs - eu_grant`) is the partner's own co-financing o
 3. **Funding rate confirmed** `HARD LIMIT`
    Per-partner funding rate is locked.
 
+#### Grant Agreement Structure
+
+- **Part A (binding financials)**: Total EUR per partner for full project duration, broken down by cost category (personnel, travel, equipment, subcontracting, other direct, indirect). This is the ceiling --- cannot be exceeded without amendment.
+- **Part B (work plan justification)**: PMs per work package per partner (tables 3.1a, 3.1b), narrative justification of costs. PMs here must be consistent with EUR in Part A.
+
 ### Phase 3: PROJECT KICK-OFF
 
 > Detailed planning within the locked EUR envelopes

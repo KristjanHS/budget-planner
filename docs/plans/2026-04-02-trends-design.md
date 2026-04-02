@@ -30,11 +30,11 @@ Three new columns added to the right of the existing Variance column:
 
 | Column | Header | Formula Pattern | Conditional Formatting |
 |--------|--------|----------------|----------------------|
-| VAL_COL_DIFF + 1 | Cum. EUR | `=SUMPRODUCT((month_headers<=current_month)*monthly_values)` | None |
+| VAL_COL_DIFF + 1 | Cum. EUR | `=SUMPRODUCT((COLUMN(C{r}:BJ{r})-COLUMN($C$1)+1<=current_month)*(C{r}:BJ{r}))` | None |
 | VAL_COL_DIFF + 2 | % Ceiling | `=CumEUR / Ceiling` | Amber >85%, Red >100% |
 | VAL_COL_DIFF + 3 | Breach In | `=IF(rate=0,"—",(Ceiling-CumEUR)/rate)` | Red <6 months, Amber <12 |
 
-- `CumEUR` uses a SUMPRODUCT that sums monthly actual EUR values for months up to `current_month` (named range from Trends sheet).
+- `CumEUR` uses SUMPRODUCT with **column-position math** (not month header comparison — headers are text like `"M1\nJul 26"`, not numbers). The pattern `COLUMN(range)-COLUMN($C$1)+1` yields month numbers 1..60 which can be compared to `current_month`.
 - `% Ceiling` divides cumulative EUR by the existing Ceiling column value.
 - `Breach In` calculates months remaining at current monthly burn rate. Monthly rate = `CumEUR / current_month` (simplified since actuals accumulate from M1). Falls back to "—" if no actuals entered.
 - TOTAL row gets the same 3 columns aggregated against `partner_ceiling`.
@@ -44,90 +44,85 @@ Three new columns added to the right of the existing Variance column:
 ```
 Row 1:    Current Month: [blue input cell B1, named range current_month, default=1]
 Row 2:    (blank)
-Row 3:    Section header: "WP BURN RATE"
-Row 4:    Column headers
+Row 3:    Section header: "WP BURN RATE & EXHAUSTION"
+Row 4:    Column headers (7 cols: WP ID, WP Name, % Time, % Budget EUR, Burn Delta, Status, Exhaustion Mo.)
 Row 5-12: WP data rows (8 WPs)
 Row 13:   TOTAL row (weighted average)
 Row 14:   (blank)
-Row 15:   Section header: "PROJECTED EXHAUSTION"
-Row 16:   Column headers
-Row 17-24: WP data rows (8 WPs)
-Row 25:   (blank)
-Row 26:   LineChart (project-level cumulative planned vs actual vs ceiling)
-Row ~42:  (blank, chart occupies ~15 rows)
-Row 43:   Section header: "PERSON LOAD"
-Row 44:   Column headers
-Row 45-48: Person data rows (4 team members)
-Row 50+:  Hidden helper rows for chart cumulative running totals
+Row 15:   LineChart (project-level cumulative planned vs actual vs ceiling)
+Row ~31:  (blank, chart occupies ~15 rows)
+Row 32:   Section header: "PERSON LOAD"
+Row 33:   Column headers
+Row 34-37: Person data rows (4 team members)
+Row 39+:  Hidden helper rows for chart cumulative running totals
 ```
 
-### 3. Trends Sheet — WP Burn Rate Table
+### 3. Trends Sheet — WP Burn Rate & Exhaustion Table (merged)
+
+Single table combining burn rate signals with projected exhaustion date. The previous design had separate Burn Rate and Projected Exhaustion tables — merged to eliminate redundancy (exhaustion month is a reformulation of burn delta).
+
+**Dropped `% FTE Consumed` column:** `Plan!Sum` (col BK) is the TOTAL planned FTE across all 60 months, not cumulative-to-date. It would show a static ratio regardless of `current_month`, which is misleading as a burn indicator. EUR is the primary burn metric; FTE can be derived as `EUR / fte_rate` where needed.
 
 | Col | Header | Formula | Notes |
 |-----|--------|---------|-------|
 | A | WP ID | `=Plan!A{config_row}` | Green cross-sheet ref |
 | B | WP Name | `=Plan!B{config_row}` | Green cross-sheet ref |
 | C | % Time Elapsed | `=IF(current_month<wp_start, 0, MIN(1, (current_month-wp_start+1)/(wp_end-wp_start+1)))` | Clamped 0-100% |
-| D | % Budget EUR | `=Actuals!CumEUR{row} / Actuals!Ceiling{row}` | Cross-sheet to new Actuals col |
-| E | % FTE Consumed | `=Plan!Sum{row} / Plan!BudgetFTE{row}` | Uses existing Plan validation cols |
-| F | Burn Delta | `=D{row} - C{row}` | Positive = burning faster than time |
-| G | Status | Conditional formatting only | No formula — RAG fill on col F |
+| D | % Budget EUR | `=Actuals!{cum_col}{row} / Actuals!{ceiling_col}{row}` | Cross-sheet to new Actuals CumEUR / Ceiling cols |
+| E | Burn Delta | `=D{row} - C{row}` | Positive = burning faster than time |
+| F | Status | `=IF(ABS(E{row})<=0.05,"OK",IF(E{row}>0.15,"OVER",IF(E{row}>0.05,"WATCH",IF(E{row}<-0.10,"SLOW","OK"))))` | Text + RAG conditional formatting |
+| G | Exhaustion Mo. | `=IF(D{row}=0,"—",IF(COUNTIF(actuals_range,">0")=0,"No data", wp_start+ROUND(Actuals!{ceiling_col}{row}/(Actuals!{cum_col}{row}/COUNTIF(actuals_range,">0")),0)-1))` | Month when ceiling hit at current rate |
 
-**Conditional formatting on Burn Delta (col F):**
+**Conditional formatting on Burn Delta (col E):**
 - Green: ABS(delta) <= 0.05
 - Amber (overspend): delta > 0.05 AND delta <= 0.15
 - Amber (underspend): delta < -0.10
 - Red: delta > 0.15
 
-For WPs not yet started (`current_month < wp_start`), all cells show "—" via `IF` guard.
-
-TOTAL row: weighted average burn delta, weighted by each WP's ceiling as share of partner_ceiling.
-
-### 4. Trends Sheet — Projected Exhaustion Table
-
-| Col | Header | Formula | Notes |
-|-----|--------|---------|-------|
-| A | WP ID | `=Plan!A{config_row}` | Green cross-sheet ref |
-| B | Burn Rate EUR/mo | `=IF(COUNTIF(actuals_row,">0")=0, "No data", Actuals!CumEUR / COUNTIF(actuals_row,">0"))` | Monthly rate from actual spend |
-| C | Burn Rate FTE/mo | `=IF(current_month<wp_start, "—", Plan!Sum / (MIN(current_month,wp_end)-wp_start+1))` | Monthly FTE rate over elapsed active months |
-| D | Proj. Total EUR | `=IF(B="No data", "—", B{row} * (wp_end-wp_start+1))` | Linear projection over active months |
-| E | Proj. Total FTE | `=IF(C="—", "—", C{row} * (wp_end-wp_start+1))` | Linear projection |
-| F | Exhaustion Month | `=IF(B="No data", "—", wp_start + ROUND(Ceiling/B{row}, 0) - 1)` | Month when ceiling is hit |
-
-**Conditional formatting on Exhaustion Month (col F):**
+**Conditional formatting on Exhaustion Month (col G):**
 - Red: exhaustion month < wp_end (budget runs out before WP ends)
 - Amber: exhaustion month within 3 months of wp_end
 - Green: exhaustion month >= wp_end
 
-**Cell comment on col B header (written by generator):** "Projection is linear based on quarterly actuals. Accuracy improves after Q2."
+**Status column (col F):** Uses both a text formula AND conditional formatting. Text ensures readability in black-and-white printing; color gives the at-a-glance signal. CF rules match the text thresholds.
 
-### 5. Trends Sheet — Cumulative LineChart
+For WPs not yet started (`current_month < wp_start`), all cells show "—" via `IF` guard.
+
+TOTAL row: weighted average burn delta, weighted by each WP's ceiling as share of partner_ceiling.
+
+**Cell comment on col G header (written by generator):** "Projection is linear based on quarterly actuals. Accuracy improves after Q2."
+
+### 4. Trends Sheet — Cumulative LineChart
 
 **Chart: Project-level cumulative planned vs actual EUR**
 
-- Series 1 (blue solid): Cumulative planned EUR — running sum of Plan Planned FTE × fte_rate per month
+- Series 1 (blue solid): Cumulative planned EUR — running sum across all WPs of Plan Planned FTE × fte_rate per month. Helper row formula per column: `=SUM(Plan!{col}{first_wp}:{col}{last_wp})*fte_rate + {prev_cumulative}` (sum all WP planned FTE for that month, convert to EUR, add to running total).
 - Series 2 (red solid): Cumulative actual EUR — running sum of Actuals TOTAL row per month
 - Series 3 (grey dashed): Ceiling — flat horizontal line at `partner_ceiling`
 - X-axis: M1–M60 month labels
 - Title: "Cumulative EUR: Planned vs Actual"
 
 **Helper rows (hidden, below chart):**
-- Row H1: Cumulative planned EUR — `=SUM(Plan_EUR_M1:Plan_EUR_Mn)` accumulating left to right
-- Row H2: Cumulative actual EUR — `=SUM(Actuals_TOTAL_M1:Actuals_TOTAL_Mn)` accumulating left to right
+- Row H1: Cumulative planned EUR — per column: `=SUM(Plan!{col}{first_wp}:{col}{last_wp})*fte_rate` (monthly planned EUR for all WPs), then accumulated: `=H1_prev + H1_current`
+- Row H2: Cumulative actual EUR — per column: `=Actuals!{col}{total_row}`, then accumulated: `=H2_prev + H2_current`
 - Row H3: Ceiling — constant `=partner_ceiling` repeated across all 60 columns
 - Columns C through BJ (60 months, matching MONTH_COL_START layout)
 
 Chart generated by openpyxl `LineChart` at workbook creation time. Data ranges are fixed (60 months, always same layout). Chart is recreated on each `python -m budget_planner` run.
 
-### 6. Trends Sheet — Person Load Table
+### 5. Trends Sheet — Person Load Table
+
+**Note:** Capacity TOTAL row has monthly SUM formula cells (one per month) but NO validation columns (Sum/Budget/Diff are empty). All Person Load formulas must use SUMPRODUCT over the TOTAL row's monthly cell range `C{total_row}:BJ{total_row}`, not a single summary cell.
 
 | Col | Header | Formula | Notes |
 |-----|--------|---------|-------|
 | A | Person | `=Team!A{roster_row}` | Green cross-sheet ref |
-| B | Avg FTE (to date) | `=IF(current_month=0, 0, Capacity!TOTAL_sum / current_month)` | Average allocation so far |
-| C | Avg FTE (remaining) | `=SUM(remaining_months) / (PROJECT_MONTHS - current_month)` | Implied future load |
-| D | Peak Month FTE | `=MAX(Capacity!TOTAL_row_range)` | Worst single month |
-| E | Status | Conditional formatting only | RAG fill |
+| B | Avg FTE (to date) | `=IF(current_month=0, 0, SUMPRODUCT((COLUMN(Capacity!C{tr}:BJ{tr})-COLUMN(Capacity!$C$1)+1<=current_month)*(Capacity!C{tr}:BJ{tr})) / current_month)` | Average allocation over elapsed months |
+| C | Avg FTE (remaining) | `=IF(current_month>=PROJECT_MONTHS, 0, SUMPRODUCT((COLUMN(Capacity!C{tr}:BJ{tr})-COLUMN(Capacity!$C$1)+1>current_month)*(Capacity!C{tr}:BJ{tr})) / (PROJECT_MONTHS-current_month))` | Implied future load |
+| D | Peak Month FTE | `=MAX(Capacity!C{tr}:BJ{tr})` | Worst single month |
+| E | Status | `=IF(C{row}>Team!B{roster_row},"OVER",IF(C{row}>0.8*Team!B{roster_row},"WATCH","OK"))` | Text + RAG conditional formatting |
+
+`{tr}` = the person's TOTAL row in Capacity. The SUMPRODUCT pattern uses column-position math (same as Actuals CumEUR) to select months before/after `current_month`.
 
 **Conditional formatting on Status (col E) — based on col C value:**
 - Red: Avg Remaining > max_fte (from Team!B{roster_row})
@@ -137,7 +132,7 @@ Chart generated by openpyxl `LineChart` at workbook creation time. Data ranges a
 **Conditional formatting on Peak Month (col D):**
 - Red: Peak > max_fte
 
-### 7. current_month Named Range
+### 6. current_month Named Range
 
 - Location: Trends!$B$1
 - Type: Blue input cell (manual entry)
@@ -145,11 +140,11 @@ Chart generated by openpyxl `LineChart` at workbook creation time. Data ranges a
 - Cell comment: "Set to the last month with completed actuals (e.g., 12 for end of Year 1)"
 - Referenced by: Actuals cumulative columns, all Trends sheet formulas
 
-### 8. _META Sheet Update
+### 7. _META Sheet Update
 
 Add documentation for the Trends sheet structure, column definitions, and the current_month workflow.
 
-### 9. Builder Architecture
+### 8. Builder Architecture
 
 New file `budget_planner/trends.py` with function `build_trends_sheet(wb, layout, actuals_layout, capacity_layout, team_layout)`.
 
@@ -185,33 +180,29 @@ Sheet tab color: Gold/Yellow (`FFD700`) — distinct from existing sheets.
 Step 1: Actuals sheet additions (3 new columns + conditional formatting)
   Files: budget_planner/actuals.py, budget_planner/config.py (new column constants)
 
-Step 2: Trends builder — current_month + burn rate table
+Step 2: Trends builder — current_month + burn rate & exhaustion table (merged)
   Files: budget_planner/trends.py (new), budget_planner/workbook.py
   Depends on: Step 1 (cross-sheet refs to new Actuals columns)
 
-Step 3: Trends builder — projected exhaustion table
-  Files: budget_planner/trends.py
-  Depends on: Step 2 (same sheet, sequential rows)
-
-Step 4: Trends builder — cumulative chart + helper rows
+Step 3: Trends builder — cumulative chart + helper rows
   Files: budget_planner/trends.py
   Depends on: Step 2 (needs sheet context)
 
-Step 5: Trends builder — person load table
+Step 4: Trends builder — person load table
   Files: budget_planner/trends.py
   Depends on: Step 2 (needs current_month)
 
-Step 6: Wire into workbook orchestrator + _META update
+Step 5: Wire into workbook orchestrator + _META update
   Files: budget_planner/workbook.py, budget_planner/meta.py
-  Depends on: Steps 1-5
+  Depends on: Steps 1-4
 
-Step 7: Tests
+Step 6: Tests
   Files: tests/test_trends.py (new), tests/test_actuals.py (extend)
-  Depends on: Step 6
+  Depends on: Step 5
 
 Parallel groups:
-  Steps 3, 4, 5 are independent sections of trends.py but write to the
+  Steps 3 and 4 are independent sections of trends.py but write to the
   same file — must be sequential within the builder.
-  Step 1 can run before Steps 2-5.
-  Step 7 can only run after Step 6.
+  Step 1 can run before Steps 2-4.
+  Step 6 can only run after Step 5.
 ```

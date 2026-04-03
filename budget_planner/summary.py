@@ -10,8 +10,9 @@ from budget_planner.layout import (
 )
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT, TITLE_FONT,
-    SECTION_FONT, SECTION_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
+    SECTION_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     AMBER_FILL, RED_FILL, CENTER, style_cell, col_letter,
+    write_section_header,
 )
 
 
@@ -33,12 +34,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
     if project_params is None or work_packages is None:
         from budget_planner import config
         if project_params is None:
-            project_params = {
-                "title": config.PROJECT_TITLE,
-                "start": config.PROJECT_START,
-                "months": config.PROJECT_MONTHS,
-                "rate": config.DEFAULT_RATE,
-            }
+            project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
 
@@ -195,10 +191,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
 
     # ── BUDGET OVERVIEW ──
     r = totals_row + 2
-    summary.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
-    style_cell(summary, r, 1, "BUDGET OVERVIEW", font=SECTION_FONT,
-               fill=SECTION_FILL, alignment=CENTER)
-    style_cell(summary, r, 2, fill=SECTION_FILL)
+    write_section_header(summary, r, "BUDGET OVERVIEW", merge_end=2)
     r += 2
 
     # Personnel Actual — total EUR from Actuals sheet

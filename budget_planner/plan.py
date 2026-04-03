@@ -10,8 +10,8 @@ from budget_planner.layout import (
 )
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
-    SECTION_FONT, SECTION_FILL, GREY_FILL, LIGHT_GREEN_FILL,
-    YELLOW_FILL, CENTER, style_cell, col_letter,
+    GREY_FILL, LIGHT_GREEN_FILL,
+    YELLOW_FILL, style_cell, col_letter, write_section_header,
 )
 
 
@@ -33,12 +33,7 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
     if project_params is None or work_packages is None:
         from budget_planner import config
         if project_params is None:
-            project_params = {
-                "title": config.PROJECT_TITLE,
-                "start": config.PROJECT_START,
-                "months": config.PROJECT_MONTHS,
-                "rate": config.DEFAULT_RATE,
-            }
+            project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
 
@@ -85,12 +80,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     if project_params is None or work_packages is None:
         from budget_planner import config
         if project_params is None:
-            project_params = {
-                "title": config.PROJECT_TITLE,
-                "start": config.PROJECT_START,
-                "months": config.PROJECT_MONTHS,
-                "rate": config.DEFAULT_RATE,
-            }
+            project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
 
@@ -143,12 +133,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     r = 3
 
     # Section header
-    merge_end = val_col_diff
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=merge_end)
-    style_cell(ws, r, 1, "PLANNED FTE (PERSON-MONTHS)", font=SECTION_FONT,
-               fill=SECTION_FILL, alignment=CENTER)
-    for c2 in range(2, merge_end + 1):
-        style_cell(ws, r, c2, fill=SECTION_FILL)
+    write_section_header(ws, r, "PLANNED FTE (PERSON-MONTHS)", merge_end=val_col_diff)
     r += 1
 
     year_row, month_row, r = build_year_month_headers(

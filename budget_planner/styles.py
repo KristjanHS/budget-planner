@@ -64,6 +64,14 @@ def col_letter(c):
     return get_column_letter(c)
 
 
+def write_section_header(ws, row, title, merge_end):
+    """Write a merged section header row with SECTION_FONT/SECTION_FILL."""
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=merge_end)
+    style_cell(ws, row, 1, title, font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER)
+    for c in range(2, merge_end + 1):
+        style_cell(ws, row, c, fill=SECTION_FILL)
+
+
 def apply_year_groups(ws, month_col_start, project_months, current_month=None,
                       *, project_start=None):
     """Apply column grouping by calendar year (outline level 1).

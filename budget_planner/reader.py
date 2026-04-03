@@ -265,10 +265,8 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
     wb = ws.parent
     config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
 
-    # Get Plan layout for WP ID resolution (Capacity WP rows reference Plan)
+    # Get Plan sheet for WP ID resolution (Capacity WP rows reference Plan)
     plan_ws = wb[SHEET_PLAN]
-    plan_layout = discover_layout(plan_ws)
-    planned_first_wp_row = plan_layout["planned_first_wp_row"]
 
     def _resolve_person_name(cell_value):
         """Resolve person name from formula or literal value."""
@@ -285,26 +283,10 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
         return None
 
     def _resolve_wp_id(cell_value):
-        """Resolve WP ID from formula =Plan!A{n} or =Config!A{n} or literal."""
-        if cell_value is None:
-            return None
-        val = str(cell_value)
-        # Try Plan!A{n} reference (Capacity -> Plan planned WP row)
-        m = re.match(rf"={SHEET_PLAN}!A(\d+)", val)
-        if m:
-            plan_row = int(m.group(1))
-            idx = plan_row - planned_first_wp_row
-            if 0 <= idx < len(config_wps):
-                return config_wps[idx]["id"]
-            return None
-        # Try Config!A{n} reference
-        m2 = re.match(rf"={SHEET_CONFIG}!A(\d+)", val)
-        if m2 and config_ws:
-            config_row = int(m2.group(1))
-            resolved = config_ws.cell(config_row, 1).value
-            return str(resolved) if resolved and str(resolved) in wp_ids else None
-        if val in wp_ids:
-            return val
+        """Resolve WP ID from formula or literal, validated against known WP IDs."""
+        resolved = _resolve_plan_ref(cell_value, plan_ws, config_ws)
+        if resolved is not None and resolved in wp_ids:
+            return resolved
         return None
 
     for hi, header_row in enumerate(person_headers):

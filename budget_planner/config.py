@@ -100,3 +100,13 @@ VAL_COL_DIFF = _vcols["diff"]
 VAL_COL_CUM = _vcols["cum"]
 VAL_COL_PCT_CEIL = _vcols["pct_ceil"]
 VAL_COL_BREACH = _vcols["breach"]
+
+
+def default_project_params():
+    """Return default project parameters dict from module-level constants."""
+    return {
+        "title": PROJECT_TITLE,
+        "start": PROJECT_START,
+        "months": PROJECT_MONTHS,
+        "rate": DEFAULT_RATE,
+    }

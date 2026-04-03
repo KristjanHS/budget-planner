@@ -13,8 +13,8 @@ from budget_planner.layout import (
 )
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
-    SECTION_FONT, SECTION_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    CENTER, style_cell, col_letter,
+    LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
+    CENTER, style_cell, col_letter, write_section_header,
 )
 
 # Local fill constants for conditional formatting
@@ -41,10 +41,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     if any(v is None for v in [project_params, work_packages, team]):
         from budget_planner import config
         if project_params is None:
-            project_params = {
-                "title": config.PROJECT_TITLE, "start": config.PROJECT_START,
-                "months": config.PROJECT_MONTHS, "rate": config.DEFAULT_RATE,
-            }
+            project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
         if team is None:
@@ -68,12 +65,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     # Section 1: WP Burn Rate & Exhaustion Table
     # ================================================================
     section1_row = 3
-    ws.merge_cells(start_row=section1_row, start_column=1,
-                   end_row=section1_row, end_column=7)
-    style_cell(ws, section1_row, 1, "WP BURN RATE & EXHAUSTION",
-               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER)
-    for c in range(2, 8):
-        style_cell(ws, section1_row, c, fill=SECTION_FILL)
+    write_section_header(ws, section1_row, "WP BURN RATE & EXHAUSTION", merge_end=7)
 
     # Column headers (row 4)
     header_row = 4
@@ -253,12 +245,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     # Chart is anchored 2 rows below total and occupies ~15 rows of height
     chart_anchor_row = total_row + 2
     person_section_row = chart_anchor_row + 16  # chart height ~15 rows
-    ws.merge_cells(start_row=person_section_row, start_column=1,
-                   end_row=person_section_row, end_column=5)
-    style_cell(ws, person_section_row, 1, "PERSON LOAD",
-               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER)
-    for c in range(2, 6):
-        style_cell(ws, person_section_row, c, fill=SECTION_FILL)
+    write_section_header(ws, person_section_row, "PERSON LOAD", merge_end=5)
 
     # Column headers
     person_header_row = person_section_row + 1

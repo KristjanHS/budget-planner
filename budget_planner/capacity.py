@@ -10,8 +10,9 @@ from budget_planner.layout import (
 )
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
-    SECTION_FONT, SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
+    SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     YELLOW_FILL, AMBER_FILL, RED_FILL, CENTER, style_cell, col_letter,
+    write_section_header,
 )
 
 
@@ -53,12 +54,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     if any(v is None for v in [project_params, work_packages, team, external_commitments]):
         from budget_planner import config
         if project_params is None:
-            project_params = {
-                "title": config.PROJECT_TITLE,
-                "start": config.PROJECT_START,
-                "months": config.PROJECT_MONTHS,
-                "rate": config.DEFAULT_RATE,
-            }
+            project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
         if team is None:
@@ -85,11 +81,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     person_rows = team_layout["person_rows"]
 
     # ── CONFIG BLOCK: EXTERNAL COMMITMENTS ──
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
-    style_cell(ws, r, 1, "EXTERNAL COMMITMENTS", font=SECTION_FONT,
-               fill=SECTION_FILL, alignment=CENTER)
-    for c2 in range(2, 6):
-        style_cell(ws, r, c2, fill=SECTION_FILL)
+    write_section_header(ws, r, "EXTERNAL COMMITMENTS", merge_end=5)
     r += 1
 
     config_col_headers = ["Person", "Project", "Total FTE", "Start Month", "End Month"]

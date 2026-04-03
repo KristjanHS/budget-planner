@@ -54,16 +54,17 @@ def test_planned_fte_formula_refs_match_capacity_layout(
     assert len(formula_rows) > 0, f"No Capacity row refs found in {formula}"
 
     # Verify each referenced row in Capacity has this WP's ID in column A
+    config = v2_workbook["Config"]
     for cap_row in formula_rows:
         cap_val = capacity.cell(cap_row, 1).value
-        # Column A is a formula referencing Plan config (=Plan!A<n>),
+        # Column A is a formula referencing Config (=Config!A<n>),
         # so we follow the reference to get the WP ID
         if isinstance(cap_val, str) and cap_val.startswith("="):
-            # Parse =Plan!A<row> to get the config row
-            match = re.match(r"=Plan!A(\d+)", cap_val)
+            # Parse =Config!A<row> to get the config row
+            match = re.match(r"=Config!A(\d+)", cap_val)
             assert match, f"Unexpected formula in Capacity!A{cap_row}: {cap_val}"
             config_row = int(match.group(1))
-            wp_id_from_config = plan.cell(config_row, 1).value
+            wp_id_from_config = config.cell(config_row, 1).value
             assert wp_id_from_config == wp["id"], (
                 f"Capacity row {cap_row} refs config row {config_row} "
                 f"with WP ID '{wp_id_from_config}', expected '{wp['id']}'"

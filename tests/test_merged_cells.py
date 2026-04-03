@@ -3,8 +3,9 @@ import pytest
 import openpyxl
 
 from budget_planner.workbook import generate_workbook
+from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    PROJECT_MONTHS, MONTH_COL_START,
+    PROJECT_MONTHS, PROJECT_START, MONTH_COL_START,
     VAL_COL_DIFF, VAL_COL_BREACH,
 )
 
@@ -49,17 +50,13 @@ def _find_section_merge(ws, text: str) -> tuple[int, int, int] | None:
 
 
 def _expected_year_spans() -> list[tuple[int, int]]:
-    """Compute expected (min_col, max_col) for 12-month year header merges."""
+    """Compute expected (min_col, max_col) for calendar-year header merges."""
     spans = []
-    m = 0
-    while m < PROJECT_MONTHS:
-        year_start_col = MONTH_COL_START + m
-        months_left = PROJECT_MONTHS - m
-        span = min(12, months_left)
+    for group_start, span in _calendar_year_groups(PROJECT_START, PROJECT_MONTHS):
+        year_start_col = MONTH_COL_START + group_start
         year_end_col = year_start_col + span - 1
         if span > 1:
             spans.append((year_start_col, year_end_col))
-        m += span
     return spans
 
 
@@ -94,11 +91,12 @@ class TestCapacityYearHeaders:
 
         # Capacity year headers are on the row right after the external
         # commitments config block + gap row.  Find by scanning for a merge
-        # whose top-left value starts with "Year 1".
+        # whose top-left value is the first calendar year (e.g. "2025").
+        first_cal_year = str(PROJECT_START.year)
         year_row = None
         for rng in ws.merged_cells.ranges:
             cell = ws.cell(row=rng.min_row, column=rng.min_col)
-            if cell.value and str(cell.value).startswith("Year 1"):
+            if cell.value and str(cell.value) == first_cal_year:
                 year_row = rng.min_row
                 break
         assert year_row is not None, "Capacity year header row not found"
@@ -116,7 +114,8 @@ class TestSummaryYearHeaders:
 
     def test_summary_year_header_merges(self, workbook):
         ws = workbook["Summary"]
-        num_years = (PROJECT_MONTHS + 11) // 12
+        cal_groups = list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS))
+        num_years = len(cal_groups)
         YEAR_GROUP_START = 3
         COLS_PER_YEAR = 4
 
@@ -132,11 +131,12 @@ class TestSummaryYearHeaders:
         total_end = total_start + 3  # 4 columns
         expected_total = (total_start, total_end)
 
-        # Find the year header row — look for the "Year 1" merge
+        # Find the year header row — look for the first calendar year label
+        first_cal_year = str(PROJECT_START.year)
         year_row = None
         for rng in ws.merged_cells.ranges:
             cell = ws.cell(row=rng.min_row, column=rng.min_col)
-            if cell.value and str(cell.value).startswith("Year 1"):
+            if cell.value and str(cell.value) == first_cal_year:
                 year_row = rng.min_row
                 break
         assert year_row is not None, "Summary year header row not found"
@@ -161,7 +161,6 @@ class TestSectionHeaders:
     """Section headers span the correct column range."""
 
     @pytest.mark.parametrize("sheet_name,header_text,expected_cols", [
-        ("Plan", "CONFIGURATION", (1, 7)),
         ("Plan", "PLANNED FTE", (1, VAL_COL_DIFF)),
         ("Capacity", "EXTERNAL COMMITMENTS", (1, 5)),
         ("Actuals", "ACTUAL EUR", (1, VAL_COL_BREACH)),

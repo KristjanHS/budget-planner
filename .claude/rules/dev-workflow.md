@@ -34,6 +34,12 @@ When a design specifies Excel formulas, verify assumptions against a generated w
 Chart series titles require SeriesLabel: `series.tx = SeriesLabel(v="Name")`, not `series.title = "Name"`.
 When CF formulas reference external data varying per row (e.g., different WP end months), apply per-row rules — a range-wide rule with absolute refs uses the same value for all rows.
 SUMPRODUCT with mixed text/number arrays returns #VALUE!. Guard with `IF(ISNUMBER(range),range,0)` when cells may contain text like "—".
+When overwriting a styled cell (e.g., replacing BLUE_INPUT seed with BLACK_FORMULA), explicitly set `cell.protection` on the second pass — openpyxl retains the previous protection state.
+CF test assertions: match rules by fill color + formula pattern, not positional index — adding new CF rules shifts all indices.
+
+## Testing
+Tests must not hardcode config.py seed values (WP names, person names, FTE amounts, start/end months).
+Derive expected values from config imports or from the generated workbook. Tests must pass after user changes data to real values in Excel and runs rebuild.
 
 ## Invariants
 - Excel formulas only — never hardcode calculated values

@@ -3,8 +3,11 @@
 from openpyxl.comments import Comment
 from openpyxl.styles import Font
 from openpyxl.formatting.rule import FormulaRule
-from dateutil.relativedelta import relativedelta
 
+from budget_planner.layout import (
+    MONTH_COL_START, SHEET_CONFIG, CAPACITY_AMBER_LOAD,
+    build_year_month_headers, month_col_end as _month_col_end, val_columns,
+)
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FONT, SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
@@ -12,7 +15,7 @@ from budget_planner.styles import (
 )
 
 
-def _wp_config_row(wp_id, work_packages, config_first_wp_row=8):
+def _wp_config_row(wp_id, work_packages, config_first_wp_row):
     """Return the Plan config table row for a WP ID."""
     for i, wp in enumerate(work_packages):
         if wp["id"] == wp_id:
@@ -23,13 +26,13 @@ def _wp_config_row(wp_id, work_packages, config_first_wp_row=8):
 def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
                          project_params=None, work_packages=None,
                          team=None, external_commitments=None,
-                         preserved=None):
+                         preserved=None, config_first_wp_row=None):
     """Build the Capacity sheet: external commitments config + per-person groups.
 
     Args:
         ws: The Capacity worksheet to populate.
         wb: The parent Workbook.
-        team_layout: dict from build_team_sheet with person_rows, share_wp_columns, etc.
+        team_layout: dict from build_config_sheet with person_rows, etc.
         mode: "demo" seeds monthly cells with calculated values;
               "skeleton" leaves them empty for manual entry.
         project_params: dict with keys title, start, months, rate.
@@ -40,6 +43,7 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
             When None, lazy-imports from config.
         preserved: dict keyed by (person_name, wp_id) -> list of monthly
             float values for round-trip rebuild mode.
+        config_first_wp_row: First WP row in Plan config table. Required.
 
     Returns:
         capacity_layout dict with row/column positions for all key elements.
@@ -65,19 +69,19 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
     assert work_packages is not None
     assert team is not None
     assert external_commitments is not None
+    assert config_first_wp_row is not None
 
-    month_col_start = 3
-    month_col_end = month_col_start + project_params["months"] - 1
-    val_col_sum = month_col_end + 1
-    val_col_budget = month_col_end + 2
-    val_col_diff = month_col_end + 3
+    month_col_start = MONTH_COL_START
+    month_col_end = _month_col_end(project_params["months"])
+    _vcols = val_columns(project_params["months"])
+    val_col_sum = _vcols["sum"]
+    val_col_budget = _vcols["budget"]
+    val_col_diff = _vcols["diff"]
 
     ws.sheet_properties.tabColor = "7030A0"
     r = 1
 
     person_rows = team_layout["person_rows"]
-    share_wp_columns = team_layout["share_wp_columns"]
-    share_first_row = team_layout["share_first_row"]
 
     # ── CONFIG BLOCK: EXTERNAL COMMITMENTS ──
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
@@ -109,49 +113,14 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
     r += 1
 
     # ── YEAR + MONTH HEADER ROWS (once, before first person group) ──
-    year_header_row = r
-    style_cell(ws, r, 1, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, 2, "", fill=LIGHT_BLUE_FILL)
-    m = 0
-    while m < project_params["months"]:
-        year_start_col = month_col_start + m
-        months_left = project_params["months"] - m
-        span = min(12, months_left)
-        year_end_col = year_start_col + span - 1
-        cal_date = project_params["start"] + relativedelta(months=m)
-        year_label = f"Year {m // 12 + 1} ({cal_date.year})"
-        if span > 1:
-            ws.merge_cells(start_row=r, start_column=year_start_col,
-                           end_row=r, end_column=year_end_col)
-        style_cell(ws, r, year_start_col, year_label, font=HEADER_FONT,
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
-        for c2 in range(year_start_col + 1, year_end_col + 1):
-            style_cell(ws, r, c2, fill=LIGHT_BLUE_FILL)
-        m += span
-    # Validation headers in year row
-    style_cell(ws, r, val_col_sum, "Sum", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, val_col_budget, "Budget", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, val_col_diff, "Variance", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    r += 1
-
-    month_header_row = r
-    style_cell(ws, r, 1, "WP ID", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-               alignment=CENTER)
-    style_cell(ws, r, 2, "WP Name", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-               alignment=CENTER)
-    for mi in range(project_params["months"]):
-        c = month_col_start + mi
-        cal_date = project_params["start"] + relativedelta(months=mi)
-        mlabel = f"M{mi+1}\n{cal_date.strftime('%b %y')}"
-        style_cell(ws, r, c, mlabel, font=Font(name="Arial", size=8),
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, val_col_sum, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, val_col_budget, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, val_col_diff, "", fill=LIGHT_BLUE_FILL)
-    r += 1
+    year_header_row, month_header_row, r = build_year_month_headers(
+        ws, r, project_params, month_col_start,
+        val_headers=[
+            (val_col_sum, "Sum"),
+            (val_col_budget, "Budget"),
+            (val_col_diff, "Variance"),
+        ],
+    )
 
     first_person_header_row = r
 
@@ -166,7 +135,7 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
         header_row = r
         ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
         style_cell(ws, r, 1, font=HEADER_FONT, fill=SECTION_FILL)
-        ws.cell(row=r, column=1).value = f"=Team!A{roster_row}"
+        ws.cell(row=r, column=1).value = f"={SHEET_CONFIG}!A{roster_row}"
         ws.cell(row=r, column=1).font = Font(name="Arial", bold=True, size=10,
                                               color="FFFFFF")
         style_cell(ws, r, 2, fill=SECTION_FILL)
@@ -177,25 +146,18 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
         wp_rows = {}
         external_rows = {}
 
-        # Programme WP rows
-        # Find the person's index in team for share matrix row lookup
-        person_idx = next(i for i, m in enumerate(team) if m["name"] == name)
-        share_row = share_first_row + person_idx
-
+        # Programme WP rows — one row per WP for every person
         first_wp_row_for_person = True
-        for wp_id, share in member["wps"].items():
-            wp = next(w for w in work_packages if w["id"] == wp_id)
-            config_row = _wp_config_row(wp_id, work_packages)
-            share_col = share_wp_columns[wp_id]
+        for wp in work_packages:
+            wp_id = wp["id"]
+            config_row = _wp_config_row(wp_id, work_packages, config_first_wp_row)
 
-            # Col A: formula ref to Plan config WP ID
-            style_cell(ws, r, 1, font=GREEN_XREF).value = f"=Plan!A{config_row}"
-            # Col B: formula ref to Plan config WP Name
-            style_cell(ws, r, 2, font=GREEN_XREF).value = f"=Plan!B{config_row}"
+            # Col A: formula ref to Config WP ID
+            style_cell(ws, r, 1, font=GREEN_XREF).value = f"={SHEET_CONFIG}!A{config_row}"
+            # Col B: formula ref to Config WP Name
+            style_cell(ws, r, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
             # Monthly cells
-            active_months = wp["end"] - wp["start"] + 1
-
             # Check for preserved round-trip data
             if preserved and (name, wp_id) in preserved:
                 monthly_values = preserved[(name, wp_id)]
@@ -210,10 +172,8 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
                 if wp["start"] <= month_num <= wp["end"]:
                     if monthly_values is not None and mi < len(monthly_values) and monthly_values[mi] is not None:
                         seed_value = monthly_values[mi]
-                    elif mode == "skeleton":
-                        seed_value = None
                     else:
-                        seed_value = round(share * wp["fte"] / active_months, 4) if active_months > 0 else 0
+                        seed_value = None
 
                     if seed_value is not None:
                         style_cell(ws, r, c, seed_value, font=BLUE_INPUT, fmt="0.00")
@@ -238,11 +198,10 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
             style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                        fmt="0.00").value = f"=SUM({sum_range})"
 
-            # Budget: person's share x WP total FTE
-            share_cl = col_letter(share_col)
+            # Budget: WP total FTE from Config WP table
             style_cell(ws, r, val_col_budget, font=GREEN_XREF,
                        fmt="0.00").value = (
-                f"=Team!{share_cl}{share_row}*Plan!C{config_row}"
+                f"={SHEET_CONFIG}!C{config_row}"
             )
 
             # Variance: Budget - Sum
@@ -339,21 +298,21 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
             cl = col_letter(c)
             style_cell(ws, r, c, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                        fmt="0.00").value = (
-                f"=Team!B{roster_row}-{cl}{total_row}"
+                f"={SHEET_CONFIG}!B{roster_row}-{cl}{total_row}"
             )
         r += 1
 
         # Conditional formatting for TOTAL row
         total_range = (f"{col_letter(month_col_start)}{total_row}:"
                        f"{col_letter(month_col_end)}{total_row}")
-        # Amber if > 0.8 x Max FTE (added first, lower priority)
+        # Amber if > CAPACITY_AMBER_LOAD x Max FTE (added first, lower priority)
         ws.conditional_formatting.add(total_range, FormulaRule(
-            formula=[f"{col_letter(month_col_start)}{total_row}>0.8*Team!$B${roster_row}"],
+            formula=[f"{col_letter(month_col_start)}{total_row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}"],
             fill=AMBER_FILL,
         ))
         # Red if > Max FTE (added second, overrides amber for overcommitted cells)
         ws.conditional_formatting.add(total_range, FormulaRule(
-            formula=[f"{col_letter(month_col_start)}{total_row}>Team!$B${roster_row}"],
+            formula=[f"{col_letter(month_col_start)}{total_row}>{SHEET_CONFIG}!$B${roster_row}"],
             fill=RED_FILL,
         ))
 

@@ -64,33 +64,47 @@ def col_letter(c):
     return get_column_letter(c)
 
 
-def apply_year_groups(ws, month_col_start, project_months, current_month=None):
-    """Apply column grouping by year (outline level 1).
+def apply_year_groups(ws, month_col_start, project_months, current_month=None,
+                      *, project_start=None):
+    """Apply column grouping by calendar year (outline level 1).
 
-    Groups 12 month columns per year. If current_month is provided,
-    expand the group containing that month and collapse others.
-    If current_month is None, expand year 1 and collapse rest.
+    Groups month columns by calendar-year boundaries. If current_month is
+    provided, expand the group containing that month and collapse others.
+    If current_month is None, expand the first group and collapse rest.
 
     Args:
         ws: Worksheet to apply grouping to.
         month_col_start: First month column number (typically 3 = column C).
         project_months: Total number of project months.
         current_month: 1-based month number to keep visible (optional).
+        project_start: Project start date (datetime). Required for
+            calendar-year grouping. Falls back to fixed 12-month spans
+            if not provided (backward compat).
     """
-    m = 0
-    while m < project_months:
-        year_start_col = month_col_start + m
-        span = min(12, project_months - m)
+    if project_start is not None:
+        from budget_planner.layout import _calendar_year_groups
+        groups = list(_calendar_year_groups(project_start, project_months))
+    else:
+        # Backward compat: fixed 12-month spans
+        groups = []
+        m = 0
+        while m < project_months:
+            span = min(12, project_months - m)
+            groups.append((m, span))
+            m += span
+
+    first_group = True
+    for group_start, span in groups:
+        year_start_col = month_col_start + group_start
         year_end_col = year_start_col + span - 1
-        year_num = m // 12 + 1
 
         # Determine if this year's group should be collapsed
         if current_month is not None:
-            # Expand the year containing current_month
-            expand = (m < current_month <= m + span)
+            # Expand the group containing current_month (1-based)
+            expand = (group_start < current_month <= group_start + span)
         else:
-            # Default: expand year 1
-            expand = (year_num == 1)
+            # Default: expand first group
+            expand = first_group
 
         ws.column_dimensions.group(
             col_letter(year_start_col),
@@ -99,4 +113,4 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None):
             hidden=not expand,
         )
 
-        m += span
+        first_group = False

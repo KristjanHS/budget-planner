@@ -61,7 +61,7 @@ def test_config_sheet_named_ranges():
 
 
 def test_config_sheet_layout_keys():
-    """Layout dict has expected keys."""
+    """Layout dict has expected keys including roster."""
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -71,6 +71,10 @@ def test_config_sheet_layout_keys():
     assert "wp_first_row" in layout
     assert "wp_last_row" in layout
     assert layout["wp_last_row"] == layout["wp_first_row"] + 1  # 2 WPs
+    assert "roster_header_row" in layout
+    assert "roster_first_row" in layout
+    assert "roster_last_row" in layout
+    assert "person_rows" in layout
 
 
 def test_config_sheet_blue_font():

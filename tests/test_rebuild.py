@@ -31,7 +31,7 @@ class TestRebuildRoundTrip:
         """Rebuild creates the same sheets as init."""
         rebuild_workbook(input_path=init_wb)
         wb = load_workbook(init_wb)
-        for name in ["_META", "Config", "Plan", "Team", "Capacity",
+        for name in ["_META", "Config", "Plan", "Capacity",
                       "Actuals", "Summary", "Trends"]:
             assert name in wb.sheetnames, f"Missing sheet: {name}"
         wb.close()
@@ -71,21 +71,20 @@ class TestCapacityPreservation:
 
     def test_modified_capacity_values_preserved(self, init_wb):
         """Manual edits to Capacity cells survive rebuild."""
-        # Read the capacity data to find a valid FTE input cell
         wb = load_workbook(init_wb)
         cap = wb["Capacity"]
 
-        # Find first blue input cell with a seed value in Capacity
-        # Person groups start after external config + year/month headers
-        # Scan for a cell with a float value 0 < val < 1 in month columns
+        # Find first WP data row in Capacity (col A = Config WP ref, col B also a formula)
         test_row = None
         test_col = 3  # Column C = first month
         for r in range(1, cap.max_row + 1):
-            val = cap.cell(r, test_col).value
-            if isinstance(val, (int, float)) and 0 < val < 1:
+            val_a = cap.cell(r, 1).value
+            val_b = cap.cell(r, 2).value
+            if (isinstance(val_a, str) and val_a.startswith("=Config!A")
+                    and isinstance(val_b, str) and val_b.startswith("=Config!B")):
                 test_row = r
                 break
-        assert test_row is not None, "Could not find a Capacity FTE cell"
+        assert test_row is not None, "Could not find a Capacity WP row"
 
         new_value = 0.42
         _set_cell(cap, test_row, test_col, new_value)
@@ -183,7 +182,7 @@ class TestValidation:
                  "start": 1, "end": 60}]
 
     def _team(self):
-        return [{"name": "Alice", "max_fte": 1.0, "wps": {"WP1": 1.0}}]
+        return [{"name": "Alice", "max_fte": 1.0}]
 
     def test_valid_config_no_errors(self):
         errors, warnings = _validate_config(
@@ -238,11 +237,6 @@ class TestValidation:
             self._params(), wps, self._team(), [])
         assert any("start" in w.lower() for w in warnings)
 
-    def test_share_sum_warning(self):
-        team = [{"name": "Alice", "max_fte": 1.0, "wps": {"WP1": 0.3}}]
-        _, warnings = _validate_config(
-            self._params(), self._wps(), team, [])
-        assert any("share" in w.lower() for w in warnings)
 
 
 class TestRebuildErrors:

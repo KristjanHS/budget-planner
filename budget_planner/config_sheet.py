@@ -1,10 +1,12 @@
-"""Config sheet builder — project parameters and work package definitions."""
+"""Config sheet builder — project parameters, work packages, and team roster."""
 
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.formatting.rule import FormulaRule
 
+from budget_planner.layout import SHEET_CONFIG
 from budget_planner.styles import (
+    BLACK_FORMULA,
     BLUE_INPUT,
     HEADER_FONT,
     SECTION_FONT,
@@ -17,14 +19,15 @@ from budget_planner.styles import (
 )
 
 
-def build_config_sheet(ws, wb, project_params, work_packages):
-    """Build the Config sheet with project parameters and work packages table.
+def build_config_sheet(ws, wb, project_params, work_packages, team=None):
+    """Build the Config sheet with project parameters, work packages table, and team roster.
 
     Args:
         ws: Config worksheet to populate.
         wb: Parent Workbook (for named ranges).
         project_params: dict with keys 'title', 'start', 'months', 'rate'.
         work_packages: list of dicts with keys 'id', 'name', 'fte', 'start', 'end'.
+        team: list of dicts with keys 'name', 'max_fte'. When None, lazy-imports from config.
 
     Returns:
         config_layout dict with keys:
@@ -32,7 +35,15 @@ def build_config_sheet(ws, wb, project_params, work_packages):
             'wp_header_row': int,
             'wp_first_row': int,
             'wp_last_row': int,
+            'wp_total_row': int,
+            'roster_header_row': int,
+            'roster_first_row': int,
+            'roster_last_row': int,
+            'person_rows': dict mapping person name to row number,
     """
+    if team is None:
+        from budget_planner import config
+        team = config.TEAM
     # ── Section A: Project Parameters (rows 1-4) ──
     param_defs = [
         ("Project Title", project_params["title"], None, None),
@@ -56,14 +67,17 @@ def build_config_sheet(ws, wb, project_params, work_packages):
     header_row = 7
     first_data_row = 8
 
-    # Section header — merged A6:E6
+    # Section header — merged A6:G6
     ws.merge_cells(start_row=section_row, start_column=1,
-                   end_row=section_row, end_column=5)
+                   end_row=section_row, end_column=7)
     style_cell(ws, section_row, 1, value="WORK PACKAGES",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
     # Column headers
-    headers = ["WP ID", "WP Name", "FTE Budget", "Start Month", "End Month"]
+    headers = [
+        "WP ID", "WP Name", "FTE Budget", "Start Month", "End Month",
+        "Active Months", "Personnel Ceiling (\u20ac)",
+    ]
     for col, hdr in enumerate(headers, start=1):
         style_cell(ws, header_row, col, value=hdr,
                    font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
@@ -76,9 +90,31 @@ def build_config_sheet(ws, wb, project_params, work_packages):
         for col, (val, fmt) in enumerate(zip(values, wp_formats), start=1):
             style_cell(ws, row_idx, col, value=val, font=BLUE_INPUT, fmt=fmt,
                        border=False)
+        # Col F: Active Months = End - Start + 1 (black formula)
+        style_cell(ws, row_idx, 6, font=BLACK_FORMULA, fmt="0",
+                   border=False).value = f"=E{row_idx}-D{row_idx}+1"
+        # Col G: Personnel Ceiling = FTE Budget * fte_rate (black formula)
+        style_cell(ws, row_idx, 7, font=BLACK_FORMULA, fmt="\u20ac#,##0",
+                   border=False).value = f"=C{row_idx}*fte_rate"
 
-    # Excel Table over header + data range
-    table_ref = f"A{header_row}:E{last_data_row}"
+    # TOTAL row
+    wp_total_row = last_data_row + 1
+    style_cell(ws, wp_total_row, 1, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, wp_total_row, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
+    style_cell(ws, wp_total_row, 3, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
+               fmt="0.00").value = (
+        f"=SUM(C{first_data_row}:C{last_data_row})"
+    )
+    style_cell(ws, wp_total_row, 4, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, wp_total_row, 5, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, wp_total_row, 6, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, wp_total_row, 7, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
+               fmt="\u20ac#,##0").value = (
+        f"=SUM(G{first_data_row}:G{last_data_row})"
+    )
+
+    # Excel Table over header + data range (includes derived columns F-G)
+    table_ref = f"A{header_row}:G{last_data_row}"
     table_style = TableStyleInfo(
         name="TableStyleMedium9", showFirstColumn=False,
         showLastColumn=False, showRowStripes=True, showColumnStripes=False,
@@ -93,13 +129,41 @@ def build_config_sheet(ws, wb, project_params, work_packages):
             formula=[f"$D{row_idx}>$E{row_idx}"],
             fill=YELLOW_FILL,
         )
-        ws.conditional_formatting.add(f"A{row_idx}:E{row_idx}", rule)
+        ws.conditional_formatting.add(f"A{row_idx}:G{row_idx}", rule)
+
+    # ── Section C: Team Roster (below WP table + TOTAL row) ──
+    r = wp_total_row + 2  # blank separator row after TOTAL row
+
+    # Section header — merged A:B
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
+    style_cell(ws, r, 1, value="TEAM ROSTER",
+               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
+    style_cell(ws, r, 2, fill=SECTION_FILL)
+    r += 1
+
+    # Column headers
+    roster_header_row = r
+    style_cell(ws, r, 1, "Person", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
+               alignment=CENTER)
+    style_cell(ws, r, 2, "Max FTE", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
+               alignment=CENTER)
+    r += 1
+
+    # Team member data rows
+    roster_first_row = r
+    person_rows: dict[str, int] = {}
+    for member in team:
+        style_cell(ws, r, 1, member["name"], font=BLUE_INPUT)
+        style_cell(ws, r, 2, member["max_fte"], font=BLUE_INPUT, fmt="0.00")
+        person_rows[member["name"]] = r
+        r += 1
+    roster_last_row = r - 1
 
     # ── Named Ranges ──
-    dn_start = DefinedName("project_start", attr_text="Config!$B$2")
+    dn_start = DefinedName("project_start", attr_text=f"{SHEET_CONFIG}!$B$2")
     wb.defined_names.add(dn_start)
 
-    dn_rate = DefinedName("fte_rate", attr_text="Config!$B$4")
+    dn_rate = DefinedName("fte_rate", attr_text=f"{SHEET_CONFIG}!$B$4")
     wb.defined_names.add(dn_rate)
 
     # ── Sheet Appearance ──
@@ -111,4 +175,9 @@ def build_config_sheet(ws, wb, project_params, work_packages):
         "wp_header_row": header_row,
         "wp_first_row": first_data_row,
         "wp_last_row": last_data_row,
+        "wp_total_row": wp_total_row,
+        "roster_header_row": roster_header_row,
+        "roster_first_row": roster_first_row,
+        "roster_last_row": roster_last_row,
+        "person_rows": person_rows,
     }

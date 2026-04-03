@@ -1,17 +1,20 @@
 """Actuals sheet builder — EUR actuals per WP per month from accountant."""
 
-from openpyxl.styles import Font
 from openpyxl.formatting.rule import FormulaRule
-from dateutil.relativedelta import relativedelta
 
+from budget_planner.layout import (
+    MONTH_COL_START, SHEET_ACTUALS, SHEET_CONFIG,
+    ACTUALS_AMBER_PCT_CEIL, ACTUALS_AMBER_BREACH_MONTHS, ACTUALS_RED_BREACH_MONTHS,
+    build_year_month_headers, month_col_end as _month_col_end, val_columns,
+)
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
-    SECTION_FONT, SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
+    SECTION_FONT, SECTION_FILL, GREY_FILL, LIGHT_GREEN_FILL,
     RED_FILL, AMBER_FILL, CENTER, style_cell, col_letter,
 )
 
 
-def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, preserved=None):
+def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, preserved=None, mode="demo"):
     """Build the Actuals sheet for EUR actuals per WP per month.
 
     Args:
@@ -34,19 +37,28 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
 
-    month_col_start = 3
+    # Demo mode: seed actuals with scenario data for Trends validation
+    demo_current_month: int = 0
+    demo_multipliers: list[float] = []
+    if mode == "demo":
+        from budget_planner.config import DEMO_CURRENT_MONTH, DEMO_ACTUALS_MULTIPLIERS
+        demo_current_month = DEMO_CURRENT_MONTH
+        demo_multipliers = list(DEMO_ACTUALS_MULTIPLIERS)
+
+    month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
-    month_col_end = month_col_start + project_params["months"] - 1
-    val_col_sum = month_col_end + 1
-    val_col_budget = month_col_end + 2
-    val_col_diff = month_col_end + 3
-    val_col_cum = val_col_diff + 1
-    val_col_pct_ceil = val_col_diff + 2
-    val_col_breach = val_col_diff + 3
+    month_col_end = _month_col_end(project_params["months"])
+    _vcols = val_columns(project_params["months"])
+    val_col_sum = _vcols["sum"]
+    val_col_budget = _vcols["budget"]
+    val_col_diff = _vcols["diff"]
+    val_col_cum = _vcols["cum"]
+    val_col_pct_ceil = _vcols["pct_ceil"]
+    val_col_breach = _vcols["breach"]
 
     config_first_wp_row = layout["config_first_wp_row"]
 
-    ws = wb.create_sheet("Actuals")
+    ws = wb.create_sheet(SHEET_ACTUALS)
     ws.sheet_properties.tabColor = "0000FF"
 
     r = 1
@@ -59,70 +71,27 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
     for c2 in range(2, merge_end + 1):
         style_cell(ws, r, c2, fill=SECTION_FILL)
     r += 1
-    year_row = r
 
-    # -- Year header row --
-    style_cell(ws, r, 1, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, 2, "", fill=LIGHT_BLUE_FILL)
-    m = 0
-    while m < project_params["months"]:
-        year_start_col = month_col_start + m
-        months_left = project_params["months"] - m
-        span = min(12, months_left)
-        year_end_col = year_start_col + span - 1
-        cal_date = project_params["start"] + relativedelta(months=m)
-        year_label = f"Year {m // 12 + 1} ({cal_date.year})"
-        if span > 1:
-            ws.merge_cells(start_row=r, start_column=year_start_col,
-                           end_row=r, end_column=year_end_col)
-        style_cell(ws, r, year_start_col, year_label, font=HEADER_FONT,
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
-        for c2 in range(year_start_col + 1, year_end_col + 1):
-            style_cell(ws, r, c2, fill=LIGHT_BLUE_FILL)
-        m += span
-    # Validation headers
-    style_cell(ws, r, val_col_sum, "Sum", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, val_col_budget, "Ceiling", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, val_col_diff, "Variance", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, val_col_cum, "Cum. EUR", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, val_col_pct_ceil, "% Ceiling", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, val_col_breach, "Breach In", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    r += 1
-    month_row = r
-
-    # -- Month header row --
-    style_cell(ws, r, 1, "WP ID", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-               alignment=CENTER)
-    style_cell(ws, r, 2, "WP Name", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-               alignment=CENTER)
-    for m_idx in range(project_params["months"]):
-        c = month_col_start + m_idx
-        cal_date = project_params["start"] + relativedelta(months=m_idx)
-        mlabel = f"M{m_idx + 1}\n{cal_date.strftime('%b %y')}"
-        style_cell(ws, r, c, mlabel, font=Font(name="Arial", size=8),
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, val_col_sum, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, val_col_budget, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, val_col_diff, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, val_col_cum, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, val_col_pct_ceil, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, val_col_breach, "", fill=LIGHT_BLUE_FILL)
-    r += 1
+    year_row, month_row, r = build_year_month_headers(
+        ws, r, project_params, month_col_start,
+        val_headers=[
+            (val_col_sum, "Sum"),
+            (val_col_budget, "Ceiling"),
+            (val_col_diff, "Variance"),
+            (val_col_cum, "Cum. EUR"),
+            (val_col_pct_ceil, "% Ceiling"),
+            (val_col_breach, "Breach In"),
+        ],
+    )
     first_wp_row = r
 
     # -- WP rows (blue input EUR cells) --
     for i, wp in enumerate(work_packages):
         row = r + i
         config_row = config_first_wp_row + i
-        # Cross-sheet refs to Plan config
-        style_cell(ws, row, 1, font=GREEN_XREF).value = f"=Plan!A{config_row}"
-        style_cell(ws, row, 2, font=GREEN_XREF).value = f"=Plan!B{config_row}"
+        # Cross-sheet refs to Config WP table
+        style_cell(ws, row, 1, font=GREEN_XREF).value = f"={SHEET_CONFIG}!A{config_row}"
+        style_cell(ws, row, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
         # Get preserved monthly values if available
         preserved_values = None
@@ -135,6 +104,11 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
             if wp["start"] <= month_num <= wp["end"]:
                 if preserved_values is not None and m_idx < len(preserved_values) and preserved_values[m_idx] is not None:
                     eur_value = preserved_values[m_idx]
+                elif mode == "demo" and month_num <= demo_current_month:
+                    active_months = wp["end"] - wp["start"] + 1
+                    monthly_planned = (wp["fte"] / active_months) * project_params["rate"]
+                    multiplier = demo_multipliers[i % len(demo_multipliers)]
+                    eur_value = round(monthly_planned * multiplier)
                 else:
                     eur_value = 0
                 style_cell(ws, row, c, eur_value, font=BLUE_INPUT, fmt="\u20ac#,##0")
@@ -147,9 +121,9 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
                      f"{col_letter(month_col_end)}{row}")
         style_cell(ws, row, val_col_sum, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = f"=SUM({sum_range})"
-        # Validation: Ceiling (from Plan Personnel Ceiling column G)
+        # Validation: Ceiling (from Config Personnel Ceiling column G)
         style_cell(ws, row, val_col_budget, font=GREEN_XREF,
-                   fmt="\u20ac#,##0").value = f"=Plan!G{config_row}"
+                   fmt="\u20ac#,##0").value = f"={SHEET_CONFIG}!G{config_row}"
         # Validation: Variance = Ceiling - Sum
         style_cell(ws, row, val_col_diff, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = (
@@ -233,26 +207,26 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
         formula=[f"{diff_col_l}{first_wp_row}<0"], fill=RED_FILL,
     ))
 
-    # -- Conditional formatting: % Ceiling column (amber >85%, red >100%) --
+    # -- Conditional formatting: % Ceiling column (amber >ACTUALS_AMBER_PCT_CEIL, red >100%) --
     pct_col_l = col_letter(val_col_pct_ceil)
     pct_range = f"{pct_col_l}{first_wp_row}:{pct_col_l}{last_wp_row}"
     # Amber first (lower priority), then red overrides
     ws.conditional_formatting.add(pct_range, FormulaRule(
-        formula=[f"{pct_col_l}{first_wp_row}>0.85"], fill=AMBER_FILL,
+        formula=[f"{pct_col_l}{first_wp_row}>{ACTUALS_AMBER_PCT_CEIL}"], fill=AMBER_FILL,
     ))
     ws.conditional_formatting.add(pct_range, FormulaRule(
         formula=[f"{pct_col_l}{first_wp_row}>1"], fill=RED_FILL,
     ))
 
-    # -- Conditional formatting: Breach In column (amber <12, red <6) --
+    # -- Conditional formatting: Breach In column (amber <ACTUALS_AMBER_BREACH_MONTHS, red <ACTUALS_RED_BREACH_MONTHS) --
     breach_col_l = col_letter(val_col_breach)
     breach_range = f"{breach_col_l}{first_wp_row}:{breach_col_l}{last_wp_row}"
     # Amber first (lower priority), then red overrides
     ws.conditional_formatting.add(breach_range, FormulaRule(
-        formula=[f"{breach_col_l}{first_wp_row}<12"], fill=AMBER_FILL,
+        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_AMBER_BREACH_MONTHS}"], fill=AMBER_FILL,
     ))
     ws.conditional_formatting.add(breach_range, FormulaRule(
-        formula=[f"{breach_col_l}{first_wp_row}<6"], fill=RED_FILL,
+        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_RED_BREACH_MONTHS}"], fill=RED_FILL,
     ))
 
     # Freeze panes

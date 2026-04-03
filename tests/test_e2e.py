@@ -10,8 +10,9 @@ import openpyxl
 from pathlib import Path
 
 from budget_planner.workbook import generate_workbook
+from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    MONTH_COL_START, NUM_WPS, PROJECT_MONTHS, DEFAULT_RATE,
+    MONTH_COL_START, NUM_WPS, PROJECT_MONTHS, PROJECT_START, DEFAULT_RATE,
     WORK_PACKAGES, VAL_COL_SUM, VAL_COL_BUDGET,
 )
 
@@ -85,7 +86,7 @@ def test_demo_mode_formula_count(demo_recalc):
 
 
 def test_demo_mode_plan_planned_equals_capacity_sums(demo_wb_path, demo_recalc):
-    """After recalc, Plan Planned FTE values should equal Capacity sums."""
+    """After recalc, Plan Planned FTE values should be numeric (sum of Capacity)."""
     # Load recalculated workbook with data_only=True to get computed values
     wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
     plan = wb["Plan"]
@@ -94,13 +95,13 @@ def test_demo_mode_plan_planned_equals_capacity_sums(demo_wb_path, demo_recalc):
 
     layout = discover_layout(plan)
 
-    # For WP1 (active M1-M60), check that Plan planned M1 value > 0
-    # (it should be the sum of all persons' WP1 allocations)
+    # For WP1 (active M1-M14), check that Plan planned M1 value is numeric
+    # (no seeding means values are 0, but the formula should resolve to a number)
     planned_row = layout["planned_first_wp_row"]
     val = plan.cell(planned_row, MONTH_COL_START).value
-    # After recalc, this should be a computed number, not a formula
-    assert val is not None and isinstance(val, (int, float)) and val > 0, \
-        f"Plan WP1 M1 after recalc should be positive, got: {val}"
+    # After recalc, this should be a computed number (0 without seeding)
+    assert val is not None and isinstance(val, (int, float)), \
+        f"Plan WP1 M1 after recalc should be numeric, got: {val}"
     wb.close()
 
 
@@ -109,7 +110,8 @@ def test_demo_mode_plan_planned_equals_capacity_sums(demo_wb_path, demo_recalc):
 # Layout constants matching summary.py
 _YEAR_GROUP_START = 3
 _COLS_PER_YEAR = 4  # Plan FTE, Plan EUR, Act EUR, Var EUR
-_NUM_YEARS = (PROJECT_MONTHS + 11) // 12
+_CAL_GROUPS = list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS))
+_NUM_YEARS = len(_CAL_GROUPS)
 _TOTAL_GROUP_START = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
 
 
@@ -122,20 +124,18 @@ def _find_summary_first_wp_row(ws):
     raise AssertionError("Could not find Summary first WP row")
 
 
-def test_summary_year1_plan_fte_positive(demo_wb_path, demo_recalc):
-    """After recalc, Summary Year 1 Plan FTE should be > 0 for at least one WP."""
+def test_summary_year1_plan_fte_numeric(demo_wb_path, demo_recalc):
+    """After recalc, Summary Year 1 Plan FTE should be numeric for all WPs."""
     wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
     summary = wb["Summary"]
     first_wp = _find_summary_first_wp_row(summary)
 
     # Year 1 Plan FTE column = YEAR_GROUP_START (col C)
-    found_positive = False
     for i in range(NUM_WPS):
         val = summary.cell(first_wp + i, _YEAR_GROUP_START).value
-        if isinstance(val, (int, float)) and val > 0:
-            found_positive = True
-            break
-    assert found_positive, "No WP has positive Year 1 Plan FTE after recalc"
+        assert val is None or isinstance(val, (int, float)), (
+            f"WP row {first_wp + i} Year 1 Plan FTE should be numeric, got {val}"
+        )
     wb.close()
 
 
@@ -160,29 +160,37 @@ def test_summary_total_plan_fte_equals_year_sum(demo_wb_path, demo_recalc):
     wb.close()
 
 
-def test_summary_actual_eur_zero(demo_wb_path, demo_recalc):
-    """Fresh workbook: all Summary Actual EUR values should be 0."""
+def test_summary_actual_eur_seeded(demo_wb_path, demo_recalc):
+    """Fresh demo workbook: Summary Actual EUR reflects seeded actuals data."""
+    from budget_planner.config import DEMO_CURRENT_MONTH
     wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
     summary = wb["Summary"]
     first_wp = _find_summary_first_wp_row(summary)
 
-    for i in range(NUM_WPS):
-        row = first_wp + i
-        # Check each year's Actual EUR (offset +2 within year group)
-        for y in range(_NUM_YEARS):
-            col = _YEAR_GROUP_START + y * _COLS_PER_YEAR + 2
-            val = summary.cell(row, col).value
-            assert val is None or val == 0, \
-                f"WP row {row}, Year {y+1} Act EUR should be 0, got {val}"
-        # Check project total Actual EUR (offset +2 within total group)
-        total_act = summary.cell(row, _TOTAL_GROUP_START + 2).value
-        assert total_act is None or total_act == 0, \
-            f"WP row {row}, total Act EUR should be 0, got {total_act}"
+    # First calendar year group should have positive actuals for active WPs
+    row = first_wp  # WP1 (active from M1)
+    col = _YEAR_GROUP_START + 0 * _COLS_PER_YEAR + 2  # First year Actual EUR
+    val = summary.cell(row, col).value
+    assert isinstance(val, (int, float)) and val > 0, \
+        f"WP1 first calendar year Act EUR should be > 0 in demo mode, got {val}"
+
+    # Find the first calendar year group that starts after DEMO_CURRENT_MONTH
+    # (all its months are beyond the seeded range, so actuals should be 0)
+    unseeded_year_idx = None
+    for y, (group_start, _span) in enumerate(_CAL_GROUPS):
+        if group_start >= DEMO_CURRENT_MONTH:
+            unseeded_year_idx = y
+            break
+    assert unseeded_year_idx is not None, "All calendar years fall within demo seed range"
+    col_unseeded = _YEAR_GROUP_START + unseeded_year_idx * _COLS_PER_YEAR + 2
+    val_unseeded = summary.cell(row, col_unseeded).value
+    assert val_unseeded is None or val_unseeded == 0, \
+        f"WP1 calendar year {unseeded_year_idx+1} Act EUR should be 0, got {val_unseeded}"
     wb.close()
 
 
 def test_summary_budget_overview_after_recalc(demo_wb_path, demo_recalc):
-    """Budget Overview: Personnel Actual = 0, Personnel Ceiling > 0."""
+    """Budget Overview: Personnel Actual > 0 (seeded), Personnel Ceiling > 0."""
     wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
     summary = wb["Summary"]
 
@@ -197,8 +205,8 @@ def test_summary_budget_overview_after_recalc(demo_wb_path, demo_recalc):
             personnel_ceiling = summary.cell(row, 2).value
 
     assert personnel_actual is not None, "Personnel Actual label not found"
-    assert personnel_actual == 0, \
-        f"Personnel Actual should be 0 in fresh workbook, got {personnel_actual}"
+    assert isinstance(personnel_actual, (int, float)) and personnel_actual > 0, \
+        f"Personnel Actual should be > 0 in demo mode, got {personnel_actual}"
 
     assert personnel_ceiling is not None, "Personnel Ceiling label not found"
     assert isinstance(personnel_ceiling, (int, float)) and personnel_ceiling > 0, \
@@ -223,14 +231,14 @@ def _find_actuals_total_row(ws):
     raise AssertionError("Could not find Actuals TOTAL row")
 
 
-def test_actuals_total_sum_zero(demo_wb_path, demo_recalc):
-    """Fresh workbook: Actuals TOTAL Sum should be 0 after recalc."""
+def test_actuals_total_sum_positive(demo_wb_path, demo_recalc):
+    """Fresh demo workbook: Actuals TOTAL Sum should be positive (seeded data)."""
     wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
     actuals = wb["Actuals"]
     total_row = _find_actuals_total_row(actuals)
     val = actuals.cell(total_row, VAL_COL_SUM).value
-    assert val is not None and (val == 0 or val == 0.0), \
-        f"Actuals TOTAL Sum should be 0, got {val}"
+    assert isinstance(val, (int, float)) and val > 0, \
+        f"Actuals TOTAL Sum should be > 0 in demo mode, got {val}"
     wb.close()
 
 

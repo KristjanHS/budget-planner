@@ -31,21 +31,32 @@ def cap_ws(full_wb):
 
 @pytest.fixture(scope="module")
 def capacity_layout(tmp_path_factory):
-    """Build a full workbook and capture the capacity_layout return value."""
+    """Build a full workbook and capture the capacity_layout return value.
+
+    Also exposes config_layout and plan_layout under respective keys.
+    """
     from openpyxl import Workbook as WB
     from budget_planner.plan import build_plan_sheet
-    from budget_planner.team import build_team_sheet
+    from budget_planner.config_sheet import build_config_sheet
 
     wb = WB()
     meta_ws = wb.active
     assert meta_ws is not None
     meta_ws.title = "_META"
+    config_ws = wb.create_sheet("Config")
+    config_layout = build_config_sheet(config_ws, wb,
+                                        {"title": "Test", "start": __import__("datetime").datetime(2026, 11, 1),
+                                         "months": 14, "rate": 7500},
+                                        WORK_PACKAGES)
     plan_ws = wb.create_sheet("Plan")
-    build_plan_sheet(plan_ws, wb)
-    team_ws = wb.create_sheet("Team")
-    team_layout = build_team_sheet(team_ws, wb)
+    plan_layout = build_plan_sheet(plan_ws, wb, config_layout=config_layout)
     cap_ws = wb.create_sheet("Capacity")
-    layout = build_capacity_sheet(cap_ws, wb, team_layout)
+    layout = build_capacity_sheet(
+        cap_ws, wb, config_layout,
+        config_first_wp_row=plan_layout["config_first_wp_row"],
+    )
+    layout["config_layout"] = config_layout
+    layout["plan_layout"] = plan_layout
     return layout
 
 
@@ -70,11 +81,12 @@ def test_capacity_has_person_group_per_team_member(capacity_layout):
 # ── Test 6: programme WP rows per person ──
 
 def test_capacity_person_has_grant_wp_rows(capacity_layout):
-    """Each person has rows for their assigned WPs."""
+    """Each person has rows for ALL WPs."""
+    all_wp_ids = {wp["id"] for wp in WORK_PACKAGES}
     for member in TEAM:
         group = capacity_layout["person_groups"][member["name"]]
-        assert set(group["wp_rows"].keys()) == set(member["wps"].keys()), (
-            f"{member['name']}: expected WPs {set(member['wps'].keys())}, "
+        assert set(group["wp_rows"].keys()) == all_wp_ids, (
+            f"{member['name']}: expected WPs {all_wp_ids}, "
             f"got {set(group['wp_rows'].keys())}"
         )
 
@@ -149,13 +161,13 @@ def test_capacity_total_row_is_sum_formula(cap_ws, capacity_layout):
 # ── Test 12: REMAINING row formula ──
 
 def test_capacity_remaining_row_formula(cap_ws, capacity_layout):
-    """REMAINING references Team max_fte minus TOTAL."""
+    """REMAINING references Config max_fte minus TOTAL."""
     for member in TEAM:
         group = capacity_layout["person_groups"][member["name"]]
         remaining_row = group["remaining_row"]
         val = cap_ws.cell(row=remaining_row, column=MONTH_COL_START).value
-        assert isinstance(val, str) and "Team!" in val, (
-            f"{member['name']} REMAINING M1: expected Team! ref, got {val}"
+        assert isinstance(val, str) and "Config!" in val, (
+            f"{member['name']} REMAINING M1: expected Config! ref, got {val}"
         )
 
 
@@ -169,10 +181,9 @@ def _inactive_params():
     """
     params = []
     for member in TEAM:
-        for wp_id in member["wps"]:
-            wp = next(w for w in WORK_PACKAGES if w["id"] == wp_id)
+        for wp in WORK_PACKAGES:
             if wp["start"] > 1 or wp["end"] < PROJECT_MONTHS:
-                params.append((member["name"], wp_id))
+                params.append((member["name"], wp["id"]))
     return params[:3]
 
 
@@ -213,33 +224,22 @@ def test_capacity_wp_row_sum_formula(cap_ws, capacity_layout):
             )
 
 
-# ── Test 15: WP row Budget formula = Team share × Plan FTE ──
+# ── Test 15: WP row Budget formula = Plan!C{config_row} ──
 
 def test_capacity_wp_row_budget_formula(cap_ws, capacity_layout):
-    """programme WP rows have Budget = Team!{share_col}{share_row} * Plan!C{config_row}."""
-    # Rebuild share_wp_columns and share_first_row from a fresh team build
-    from budget_planner.team import build_team_sheet as _bts
-    from openpyxl import Workbook as _WB
+    """programme WP rows have Budget = Config!C{config_row} (WP total FTE)."""
+    # Derive Config WP row per WP from plan_layout
+    config_first_wp_row = capacity_layout["plan_layout"]["config_first_wp_row"]
+    wp_config_rows = {
+        wp["id"]: config_first_wp_row + i for i, wp in enumerate(WORK_PACKAGES)
+    }
 
-    tmp_wb = _WB()
-    tmp_meta = tmp_wb.active
-    assert tmp_meta is not None
-    tmp_meta.title = "_META"
-    tmp_team_ws = tmp_wb.create_sheet("Team")
-    team_layout = _bts(tmp_team_ws, tmp_wb)
-    share_wp_columns = team_layout["share_wp_columns"]
-    share_first_row = team_layout["share_first_row"]
-
-    for person_idx, member in enumerate(TEAM):
+    for member in TEAM:
         group = capacity_layout["person_groups"][member["name"]]
-        share_row = share_first_row + person_idx
         for wp_id, row in group["wp_rows"].items():
-            share_cl = col_letter(share_wp_columns[wp_id])
-            from budget_planner.capacity import _wp_config_row
-            from budget_planner.config import WORK_PACKAGES
-            config_row = _wp_config_row(wp_id, WORK_PACKAGES)
+            config_row = wp_config_rows[wp_id]
             val = cap_ws.cell(row=row, column=VAL_COL_BUDGET).value
-            expected = f"=Team!{share_cl}{share_row}*Plan!C{config_row}"
+            expected = f"=Config!C{config_row}"
             assert val == expected, (
                 f"{member['name']}/{wp_id} Budget: expected {expected}, got {val}"
             )

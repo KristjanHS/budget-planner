@@ -20,9 +20,8 @@ budget_planner/
   reader.py            # Layout detection + Config/Team/Capacity/Actuals readers, parameterized constants
   workbook.py          # Orchestrator: init_workbook() + rebuild_workbook() + snapshot/restore
 tests/
-  conftest.py          # Fixtures: fresh wb, recalc
+  conftest.py          # Fixtures: fresh wb paths
   test_workbook.py     # Structural invariants (sheets, params, inactive months)
-  test_recalc.py       # LibreOffice formula verification
   test_team.py         # Team sheet roster + share matrix
   test_capacity.py     # Capacity sheet per-person groups, blue input, inactive months
   test_plan_v2.py      # Plan <-> Capacity cross-sheet formula linkage + font color

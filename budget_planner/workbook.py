@@ -9,12 +9,15 @@ from openpyxl.workbook.defined_name import DefinedName
 
 from budget_planner.config_sheet import build_config_sheet
 from budget_planner.plan import build_plan_sheet, _apply_planned_formulas
-from budget_planner.team import build_team_sheet
 from budget_planner.capacity import build_capacity_sheet
 from budget_planner.actuals import build_actuals_sheet
 from budget_planner.summary import build_summary_sheet
 from budget_planner.trends import build_trends_sheet
 from budget_planner.meta import build_meta_sheet
+from budget_planner.layout import (
+    SHEET_META, SHEET_CONFIG, SHEET_PLAN, SHEET_CAPACITY,
+    SHEET_ACTUALS, SHEET_TRENDS,
+)
 from budget_planner.styles import BLUE_INPUT, HEADER_FONT, style_cell, apply_year_groups
 
 
@@ -90,13 +93,6 @@ def _validate_config(project_params, work_packages, team, external_commitments):
         if wp["fte"] <= 0:
             warnings.append(f"WP {wp['id']}: FTE budget is {wp['fte']} (expected > 0)")
 
-    for member in team:
-        total_share = sum(member["wps"].values()) if member["wps"] else 0
-        if member["wps"] and abs(total_share - 1.0) > 0.05:
-            warnings.append(
-                f"'{member['name']}': share seeds sum to {total_share:.2f} (expected ~1.0)"
-            )
-
     return errors, warnings
 
 
@@ -107,31 +103,28 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
 
     Expects wb to already have a '_META' sheet as the active/first sheet.
     """
-    meta_ws = wb["_META"]
+    meta_ws = wb[SHEET_META]
 
-    # Config sheet (new — holds project params + WP table)
-    config_ws = wb.create_sheet("Config")
-    build_config_sheet(config_ws, wb, project_params, work_packages)
+    # Config sheet (holds project params + WP table + team roster)
+    config_ws = wb.create_sheet(SHEET_CONFIG)
+    config_layout = build_config_sheet(config_ws, wb, project_params, work_packages,
+                                       team=team)
 
     # Plan sheet
-    plan_ws = wb.create_sheet("Plan")
+    plan_ws = wb.create_sheet(SHEET_PLAN)
     layout = build_plan_sheet(plan_ws, wb,
                               project_params=project_params,
-                              work_packages=work_packages)
+                              work_packages=work_packages,
+                              config_layout=config_layout)
 
-    # Team sheet
-    team_ws = wb.create_sheet("Team")
-    team_layout = build_team_sheet(team_ws, wb,
-                                   team=team,
-                                   work_packages=work_packages)
-
-    # Capacity sheet
-    capacity_ws = wb.create_sheet("Capacity")
+    # Capacity sheet (uses config_layout for roster person_rows)
+    capacity_ws = wb.create_sheet(SHEET_CAPACITY)
     capacity_layout = build_capacity_sheet(
-        capacity_ws, wb, team_layout, mode=mode,
+        capacity_ws, wb, config_layout, mode=mode,
         project_params=project_params, work_packages=work_packages,
         team=team, external_commitments=external_commitments,
         preserved=preserved_capacity,
+        config_first_wp_row=layout["config_first_wp_row"],
     )
 
     # Overwrite planned FTE with cross-sheet formulas from Capacity
@@ -140,15 +133,20 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
                             project_params=project_params)
 
     # Trends sheet skeleton + current_month named range
-    trends_ws = wb.create_sheet("Trends")
+    trends_ws = wb.create_sheet(SHEET_TRENDS)
     trends_ws.sheet_properties.tabColor = "FFD700"
     style_cell(trends_ws, 1, 1, "Current Month:", font=HEADER_FONT, border=False)
-    style_cell(trends_ws, 1, 2, 1, font=BLUE_INPUT, border=False)
+    if mode == "demo":
+        from budget_planner.config import DEMO_CURRENT_MONTH
+        current_month_value = DEMO_CURRENT_MONTH
+    else:
+        current_month_value = 1
+    style_cell(trends_ws, 1, 2, current_month_value, font=BLUE_INPUT, border=False)
     trends_ws["B1"].comment = Comment(
         "Set to the last month with completed actuals (e.g., 12 for end of Year 1)",
         "Programme Budget Tool",
     )
-    wb.defined_names.add(DefinedName("current_month", attr_text="Trends!$B$1"))
+    wb.defined_names.add(DefinedName("current_month", attr_text=f"{SHEET_TRENDS}!$B$1"))
 
     # Actuals sheet
     actuals_layout = build_actuals_sheet(
@@ -156,6 +154,7 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
         project_params=project_params,
         work_packages=work_packages,
         preserved=preserved_actuals,
+        mode=mode,
     )
 
     # Summary sheet
@@ -165,7 +164,7 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
 
     # Trends sheet (populate after Actuals and Summary so layouts are available)
     build_trends_sheet(trends_ws, wb, layout, actuals_layout,
-                       capacity_layout, team_layout,
+                       capacity_layout, config_layout,
                        project_params=project_params,
                        work_packages=work_packages,
                        team=team)
@@ -178,25 +177,29 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
                      external_commitments=external_commitments,
                      rebuild_warnings=rebuild_warnings)
 
-    # Sheets: _META, Config, Plan, Team, Capacity, Trends, Actuals, Summary
-    wb.move_sheet("_META", offset=0)
+    # Sheets: _META, Config, Plan, Capacity, Trends, Actuals, Summary
+    wb.move_sheet(SHEET_META, offset=0)
 
 
 def _apply_protection(wb):
     """Protect all sheets with password 'grant'.
 
     Blue input cells are already unlocked via style_cell auto-detection.
+    Explicitly allows column/row resizing so users can auto-fit widths.
     """
     for ws in wb.worksheets:
         ws.protection.set_password("grant")
+        ws.protection.formatColumns = False
+        ws.protection.formatRows = False
 
 
 def _apply_all_year_groups(wb, project_params, current_month=None):
     """Apply column grouping by year to sheets with monthly columns."""
-    for sheet_name in ["Plan", "Capacity", "Actuals"]:
+    for sheet_name in [SHEET_PLAN, SHEET_CAPACITY, SHEET_ACTUALS]:
         if sheet_name in wb.sheetnames:
             apply_year_groups(wb[sheet_name], 3, project_params["months"],
-                              current_month)
+                              current_month,
+                              project_start=project_params["start"])
 
 
 def _backup_existing(filepath):
@@ -237,12 +240,12 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
     wb = Workbook()
     meta_ws = wb.active
     assert meta_ws is not None
-    meta_ws.title = "_META"
+    meta_ws.title = SHEET_META
 
     _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
                       mode=mode)
 
-    _apply_protection(wb)
+    # _apply_protection(wb)  # Temporarily disabled
     _apply_all_year_groups(wb, project_params)
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
@@ -256,8 +259,9 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
                      mode: str = "demo") -> str:
     """Rebuild workbook from existing file, preserving Capacity and Actuals data.
 
-    Reads Config sheet, Team sheet, and Capacity sheet from the existing workbook.
-    Validates extracted data, regenerates all sheets, and re-injects preserved values.
+    Reads Config sheet (params, WPs, team roster) and Capacity sheet from the
+    existing workbook. Validates extracted data, regenerates all sheets, and
+    re-injects preserved values.
 
     Args:
         input_path: Path to the existing workbook.
@@ -268,7 +272,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
     """
     from openpyxl import load_workbook
     from budget_planner.reader import (
-        read_config_sheet, read_team_sheet, read_capacity_sheet,
+        read_config_sheet, read_team_from_config, read_capacity_sheet,
         read_actuals_values,
     )
 
@@ -285,34 +289,23 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
     # ── Extract data ──
 
     # Config sheet → project params + WPs
-    if "Config" not in existing_wb.sheetnames:
+    if SHEET_CONFIG not in existing_wb.sheetnames:
         existing_wb.close()
         raise ValueError(
             "Workbook has no Config sheet. "
             "Run 'python -m budget_planner init' to create a fresh workbook first."
         )
-    project_params, work_packages = read_config_sheet(existing_wb["Config"])
+    project_params, work_packages = read_config_sheet(existing_wb[SHEET_CONFIG])
 
-    # Team sheet → roster + shares
-    if "Team" not in existing_wb.sheetnames:
-        existing_wb.close()
-        raise ValueError("Workbook has no Team sheet.")
-    team_data = read_team_sheet(existing_wb["Team"])
-    team = [
-        {
-            "name": p["name"],
-            "max_fte": p["max_fte"],
-            "wps": team_data["shares"].get(p["name"], {}),
-        }
-        for p in team_data["roster"]
-    ]
+    # Team roster from Config sheet
+    team = read_team_from_config(existing_wb[SHEET_CONFIG])
 
     # Capacity sheet → external commitments + FTE values
-    if "Capacity" not in existing_wb.sheetnames:
+    if SHEET_CAPACITY not in existing_wb.sheetnames:
         existing_wb.close()
         raise ValueError("Workbook has no Capacity sheet.")
     capacity_data = read_capacity_sheet(
-        existing_wb["Capacity"], work_packages,
+        existing_wb[SHEET_CAPACITY], work_packages,
         project_months=project_params["months"],
     )
     external_commitments = capacity_data["external_commitments"]
@@ -327,15 +320,15 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
 
     # Preserve Actuals EUR values (always)
     preserved_actuals = None
-    if "Actuals" in existing_wb.sheetnames:
+    if SHEET_ACTUALS in existing_wb.sheetnames:
         preserved_actuals = read_actuals_values(
-            existing_wb["Actuals"], project_params["months"],
+            existing_wb[SHEET_ACTUALS], project_params["months"],
         )
 
     # Read current_month from Trends for column grouping
     current_month = 1
-    if "Trends" in existing_wb.sheetnames:
-        cm = existing_wb["Trends"].cell(1, 2).value
+    if SHEET_TRENDS in existing_wb.sheetnames:
+        cm = existing_wb[SHEET_TRENDS].cell(1, 2).value
         if isinstance(cm, (int, float)):
             current_month = int(cm)
 
@@ -383,7 +376,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
     wb = Workbook()
     meta_ws = wb.active
     assert meta_ws is not None
-    meta_ws.title = "_META"
+    meta_ws.title = SHEET_META
 
     _build_all_sheets(
         wb, project_params, work_packages, team, external_commitments,
@@ -393,7 +386,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
         rebuild_warnings=warnings if warnings else None,
     )
 
-    _apply_protection(wb)
+    # _apply_protection(wb)  # Temporarily disabled
     _apply_all_year_groups(wb, project_params, current_month=current_month)
 
     # Back up then overwrite

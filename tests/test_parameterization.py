@@ -8,7 +8,7 @@ import pytest
 
 BUILDER_MODULES = [
     "budget_planner.plan",
-    "budget_planner.team",
+    "budget_planner.config_sheet",
     "budget_planner.capacity",
     "budget_planner.actuals",
     "budget_planner.summary",
@@ -60,14 +60,14 @@ def test_builders_accept_project_params():
 def test_builders_accept_work_packages():
     """All builders should accept work_packages kwarg."""
     from budget_planner.plan import build_plan_sheet
-    from budget_planner.team import build_team_sheet
+    from budget_planner.config_sheet import build_config_sheet
     from budget_planner.capacity import build_capacity_sheet
     from budget_planner.actuals import build_actuals_sheet
     from budget_planner.summary import build_summary_sheet
     from budget_planner.trends import build_trends_sheet
     from budget_planner.meta import build_meta_sheet
 
-    for func in [build_plan_sheet, build_team_sheet, build_capacity_sheet,
+    for func in [build_plan_sheet, build_config_sheet, build_capacity_sheet,
                  build_actuals_sheet, build_summary_sheet, build_trends_sheet,
                  build_meta_sheet]:
         sig = inspect.signature(func)

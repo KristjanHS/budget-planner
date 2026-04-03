@@ -67,7 +67,8 @@ def test_current_month_named_range(trends_workbook):
 
 
 def test_current_month_default_value(trends_ws):
-    assert trends_ws["B1"].value == 1
+    from budget_planner.config import DEMO_CURRENT_MONTH
+    assert trends_ws["B1"].value == DEMO_CURRENT_MONTH
 
 
 # ================================================================
@@ -94,15 +95,15 @@ def test_burn_rate_wp_count(trends_ws):
 
 
 def test_burn_rate_wp_id_refs_plan(trends_ws):
-    """Col A formulas reference Plan config rows."""
+    """Col A formulas reference Config WP rows."""
     header_row = _find_row_containing(trends_ws, 1, "WP ID")
     assert header_row is not None
     first_wp_row = header_row + 1
     for i in range(NUM_WPS):
         cell = trends_ws.cell(first_wp_row + i, 1)
         formula = str(cell.value)
-        assert formula.startswith("=Plan!A"), (
-            f"WP row {i}: expected Plan!A ref, got {formula}"
+        assert formula.startswith("=Config!A"), (
+            f"WP row {i}: expected Config!A ref, got {formula}"
         )
 
 
@@ -114,7 +115,7 @@ def test_burn_rate_time_elapsed_formula(trends_ws):
     cell = trends_ws.cell(first_wp_row, 3)
     formula = str(cell.value)
     assert "current_month" in formula
-    assert "Plan!D" in formula
+    assert "Config!D" in formula
 
 
 def test_burn_rate_budget_eur_formula(trends_ws):
@@ -169,7 +170,7 @@ def test_burn_rate_total_row(trends_ws):
     assert total_row is not None
     cell = trends_ws.cell(total_row, 5)
     formula = str(cell.value)
-    assert "SUMPRODUCT" in formula
+    assert "ISNUMBER" in formula
     assert "partner_ceiling" in formula
 
 
@@ -178,10 +179,10 @@ def test_burn_rate_total_row(trends_ws):
 # ================================================================
 
 def test_person_load_section_header(trends_ws):
-    """Row 32 has PERSON LOAD section header."""
-    val = trends_ws.cell(32, 1).value
-    assert val is not None
-    assert "PERSON LOAD" in str(val)
+    """Trends has a PERSON LOAD section header."""
+    row = _find_row_containing(trends_ws, 1, "PERSON LOAD")
+    assert row is not None, "PERSON LOAD section header not found in column A"
+    assert "PERSON LOAD" in str(trends_ws.cell(row, 1).value)
 
 
 def test_person_load_person_count(trends_ws):
@@ -233,14 +234,14 @@ def test_person_load_peak_formula(trends_ws):
 
 
 def test_person_load_status_formula(trends_ws):
-    """Col E has IF formula with Team sheet reference."""
+    """Col E has IF formula with Config sheet reference."""
     header_row = _find_row_containing(trends_ws, 1, "Person")
     assert header_row is not None
     first_person_row = header_row + 1
     cell = trends_ws.cell(first_person_row, 5)
     formula = str(cell.value)
     assert "IF" in formula
-    assert "Team!" in formula
+    assert "Config!" in formula
 
 
 # ================================================================
@@ -271,9 +272,21 @@ def test_chart_has_three_source_rows(trends_ws):
 
 
 def test_helper_rows_hidden(trends_ws):
-    """Helper rows 40, 41, 42, 43 are hidden."""
-    for r in [40, 41, 42, 43]:
-        assert trends_ws.row_dimensions[r].hidden, f"Row {r} should be hidden"
+    """Chart helper rows (between person load section and chart) are hidden."""
+    # Discover helper rows dynamically: they are the hidden rows in the sheet
+    hidden_rows = [
+        r for r in range(1, trends_ws.max_row + 1)
+        if trends_ws.row_dimensions[r].hidden
+    ]
+    assert len(hidden_rows) == 4, (
+        f"Expected 4 hidden helper rows (planned, actual, ceiling, labels), "
+        f"found {len(hidden_rows)}: {hidden_rows}"
+    )
+    # Verify they are contiguous
+    for i in range(1, len(hidden_rows)):
+        assert hidden_rows[i] == hidden_rows[i - 1] + 1, (
+            f"Hidden helper rows should be contiguous, got {hidden_rows}"
+        )
 
 
 # ================================================================
@@ -283,3 +296,129 @@ def test_helper_rows_hidden(trends_ws):
 def test_trends_has_conditional_formatting(trends_ws):
     """Trends sheet has conditional formatting rules."""
     assert len(trends_ws.conditional_formatting._cf_rules) > 0
+
+
+# ================================================================
+# Dynamic row layout — parametric tests for row collision safety
+# ================================================================
+
+def _make_wps(n):
+    """Generate n synthetic work packages."""
+    return [
+        {"id": f"WP{i+1}", "name": f"Work Package {i+1}",
+         "fte": 10.0, "start": 1, "end": 60}
+        for i in range(n)
+    ]
+
+
+def _make_team(n, work_packages):
+    """Generate n synthetic team members, each assigned to WP1."""
+    wp_id = work_packages[0]["id"]
+    return [
+        {"name": f"Person{i+1}", "max_fte": 1.0, "wps": {wp_id: 1.0}}
+        for i in range(n)
+    ]
+
+
+def _build_trends_only(num_wps, num_team):
+    """Build a workbook with given WP/team counts and return the Trends ws + layout."""
+    from datetime import datetime
+    from openpyxl import Workbook as WB
+    from budget_planner.workbook import _build_all_sheets
+    from budget_planner.layout import SHEET_META, SHEET_TRENDS
+
+    work_packages = _make_wps(num_wps)
+    team = _make_team(num_team, work_packages)
+    external_commitments: list[dict[str, object]] = []
+    project_params = {
+        "title": "Test", "start": datetime(2026, 1, 1),
+        "months": 24, "rate": 7500,
+    }
+
+    wb = WB()
+    meta_ws = wb.active
+    assert meta_ws is not None
+    meta_ws.title = SHEET_META
+
+    _build_all_sheets(wb, project_params, work_packages, team,
+                      external_commitments, mode="skeleton")
+
+    trends_ws = wb[SHEET_TRENDS]
+    return trends_ws
+
+
+@pytest.mark.parametrize("num_wps,num_team", [
+    (3, 2),    # small — fewer WPs than default
+    (9, 4),    # current default config size
+    (15, 8),   # large — more WPs and team members
+])
+def test_trends_no_row_collisions(num_wps, num_team):
+    """Sections must not overlap regardless of WP / team count.
+
+    Verifies that:
+    - WP data rows don't overlap with chart anchor
+    - Chart anchor + 15 (chart height) doesn't overlap person section
+    - Person rows don't overlap with hidden helper rows
+    - All hidden rows are contiguous and below person data
+    """
+    ws = _build_trends_only(num_wps, num_team)
+
+    # Discover sections dynamically
+    total_row = _find_row(ws, 2, "TOTAL")
+    assert total_row is not None, "TOTAL row not found"
+
+    wp_header = _find_row_containing(ws, 1, "WP ID")
+    assert wp_header is not None
+    first_wp = wp_header + 1
+    last_wp = total_row - 1
+    assert last_wp - first_wp + 1 == num_wps, (
+        f"Expected {num_wps} WP rows, got {last_wp - first_wp + 1}"
+    )
+
+    person_section = _find_row_containing(ws, 1, "PERSON LOAD")
+    assert person_section is not None, "PERSON LOAD section not found"
+
+    person_header = _find_row_containing(ws, 1, "Person")
+    assert person_header is not None
+    first_person = person_header + 1
+
+    # Count person data rows
+    person_count = 0
+    for i in range(50):
+        cell = ws.cell(first_person + i, 1)
+        if cell.value is None or str(cell.value).strip() == "":
+            break
+        person_count += 1
+    assert person_count == num_team
+    last_person = first_person + person_count - 1
+
+    # Find hidden (helper) rows
+    hidden_rows = sorted(
+        r for r in range(1, ws.max_row + 1)
+        if ws.row_dimensions[r].hidden
+    )
+    assert len(hidden_rows) == 4, (
+        f"Expected 4 hidden helper rows, found {len(hidden_rows)}: {hidden_rows}"
+    )
+
+    # Verify no overlaps
+    # Chart anchor should be after total row
+    chart_anchor = total_row + 2  # matches the code
+    assert chart_anchor > total_row, "Chart anchor must be after TOTAL row"
+
+    # Person section must start after chart (chart height ~15 rows)
+    assert person_section >= chart_anchor + 15, (
+        f"Person section row {person_section} too close to chart at {chart_anchor}. "
+        f"Chart needs ~15 rows of height."
+    )
+
+    # Helper rows must be after person data
+    assert hidden_rows[0] > last_person, (
+        f"First helper row {hidden_rows[0]} overlaps person data ending at {last_person}"
+    )
+
+    # Helper rows must be contiguous
+    for i in range(1, len(hidden_rows)):
+        assert hidden_rows[i] == hidden_rows[i - 1] + 1, (
+            f"Hidden helper rows not contiguous: {hidden_rows}"
+        )

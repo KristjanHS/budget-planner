@@ -2,7 +2,12 @@
 
 from openpyxl.styles import Font
 from openpyxl.formatting.rule import FormulaRule
+from dateutil.relativedelta import relativedelta
 
+from budget_planner.layout import (
+    MONTH_COL_START, SHEET_SUMMARY, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS,
+    val_columns, _calendar_year_groups,
+)
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT, TITLE_FONT,
     SECTION_FONT, SECTION_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
@@ -37,16 +42,15 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
 
-    month_col_start = 3
+    month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
-    month_col_end = month_col_start + project_params["months"] - 1
-    val_col_sum = month_col_end + 1
+    val_col_sum = val_columns(project_params["months"])["sum"]
     config_first_wp_row = layout["config_first_wp_row"]
     planned_first_wp_row = layout["planned_first_wp_row"]
     actuals_first_wp_row = actuals_layout["first_wp_row"]
     actuals_total_row = actuals_layout["total_row"]
 
-    summary = wb.create_sheet("Summary")
+    summary = wb.create_sheet(SHEET_SUMMARY)
     summary.sheet_properties.tabColor = "008000"
 
     r = 1
@@ -54,8 +58,10 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
     style_cell(summary, r, 1, "ANNUAL BUDGET SUMMARY", font=TITLE_FONT, border=False)
     r += 2
 
-    # Calculate years
-    num_years = (project_params["months"] + 11) // 12
+    # Calculate calendar year groups
+    project_start = project_params["start"]
+    cal_groups = list(_calendar_year_groups(project_start, project_params["months"]))
+    num_years = len(cal_groups)
 
     # Year group headers
     YEAR_GROUP_START = 3
@@ -68,12 +74,12 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
     # Year headers row
     style_cell(summary, r, 1, "", fill=LIGHT_BLUE_FILL)
     style_cell(summary, r, 2, "", fill=LIGHT_BLUE_FILL)
-    for y in range(num_years):
+    for y, (group_start, _span) in enumerate(cal_groups):
         start_col = YEAR_GROUP_START + y * COLS_PER_YEAR
         end_col = start_col + COLS_PER_YEAR - 1
-        cal_year = project_params["start"].year + y
+        cal_date = project_start + relativedelta(months=group_start)
         summary.merge_cells(start_row=r, start_column=start_col, end_row=r, end_column=end_col)
-        style_cell(summary, r, start_col, f"Year {y+1} ({cal_year})", font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
+        style_cell(summary, r, start_col, str(cal_date.year), font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
         for c2 in range(start_col + 1, end_col + 1):
             style_cell(summary, r, c2, fill=LIGHT_BLUE_FILL)
 
@@ -104,14 +110,12 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
     for i, wp in enumerate(work_packages):
         row = r + i
         config_row = config_first_wp_row + i
-        style_cell(summary, row, 1, font=GREEN_XREF).value = f"=Plan!A{config_row}"
-        style_cell(summary, row, 2, font=GREEN_XREF).value = f"=Plan!B{config_row}"
+        style_cell(summary, row, 1, font=GREEN_XREF).value = f"={SHEET_CONFIG}!A{config_row}"
+        style_cell(summary, row, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
-        for y in range(num_years):
-            m_start = y * 12
-            m_end = min((y + 1) * 12, project_params["months"]) - 1
-            first_col_l = col_letter(month_col_start + m_start)
-            last_col_l = col_letter(month_col_start + m_end)
+        for y, (group_start, span) in enumerate(cal_groups):
+            first_col_l = col_letter(month_col_start + group_start)
+            last_col_l = col_letter(month_col_start + group_start + span - 1)
 
             sc = YEAR_GROUP_START + y * COLS_PER_YEAR
             plan_wp_row = planned_first_wp_row + i
@@ -119,7 +123,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
 
             # Plan FTE (cross-sheet ref to Plan Planned block)
             style_cell(summary, row, sc, font=GREEN_XREF, fmt="0.00").value = (
-                f"=SUM(Plan!{first_col_l}{plan_wp_row}:{last_col_l}{plan_wp_row})"
+                f"=SUM({SHEET_PLAN}!{first_col_l}{plan_wp_row}:{last_col_l}{plan_wp_row})"
             )
             # Plan EUR = Plan FTE * fte_rate
             style_cell(summary, row, sc + 1, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
@@ -127,7 +131,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
             )
             # Actual EUR (cross-sheet ref to Actuals sheet)
             style_cell(summary, row, sc + 2, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
-                f"=SUM(Actuals!{first_col_l}{actuals_wp_row}:{last_col_l}{actuals_wp_row})"
+                f"=SUM({SHEET_ACTUALS}!{first_col_l}{actuals_wp_row}:{last_col_l}{actuals_wp_row})"
             )
             # Variance EUR = Plan EUR - Actual EUR
             style_cell(summary, row, sc + 3, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
@@ -202,7 +206,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
     style_cell(summary, r, 1, "Personnel Actual", font=HEADER_FONT, border=False)
     style_cell(summary, r, 2, font=GREEN_XREF, fmt="\u20ac#,##0",
                border=False).value = (
-        f"=Actuals!{col_letter(val_col_sum)}{actuals_total_row}"
+        f"={SHEET_ACTUALS}!{col_letter(val_col_sum)}{actuals_total_row}"
     )
     r += 1
 
@@ -245,5 +249,4 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
             formula=[f"B{remaining_row}<0"], fill=RED_FILL,
         ))
 
-    # Column widths
     summary.freeze_panes = f"C{SUMMARY_FIRST_WP_ROW}"

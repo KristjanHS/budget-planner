@@ -2,6 +2,7 @@
 from openpyxl.styles import Font
 from datetime import datetime
 
+from budget_planner.layout import MONTH_COL_START, month_col_end as _month_col_end, val_columns
 from budget_planner.styles import WRAP, col_letter
 
 
@@ -47,20 +48,18 @@ def build_meta_sheet(ws, layout, *, project_params=None, work_packages=None,
     assert team is not None
     assert external_commitments is not None
 
-    month_col_start = 3
+    month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
-    month_col_end = month_col_start + project_params["months"] - 1
-    val_col_sum = month_col_end + 1
-    val_col_budget = month_col_end + 2
-    val_col_diff = month_col_end + 3
-    val_col_cum = val_col_diff + 1
-    val_col_pct_ceil = val_col_diff + 2
-    val_col_breach = val_col_diff + 3
+    month_col_end = _month_col_end(project_params["months"])
+    _vcols = val_columns(project_params["months"])
+    val_col_sum = _vcols["sum"]
+    val_col_budget = _vcols["budget"]
+    val_col_diff = _vcols["diff"]
+    val_col_cum = _vcols["cum"]
+    val_col_pct_ceil = _vcols["pct_ceil"]
+    val_col_breach = _vcols["breach"]
 
     # Derive row numbers from layout dict
-    config_end = layout["config_total_row"]
-    wp_last_config = layout["config_last_wp_row"]
-    config_total = layout["config_total_row"]
     plan_header = layout["planned_header_row"]
     plan_year_row = layout["planned_header_row"] + 1
     plan_month_row = layout["planned_header_row"] + 2
@@ -72,9 +71,8 @@ def build_meta_sheet(ws, layout, *, project_params=None, work_packages=None,
     sum_last_wp = 4 + num_wps
     sum_total = 5 + num_wps
 
-    # Team sheet references
+    # Team roster references (now in Config sheet)
     num_team = len(team)
-    roster_last = 2 + num_team  # header rows 1-2, data starts row 3
     num_ext = len(external_commitments)
 
     # Column letters
@@ -94,28 +92,12 @@ PURPOSE: Track planned FTE allocation and actual EUR spend per work package per 
 
 ═══ SHEET INDEX ═══
 1. _META        — This sheet. AI-agent-readable documentation of workbook structure, conventions, and modification instructions.
-2. Plan         — Global parameters + config table + Planned FTE (formulas from Capacity).
-3. Team         — Person roster + WP share seeds for initial allocation.
+2. Config       — Project parameters + WP table + team roster.
+3. Plan         — Compact header + Planned FTE (formulas from Capacity).
 4. Capacity     — Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects.
 5. Actuals      — EUR actuals per WP per month (input from accountant). Tab color: Blue.
 6. Summary      — Annual aggregation. Plan FTE, Plan EUR, Actual EUR, Variance EUR per WP per year. Budget overview.
 7. Trends       — WP burn rate & exhaustion, cumulative EUR chart, person load. Tab color: Gold (FFD700).
-
-═══ TEAM SHEET STRUCTURE ═══
-
-SHEET: TEAM
-  Tab color: Orange
-
-  BLOCK 1: TEAM ROSTER (rows 1-{roster_last})
-    Row 1: Section header "TEAM ROSTER"
-    Row 2: Column headers (Person, Max FTE)
-    Rows 3-{roster_last}: One row per team member (input, blue text)
-
-  BLOCK 2: WP SHARE SEEDS (below roster)
-    Section header + column headers (Person, then one col per WP ID)
-    Data rows: one per team member, share fraction per WP (input, blue text)
-    Validation row: SUM per column (should equal 1.0)
-    NOTE: Shares are used only for initial seeding. Capacity is source of truth.
 
 ═══ CAPACITY SHEET STRUCTURE ═══
 
@@ -129,11 +111,11 @@ SHEET: CAPACITY (primary planning surface)
   YEAR/MONTH HEADERS: same layout as Plan sheet
 
   PER-PERSON GROUPS: one group per team member ({num_team} people)
-    Person Header: bold, section fill, formula ref to Team roster
-    Programme WP Rows: WP ID/Name formula refs to Plan config, monthly FTE (input, blue)
+    Person Header: bold, section fill, formula ref to Config roster
+    Programme WP Rows: WP ID/Name formula refs to Config WP table, monthly FTE (input, blue)
     External Project Rows: project name (input), monthly FTE (input, blue)
     TOTAL Row: SUM of all rows above (formula)
-    REMAINING Row: Team Max FTE - TOTAL (formula)
+    REMAINING Row: Config Max FTE - TOTAL (formula)
 
   CONDITIONAL FORMATTING:
     TOTAL > Max FTE: red fill (overcommitted)
@@ -144,27 +126,14 @@ SHEET: CAPACITY (primary planning surface)
 
 ═══ PLAN SHEET STRUCTURE ═══
 
-BLOCK 1: GLOBAL PARAMETERS (Rows 1-4, columns A-B only)
-  B1 = Project title (text, input)
-  B2 = Project start date (date, input). All month columns derive calendar dates from this.
-  B3 = Monthly FTE rate in EUR (number, input). Used to derive euro amounts.
-  B4 = Personnel Ceiling (formula: SUM of config column G). Total budget in EUR.
+ROW 1: COMPACT HEADER
+  B1 = Project title (green cross-ref to Config!B1)
+  E1 = Project start date (green cross-ref to Config!B2, MMM YYYY format)
+  G1 = FTE Rate (green cross-ref to Config!B4, EUR format)
+  I1 = Personnel Ceiling (formula: SUM of Config!G column, EUR format)
+       Also serves as the partner_ceiling named range target.
 
-BLOCK 2: CONFIGURATION TABLE (Rows 6-{config_end})
-  Row 6 = Section header "CONFIGURATION"
-  Row 7 = Column headers
-  Rows 8-{wp_last_config} = One row per WP
-  Columns:
-    A = WP ID (text, input)
-    B = WP Name (text, input)
-    C = Total FTE budget in person-months (number, input)
-    D = Start month number 1-{pm} (integer, input)
-    E = End month number 1-{pm} (integer, input)
-    F = Active months (formula: E-D+1)
-    G = Personnel Ceiling (€) (formula: C * fte_rate)
-  Row {config_total} = Totals row
-
-BLOCK 3: PLANNED FTE (Rows {plan_header}-{plan_total})
+PLANNED FTE (Rows {plan_header}-{plan_total})
   Row {plan_header} = Section header "PLANNED FTE (PERSON-MONTHS)"
   Row {plan_year_row} = Year labels (merged per 12 months)
   Row {plan_month_row} = Month numbers (M1..M{pm}) in columns {first_mcol}..{last_mcol}
@@ -188,13 +157,13 @@ SHEET: ACTUALS (EUR actuals from accountant)
   Row 2 = Year labels (merged per 12 months, same layout as Plan)
   Row 3 = Month headers (M1..M{pm}) in columns {first_mcol}..{last_mcol}
   Rows 4-{act_last_wp} = One row per WP
-    Col A = WP ID (formula, cross-ref to Plan config via =Plan!A{{config_row}})
-    Col B = WP Name (formula, cross-ref to Plan config via =Plan!B{{config_row}})
+    Col A = WP ID (formula, cross-ref to Config via =Config!A{{config_row}})
+    Col B = WP Name (formula, cross-ref to Config via =Config!B{{config_row}})
     Cols {first_mcol}-{last_mcol} = EUR amount per month (input, blue text, €#,##0 format)
       - Active months initialized to 0
       - Inactive months greyed out and empty (same WP active period as Plan)
     Col {val_sum_col} = Sum of monthly EUR (formula: SUM)
-    Col {val_budget_col} = Ceiling EUR from Plan config column G (formula, green cross-ref)
+    Col {val_budget_col} = Ceiling EUR from Config column G (formula, green cross-ref)
     Col {val_diff_col} = Variance: Ceiling - Sum (formula). Negative = OVERRUN.
     Col {val_cum_col} = Cum. EUR: SUMPRODUCT cumulative up to current_month (formula)
     Col {val_pct_col} = % Ceiling: Cum. EUR / Ceiling (formula, 0.0% format)
@@ -246,7 +215,7 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
     Row 32 = Section header "PERSON LOAD" (merged A-E)
     Row 33 = Column headers: Person, Avg FTE (to date), Avg FTE (remaining), Peak Month FTE, Status
     Rows 34-37 = One row per team member ({num_team} people)
-      - Formulas reference Capacity TOTAL rows and Team roster
+      - Formulas reference Capacity TOTAL rows and Config roster
       - Status = OVER/WATCH/OK based on remaining avg vs max_fte
     Conditional formatting: green/amber/red on Status and Peak Month
 
@@ -273,17 +242,16 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
     Percentages: 0.0%
 
 ═══ DATA FLOW ═══
-  Team → Capacity → Plan ← Actuals → Summary (no circular refs)
+  Config → Capacity → Plan ← Actuals → Summary (no circular refs)
                                   ↘ Trends ↙
 
-  Team roster (names, Max FTE) --> Capacity person headers + REMAINING formulas
-  Team WP shares --> Capacity seed values (generation-time only)
+  Config roster (names, Max FTE) --> Capacity person headers + REMAINING formulas
   Capacity monthly FTE (input) --> Plan Planned FTE (SUM formulas across people)
   Plan config (WP budgets) --> Actuals ceiling validation
   Actuals monthly EUR (input) --> Summary actual EUR aggregation
   Plan Planned FTE --> Summary planned FTE/EUR aggregation
   Actuals cumulative columns + Plan config --> Trends burn rate & exhaustion
-  Capacity TOTAL rows + Team roster --> Trends person load
+  Capacity TOTAL rows + Config roster --> Trends person load
   Plan Planned FTE + Actuals TOTAL --> Trends cumulative chart
 
   PRIMARY PLANNING SURFACE: Capacity sheet. Edit monthly FTE per person there.
@@ -292,7 +260,7 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
   Trends sheet is read-only formulas — set current_month (Trends!B1) to update.
 
 ═══ BUILD ORDER ═══
-  Config → Plan → Team → Capacity → patch Plan → Trends skeleton → Actuals → Summary → Trends → _META
+  Config → Plan → Capacity → patch Plan → Trends skeleton → Actuals → Summary → Trends → _META
   Config sheet created first so named ranges are available for Plan formulas.
   Trends skeleton (B1 + named range) created before Actuals so current_month is available.
   Trends content populated after Actuals/Summary so their layouts are known.
@@ -300,7 +268,7 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
 ═══ NAMED RANGES ═══
   project_start   = Config!$B$2   (project start date)
   fte_rate         = Config!$B$4   (monthly EUR rate per person-month)
-  partner_ceiling  = Plan!$B$4     (total personnel ceiling in EUR)
+  partner_ceiling  = Plan!$I$1     (total personnel ceiling in EUR)
   current_month    = Trends!$B$1   (last month with completed actuals, blue input)
 
 FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for month iterations.
@@ -313,9 +281,8 @@ TO ADD A WORK PACKAGE:
   3. Rebuild regenerates all sheets. Existing Capacity FTE and Actuals EUR are preserved.
 
 TO ADD A TEAM MEMBER:
-  1. Add a row to the Team sheet roster (Name, Max FTE)
-  2. Add share seeds in the WP Share Seeds matrix
-  3. Run: python -m budget_planner rebuild
+  1. Add a row to the Config sheet TEAM ROSTER section (Name, Max FTE)
+  2. Run: python -m budget_planner rebuild
 
 TO CHANGE PROJECT DURATION:
   1. Edit Project Months on the Config sheet (cell B3)
@@ -326,7 +293,7 @@ TO CHANGE FTE RATE:
   Edit cell B4 on Config sheet. All EUR calculations update via the fte_rate named range.
 
 TO REPLACE EXAMPLE DATA:
-  Edit Config sheet (WPs), Team sheet (roster + shares), Capacity config block
+  Edit Config sheet (WPs, team roster), Capacity config block
   (external commitments). Then run: python -m budget_planner rebuild
 
 SCENARIO PLANNING:
@@ -350,9 +317,6 @@ SCENARIO PLANNING:
    LOG section below.
 """.format(
         date=datetime.now().strftime("%Y-%m-%d"),
-        config_end=config_end,
-        wp_last_config=wp_last_config,
-        config_total=config_total,
         pm=project_params["months"],
         plan_header=plan_header,
         plan_year_row=plan_year_row,
@@ -371,7 +335,6 @@ SCENARIO PLANNING:
         val_breach_col=val_breach_col,
         sum_last_wp=sum_last_wp,
         sum_total=sum_total,
-        roster_last=roster_last,
         num_team=num_team,
         num_ext=num_ext,
     )

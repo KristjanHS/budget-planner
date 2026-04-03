@@ -4,7 +4,8 @@ import pytest
 import openpyxl
 
 from budget_planner.workbook import generate_workbook
-from budget_planner.config import TEAM, PROJECT_MONTHS
+from budget_planner.layout import _calendar_year_groups
+from budget_planner.config import TEAM, WORK_PACKAGES, PROJECT_MONTHS, PROJECT_START
 
 
 # ── Fixtures ──
@@ -45,7 +46,7 @@ class TestCapacityConditionalFormatting:
         """Yellow per WP row + 3 per person = expected total."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        total_wp_rows = sum(len(m["wps"]) for m in TEAM)
+        total_wp_rows = len(WORK_PACKAGES) * len(TEAM)
         expected = total_wp_rows + 3 * len(TEAM)
         assert len(rules) == expected, (
             f"Expected {expected} CF rules on Capacity, got {len(rules)}"
@@ -60,13 +61,13 @@ class TestCapacityConditionalFormatting:
         # Find the amber rule by scanning for FFD966 fill with >0.8 pattern
         amber_rules = [(i, r) for i, r in enumerate(rules)
                         if r[2] is not None and r[2].endswith("FFD966")
-                        and any(">0.8*Team!$B$" in f for f in r[1])]
+                        and any(">0.8*Config!$B$" in f for f in r[1])]
         assert len(amber_rules) >= person_idx + 1, (
             f"Expected at least {person_idx + 1} amber TOTAL rules, got {len(amber_rules)}"
         )
         _, (sqref, formulas, fg_color) = amber_rules[person_idx]
-        assert ">0.8*Team!$B$" in formulas[0], (
-            f"Amber formula should reference >0.8*Team!$B$<row>, got: {formulas[0]}"
+        assert ">0.8*Config!$B$" in formulas[0], (
+            f"Amber formula should reference >0.8*Config!$B$<row>, got: {formulas[0]}"
         )
 
     @pytest.mark.parametrize("person_idx", range(len(TEAM)))
@@ -74,16 +75,16 @@ class TestCapacityConditionalFormatting:
         """Each person's TOTAL row has a red fill for > Max FTE."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        # Find red TOTAL rules: FFC7CE fill with >Team! pattern (no 0.8)
+        # Find red TOTAL rules: FFC7CE fill with >Config! pattern (no 0.8)
         red_total_rules = [(i, r) for i, r in enumerate(rules)
                            if r[2] is not None and r[2].endswith("FFC7CE")
-                           and any(">Team!$B$" in f for f in r[1])
+                           and any(">Config!$B$" in f for f in r[1])
                            and not any("0.8" in f for f in r[1])]
         assert len(red_total_rules) >= person_idx + 1, (
             f"Expected at least {person_idx + 1} red TOTAL rules, got {len(red_total_rules)}"
         )
         _, (sqref, formulas, fg_color) = red_total_rules[person_idx]
-        assert ">Team!$B$" in formulas[0]
+        assert ">Config!$B$" in formulas[0]
         assert "0.8" not in formulas[0]
 
     @pytest.mark.parametrize("person_idx", range(len(TEAM)))
@@ -95,7 +96,7 @@ class TestCapacityConditionalFormatting:
         red_remaining_rules = [(i, r) for i, r in enumerate(rules)
                                if r[2] is not None and r[2].endswith("FFC7CE")
                                and any("<0" in f for f in r[1])
-                               and not any("Team" in f for f in r[1])]
+                               and not any("Config" in f for f in r[1])]
         assert len(red_remaining_rules) >= person_idx + 1, (
             f"Expected at least {person_idx + 1} red REMAINING rules, got {len(red_remaining_rules)}"
         )
@@ -112,63 +113,81 @@ class TestSummaryConditionalFormatting:
         """Each year's Variance EUR column has a red fill for < 0."""
         ws = workbook["Summary"]
         rules = _collect_cf_rules(ws)
-        num_years = (PROJECT_MONTHS + 11) // 12
-        # Year variance rules are the first num_years rules
-        for y in range(num_years):
-            sqref, formulas, fg_color = rules[y]
+        num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
+        # Match by: RED_FILL + <0 formula + range sqref (contains ':')
+        variance_red_rules = [
+            r for r in rules
+            if r[2] is not None and r[2].endswith("FFC7CE")
+            and any("<0" in f for f in r[1])
+            and ":" in r[0]
+        ]
+        # Year variance + project total variance = num_years + 1 total range-based red rules
+        assert len(variance_red_rules) >= num_years, (
+            f"Expected at least {num_years} red variance range rules, got {len(variance_red_rules)}"
+        )
+        for rule in variance_red_rules[:num_years]:
+            sqref, formulas, fg_color = rule
             assert len(formulas) == 1
             assert "<0" in formulas[0], (
-                f"Year {y+1} variance formula should contain '<0', got: {formulas[0]}"
-            )
-            assert fg_color is not None and fg_color.endswith("FFC7CE"), (
-                f"Year {y+1}: expected RED_FILL (FFC7CE), got: {fg_color}"
+                f"Year variance formula should contain '<0', got: {formulas[0]}"
             )
 
     def test_summary_project_total_variance_red(self, workbook):
         """Project total Variance EUR column has a red fill for < 0."""
         ws = workbook["Summary"]
         rules = _collect_cf_rules(ws)
-        num_years = (PROJECT_MONTHS + 11) // 12
-        # Project total variance is added after all year variance rules
-        sqref, formulas, fg_color = rules[num_years]
-        assert len(formulas) == 1
-        assert "<0" in formulas[0], (
-            f"Project total variance formula should contain '<0', got: {formulas[0]}"
-        )
-        assert fg_color is not None and fg_color.endswith("FFC7CE"), (
-            f"Expected RED_FILL (FFC7CE), got: {fg_color}"
+        num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
+        # Match by: RED_FILL + <0 formula + range sqref (contains ':')
+        variance_red_rules = [
+            r for r in rules
+            if r[2] is not None and r[2].endswith("FFC7CE")
+            and any("<0" in f for f in r[1])
+            and ":" in r[0]
+        ]
+        # Year variance + project total variance = num_years + 1 total range-based red rules
+        assert len(variance_red_rules) == num_years + 1, (
+            f"Expected {num_years + 1} red variance range rules (year + total), "
+            f"got {len(variance_red_rules)}"
         )
 
     def test_summary_remaining_amber(self, workbook):
         """Remaining cell has amber fill when < 10% of ceiling."""
         ws = workbook["Summary"]
         rules = _collect_cf_rules(ws)
-        num_years = (PROJECT_MONTHS + 11) // 12
-        # Remaining amber is after year variance + project total variance
-        amber_idx = num_years + 1
-        sqref, formulas, fg_color = rules[amber_idx]
+        # Match by: AMBER_FILL (only one amber rule on Summary)
+        amber_rules = [
+            r for r in rules
+            if r[2] is not None and r[2].endswith("FFD966")
+            and any("*0.1" in f for f in r[1])
+        ]
+        assert len(amber_rules) == 1, (
+            f"Expected exactly 1 amber remaining rule, got {len(amber_rules)}"
+        )
+        sqref, formulas, fg_color = amber_rules[0]
         assert len(formulas) == 1
         assert "*0.1" in formulas[0], (
             f"Remaining amber formula should contain '*0.1', got: {formulas[0]}"
-        )
-        assert fg_color is not None and fg_color.endswith("FFD966"), (
-            f"Expected AMBER_FILL (FFD966), got: {fg_color}"
         )
 
     def test_summary_remaining_red(self, workbook):
         """Remaining cell has red fill when < 0."""
         ws = workbook["Summary"]
         rules = _collect_cf_rules(ws)
-        num_years = (PROJECT_MONTHS + 11) // 12
-        # Remaining red is the last summary rule
-        red_idx = num_years + 2
-        sqref, formulas, fg_color = rules[red_idx]
+        # Match by: RED_FILL + <0 formula + single-cell sqref (no ':')
+        red_single_cell_rules = [
+            r for r in rules
+            if r[2] is not None and r[2].endswith("FFC7CE")
+            and any("<0" in f for f in r[1])
+            and ":" not in r[0]
+        ]
+        assert len(red_single_cell_rules) == 1, (
+            f"Expected exactly 1 red single-cell rule (remaining), "
+            f"got {len(red_single_cell_rules)}"
+        )
+        sqref, formulas, fg_color = red_single_cell_rules[0]
         assert len(formulas) == 1
         assert "<0" in formulas[0], (
             f"Remaining red formula should contain '<0', got: {formulas[0]}"
-        )
-        assert fg_color is not None and fg_color.endswith("FFC7CE"), (
-            f"Expected RED_FILL (FFC7CE), got: {fg_color}"
         )
 
 

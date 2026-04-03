@@ -6,6 +6,11 @@ from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import PatternFill
 
+from budget_planner.layout import (
+    MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS, SHEET_CAPACITY,
+    TREND_OK_BAND, TREND_OVER_THRESHOLD, TREND_WATCH_THRESHOLD, TREND_SLOW_THRESHOLD,
+    CAPACITY_AMBER_LOAD, month_col_end as _month_col_end, val_columns,
+)
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FONT, SECTION_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
@@ -49,10 +54,10 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     assert work_packages is not None
     assert team is not None
 
-    month_col_start = 3
+    month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
-    month_col_end = month_col_start + project_params["months"] - 1
-    val_col_budget = month_col_end + 2
+    month_col_end = _month_col_end(project_params["months"])
+    val_col_budget = val_columns(project_params["months"])["budget"]
 
     cum_col_letter = col_letter(actuals_layout["cum_col"])
     ceiling_col_letter = col_letter(val_col_budget)
@@ -60,7 +65,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     me = col_letter(month_col_end)
 
     # ================================================================
-    # Section 1: WP Burn Rate & Exhaustion Table (rows 3-13)
+    # Section 1: WP Burn Rate & Exhaustion Table
     # ================================================================
     section1_row = 3
     ws.merge_cells(start_row=section1_row, start_column=1,
@@ -87,88 +92,88 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         "Programme Budget Tool",
     )
 
-    # WP data rows (rows 5-12)
-    first_wp_data_row = 5
+    # WP data rows
+    first_wp_data_row = header_row + 1
     last_wp_data_row = first_wp_data_row + num_wps - 1
 
     for i, wp in enumerate(work_packages):
         row = first_wp_data_row + i
         config_row = layout["config_first_wp_row"] + i
         actuals_row = actuals_layout["first_wp_row"] + i
-        actuals_month_range = f"Actuals!{ms}{actuals_row}:{me}{actuals_row}"
+        actuals_month_range = f"{SHEET_ACTUALS}!{ms}{actuals_row}:{me}{actuals_row}"
 
         # Col A: WP ID (green cross-sheet ref)
-        style_cell(ws, row, 1, font=GREEN_XREF).value = f"=Plan!A{config_row}"
+        style_cell(ws, row, 1, font=GREEN_XREF).value = f"={SHEET_CONFIG}!A{config_row}"
 
         # Col B: WP Name (green cross-sheet ref)
-        style_cell(ws, row, 2, font=GREEN_XREF).value = f"=Plan!B{config_row}"
+        style_cell(ws, row, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
         # Col C: % Time Elapsed
         time_formula = (
-            f"MIN(1,(current_month-Plan!D{config_row}+1)"
-            f"/(Plan!E{config_row}-Plan!D{config_row}+1))"
+            f"MIN(1,(current_month-{SHEET_CONFIG}!D{config_row}+1)"
+            f"/({SHEET_CONFIG}!E{config_row}-{SHEET_CONFIG}!D{config_row}+1))"
         )
         style_cell(ws, row, 3, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<Plan!D{config_row},"\u2014",{time_formula})'
+            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",{time_formula})'
         )
 
         # Col D: % Budget EUR
         budget_formula = (
-            f"Actuals!{cum_col_letter}{actuals_row}"
-            f"/Actuals!{ceiling_col_letter}{actuals_row}"
+            f"{SHEET_ACTUALS}!{cum_col_letter}{actuals_row}"
+            f"/{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
         )
         style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<Plan!D{config_row},"\u2014",{budget_formula})'
+            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",{budget_formula})'
         )
 
         # Col E: Burn Delta
         style_cell(ws, row, 5, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<Plan!D{config_row},"\u2014",D{row}-C{row})'
+            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",D{row}-C{row})'
         )
 
         # Col F: Status
         status_formula = (
-            f'IF(ABS(E{row})<=0.05,"OK",'
-            f'IF(E{row}>0.15,"OVER",'
-            f'IF(E{row}>0.05,"WATCH",'
-            f'IF(E{row}<-0.10,"SLOW","OK"))))'
+            f'IF(ABS(E{row})<={TREND_OK_BAND},"OK",'
+            f'IF(E{row}>{TREND_OVER_THRESHOLD},"OVER",'
+            f'IF(E{row}>{TREND_WATCH_THRESHOLD},"WATCH",'
+            f'IF(E{row}<{TREND_SLOW_THRESHOLD},"SLOW","OK"))))'
         )
         style_cell(ws, row, 6, font=BLACK_FORMULA).value = (
-            f'=IF(current_month<Plan!D{config_row},"\u2014",{status_formula})'
+            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",{status_formula})'
         )
 
         # Col G: Exhaustion Mo.
         exhaustion_formula = (
             f"IF(D{row}=0,\"\u2014\","
             f"IF(COUNTIF({actuals_month_range},\">0\")=0,\"No data\","
-            f"Plan!D{config_row}+ROUND("
-            f"Actuals!{ceiling_col_letter}{actuals_row}"
-            f"/(Actuals!{cum_col_letter}{actuals_row}"
+            f"{SHEET_CONFIG}!D{config_row}+ROUND("
+            f"{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
+            f"/({SHEET_ACTUALS}!{cum_col_letter}{actuals_row}"
             f"/COUNTIF({actuals_month_range},\">0\")),0)-1))"
         )
         style_cell(ws, row, 7, font=BLACK_FORMULA, fmt="0").value = (
-            f'=IF(current_month<Plan!D{config_row},"\u2014",{exhaustion_formula})'
+            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",{exhaustion_formula})'
         )
 
     # -- Conditional formatting: Burn Delta (col E, rows 5-12) --
     e_range = f"E{first_wp_data_row}:E{last_wp_data_row}"
     e_ref = f"E{first_wp_data_row}"
 
-    # Green first (lowest priority) — ABS(delta) <= 0.05
+    # Green first (lowest priority) — ABS(delta) <= TREND_OK_BAND
     ws.conditional_formatting.add(e_range, FormulaRule(
-        formula=[f'ABS({e_ref})<=0.05'], fill=_GREEN_CF_FILL,
+        formula=[f'ABS({e_ref})<={TREND_OK_BAND}'], fill=_GREEN_CF_FILL,
     ))
-    # Amber: overspend (delta > 0.05 AND delta <= 0.15)
+    # Amber: overspend (delta > TREND_WATCH_THRESHOLD AND delta <= TREND_OVER_THRESHOLD)
     ws.conditional_formatting.add(e_range, FormulaRule(
-        formula=[f'AND({e_ref}>0.05,{e_ref}<=0.15)'], fill=_AMBER_CF_FILL,
+        formula=[f'AND({e_ref}>{TREND_WATCH_THRESHOLD},{e_ref}<={TREND_OVER_THRESHOLD})'], fill=_AMBER_CF_FILL,
     ))
-    # Amber: underspend (delta < -0.10)
+    # Amber: underspend (delta < TREND_SLOW_THRESHOLD)
     ws.conditional_formatting.add(e_range, FormulaRule(
-        formula=[f'{e_ref}<-0.10'], fill=_AMBER_CF_FILL,
+        formula=[f'{e_ref}<{TREND_SLOW_THRESHOLD}'], fill=_AMBER_CF_FILL,
     ))
-    # Red: delta > 0.15
+    # Red: delta > TREND_OVER_THRESHOLD
     ws.conditional_formatting.add(e_range, FormulaRule(
-        formula=[f'{e_ref}>0.15'], fill=_RED_CF_FILL,
+        formula=[f'{e_ref}>{TREND_OVER_THRESHOLD}'], fill=_RED_CF_FILL,
     ))
 
     # -- Conditional formatting: Status (col F, rows 5-12) --
@@ -197,15 +202,15 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         g_ref = f"G{row}"
         # Green first: exhaustion >= wp_end
         ws.conditional_formatting.add(g_cell, FormulaRule(
-            formula=[f'AND(ISNUMBER({g_ref}),{g_ref}>=Plan!E{config_row})'],
+            formula=[f'AND(ISNUMBER({g_ref}),{g_ref}>={SHEET_CONFIG}!E{config_row})'],
             fill=_GREEN_CF_FILL,
         ))
         # Amber: exhaustion within 3 months of wp_end
         ws.conditional_formatting.add(g_cell, FormulaRule(
             formula=[
                 f'AND(ISNUMBER({g_ref}),'
-                f'{g_ref}<Plan!E{config_row},'
-                f'{g_ref}>=Plan!E{config_row}-3)'
+                f'{g_ref}<{SHEET_CONFIG}!E{config_row},'
+                f'{g_ref}>={SHEET_CONFIG}!E{config_row}-3)'
             ],
             fill=_AMBER_CF_FILL,
         ))
@@ -213,36 +218,41 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         ws.conditional_formatting.add(g_cell, FormulaRule(
             formula=[
                 f'AND(ISNUMBER({g_ref}),'
-                f'{g_ref}<Plan!E{config_row}-3)'
+                f'{g_ref}<{SHEET_CONFIG}!E{config_row}-3)'
             ],
             fill=_RED_CF_FILL,
         ))
 
-    # -- TOTAL row (row 13) --
+    # -- TOTAL row --
     total_row = last_wp_data_row + 1
     act_first = actuals_layout["first_wp_row"]
-    act_last = actuals_layout["last_wp_row"]
     style_cell(ws, total_row, 1, "", fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 2, "TOTAL", font=HEADER_FONT,
                fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 3, "", fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 4, "", fill=LIGHT_GREEN_FILL)
-    # Weighted average burn delta (ISNUMBER guard for WPs showing "—")
+    # Weighted average burn delta — individual IF() terms avoid text*number #VALUE!
+    terms = []
+    for i in range(num_wps):
+        wr = first_wp_data_row + i
+        ar = act_first + i
+        terms.append(
+            f"IF(ISNUMBER(E{wr}),E{wr}*{SHEET_ACTUALS}!"
+            f"{ceiling_col_letter}{ar},0)"
+        )
     style_cell(ws, total_row, 5, font=BLACK_FORMULA,
                fill=LIGHT_GREEN_FILL, fmt="0.0%").value = (
-        f"=SUMPRODUCT(IF(ISNUMBER(E{first_wp_data_row}:E{last_wp_data_row}),"
-        f"E{first_wp_data_row}:E{last_wp_data_row},0),"
-        f"Actuals!{ceiling_col_letter}{act_first}"
-        f":{ceiling_col_letter}{act_last})"
-        f"/partner_ceiling"
+        "=(" + "+".join(terms) + ")/partner_ceiling"
     )
     style_cell(ws, total_row, 6, "", fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 7, "", fill=LIGHT_GREEN_FILL)
 
     # ================================================================
-    # Section 2: Person Load Table (rows 32-37+)
+    # Section 2: Person Load Table
     # ================================================================
-    person_section_row = 32
+    # Chart is anchored 2 rows below total and occupies ~15 rows of height
+    chart_anchor_row = total_row + 2
+    person_section_row = chart_anchor_row + 16  # chart height ~15 rows
     ws.merge_cells(start_row=person_section_row, start_column=1,
                    end_row=person_section_row, end_column=5)
     style_cell(ws, person_section_row, 1, "PERSON LOAD",
@@ -250,8 +260,8 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     for c in range(2, 6):
         style_cell(ws, person_section_row, c, fill=SECTION_FILL)
 
-    # Column headers (row 33)
-    person_header_row = 33
+    # Column headers
+    person_header_row = person_section_row + 1
     person_headers = [
         "Person", "Avg FTE (to date)", "Avg FTE (remaining)",
         "Peak Month FTE", "Status",
@@ -260,8 +270,8 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         style_cell(ws, person_header_row, ci, h, font=HEADER_FONT,
                    fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
-    # Person data rows (row 34+)
-    person_first_row = 34
+    # Person data rows
+    person_first_row = person_header_row + 1
     person_groups = capacity_layout["person_groups"]
     person_rows_map = team_layout["person_rows"]
 
@@ -273,36 +283,36 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
 
         # Col A: Person name (green cross-sheet ref)
         style_cell(ws, row, 1, font=GREEN_XREF).value = (
-            f"=Team!A{roster_row}"
+            f"={SHEET_CONFIG}!A{roster_row}"
         )
 
         # Col B: Avg FTE (to date)
         style_cell(ws, row, 2, font=BLACK_FORMULA, fmt="0.00").value = (
             f"=IF(current_month=0,0,"
-            f"SUMPRODUCT((COLUMN(Capacity!{ms}{tr}:{me}{tr})"
-            f"-COLUMN(Capacity!${ms}$1)+1<=current_month)"
-            f"*(Capacity!{ms}{tr}:{me}{tr}))"
+            f"SUMPRODUCT((COLUMN({SHEET_CAPACITY}!{ms}{tr}:{me}{tr})"
+            f"-COLUMN({SHEET_CAPACITY}!${ms}$1)+1<=current_month)"
+            f"*({SHEET_CAPACITY}!{ms}{tr}:{me}{tr}))"
             f"/current_month)"
         )
 
         # Col C: Avg FTE (remaining)
         style_cell(ws, row, 3, font=BLACK_FORMULA, fmt="0.00").value = (
             f"=IF(current_month>={project_params['months']},0,"
-            f"SUMPRODUCT((COLUMN(Capacity!{ms}{tr}:{me}{tr})"
-            f"-COLUMN(Capacity!${ms}$1)+1>current_month)"
-            f"*(Capacity!{ms}{tr}:{me}{tr}))"
+            f"SUMPRODUCT((COLUMN({SHEET_CAPACITY}!{ms}{tr}:{me}{tr})"
+            f"-COLUMN({SHEET_CAPACITY}!${ms}$1)+1>current_month)"
+            f"*({SHEET_CAPACITY}!{ms}{tr}:{me}{tr}))"
             f"/({project_params['months']}-current_month))"
         )
 
         # Col D: Peak Month FTE
         style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="0.00").value = (
-            f"=MAX(Capacity!{ms}{tr}:{me}{tr})"
+            f"=MAX({SHEET_CAPACITY}!{ms}{tr}:{me}{tr})"
         )
 
         # Col E: Status
         style_cell(ws, row, 5, font=BLACK_FORMULA).value = (
-            f'=IF(C{row}>Team!B{roster_row},"OVER",'
-            f'IF(C{row}>0.8*Team!B{roster_row},"WATCH","OK"))'
+            f'=IF(C{row}>{SHEET_CONFIG}!B{roster_row},"OVER",'
+            f'IF(C{row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!B{roster_row},"WATCH","OK"))'
         )
 
     person_last_row = person_first_row + len(team) - 1
@@ -317,31 +327,32 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
 
         # Status CF (green/amber/red based on col C vs max_fte)
         ws.conditional_formatting.add(e_cell, FormulaRule(
-            formula=[f'C{row}<=0.8*Team!$B${roster_row}'],
+            formula=[f'C{row}<={CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}'],
             fill=_GREEN_CF_FILL,
         ))
         ws.conditional_formatting.add(e_cell, FormulaRule(
-            formula=[f'C{row}>0.8*Team!$B${roster_row}'],
+            formula=[f'C{row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}'],
             fill=_AMBER_CF_FILL,
         ))
         ws.conditional_formatting.add(e_cell, FormulaRule(
-            formula=[f'C{row}>Team!$B${roster_row}'],
+            formula=[f'C{row}>{SHEET_CONFIG}!$B${roster_row}'],
             fill=_RED_CF_FILL,
         ))
 
         # Peak Month CF (red if > max_fte)
         ws.conditional_formatting.add(d_cell, FormulaRule(
-            formula=[f'D{row}>Team!$B${roster_row}'],
+            formula=[f'D{row}>{SHEET_CONFIG}!$B${roster_row}'],
             fill=_RED_CF_FILL,
         ))
 
     # ================================================================
     # Section 3: Cumulative LineChart + hidden helper rows
     # ================================================================
-    # Helper rows placed at row 40+ (below person load section)
-    helper_row_planned = 40
-    helper_row_actual = 41
-    helper_row_ceiling = 42
+    # Helper rows placed below person load section (2-row gap)
+    helper_start_row = person_last_row + 2
+    helper_row_planned = helper_start_row
+    helper_row_actual = helper_start_row + 1
+    helper_row_ceiling = helper_start_row + 2
 
     plan_first_wp = layout["planned_first_wp_row"]
     plan_last_wp = layout["planned_last_wp_row"]
@@ -356,27 +367,27 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
             # First month: just the monthly total * fte_rate
             style_cell(ws, helper_row_planned, c,
                        font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"=SUM(Plan!{cl}{plan_first_wp}:{cl}{plan_last_wp})*fte_rate"
+                f"=SUM({SHEET_PLAN}!{cl}{plan_first_wp}:{cl}{plan_last_wp})*fte_rate"
             )
         else:
             prev_cl = col_letter(c - 1)
             style_cell(ws, helper_row_planned, c,
                        font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
                 f"={prev_cl}{helper_row_planned}"
-                f"+SUM(Plan!{cl}{plan_first_wp}:{cl}{plan_last_wp})*fte_rate"
+                f"+SUM({SHEET_PLAN}!{cl}{plan_first_wp}:{cl}{plan_last_wp})*fte_rate"
             )
 
         # Helper Row 2: Cumulative actual EUR
         if m_idx == 0:
             style_cell(ws, helper_row_actual, c,
                        font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"=Actuals!{cl}{act_total}"
+                f"={SHEET_ACTUALS}!{cl}{act_total}"
             )
         else:
             prev_cl = col_letter(c - 1)
             style_cell(ws, helper_row_actual, c,
                        font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"={prev_cl}{helper_row_actual}+Actuals!{cl}{act_total}"
+                f"={prev_cl}{helper_row_actual}+{SHEET_ACTUALS}!{cl}{act_total}"
             )
 
         # Helper Row 3: Ceiling line (flat)
@@ -431,8 +442,8 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     s_ceiling.graphicalProperties.line.dashStyle = "dash"
 
     # X-axis categories: M1..M60 labels
-    # Create labels in a helper area (row 43, hidden)
-    helper_row_labels = 43
+    # Create labels in a helper area (row after ceiling, hidden)
+    helper_row_labels = helper_row_ceiling + 1
     for m_idx in range(project_params["months"]):
         c = month_col_start + m_idx
         ws.cell(row=helper_row_labels, column=c, value=f"M{m_idx + 1}")
@@ -445,7 +456,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     # Chart dimensions and placement
     chart.width = 30
     chart.height = 15
-    ws.add_chart(chart, "A15")
+    ws.add_chart(chart, f"A{chart_anchor_row}")
 
     # ================================================================
     # Return layout dict
@@ -456,7 +467,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         "burn_rate_first_wp_row": first_wp_data_row,
         "burn_rate_last_wp_row": last_wp_data_row,
         "burn_rate_total_row": total_row,
-        "chart_anchor_row": 15,
+        "chart_anchor_row": chart_anchor_row,
         "person_load_section_row": person_section_row,
         "person_load_header_row": person_header_row,
         "person_load_first_row": person_first_row,

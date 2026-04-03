@@ -2,12 +2,12 @@
 import re
 
 import openpyxl
-import pytest
 from openpyxl.utils import get_column_letter
 
 from budget_planner.reader import discover_layout, read_capacity_sheet, read_plan_config
+from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    WORK_PACKAGES, TEAM, MONTH_COL_START, PROJECT_MONTHS,
+    WORK_PACKAGES, TEAM, MONTH_COL_START, PROJECT_MONTHS, PROJECT_START,
     NUM_WPS, VAL_COL_SUM,
 )
 
@@ -44,15 +44,6 @@ def test_capacity_to_plan_formula_linkage(fresh_wb_path):
         cap_row_refs = [int(m) for m in re.findall(r"Capacity!\w+(\d+)", cell_value)]
         assert len(cap_row_refs) > 0, f"No Capacity row refs found in formula: {cell_value}"
 
-        # Verify each referenced row belongs to a person assigned to this WP
-        for person_name, group in cap_data["person_groups"].items():
-            if wp["id"] in group["wp_values"]:
-                # This person should have a row referenced in the formula
-                # Find the capacity row for this person-WP pair
-                # We can't get exact rows from cap_data, but we can verify
-                # that the count of refs matches the count of assigned persons
-                pass
-
         # Count how many persons are assigned to this WP
         assigned_count = sum(
             1 for pg in cap_data["person_groups"].values()
@@ -66,8 +57,8 @@ def test_capacity_to_plan_formula_linkage(fresh_wb_path):
     wb.close()
 
 
-def test_team_shares_to_capacity_seed_values(fresh_wb_path):
-    """Capacity seed values match Team share * WP FTE / active months."""
+def test_capacity_all_wps_per_person_no_seeding(fresh_wb_path):
+    """Every person has ALL WPs in Capacity, with no seed values."""
     wb = openpyxl.load_workbook(fresh_wb_path)
     cap = wb["Capacity"]
     plan = wb["Plan"]
@@ -75,36 +66,26 @@ def test_team_shares_to_capacity_seed_values(fresh_wb_path):
     config_wps = read_plan_config(plan, layout)
     cap_data = read_capacity_sheet(cap, config_wps)
 
+    all_wp_ids = {wp["id"] for wp in WORK_PACKAGES}
+
     for member in TEAM:
         name = member["name"]
         assert name in cap_data["person_groups"], f"Person {name} not found in Capacity"
         person_group = cap_data["person_groups"][name]
 
-        for wp_id, share in member["wps"].items():
-            wp = next(w for w in WORK_PACKAGES if w["id"] == wp_id)
-            active_months = wp["end"] - wp["start"] + 1
-            expected_seed = round(share * wp["fte"] / active_months, 4) if active_months > 0 else 0
+        # Every person has a row for every WP
+        assert set(person_group["wp_values"].keys()) == all_wp_ids, (
+            f"{name}: expected all WPs, got {set(person_group['wp_values'].keys())}"
+        )
 
-            assert wp_id in person_group["wp_values"], (
-                f"{name} missing WP {wp_id} in Capacity"
-            )
-            monthly = person_group["wp_values"][wp_id]
-
-            # Check first active month value matches seed
-            first_active_idx = wp["start"] - 1
-            actual_val = monthly[first_active_idx]
-            assert actual_val == pytest.approx(expected_seed, abs=0.001), (
-                f"{name}/{wp_id} M{wp['start']}: expected seed {expected_seed}, "
-                f"got {actual_val}"
-            )
-
-            # Check inactive months are None
+        # All monthly values should be None (no seeding)
+        for wp in WORK_PACKAGES:
+            monthly = person_group["wp_values"][wp["id"]]
             for mi in range(PROJECT_MONTHS):
                 month_num = mi + 1
                 if month_num < wp["start"] or month_num > wp["end"]:
                     assert monthly[mi] is None, (
-                        f"{name}/{wp_id} M{month_num}: inactive month should be None, "
-                        f"got {monthly[mi]}"
+                        f"{name}/{wp['id']} M{month_num}: inactive month should be None"
                     )
 
     wb.close()
@@ -115,7 +96,8 @@ def test_team_shares_to_capacity_seed_values(fresh_wb_path):
 # Summary layout constants (must match summary.py)
 _COLS_PER_YEAR = 4  # Plan FTE, Plan EUR, Act EUR, Var EUR
 _YEAR_GROUP_START = 3
-_NUM_YEARS = (PROJECT_MONTHS + 11) // 12
+_CAL_GROUPS = list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS))
+_NUM_YEARS = len(_CAL_GROUPS)
 _TOTAL_GROUP_START = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
 
 
@@ -123,7 +105,7 @@ def _find_summary_first_wp_row(summary_ws):
     """Find the first WP data row by scanning for formula refs in col A."""
     for r in range(1, summary_ws.max_row + 1):
         val = summary_ws.cell(r, 1).value
-        if isinstance(val, str) and val.startswith("=Plan!A"):
+        if isinstance(val, str) and val.startswith("=Config!A"):
             return r
     raise ValueError("Cannot find Summary first WP row")
 
@@ -152,14 +134,12 @@ def test_summary_plan_fte_formulas_reference_plan_planned_rows(fresh_wb_path):
         row = first_wp + i
         plan_wp_row = layout["planned_first_wp_row"] + i
 
-        for y in range(_NUM_YEARS):
+        for y, (group_start, span) in enumerate(_CAL_GROUPS):
             sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
             cell_val = summary.cell(row, sc).value
 
-            m_start = y * 12
-            m_end = min((y + 1) * 12, PROJECT_MONTHS) - 1
-            first_col_l = get_column_letter(MONTH_COL_START + m_start)
-            last_col_l = get_column_letter(MONTH_COL_START + m_end)
+            first_col_l = get_column_letter(MONTH_COL_START + group_start)
+            last_col_l = get_column_letter(MONTH_COL_START + group_start + span - 1)
 
             expected = f"=SUM(Plan!{first_col_l}{plan_wp_row}:{last_col_l}{plan_wp_row})"
             assert cell_val == expected, (
@@ -180,7 +160,7 @@ def test_summary_actual_eur_formulas_reference_actuals_rows(fresh_wb_path):
     actuals_first_wp = None
     for r in range(1, actuals.max_row + 1):
         val = actuals.cell(r, 1).value
-        if isinstance(val, str) and val.startswith("=Plan!A"):
+        if isinstance(val, str) and val.startswith("=Config!A"):
             actuals_first_wp = r
             break
     assert actuals_first_wp is not None, "Cannot find Actuals first WP row"
@@ -189,15 +169,13 @@ def test_summary_actual_eur_formulas_reference_actuals_rows(fresh_wb_path):
         row = first_wp + i
         actuals_wp_row = actuals_first_wp + i
 
-        for y in range(_NUM_YEARS):
+        for y, (group_start, span) in enumerate(_CAL_GROUPS):
             sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
             # Actual EUR is at sc + 2
             cell_val = summary.cell(row, sc + 2).value
 
-            m_start = y * 12
-            m_end = min((y + 1) * 12, PROJECT_MONTHS) - 1
-            first_col_l = get_column_letter(MONTH_COL_START + m_start)
-            last_col_l = get_column_letter(MONTH_COL_START + m_end)
+            first_col_l = get_column_letter(MONTH_COL_START + group_start)
+            last_col_l = get_column_letter(MONTH_COL_START + group_start + span - 1)
 
             expected = f"=SUM(Actuals!{first_col_l}{actuals_wp_row}:{last_col_l}{actuals_wp_row})"
             assert cell_val == expected, (

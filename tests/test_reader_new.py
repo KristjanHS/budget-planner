@@ -1,6 +1,9 @@
 """Tests for new reader functions (Config sheet, Actuals values)."""
 from datetime import datetime
+
+import pytest
 from openpyxl import Workbook
+
 from budget_planner.config_sheet import build_config_sheet
 from budget_planner.reader import read_config_sheet, read_actuals_values
 
@@ -31,32 +34,17 @@ def test_read_config_sheet_roundtrip():
     ws = wb["Config"]
     params, wps = read_config_sheet(ws)
     assert params["title"] == "Test"
+    assert params["start"] == datetime(2026, 7, 1)
     assert params["months"] == 24
     assert params["rate"] == 7500
     assert len(wps) == 2
     assert wps[0]["id"] == "WP1"
+    assert wps[0]["name"] == "Mgmt"
     assert wps[0]["fte"] == 12.0
+    assert wps[1]["id"] == "WP2"
+    assert wps[1]["name"] == "Dev"
     assert wps[1]["start"] == 1
     assert wps[1]["end"] == 18
-    wb.close()
-
-
-def test_read_config_sheet_params_start_date():
-    """Config sheet preserves the start date."""
-    wb = _make_config_wb()
-    ws = wb["Config"]
-    params, _ = read_config_sheet(ws)
-    assert params["start"] == datetime(2026, 7, 1)
-    wb.close()
-
-
-def test_read_config_sheet_wp_names():
-    """Config sheet preserves WP names."""
-    wb = _make_config_wb()
-    ws = wb["Config"]
-    _, wps = read_config_sheet(ws)
-    assert wps[0]["name"] == "Mgmt"
-    assert wps[1]["name"] == "Dev"
     wb.close()
 
 
@@ -154,3 +142,140 @@ def test_read_actuals_values_literal_wp_ids():
     assert "WP1" in result
     assert result["WP1"] == [500.0, 600.0]
     wb.close()
+
+
+# ── Config sheet validation (malformed workbooks) ──
+
+
+class TestConfigSheetValidation:
+    """read_config_sheet rejects malformed Config sheets with clear errors."""
+
+    def _make_empty_config_ws(self):
+        """Create a bare Config worksheet with no content."""
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.title = "Config"
+        return wb, ws
+
+    def test_missing_title_label(self):
+        """Raises ValueError when row 1 col A is empty."""
+        wb, ws = self._make_empty_config_ws()
+        # Leave row 1 empty
+        with pytest.raises(ValueError, match="row 1 col A expected 'Project Title'"):
+            read_config_sheet(ws)
+        wb.close()
+
+    def test_wrong_title_label(self):
+        """Raises ValueError when row 1 col A has wrong text."""
+        wb, ws = self._make_empty_config_ws()
+        ws.cell(1, 1, "Name")
+        with pytest.raises(ValueError, match="row 1 col A expected 'Project Title'"):
+            read_config_sheet(ws)
+        wb.close()
+
+    def test_missing_start_label(self):
+        """Raises ValueError when row 2 col A is missing."""
+        wb, ws = self._make_empty_config_ws()
+        ws.cell(1, 1, "Project Title")
+        # Leave row 2 empty
+        with pytest.raises(ValueError, match="row 2 col A expected 'Project Start'"):
+            read_config_sheet(ws)
+        wb.close()
+
+    def test_missing_months_label(self):
+        """Raises ValueError when row 3 col A is missing."""
+        wb, ws = self._make_empty_config_ws()
+        ws.cell(1, 1, "Project Title")
+        ws.cell(2, 1, "Project Start")
+        # Leave row 3 empty
+        with pytest.raises(ValueError, match="row 3 col A expected 'Project Months'"):
+            read_config_sheet(ws)
+        wb.close()
+
+    def test_missing_rate_label(self):
+        """Raises ValueError when row 4 col A is missing."""
+        wb, ws = self._make_empty_config_ws()
+        ws.cell(1, 1, "Project Title")
+        ws.cell(2, 1, "Project Start")
+        ws.cell(3, 1, "Project Months")
+        # Leave row 4 empty
+        with pytest.raises(ValueError, match="row 4 col A expected 'FTE Rate'"):
+            read_config_sheet(ws)
+        wb.close()
+
+    def test_shifted_rows_detected(self):
+        """Inserting a row before params shifts labels — validation catches it."""
+        wb, ws = self._make_empty_config_ws()
+        # Simulate user inserting a row: params shifted down by 1
+        ws.cell(1, 1, "Project ID")  # inserted row
+        ws.cell(2, 1, "Project Title")
+        ws.cell(3, 1, "Project Start")
+        ws.cell(4, 1, "Project Months")
+        ws.cell(5, 1, "FTE Rate (EUR)")
+        with pytest.raises(ValueError, match="row 1 col A expected 'Project Title'"):
+            read_config_sheet(ws)
+        wb.close()
+
+    def test_valid_config_passes_validation(self):
+        """A properly built Config sheet passes validation."""
+        wb = _make_config_wb()
+        ws = wb["Config"]
+        params, wps = read_config_sheet(ws)
+        assert params["title"] == "Test"
+        assert len(wps) == 2
+        wb.close()
+
+
+# ── Actuals reader validation (malformed workbooks) ──
+
+
+class TestActualsReaderValidation:
+    """read_actuals_values rejects malformed Actuals sheets."""
+
+    def test_missing_wp_id_header(self):
+        """Raises ValueError when Actuals sheet has no 'WP ID' header."""
+        wb = Workbook()
+        plan_ws = wb.active
+        assert plan_ws is not None
+        plan_ws.title = "Plan"
+
+        actuals_ws = wb.create_sheet("Actuals")
+        actuals_ws.cell(1, 1, "ACTUAL EUR")
+        actuals_ws.cell(2, 1, "")
+        # Row 3 is missing "WP ID" — has something else instead
+        actuals_ws.cell(3, 1, "Identifier")
+        actuals_ws.cell(3, 2, "Name")
+
+        with pytest.raises(ValueError, match="Cannot find 'WP ID' header row"):
+            read_actuals_values(actuals_ws, project_months=3)
+        wb.close()
+
+    def test_wp_id_header_at_nonstandard_row(self):
+        """Actuals reader finds 'WP ID' header even if not at row 3."""
+        wb = Workbook()
+        plan_ws = wb.active
+        assert plan_ws is not None
+        plan_ws.title = "Plan"
+        plan_ws.cell(6, 1, "WP1")
+
+        actuals_ws = wb.create_sheet("Actuals")
+        actuals_ws.cell(1, 1, "ACTUAL EUR")
+        actuals_ws.cell(2, 1, "")
+        actuals_ws.cell(3, 1, "")  # extra blank row
+        actuals_ws.cell(4, 1, "")  # another blank row
+        # WP ID header shifted to row 5 (non-standard)
+        actuals_ws.cell(5, 1, "WP ID")
+        actuals_ws.cell(5, 2, "WP Name")
+        # WP data at row 6
+        actuals_ws.cell(6, 1, "=Plan!A6")
+        actuals_ws.cell(6, 2, "=Plan!B6")
+        actuals_ws.cell(6, 3, 42.0)
+        # TOTAL row
+        actuals_ws.cell(7, 1, "")
+        actuals_ws.cell(7, 2, "TOTAL")
+
+        result = read_actuals_values(actuals_ws, project_months=1)
+        assert "WP1" in result
+        assert result["WP1"] == [42.0]
+        wb.close()

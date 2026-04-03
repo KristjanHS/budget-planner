@@ -4,7 +4,6 @@ import re
 import pytest
 import openpyxl
 
-from budget_planner.workbook import generate_workbook
 from budget_planner.reader import discover_layout
 from budget_planner.config import WORK_PACKAGES, NUM_WPS, MONTH_COL_START, PROJECT_MONTHS
 
@@ -12,15 +11,8 @@ from budget_planner.config import WORK_PACKAGES, NUM_WPS, MONTH_COL_START, PROJE
 # ── Fixtures that don't need LibreOffice ──
 
 @pytest.fixture(scope="module")
-def fresh_path(tmp_path_factory):
-    out = tmp_path_factory.mktemp("struct") / "test.xlsx"
-    generate_workbook(str(out))
-    return str(out)
-
-
-@pytest.fixture(scope="module")
-def workbook(fresh_path):
-    return openpyxl.load_workbook(fresh_path, data_only=False)
+def workbook(fresh_wb_path):
+    return openpyxl.load_workbook(fresh_wb_path, data_only=False)
 
 
 @pytest.fixture(scope="module")
@@ -31,15 +23,19 @@ def layout(workbook):
 # ── Check 2-3: Sheet existence + global params ──
 
 def test_sheets_exist(workbook):
-    for name in ["_META", "Config", "Plan", "Team", "Capacity", "Actuals", "Summary"]:
+    for name in ["_META", "Config", "Plan", "Capacity", "Actuals", "Summary"]:
         assert name in workbook.sheetnames, f"Missing sheet: {name}"
 
 
 def test_global_params(workbook):
-    # Plan globals now reference Config sheet via formulas
+    # Plan compact header references Config sheet via formulas
     plan = workbook["Plan"]
-    assert plan["B2"].value is not None, "Plan!B2 (project_start ref) is empty"
-    # B3 is now a formula =Config!B4 (FTE rate), check Config directly
+    # B1 = title ref, E1 = start ref, G1 = rate ref, I1 = ceiling ref
+    assert plan["B1"].value is not None, "Plan!B1 (title ref) is empty"
+    assert plan["E1"].value is not None, "Plan!E1 (start ref) is empty"
+    assert plan["G1"].value is not None, "Plan!G1 (rate ref) is empty"
+    assert plan["I1"].value is not None, "Plan!I1 (ceiling ref) is empty"
+    # Check Config directly for valid rate
     config = workbook["Config"]
     val = config["B4"].value
     assert val is not None and val > 0, f"Config!B4 (fte_rate) is invalid: {val}"
@@ -54,19 +50,19 @@ def test_named_ranges(workbook):
         defined[dn.name] = dn.attr_text
     assert defined.get("project_start") == "Config!$B$2"
     assert defined.get("fte_rate") == "Config!$B$4"
-    assert defined.get("partner_ceiling") == "Plan!$B$4"
+    assert defined.get("partner_ceiling") == "Plan!$I$1"
 
 
 # ── Check 5: Config table ──
 
 @pytest.mark.parametrize("wp_idx", [0, 2])
 def test_wp_config_valid(workbook, layout, wp_idx):
-    plan = workbook["Plan"]
+    config = workbook["Config"]
     row = layout["config_first_wp_row"] + wp_idx
-    wp_id = plan.cell(row, 1).value
-    fte = plan.cell(row, 3).value
-    start = plan.cell(row, 4).value
-    end = plan.cell(row, 5).value
+    wp_id = config.cell(row, 1).value
+    fte = config.cell(row, 3).value
+    start = config.cell(row, 4).value
+    end = config.cell(row, 5).value
     assert wp_id is not None, f"WP ID is empty at row {row}"
     assert fte is not None and fte > 0, f"{wp_id}: FTE invalid ({fte})"
     assert start is not None and end is not None, f"{wp_id}: Start/End empty"
@@ -75,7 +71,15 @@ def test_wp_config_valid(workbook, layout, wp_idx):
 
 # ── Check 11: Inactive months empty ──
 
-@pytest.mark.parametrize("wp_idx", [1, 2])
+def _wp_indices_with_inactive_months():
+    """Find WP indices that have inactive months (start > 1 or end < PROJECT_MONTHS)."""
+    return [
+        i for i, wp in enumerate(WORK_PACKAGES)
+        if wp["start"] > 1 or wp["end"] < PROJECT_MONTHS
+    ][:3]
+
+
+@pytest.mark.parametrize("wp_idx", _wp_indices_with_inactive_months())
 def test_inactive_months_empty(workbook, layout, wp_idx):
     plan = workbook["Plan"]
     wp = WORK_PACKAGES[wp_idx]
@@ -148,10 +152,10 @@ def test_freeze_panes_actuals_at_first_wp(workbook):
     fp = ws.freeze_panes
     assert fp is not None
     _, freeze_row = _parse_freeze_panes(fp)
-    # WP rows have cross-sheet formulas like =Plan!A{row} in column A
+    # WP rows have cross-sheet formulas like =Config!A{row} in column A
     for r in range(1, ws.max_row + 1):
         val = ws.cell(r, 1).value
-        if isinstance(val, str) and val.startswith("=Plan!A"):
+        if isinstance(val, str) and val.startswith("=Config!A"):
             assert freeze_row == r, (
                 f"Actuals freeze row {freeze_row} != first WP row {r}"
             )
@@ -165,10 +169,10 @@ def test_freeze_panes_summary_at_first_wp(workbook):
     fp = ws.freeze_panes
     assert fp is not None
     _, freeze_row = _parse_freeze_panes(fp)
-    # Summary WP rows have formulas referencing Plan WP IDs in column A
+    # Summary WP rows have formulas referencing Config WP IDs in column A
     for r in range(1, ws.max_row + 1):
         val = ws.cell(r, 1).value
-        if val is not None and isinstance(val, str) and val.startswith("=Plan!A"):
+        if val is not None and isinstance(val, str) and val.startswith("=Config!A"):
             assert freeze_row == r, (
                 f"Summary freeze row {freeze_row} != first WP row {r}"
             )

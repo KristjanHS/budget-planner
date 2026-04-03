@@ -1,5 +1,50 @@
 """Read existing workbooks for round-trip updates."""
 import re
+from typing import Literal, overload
+
+from budget_planner.layout import MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG
+
+
+@overload
+def _find_header_row(
+    ws, pattern: str, col: int = ..., max_row: int | None = ...,
+    required: Literal[True] = ...,
+) -> int: ...
+
+
+@overload
+def _find_header_row(
+    ws, pattern: str, col: int = ..., max_row: int | None = ...,
+    required: Literal[False] = ...,
+) -> int | None: ...
+
+
+def _find_header_row(ws, pattern, col=1, max_row=None, required=True):
+    """Find row where cell contains pattern (case-insensitive substring).
+
+    Args:
+        ws: openpyxl worksheet.
+        pattern: String to search for (case-insensitive substring match).
+        col: Column number to scan (default 1 = col A).
+        max_row: Upper row limit. If None, scans the whole sheet.
+        required: If True and pattern not found, raises ValueError.
+
+    Returns:
+        Row number (int) or None if not found and required=False.
+
+    Raises:
+        ValueError: If required=True and pattern is not found.
+    """
+    limit = max_row if max_row is not None else ws.max_row
+    for r in range(1, limit + 1):
+        val = ws.cell(r, col).value
+        if val and pattern.upper() in str(val).upper():
+            return r
+    if required:
+        raise ValueError(
+            f"Cannot find '{pattern}' in column {col}, rows 1-{limit}"
+        )
+    return None
 
 
 def read_config_sheet(ws) -> tuple[dict, list[dict]]:
@@ -11,6 +56,21 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
         - work_packages: list of dicts with keys 'id', 'name', 'fte',
           'start', 'end'
     """
+    # Validate expected labels in column A (rows 1-4)
+    _expected_labels = [
+        (1, "title", "Project Title"),
+        (2, "start", "Project Start"),
+        (3, "months", "Project Months"),
+        (4, "rate", "FTE Rate"),
+    ]
+    for row, keyword, full_label in _expected_labels:
+        label = ws.cell(row, 1).value
+        if label is None or keyword not in str(label).lower():
+            raise ValueError(
+                f"Config sheet row {row} col A expected '{full_label}', "
+                f"got {label!r}. Was the Config sheet manually edited?"
+            )
+
     project_params = {
         "title": ws.cell(1, 2).value,
         "start": ws.cell(2, 2).value,
@@ -38,14 +98,24 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
 
 
 def read_plan_config(ws, layout) -> list[dict]:
-    """Read WP definitions from Plan config table."""
+    """Read WP definitions from Config sheet (via Plan layout cross-refs).
+
+    After the Plan config table was removed, WP data lives on the Config sheet.
+    This function reads from Config using the config_first_wp_row from layout.
+    """
+    wb = ws.parent
+    config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
+    if config_ws is None:
+        raise ValueError("Workbook has no Config sheet")
+
     wps = []
-    for row in range(layout["config_first_wp_row"], layout["config_last_wp_row"] + 1):
-        wp_id = ws.cell(row, 1).value
-        wp_name = ws.cell(row, 2).value
-        fte = ws.cell(row, 3).value
-        start = ws.cell(row, 4).value
-        end = ws.cell(row, 5).value
+    for row in range(layout["config_first_wp_row"],
+                     layout["config_last_wp_row"] + 1):
+        wp_id = config_ws.cell(row, 1).value
+        wp_name = config_ws.cell(row, 2).value
+        fte = config_ws.cell(row, 3).value
+        start = config_ws.cell(row, 4).value
+        end = config_ws.cell(row, 5).value
         if wp_id is None:
             continue
         wps.append({
@@ -63,27 +133,26 @@ def read_plan_config(ws, layout) -> list[dict]:
     return wps
 
 
-def read_team_sheet(ws) -> dict:
-    """Read Team roster and WP share matrix.
+def read_team_from_config(ws) -> list[dict]:
+    """Read team roster from the Config sheet's TEAM ROSTER section.
+
+    Args:
+        ws: Config worksheet.
 
     Returns:
-        {
-            "roster": [{"name": "Alice", "max_fte": 1.0, "row": 3}, ...],
-            "shares": {"Alice": {"WP1": 0.25, "WP2": 0.50}, ...},
-        }
+        List of dicts with keys 'name' and 'max_fte'.
     """
-    # Find roster header: "Person" in column A
-    roster_header_row = None
-    for r in range(1, ws.max_row + 1):
-        if ws.cell(r, 1).value == "Person":
-            roster_header_row = r
-            break
-    if roster_header_row is None:
-        raise ValueError("Cannot find roster header ('Person' in column A)")
+    # Find "TEAM ROSTER" section header
+    roster_section = _find_header_row(ws, "TEAM ROSTER", required=True)
+
+    # Person header is the next row after the section header
+    person_header = _find_header_row(
+        ws, "Person", col=1, max_row=roster_section + 5,
+    )
 
     # Read roster rows until empty name
-    roster = []
-    r = roster_header_row + 1
+    roster: list[dict] = []
+    r = person_header + 1
     while r <= ws.max_row:
         name = ws.cell(r, 1).value
         if name is None or str(name).strip() == "":
@@ -92,53 +161,14 @@ def read_team_sheet(ws) -> dict:
         roster.append({
             "name": str(name),
             "max_fte": float(max_fte or 0),
-            "row": r,
         })
         r += 1
 
-    # Find WP SHARE SEEDS section header
-    share_section_row = None
-    for r in range(roster_header_row + 1, ws.max_row + 1):
-        val = ws.cell(r, 1).value
-        if val and "WP SHARE SEEDS" in str(val).upper():
-            share_section_row = r
-            break
-
-    shares: dict[str, dict[str, float]] = {}
-    if share_section_row is None:
-        return {"roster": roster, "shares": shares}
-
-    # Read share header row (row after section header)
-    share_header_row = share_section_row + 1
-    wp_columns: dict[str, int] = {}
-    for c in range(2, ws.max_column + 1):
-        val = ws.cell(share_header_row, c).value
-        if val is None:
-            break
-        wp_columns[str(val)] = c
-
-    # Read share data rows — one per roster person
-    r = share_header_row + 1
-    for person in roster:
-        person_name = person["name"]
-        # Col A may be a formula ref like =A3 — resolve via roster name
-        person_shares: dict[str, float] = {}
-        for wp_id, col in wp_columns.items():
-            val = ws.cell(r, col).value
-            if val is not None and not (isinstance(val, str) and val.startswith("=")):
-                try:
-                    person_shares[wp_id] = float(val)
-                except (ValueError, TypeError):
-                    pass
-        if person_shares:
-            shares[person_name] = person_shares
-        r += 1
-
-    return {"roster": roster, "shares": shares}
+    return roster
 
 
 def read_capacity_sheet(ws, config_wps, project_months=None,
-                        month_col_start=3) -> dict:
+                        month_col_start=MONTH_COL_START) -> dict:
     """Read Capacity sheet person groups.
 
     Args:
@@ -165,20 +195,14 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
         from budget_planner.config import PROJECT_MONTHS
         project_months = PROJECT_MONTHS
 
-    # Build WP ID lookup from config_wps: plan config row -> WP ID
-    # config_first_wp_row is typically 6 (row 5 is header "WP ID")
-    # We need to discover it from the Plan layout, but we receive config_wps
-    # which are indexed 0..N-1.  The formula pattern is =Plan!A{row}.
+    # Build WP ID lookup from config_wps
     wp_ids = {wp["id"] for wp in config_wps}
 
     # ── Read external commitments config block ──
     external_commitments = []
-    ext_config_header = None
-    for r in range(1, min(ws.max_row + 1, 20)):
-        val = ws.cell(r, 1).value
-        if val and "EXTERNAL COMMITMENTS" in str(val).upper():
-            ext_config_header = r
-            break
+    ext_config_header = _find_header_row(
+        ws, "EXTERNAL COMMITMENTS", required=False
+    )
 
     if ext_config_header is not None:
         # Skip header row (Person, Project, Total FTE, Start Month, End Month)
@@ -201,17 +225,11 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
             r += 1
 
     # ── Find month header row: "WP ID" in col A ──
-    month_header_row = None
-    for r in range(1, ws.max_row + 1):
-        if ws.cell(r, 1).value == "WP ID":
-            month_header_row = r
-            break
-    if month_header_row is None:
-        raise ValueError("Cannot find month header row ('WP ID' in Capacity col A)")
+    month_header_row = _find_header_row(ws, "WP ID")
 
     # ── Find person header rows ──
     # Person headers have bold font + SECTION_FILL (fgColor "2F5496")
-    # and formula like =Team!A{n}
+    # and formula like =Config!A{n}
     person_headers = []
     for r in range(month_header_row + 1, ws.max_row + 1):
         cell = ws.cell(r, 1)
@@ -243,41 +261,48 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
     # ── Parse each person group ──
     person_groups: dict[str, dict] = {}
 
-    # Resolve person names from =Team!A{n} formulas via the Team sheet.
+    # Resolve person names from =Config!A{n} formulas via the Config sheet.
     wb = ws.parent
-    team_ws = wb["Team"] if "Team" in wb.sheetnames else None
+    config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
 
-    # Cache Plan layout for WP ID resolution (avoid repeated discover_layout)
-    plan_ws = wb["Plan"]
+    # Get Plan layout for WP ID resolution (Capacity WP rows reference Plan)
+    plan_ws = wb[SHEET_PLAN]
     plan_layout = discover_layout(plan_ws)
-    config_first_wp_row = plan_layout["config_first_wp_row"]
+    planned_first_wp_row = plan_layout["planned_first_wp_row"]
 
     def _resolve_person_name(cell_value):
         """Resolve person name from formula or literal value."""
         if cell_value is None:
             return None
         val = str(cell_value)
-        m = re.match(r"=Team!A(\d+)", val)
-        if m and team_ws:
-            team_row = int(m.group(1))
-            name_val = team_ws.cell(team_row, 1).value
+        m = re.match(rf"={SHEET_CONFIG}!A(\d+)", val)
+        if m and config_ws:
+            config_row = int(m.group(1))
+            name_val = config_ws.cell(config_row, 1).value
             return str(name_val) if name_val else None
         if not val.startswith("="):
             return val
         return None
 
     def _resolve_wp_id(cell_value):
-        """Resolve WP ID from formula =Plan!A{n} or literal value."""
+        """Resolve WP ID from formula =Plan!A{n} or =Config!A{n} or literal."""
         if cell_value is None:
             return None
         val = str(cell_value)
-        m = re.match(r"=Plan!A(\d+)", val)
+        # Try Plan!A{n} reference (Capacity -> Plan planned WP row)
+        m = re.match(rf"={SHEET_PLAN}!A(\d+)", val)
         if m:
             plan_row = int(m.group(1))
-            idx = plan_row - config_first_wp_row
+            idx = plan_row - planned_first_wp_row
             if 0 <= idx < len(config_wps):
                 return config_wps[idx]["id"]
             return None
+        # Try Config!A{n} reference
+        m2 = re.match(rf"={SHEET_CONFIG}!A(\d+)", val)
+        if m2 and config_ws:
+            config_row = int(m2.group(1))
+            resolved = config_ws.cell(config_row, 1).value
+            return str(resolved) if resolved and str(resolved) in wp_ids else None
         if val in wp_ids:
             return val
         return None
@@ -354,50 +379,69 @@ def _read_monthly_values(ws, row, col_start, num_months):
 def discover_layout(ws) -> dict:
     """Scan existing Plan worksheet, reconstruct layout dict.
 
-    Discovers config table and PLANNED block. ACTUAL block is not expected
-    (removed in sheet flow redesign).
-    """
-    # Find config table — scan for "WP ID" in col A
-    config_header_row = None
-    for r in range(1, 21):
-        val = ws.cell(r, 1).value
-        if val == "WP ID":
-            config_header_row = r
-            break
-    if config_header_row is None:
-        raise ValueError("Cannot find config table header row")
+    After the Plan config table was removed, the Plan sheet has:
+    - Row 1: compact header
+    - Row 2: blank
+    - Row 3: PLANNED FTE section header
+    - Rows 4-5: year/month headers
+    - Rows 6+: WP data rows
 
-    # Count WP rows
-    config_first_wp_row = config_header_row + 1
-    config_last_wp_row = config_first_wp_row
+    The config_first_wp_row/config_last_wp_row refer to the Config sheet's
+    WP table rows (row 8+ by default).
+    """
+    # Find PLANNED block header
+    planned_header_row = _find_header_row(ws, "PLANNED", required=True)
+
+    # Find the first WP data row after the PLANNED header.
+    # WP rows have a formula (e.g. =Config!A8) or literal WP ID in column A.
+    planned_first_wp_row = None
+    for r in range(planned_header_row + 1, ws.max_row + 1):
+        val = ws.cell(r, 1).value
+        if val is None or str(val).strip() == "":
+            continue
+        val_str = str(val)
+        # A formula referencing a Config row (e.g. =Config!A8) means WP data
+        if val_str.startswith("="):
+            planned_first_wp_row = r
+            break
+        # A literal WP ID (skip known header labels)
+        if not any(
+            kw in val_str.upper()
+            for kw in ("PLANNED", "YEAR", "SUM", "BUDGET", "WP ID", "WP NAME")
+        ):
+            planned_first_wp_row = r
+            break
+    if planned_first_wp_row is None:
+        raise ValueError(
+            "Cannot find first WP data row in PLANNED block. "
+            "Expected formula (=Config!A{n}) or literal WP ID after "
+            f"PLANNED header at row {planned_header_row}."
+        )
+
+    # Count WP rows: scan until empty col A or TOTAL row
+    planned_last_wp_row = planned_first_wp_row
     while True:
-        next_val = ws.cell(config_last_wp_row + 1, 1).value
-        next_name = str(ws.cell(config_last_wp_row + 1, 2).value or "")
+        next_val = ws.cell(planned_last_wp_row + 1, 1).value
+        next_name = str(ws.cell(planned_last_wp_row + 1, 2).value or "")
         if not next_val or next_name.upper().startswith("TOTAL"):
             break
-        config_last_wp_row += 1
-    config_total_row = config_last_wp_row + 1
-
-    # Find PLANNED block header
-    planned_header_row = None
-    for r in range(config_total_row + 1, ws.max_row + 1):
-        val = str(ws.cell(r, 1).value or "")
-        if "PLANNED" in val.upper():
-            planned_header_row = r
-            break
-    if planned_header_row is None:
-        raise ValueError("Cannot find PLANNED FTE block header")
-
-    num_wps = config_last_wp_row - config_first_wp_row + 1
-    planned_first_wp_row = planned_header_row + 3
-    planned_last_wp_row = planned_first_wp_row + num_wps - 1
+        planned_last_wp_row += 1
+    num_wps = planned_last_wp_row - planned_first_wp_row + 1
     planned_total_row = planned_last_wp_row + 1
 
+    # Derive Config sheet WP rows from the first WP formula reference
+    # Formula pattern: =Config!A{row}
+    first_val = ws.cell(planned_first_wp_row, 1).value
+    cfg_wp_first = 8  # default
+    if first_val and isinstance(first_val, str):
+        m = re.match(rf"={SHEET_CONFIG}!A(\d+)", str(first_val))
+        if m:
+            cfg_wp_first = int(m.group(1))
+    cfg_wp_last = cfg_wp_first + num_wps - 1
+
     return {
-        "config_header_row": config_header_row,
-        "config_first_wp_row": config_first_wp_row,
-        "config_last_wp_row": config_last_wp_row,
-        "config_total_row": config_total_row,
+        "config_first_wp_row": cfg_wp_first,
+        "config_last_wp_row": cfg_wp_last,
         "planned_header_row": planned_header_row,
         "planned_first_wp_row": planned_first_wp_row,
         "planned_last_wp_row": planned_last_wp_row,
@@ -405,7 +449,7 @@ def discover_layout(ws) -> dict:
     }
 
 
-def read_actuals_values(ws, project_months, month_col_start=3) -> dict[str, list]:
+def read_actuals_values(ws, project_months, month_col_start=MONTH_COL_START) -> dict[str, list]:
     """Read Actuals EUR values for round-trip preservation.
 
     Args:
@@ -419,11 +463,18 @@ def read_actuals_values(ws, project_months, month_col_start=3) -> dict[str, list
     """
     values: dict[str, list] = {}
     wb = ws.parent
-    plan_ws = wb["Plan"] if "Plan" in wb.sheetnames else None
+    plan_ws = wb[SHEET_PLAN] if SHEET_PLAN in wb.sheetnames else None
+    config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
 
-    # WP rows start at row 4 (row 1 = section header, row 2 = year headers,
-    # row 3 = month headers)
-    first_wp_row = 4
+    # Discover WP data start by scanning for "WP ID" header row
+    try:
+        wp_header_row = _find_header_row(ws, "WP ID")
+    except ValueError:
+        raise ValueError(
+            "Cannot find 'WP ID' header row in Actuals sheet. "
+            "Was the sheet structure manually edited?"
+        )
+    first_wp_row = wp_header_row + 1
     r = first_wp_row
     while r <= ws.max_row:
         col_a = ws.cell(r, 1).value
@@ -435,8 +486,8 @@ def read_actuals_values(ws, project_months, month_col_start=3) -> dict[str, list
         if col_a is None:
             break
 
-        # Resolve WP ID (may be a =Plan!A{n} formula)
-        wp_id = _resolve_plan_ref(col_a, plan_ws)
+        # Resolve WP ID (may be a =Plan!A{n} or =Config!A{n} formula)
+        wp_id = _resolve_plan_ref(col_a, plan_ws, config_ws)
         if wp_id is None:
             r += 1
             continue
@@ -452,18 +503,30 @@ def read_actuals_values(ws, project_months, month_col_start=3) -> dict[str, list
     return values
 
 
-def _resolve_plan_ref(cell_value, plan_ws):
-    """Resolve a cell value that might be a =Plan!A{n} formula."""
+def _resolve_plan_ref(cell_value, plan_ws, config_ws=None):
+    """Resolve a cell value that might be a =Plan!A{n} or =Config!A{n} formula."""
     if cell_value is None:
         return None
     val = str(cell_value)
-    m = re.match(r"=Plan!A(\d+)", val)
+    # Try =Plan!A{n} — resolve by reading the Plan cell (which itself may be =Config!A{n})
+    m = re.match(rf"={SHEET_PLAN}!A(\d+)", val)
     if m and plan_ws:
         plan_row = int(m.group(1))
         resolved = plan_ws.cell(plan_row, 1).value
+        if resolved and isinstance(resolved, str) and resolved.startswith("="):
+            # Follow the chain: Plan cell is a formula like =Config!A8
+            m2 = re.match(rf"={SHEET_CONFIG}!A(\d+)", resolved)
+            if m2 and config_ws:
+                config_row = int(m2.group(1))
+                final = config_ws.cell(config_row, 1).value
+                return str(final) if final else None
+        return str(resolved) if resolved else None
+    # Try =Config!A{n}
+    m3 = re.match(rf"={SHEET_CONFIG}!A(\d+)", val)
+    if m3 and config_ws:
+        config_row = int(m3.group(1))
+        resolved = config_ws.cell(config_row, 1).value
         return str(resolved) if resolved else None
     if not val.startswith("="):
         return val
     return None
-
-

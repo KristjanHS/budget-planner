@@ -51,20 +51,25 @@ def test_actuals_wp_count(actuals_workbook):
     assert wp_count == NUM_WPS
 
 
-def test_actuals_values_are_zero(actuals_workbook):
-    """Fresh workbook has 0 in active month cells."""
+def test_actuals_demo_values_seeded(actuals_workbook):
+    """Fresh demo workbook has non-zero EUR in active months up to DEMO_CURRENT_MONTH."""
+    from budget_planner.config import DEMO_CURRENT_MONTH
     ws = actuals_workbook["Actuals"]
-    # Find first WP row
     first_wp_row = None
     for r in range(1, ws.max_row + 1):
         if ws.cell(r, 1).value == "WP ID":
             first_wp_row = r + 1
             break
     assert first_wp_row is not None
-    wp = WORK_PACKAGES[0]
+    wp = WORK_PACKAGES[0]  # WP1: active from M1, multiplier 1.0
     row = first_wp_row
+    # Active month within demo range should have a positive value
     c = MONTH_COL_START + wp["start"] - 1
-    assert ws.cell(row, c).value == 0
+    assert ws.cell(row, c).value > 0
+    # Month after DEMO_CURRENT_MONTH should be 0
+    if DEMO_CURRENT_MONTH < wp["end"]:
+        c_after = MONTH_COL_START + DEMO_CURRENT_MONTH
+        assert ws.cell(row, c_after).value == 0
 
 
 def test_actuals_inactive_months_empty(actuals_workbook):
@@ -76,11 +81,11 @@ def test_actuals_inactive_months_empty(actuals_workbook):
             first_wp_row = r + 1
             break
     assert first_wp_row is not None
-    # WP3 starts at month 7 -- months before start should be inactive
-    wp3_idx = next(i for i, w in enumerate(WORK_PACKAGES) if w["id"] == "WP3")
-    wp3_start = WORK_PACKAGES[wp3_idx]["start"]
-    row = first_wp_row + wp3_idx
-    for m in range(wp3_start - 1):
+    # Find any WP with start > 1 -- months before start should be inactive
+    late_idx = next(i for i, w in enumerate(WORK_PACKAGES) if w["start"] > 1)
+    late_start = WORK_PACKAGES[late_idx]["start"]
+    row = first_wp_row + late_idx
+    for m in range(late_start - 1):
         c = MONTH_COL_START + m
         cell = ws.cell(row, c)
         assert cell.value is None or cell.value == "", f"M{m+1} should be inactive, got {cell.value}"
@@ -111,7 +116,7 @@ def test_actuals_ceiling_refs_plan(actuals_workbook):
             break
     assert first_wp_row is not None
     cell = ws.cell(first_wp_row, VAL_COL_BUDGET)
-    assert cell.value and "Plan!G" in str(cell.value)
+    assert cell.value and "Config!G" in str(cell.value)
 
 
 def test_actuals_variance_formula(actuals_workbook):

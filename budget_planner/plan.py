@@ -9,7 +9,7 @@ from budget_planner.layout import (
     build_year_month_headers, month_col_end as _month_col_end, val_columns,
 )
 from budget_planner.styles import (
-    BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
+    BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FONT, SECTION_FILL, GREY_FILL, LIGHT_GREEN_FILL,
     YELLOW_FILL, CENTER, style_cell, col_letter,
 )
@@ -17,10 +17,11 @@ from budget_planner.styles import (
 
 def _apply_planned_formulas(ws, layout, capacity_layout, *,
                             work_packages=None, project_params=None):
-    """Overwrite planned FTE cells with cross-sheet SUM formulas from Capacity.
+    """Fill planned FTE cells with cross-sheet SUM formulas from Capacity.
 
     Called after build_capacity_sheet() so that capacity row positions are known.
-    Replaces seed values in the planned block with formulas referencing Capacity.
+    Cells are already styled (BLACK_FORMULA, locked) by build_plan_sheet();
+    this function only sets the formula values.
 
     Args:
         ws: The Plan worksheet.
@@ -62,15 +63,7 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
             if wp["start"] <= month_num <= wp["end"] and cap_rows:
                 cl = col_letter(c)
                 refs = ",".join(f"{SHEET_CAPACITY}!{cl}{cr}" for cr in cap_rows)
-                cell = style_cell(ws, row, c, font=BLACK_FORMULA, fmt="0.00")
-                cell.value = f"=SUM({refs})"
-                # Re-lock: _build_month_block wrote these with BLUE_INPUT first
-                cell.protection = Protection(locked=True)
-            else:
-                # Inactive month: empty + grey fill
-                cell = style_cell(ws, row, c, "", font=BLACK_FORMULA,
-                                  fill=GREY_FILL, fmt="0.00")
-                cell.protection = Protection(locked=True)
+                ws.cell(row=row, column=c).value = f"=SUM({refs})"
 
 
 def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
@@ -181,18 +174,17 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
             f"={SHEET_CONFIG}!B{config_row}"
         )
 
-        active_months = wp["end"] - wp["start"] + 1
-        even_fte = round(wp["fte"] / active_months, 4) if active_months > 0 else 0
-
         for m in range(project_months):
             c = month_col_start + m
             month_num = m + 1
 
             if wp["start"] <= month_num <= wp["end"]:
-                style_cell(ws, row, c, even_fte, font=BLUE_INPUT, fmt="0.00")
+                cell = style_cell(ws, row, c, font=BLACK_FORMULA, fmt="0.00")
+                cell.protection = Protection(locked=True)
             else:
-                style_cell(ws, row, c, "", font=BLUE_INPUT, fill=GREY_FILL,
-                           fmt="0.00")
+                cell = style_cell(ws, row, c, "", font=BLACK_FORMULA,
+                                  fill=GREY_FILL, fmt="0.00")
+                cell.protection = Protection(locked=True)
 
         # Validation columns
         sum_range = (f"{col_letter(month_col_start)}{row}:"

@@ -102,7 +102,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
                     eur_value: int | float = preserved_values[m_idx]
                     style_cell(ws, row, c, eur_value, font=BLUE_INPUT, fmt="\u20ac#,##0")
                 else:
-                    style_cell(ws, row, c, 0, font=BLUE_INPUT, fmt="\u20ac#,##0")
+                    style_cell(ws, row, c, font=BLUE_INPUT, fmt="\u20ac#,##0")
             else:
                 style_cell(ws, row, c, "", font=BLUE_INPUT, fill=GREY_FILL,
                            fmt="\u20ac#,##0")

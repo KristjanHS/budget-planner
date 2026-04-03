@@ -38,4 +38,4 @@ pytest tests/ -v
 4. **Inactive month cells must be greyed out and empty.** Auditors flag time logged outside WP active periods.
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
 6. **_META sheet must be updated** whenever you change the workbook structure. It's the primary documentation for future AI agents.
-7. **Cell protection**: All sheets are protected (password "grant"). Only blue input cells are unlocked. Never remove protection or change the password without updating _META.
+7. **Cell protection** *(temporarily disabled)*: When re-enabled, all sheets are protected (password "grant"). Only blue input cells are unlocked. See `_apply_protection()` in workbook.py.

@@ -67,10 +67,11 @@ def test_actuals_demo_values_seeded(actuals_workbook):
     # Active month within demo range should have a positive value
     c = MONTH_COL_START + wp["start"] - 1
     assert ws.cell(row, c).value > 0
-    # Month after DEMO_CURRENT_MONTH should be 0
+    # Month after DEMO_CURRENT_MONTH should be empty (not seeded)
     if DEMO_CURRENT_MONTH < wp["end"]:
         c_after = MONTH_COL_START + DEMO_CURRENT_MONTH
-        assert ws.cell(row, c_after).value == 0
+        val = ws.cell(row, c_after).value
+        assert val is None or val == 0, f"Expected empty/0 after demo range, got {val}"
 
 
 def test_actuals_inactive_months_empty(actuals_workbook):

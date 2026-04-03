@@ -46,4 +46,4 @@ Derive expected values from config imports or from the generated workbook. Tests
 - Font color: Blue=input, Black=formula, Green=cross-sheet
 - _META sheet must reflect current workbook structure
 - When updating meta.py, verify text against the actual builder (e.g., count summary columns in summary.py, not the plan)
-- On rebuild, all config data comes from the existing workbook (Config sheet + Team sheet + Capacity config block), never from config.py. Builders receive config as function parameters.
+- On rebuild, all config data comes from the existing workbook (Config sheet + Capacity config block), never from config.py. Builders receive config as function parameters.

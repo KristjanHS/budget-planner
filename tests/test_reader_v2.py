@@ -151,13 +151,13 @@ def test_read_capacity_external_commitments_round_trip(fresh_wb_path):
     wb.close()
 
 
-# ── Skeleton mode round-trip ──
+# ── Init workbook round-trip (empty capacity) ──
 
 
-def test_skeleton_capacity_all_monthly_values_none(skeleton_wb_path):
-    """Skeleton workbook has all-None monthly values for every person/WP."""
+def test_init_capacity_all_monthly_values_none(fresh_wb_path):
+    """Init workbook has all-None monthly values for every person/WP."""
     import openpyxl
-    wb = openpyxl.load_workbook(skeleton_wb_path)
+    wb = openpyxl.load_workbook(fresh_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
     cap = read_capacity_sheet(wb["Capacity"], config_wps)
@@ -169,7 +169,7 @@ def test_skeleton_capacity_all_monthly_values_none(skeleton_wb_path):
             assert len(values) == PROJECT_MONTHS, (
                 f"{name} {wp_id}: expected {PROJECT_MONTHS} values, got {len(values)}")
             assert all(v is None for v in values), (
-                f"{name} {wp_id}: expected all None in skeleton, "
+                f"{name} {wp_id}: expected all None in init, "
                 f"got non-None at indices "
                 f"{[i for i, v in enumerate(values) if v is not None]}")
         for ext_name, values in group["external_values"].items():
@@ -177,7 +177,7 @@ def test_skeleton_capacity_all_monthly_values_none(skeleton_wb_path):
                 f"{name} {ext_name}: expected {PROJECT_MONTHS} values, "
                 f"got {len(values)}")
             assert all(v is None for v in values), (
-                f"{name} {ext_name}: expected all None in skeleton, "
+                f"{name} {ext_name}: expected all None in init, "
                 f"got non-None at indices "
                 f"{[i for i, v in enumerate(values) if v is not None]}")
     wb.close()

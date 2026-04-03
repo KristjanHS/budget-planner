@@ -53,6 +53,24 @@ EXTERNAL_COMMITMENTS = [
 # Months of actuals to seed in demo mode (end of Year 1)
 DEMO_CURRENT_MONTH = 12
 
+# Capacity assignments for demo mode — written post-hoc by seed_demo_data().
+# Each entry: person, WP id, start month, end month, monthly FTE value.
+DEMO_CAPACITY_ASSIGNMENTS = [
+    {"person": "Alice", "wp": "WP1", "start": 1,  "end": 14, "fte": 0.10},
+    {"person": "Alice", "wp": "WP2", "start": 1,  "end": 6, "fte": 0.50},
+    {"person": "Alice", "wp": "WP3", "start": 1,  "end": 7, "fte": 0.15},
+    {"person": "Bob",   "wp": "WP4", "start": 2,  "end": 11, "fte": 0.25},
+    {"person": "Bob",   "wp": "WP5", "start": 4, "end": 13, "fte": 0.50},
+    {"person": "Bob",   "wp": "WP6", "start": 4, "end": 13, "fte": 0.25},
+    {"person": "Carol", "wp": "WP7", "start": 6, "end": 14, "fte": 0.40},
+    {"person": "Carol", "wp": "WP8", "start": 10, "end": 14, "fte": 0.25},
+    {"person": "Carol", "wp": "WP9", "start": 12, "end": 14, "fte": 0.15},
+    {"person": "Dave",  "wp": "WP3", "start": 1,  "end": 7, "fte": 0.10},
+    {"person": "Dave",  "wp": "WP5", "start": 4, "end": 13, "fte": 0.30},
+    {"person": "Dave",  "wp": "WP6", "start": 4, "end": 13, "fte": 0.30},
+    {"person": "Dave",  "wp": "WP8", "start": 10, "end": 14, "fte": 0.15},
+]
+
 # Spending multipliers per WP index for demo actuals.
 # Each multiplier is applied to the planned monthly EUR to create
 # diverse Trends scenarios: OK, OVER, SLOW, WATCH.

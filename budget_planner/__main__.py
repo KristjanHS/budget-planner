@@ -4,6 +4,7 @@ import sys
 
 from budget_planner.workbook import (
     init_workbook, rebuild_workbook, snapshot_workbook, restore_workbook,
+    seed_demo_data,
 )
 
 
@@ -11,7 +12,7 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] in ("init", "rebuild"):
         _subcommand_mode()
     else:
-        _legacy_mode()
+        _snapshot_restore_mode()
 
 
 def _subcommand_mode():
@@ -21,38 +22,31 @@ def _subcommand_mode():
     )
 
     if command == "init":
-        parser.add_argument("--skeleton", action="store_true",
-                            help="Empty Capacity for manual entry")
+        parser.add_argument("--demo", action="store_true",
+                            help="Seed Capacity + Actuals with demo data")
         parser.add_argument("-o", "--output",
                             default="output/budget_plan.xlsx")
         args = parser.parse_args(sys.argv[2:])
-        mode = "skeleton" if args.skeleton else "demo"
         output = args.output
-        if args.skeleton and output == "output/budget_plan.xlsx":
-            output = "output/budget_plan_skeleton.xlsx"
-        init_workbook(output_path=output, mode=mode)
+        init_workbook(output_path=output)
+        if args.demo:
+            seed_demo_data(output)
 
     elif command == "rebuild":
         parser.add_argument("path", nargs="?",
                             default="output/budget_plan.xlsx",
                             help="Path to existing workbook")
-        parser.add_argument("--skeleton", action="store_true",
-                            help="Clear Capacity FTE values, preserve Actuals")
         args = parser.parse_args(sys.argv[2:])
-        mode = "skeleton" if args.skeleton else "demo"
-        rebuild_workbook(input_path=args.path, mode=mode)
+        rebuild_workbook(input_path=args.path)
 
 
-def _legacy_mode():
-    """Backward-compatible CLI: python -m budget_planner [--skeleton] [-o PATH]"""
-    parser = argparse.ArgumentParser(description="Generate programme budget workbook")
-    parser.add_argument("--skeleton", action="store_true",
-                        help="Production skeleton (empty Capacity)")
+def _snapshot_restore_mode():
+    """CLI for snapshot/restore: python -m budget_planner [--snapshot|--restore] PATH"""
+    parser = argparse.ArgumentParser(description="programme budget workbook utilities")
     parser.add_argument("--snapshot", metavar="PATH",
                         help="Save snapshot for scenario comparison")
     parser.add_argument("--restore", metavar="PATH",
                         help="Restore from snapshot")
-    parser.add_argument("-o", "--output", default="output/budget_plan.xlsx")
     args = parser.parse_args()
 
     if args.snapshot:
@@ -63,11 +57,7 @@ def _legacy_mode():
         restore_workbook(args.restore)
         return
 
-    mode = "skeleton" if args.skeleton else "demo"
-    output_path = args.output
-    if args.skeleton and output_path == "output/budget_plan.xlsx":
-        output_path = "output/budget_plan_skeleton.xlsx"
-    init_workbook(output_path=output_path, mode=mode)
+    parser.print_help()
 
 
 if __name__ == "__main__":

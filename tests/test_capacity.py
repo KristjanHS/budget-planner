@@ -3,7 +3,7 @@
 import pytest
 import openpyxl
 
-from budget_planner.workbook import generate_workbook
+from budget_planner.workbook import init_workbook
 from budget_planner.config import (
     TEAM, WORK_PACKAGES, EXTERNAL_COMMITMENTS,
     MONTH_COL_START, MONTH_COL_END, PROJECT_MONTHS,
@@ -19,7 +19,7 @@ from budget_planner.capacity import build_capacity_sheet
 def full_wb(tmp_path_factory):
     """Generate a full workbook and load it for inspection."""
     out = tmp_path_factory.mktemp("cap") / "test.xlsx"
-    generate_workbook(str(out))
+    init_workbook(str(out))
     wb = openpyxl.load_workbook(str(out), data_only=False)
     return wb
 

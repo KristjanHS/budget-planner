@@ -70,9 +70,9 @@ def _find_total_row(ws, col=2):
 
 @pytest.fixture
 def init_path(tmp_path):
-    """Create a fresh demo workbook."""
+    """Create a fresh workbook for rebuild testing."""
     path = str(tmp_path / "test.xlsx")
-    init_workbook(output_path=path, mode="demo")
+    init_workbook(output_path=path)
     return path
 
 

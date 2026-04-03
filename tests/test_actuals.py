@@ -2,7 +2,7 @@
 import pytest
 import openpyxl
 
-from budget_planner.workbook import generate_workbook
+from budget_planner.workbook import init_workbook, seed_demo_data
 from budget_planner.config import (
     WORK_PACKAGES, NUM_WPS, MONTH_COL_START,
     VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
@@ -14,7 +14,8 @@ from budget_planner.styles import col_letter
 @pytest.fixture(scope="module")
 def actuals_workbook(tmp_path_factory):
     out = tmp_path_factory.mktemp("actuals") / "test.xlsx"
-    generate_workbook(str(out))
+    init_workbook(str(out))
+    seed_demo_data(str(out))
     return openpyxl.load_workbook(str(out), data_only=False)
 
 

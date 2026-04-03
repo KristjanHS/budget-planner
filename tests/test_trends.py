@@ -3,7 +3,7 @@
 import pytest
 import openpyxl
 
-from budget_planner.workbook import generate_workbook
+from budget_planner.workbook import init_workbook, seed_demo_data
 from budget_planner.config import (
     NUM_WPS, TEAM,
     VAL_COL_BUDGET,
@@ -16,7 +16,8 @@ from budget_planner.styles import col_letter
 @pytest.fixture(scope="module")
 def trends_workbook(tmp_path_factory):
     out = tmp_path_factory.mktemp("trends") / "test.xlsx"
-    generate_workbook(str(out))
+    init_workbook(str(out))
+    seed_demo_data(str(out))
     return openpyxl.load_workbook(str(out), data_only=False)
 
 
@@ -341,7 +342,7 @@ def _build_trends_only(num_wps, num_team):
     meta_ws.title = SHEET_META
 
     _build_all_sheets(wb, project_params, work_packages, team,
-                      external_commitments, mode="skeleton")
+                      external_commitments)
 
     trends_ws = wb[SHEET_TRENDS]
     return trends_ws

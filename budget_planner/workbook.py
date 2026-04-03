@@ -4,6 +4,7 @@ import shutil
 from datetime import datetime
 
 from openpyxl import Workbook
+from openpyxl.cell import Cell
 from openpyxl.comments import Comment
 from openpyxl.workbook.defined_name import DefinedName
 
@@ -97,11 +98,13 @@ def _validate_config(project_params, work_packages, team, external_commitments):
 
 
 def _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
-                      *, mode="demo", preserved_capacity=None, preserved_actuals=None,
+                      *, preserved_capacity=None, preserved_actuals=None,
                       rebuild_warnings=None):
     """Build all sheets into the workbook.
 
     Expects wb to already have a '_META' sheet as the active/first sheet.
+    Capacity month cells are always empty (for manual entry or demo seeding).
+    Actuals month cells are always empty (or restored from preserved data).
     """
     meta_ws = wb[SHEET_META]
 
@@ -120,7 +123,7 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     # Capacity sheet (uses config_layout for roster person_rows)
     capacity_ws = wb.create_sheet(SHEET_CAPACITY)
     capacity_layout = build_capacity_sheet(
-        capacity_ws, wb, config_layout, mode=mode,
+        capacity_ws, wb, config_layout,
         project_params=project_params, work_packages=work_packages,
         team=team, external_commitments=external_commitments,
         preserved=preserved_capacity,
@@ -136,12 +139,7 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     trends_ws = wb.create_sheet(SHEET_TRENDS)
     trends_ws.sheet_properties.tabColor = "FFD700"
     style_cell(trends_ws, 1, 1, "Current Month:", font=HEADER_FONT, border=False)
-    if mode == "demo":
-        from budget_planner.config import DEMO_CURRENT_MONTH
-        current_month_value = DEMO_CURRENT_MONTH
-    else:
-        current_month_value = 1
-    style_cell(trends_ws, 1, 2, current_month_value, font=BLUE_INPUT, border=False)
+    style_cell(trends_ws, 1, 2, 1, font=BLUE_INPUT, border=False)
     trends_ws["B1"].comment = Comment(
         "Set to the last month with completed actuals (e.g., 12 for end of Year 1)",
         "Programme Budget Tool",
@@ -154,7 +152,6 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
         project_params=project_params,
         work_packages=work_packages,
         preserved=preserved_actuals,
-        mode=mode,
     )
 
     # Summary sheet
@@ -214,13 +211,14 @@ def _backup_existing(filepath):
     return None
 
 
-def init_workbook(output_path: str = "output/budget_plan.xlsx",
-                  mode: str = "demo") -> str:
+def init_workbook(output_path: str = "output/budget_plan.xlsx") -> str:
     """Create a fresh workbook from config.py seed data.
+
+    Always produces empty Capacity (for manual entry) and empty Actuals.
+    Use seed_demo_data() afterwards for demo/example data.
 
     Args:
         output_path: Where to save the workbook.
-        mode: 'demo' pre-fills Capacity; 'skeleton' leaves it empty.
 
     Returns:
         The output path.
@@ -242,8 +240,7 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
     assert meta_ws is not None
     meta_ws.title = SHEET_META
 
-    _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
-                      mode=mode)
+    _build_all_sheets(wb, project_params, work_packages, team, external_commitments)
 
     # _apply_protection(wb)  # Temporarily disabled
     _apply_all_year_groups(wb, project_params)
@@ -255,8 +252,7 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
     return output_path
 
 
-def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
-                     mode: str = "demo") -> str:
+def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     """Rebuild workbook from existing file, preserving Capacity and Actuals data.
 
     Reads Config sheet (params, WPs, team roster) and Capacity sheet from the
@@ -265,7 +261,6 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
 
     Args:
         input_path: Path to the existing workbook.
-        mode: 'demo' preserves Capacity FTE values; 'skeleton' clears them.
 
     Returns:
         The output path (same as input_path).
@@ -310,13 +305,11 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
     )
     external_commitments = capacity_data["external_commitments"]
 
-    # Preserve Capacity FTE values (unless skeleton mode)
-    preserved_capacity = None
-    if mode != "skeleton":
-        preserved_capacity = {}
-        for person_name, groups in capacity_data["person_groups"].items():
-            for wp_id, monthly in groups["wp_values"].items():
-                preserved_capacity[(person_name, wp_id)] = monthly
+    # Always preserve Capacity FTE values
+    preserved_capacity: dict[tuple[str, str], list[float | None]] = {}
+    for person_name, groups in capacity_data["person_groups"].items():
+        for wp_id, monthly in groups["wp_values"].items():
+            preserved_capacity[(person_name, wp_id)] = monthly
 
     # Preserve Actuals EUR values (always)
     preserved_actuals = None
@@ -343,19 +336,18 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
     wp_ids = {wp["id"] for wp in work_packages}
     team_names = {m["name"] for m in team}
 
-    if preserved_capacity:
-        for key in list(preserved_capacity.keys()):
-            person_name, wp_id = key
-            if person_name not in team_names:
-                warnings.append(
-                    f"Orphaned Capacity: person '{person_name}' removed from team"
-                )
-                del preserved_capacity[key]
-            elif wp_id not in wp_ids:
-                warnings.append(
-                    f"Orphaned Capacity: WP '{wp_id}' removed for {person_name}"
-                )
-                del preserved_capacity[key]
+    for key in list(preserved_capacity.keys()):
+        person_name, wp_id = key
+        if person_name not in team_names:
+            warnings.append(
+                f"Orphaned Capacity: person '{person_name}' removed from team"
+            )
+            del preserved_capacity[key]
+        elif wp_id not in wp_ids:
+            warnings.append(
+                f"Orphaned Capacity: WP '{wp_id}' removed for {person_name}"
+            )
+            del preserved_capacity[key]
 
     if preserved_actuals:
         for wp_id in list(preserved_actuals.keys()):
@@ -380,8 +372,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
 
     _build_all_sheets(
         wb, project_params, work_packages, team, external_commitments,
-        mode=mode,
-        preserved_capacity=preserved_capacity,
+        preserved_capacity=preserved_capacity if preserved_capacity else None,
         preserved_actuals=preserved_actuals,
         rebuild_warnings=warnings if warnings else None,
     )
@@ -396,7 +387,104 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx",
     return input_path
 
 
-def generate_workbook(output_path: str = "output/budget_plan.xlsx",
-                      mode: str = "demo") -> str:
-    """Generate workbook (backward-compatible wrapper for init_workbook)."""
-    return init_workbook(output_path=output_path, mode=mode)
+def seed_demo_data(workbook_path: str) -> str:
+    """Seed Capacity + Actuals with demo data after workbook is built.
+
+    Writes FTE values into Capacity cells matching person+WP+month range,
+    EUR actuals (monthly_planned * multiplier) into Actuals cells, and
+    sets current_month on Trends.
+
+    Args:
+        workbook_path: Path to an existing workbook (from init_workbook).
+
+    Returns:
+        The workbook path.
+    """
+    from openpyxl import load_workbook as _load_wb
+    from budget_planner.config import (
+        DEMO_CAPACITY_ASSIGNMENTS, DEMO_CURRENT_MONTH,
+        DEMO_ACTUALS_MULTIPLIERS, WORK_PACKAGES,
+    )
+    from budget_planner.layout import MONTH_COL_START
+
+    wb = _load_wb(workbook_path)
+
+    # ── Seed Capacity FTE values ──
+    cap_ws = wb[SHEET_CAPACITY]
+
+    # Build lookup: (person_name, wp_id) -> row in Capacity
+    # WP rows have col A = "=Config!A<n>" and col B = "=Config!B<n>"
+    # Person header rows have merged cells with "=Config!A<roster_row>"
+    # We scan for person headers, then WP rows within each person group.
+    cap_person_wp_rows: dict[tuple[str, str], int] = {}
+    current_person: str | None = None
+
+    for r in range(1, cap_ws.max_row + 1):
+        val_a = cap_ws.cell(r, 1).value
+        val_b = cap_ws.cell(r, 2).value
+
+        # Person header: merged cell with "=Config!A<n>" but col B is NOT a Config!B ref
+        if (isinstance(val_a, str) and val_a.startswith("=Config!A")
+                and not (isinstance(val_b, str) and val_b.startswith("=Config!B"))):
+            # Resolve person name from Config sheet
+            config_ws = wb[SHEET_CONFIG]
+            ref_row = int(val_a.split("A")[1])
+            current_person = str(config_ws.cell(ref_row, 1).value)
+            continue
+
+        # WP data row: col A = "=Config!A<n>", col B = "=Config!B<n>"
+        if (isinstance(val_a, str) and val_a.startswith("=Config!A")
+                and isinstance(val_b, str) and val_b.startswith("=Config!B")
+                and current_person is not None):
+            config_row = int(val_a.split("A")[1])
+            config_ws = wb[SHEET_CONFIG]
+            wp_id = str(config_ws.cell(config_row, 1).value)
+            cap_person_wp_rows[(current_person, wp_id)] = r
+
+    # Write FTE values from DEMO_CAPACITY_ASSIGNMENTS
+    for assignment in DEMO_CAPACITY_ASSIGNMENTS:
+        person = assignment["person"]
+        wp_id = assignment["wp"]
+        key = (person, wp_id)
+        if key not in cap_person_wp_rows:
+            continue
+        row = cap_person_wp_rows[key]
+        start_month: int = assignment["start"]
+        end_month: int = assignment["end"]
+        fte: float = assignment["fte"]
+        for m in range(start_month, end_month + 1):
+            col = MONTH_COL_START + m - 1
+            cell = cap_ws.cell(row, col)
+            assert isinstance(cell, Cell)
+            cell.value = fte
+
+    # ── Seed Actuals EUR values ──
+    act_ws = wb[SHEET_ACTUALS]
+
+    # Find first WP row in Actuals (row after "WP ID" header)
+    first_wp_row = None
+    for r in range(1, act_ws.max_row + 1):
+        if act_ws.cell(r, 1).value == "WP ID":
+            first_wp_row = r + 1
+            break
+
+    if first_wp_row is not None:
+        from budget_planner.config import DEFAULT_RATE
+        for i, wp in enumerate(WORK_PACKAGES):
+            row = first_wp_row + i
+            multiplier = DEMO_ACTUALS_MULTIPLIERS[i % len(DEMO_ACTUALS_MULTIPLIERS)]
+            active_months = wp["end"] - wp["start"] + 1
+            monthly_planned = (wp["fte"] / active_months) * DEFAULT_RATE
+            for m_idx in range(wp["start"] - 1, min(wp["end"], DEMO_CURRENT_MONTH)):
+                col = MONTH_COL_START + m_idx
+                eur_value = round(monthly_planned * multiplier)
+                act_ws.cell(row, col).value = eur_value
+
+    # ── Set current_month on Trends ──
+    if SHEET_TRENDS in wb.sheetnames:
+        wb[SHEET_TRENDS]["B1"].value = DEMO_CURRENT_MONTH
+
+    wb.save(workbook_path)
+    wb.close()
+    print(f"Demo data seeded: {workbook_path}")
+    return workbook_path

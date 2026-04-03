@@ -9,7 +9,7 @@ import pytest
 import openpyxl
 from pathlib import Path
 
-from budget_planner.workbook import generate_workbook
+from budget_planner.workbook import init_workbook, seed_demo_data
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
     MONTH_COL_START, NUM_WPS, PROJECT_MONTHS, PROJECT_START, DEFAULT_RATE,
@@ -24,9 +24,10 @@ SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 
 @pytest.fixture(scope="module")
 def demo_wb_path(tmp_path_factory):
-    """Generate a demo workbook."""
+    """Generate a demo workbook (init + seed_demo_data)."""
     out = tmp_path_factory.mktemp("e2e") / "demo.xlsx"
-    generate_workbook(str(out), mode="demo")
+    init_workbook(str(out))
+    seed_demo_data(str(out))
     return str(out)
 
 
@@ -43,18 +44,18 @@ def demo_recalc(demo_wb_path):
 
 
 @pytest.fixture(scope="module")
-def skeleton_wb_path(tmp_path_factory):
-    """Generate a skeleton workbook."""
-    out = tmp_path_factory.mktemp("e2e_skel") / "skeleton.xlsx"
-    generate_workbook(str(out), mode="skeleton")
+def empty_wb_path(tmp_path_factory):
+    """Generate an empty (no demo) workbook."""
+    out = tmp_path_factory.mktemp("e2e_empty") / "empty.xlsx"
+    init_workbook(str(out))
     return str(out)
 
 
 @pytest.fixture(scope="module")
-def skeleton_recalc(skeleton_wb_path):
-    """Recalculate skeleton workbook via LibreOffice."""
+def empty_recalc(empty_wb_path):
+    """Recalculate empty workbook via LibreOffice."""
     result = subprocess.run(
-        ["python3", str(SCRIPTS_DIR / "recalc.py"), skeleton_wb_path],
+        ["python3", str(SCRIPTS_DIR / "recalc.py"), empty_wb_path],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
@@ -71,10 +72,10 @@ def test_demo_mode_recalc_zero_errors(demo_recalc):
     assert demo_recalc["total_errors"] == 0
 
 
-def test_skeleton_mode_recalc_zero_errors(skeleton_recalc):
-    """Generate skeleton workbook -> recalc -> 0 formula errors."""
-    assert skeleton_recalc["status"] == "success"
-    assert skeleton_recalc["total_errors"] == 0
+def test_empty_mode_recalc_zero_errors(empty_recalc):
+    """Generate empty workbook -> recalc -> 0 formula errors."""
+    assert empty_recalc["status"] == "success"
+    assert empty_recalc["total_errors"] == 0
 
 
 def test_demo_mode_formula_count(demo_recalc):

@@ -14,8 +14,12 @@ from budget_planner.styles import (
 )
 
 
-def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, preserved=None, mode="demo"):
+def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, preserved=None):
     """Build the Actuals sheet for EUR actuals per WP per month.
+
+    Monthly EUR cells are always left empty (blue input) for manual entry
+    or demo seeding. When ``preserved`` is provided (rebuild), those values
+    are restored.
 
     Args:
         wb: The parent Workbook.
@@ -36,14 +40,6 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
             }
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
-
-    # Demo mode: seed actuals with scenario data for Trends validation
-    demo_current_month: int = 0
-    demo_multipliers: list[float] = []
-    if mode == "demo":
-        from budget_planner.config import DEMO_CURRENT_MONTH, DEMO_ACTUALS_MULTIPLIERS
-        demo_current_month = DEMO_CURRENT_MONTH
-        demo_multipliers = list(DEMO_ACTUALS_MULTIPLIERS)
 
     month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
@@ -103,15 +99,10 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
             month_num = m_idx + 1
             if wp["start"] <= month_num <= wp["end"]:
                 if preserved_values is not None and m_idx < len(preserved_values) and preserved_values[m_idx] is not None:
-                    eur_value = preserved_values[m_idx]
-                elif mode == "demo" and month_num <= demo_current_month:
-                    active_months = wp["end"] - wp["start"] + 1
-                    monthly_planned = (wp["fte"] / active_months) * project_params["rate"]
-                    multiplier = demo_multipliers[i % len(demo_multipliers)]
-                    eur_value = round(monthly_planned * multiplier)
+                    eur_value: int | float = preserved_values[m_idx]
+                    style_cell(ws, row, c, eur_value, font=BLUE_INPUT, fmt="\u20ac#,##0")
                 else:
-                    eur_value = 0
-                style_cell(ws, row, c, eur_value, font=BLUE_INPUT, fmt="\u20ac#,##0")
+                    style_cell(ws, row, c, 0, font=BLUE_INPUT, fmt="\u20ac#,##0")
             else:
                 style_cell(ws, row, c, "", font=BLUE_INPUT, fill=GREY_FILL,
                            fmt="\u20ac#,##0")

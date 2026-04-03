@@ -23,18 +23,19 @@ def _wp_config_row(wp_id, work_packages, config_first_wp_row):
     raise ValueError(f"Unknown WP ID: {wp_id}")
 
 
-def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
+def build_capacity_sheet(ws, wb, team_layout, *,
                          project_params=None, work_packages=None,
                          team=None, external_commitments=None,
                          preserved=None, config_first_wp_row=None):
     """Build the Capacity sheet: external commitments config + per-person groups.
 
+    Monthly FTE cells are always left empty for manual entry (or demo seeding).
+    When ``preserved`` is provided (rebuild), those values are restored.
+
     Args:
         ws: The Capacity worksheet to populate.
         wb: The parent Workbook.
         team_layout: dict from build_config_sheet with person_rows, etc.
-        mode: "demo" seeds monthly cells with calculated values;
-              "skeleton" leaves them empty for manual entry.
         project_params: dict with keys title, start, months, rate.
             When None, lazy-imports from config.
         work_packages: list of WP dicts. When None, lazy-imports from config.
@@ -180,8 +181,8 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
                     else:
                         style_cell(ws, r, c, font=BLUE_INPUT, fmt="0.00")
                     # Add comment on first active cell of first WP row per person
-                    if (mode == "skeleton" and first_wp_row_for_person
-                            and not comment_added):
+                    if (first_wp_row_for_person and not comment_added
+                            and seed_value is None):
                         ws.cell(row=r, column=c).comment = Comment(
                             "Enter monthly FTE allocation for each work "
                             "package and external project.",
@@ -233,22 +234,13 @@ def build_capacity_sheet(ws, wb, team_layout, *, mode="demo",
             # Col B: empty
             style_cell(ws, r, 2, font=BLUE_INPUT)
 
-            # Monthly cells
-            active_months = entry["end"] - entry["start"] + 1
-            if mode == "skeleton":
-                ext_seed = None
-            else:
-                ext_seed = round(entry["fte"] / active_months, 4) if active_months > 0 else 0
-
+            # Monthly cells — always empty for manual entry
             for mi in range(project_params["months"]):
                 c = month_col_start + mi
                 month_num = mi + 1
 
                 if entry["start"] <= month_num <= entry["end"]:
-                    if ext_seed is not None:
-                        style_cell(ws, r, c, ext_seed, font=BLUE_INPUT, fmt="0.00")
-                    else:
-                        style_cell(ws, r, c, font=BLUE_INPUT, fmt="0.00")
+                    style_cell(ws, r, c, font=BLUE_INPUT, fmt="0.00")
                 else:
                     style_cell(ws, r, c, "", font=BLUE_INPUT, fill=GREY_FILL,
                                fmt="0.00")

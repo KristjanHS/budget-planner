@@ -3,7 +3,7 @@
 import pytest
 import openpyxl
 
-from budget_planner.workbook import generate_workbook
+from budget_planner.workbook import init_workbook
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import TEAM, WORK_PACKAGES, PROJECT_MONTHS, PROJECT_START
 
@@ -14,7 +14,7 @@ from budget_planner.config import TEAM, WORK_PACKAGES, PROJECT_MONTHS, PROJECT_S
 def workbook(tmp_path_factory):
     """Generate a full demo workbook and load it."""
     out = tmp_path_factory.mktemp("cf") / "test.xlsx"
-    generate_workbook(str(out))
+    init_workbook(str(out))
     return openpyxl.load_workbook(str(out), data_only=False)
 
 

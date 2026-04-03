@@ -4,7 +4,7 @@ import re
 import openpyxl
 import pytest
 
-from budget_planner.workbook import generate_workbook
+from budget_planner.workbook import init_workbook
 from budget_planner.reader import discover_layout
 from budget_planner.config import (
     WORK_PACKAGES, MONTH_COL_START, PROJECT_MONTHS,
@@ -15,7 +15,7 @@ from budget_planner.config import (
 def v2_workbook(tmp_path_factory):
     """Generate a fresh v2 workbook and load it."""
     out = tmp_path_factory.mktemp("plan_v2") / "test.xlsx"
-    generate_workbook(str(out))
+    init_workbook(str(out))
     return openpyxl.load_workbook(str(out), data_only=False)
 
 

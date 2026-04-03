@@ -18,9 +18,9 @@ def _set_cell(ws: object, row: int, col: int, value: float | int) -> None:
 
 @pytest.fixture
 def init_wb(tmp_path):
-    """Create a fresh demo workbook for rebuild testing."""
+    """Create a fresh workbook for rebuild testing."""
     path = str(tmp_path / "test.xlsx")
-    init_workbook(output_path=path, mode="demo")
+    init_workbook(output_path=path)
     return path
 
 
@@ -105,9 +105,9 @@ class TestCapacityPreservation:
         assert found, f"Modified value {new_value} not found after rebuild"
         wb.close()
 
-    def test_skeleton_rebuild_keeps_structure(self, init_wb):
-        """Rebuild with skeleton mode produces valid workbook structure."""
-        rebuild_workbook(input_path=init_wb, mode="skeleton")
+    def test_rebuild_keeps_structure(self, init_wb):
+        """Rebuild produces valid workbook structure."""
+        rebuild_workbook(input_path=init_wb)
 
         wb = load_workbook(init_wb)
         assert "Config" in wb.sheetnames
@@ -117,7 +117,7 @@ class TestCapacityPreservation:
 
 
 class TestActualsPreservation:
-    """Actuals EUR values are always preserved, even in skeleton mode."""
+    """Actuals EUR values are always preserved on rebuild."""
 
     def test_actuals_values_preserved(self, init_wb):
         """Modified Actuals EUR values survive rebuild."""
@@ -145,26 +145,6 @@ class TestActualsPreservation:
                 found = True
                 break
         assert found, "Actuals value 5000 not found after rebuild"
-        wb.close()
-
-    def test_actuals_preserved_in_skeleton_mode(self, init_wb):
-        """Actuals are preserved even when Capacity is cleared."""
-        wb = load_workbook(init_wb)
-        act = wb["Actuals"]
-        _set_cell(act, 4, 3, 9999)
-        wb.save(init_wb)
-        wb.close()
-
-        rebuild_workbook(input_path=init_wb, mode="skeleton")
-
-        wb = load_workbook(init_wb)
-        act = wb["Actuals"]
-        found = False
-        for r in range(1, act.max_row + 1):
-            if act.cell(r, 3).value == 9999:
-                found = True
-                break
-        assert found, "Actuals value 9999 not preserved in skeleton rebuild"
         wb.close()
 
 

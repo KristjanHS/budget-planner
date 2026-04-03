@@ -10,20 +10,14 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 # Set up dev environment
 uv venv && uv pip install -e ".[dev]"
 
-# Create a fresh workbook from config.py seed data
+# Create a fresh empty workbook from config.py seed data
 python -m budget_planner init
+
+# Create a workbook with demo Capacity + Actuals data
+python -m budget_planner init --demo
 
 # Rebuild from existing workbook (preserves Capacity FTE + Actuals EUR)
 python -m budget_planner rebuild
-
-# Rebuild but clear Capacity allocations (keeps Actuals)
-python -m budget_planner rebuild --skeleton
-
-# Legacy: generate workbook (demo mode — pre-filled with seed allocations)
-python -m budget_planner
-
-# Legacy: generate skeleton workbook (empty Capacity for manual entry)
-python -m budget_planner --skeleton
 
 # Snapshot / restore for scenario comparison
 python -m budget_planner --snapshot output/budget_plan.xlsx

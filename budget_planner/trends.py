@@ -404,7 +404,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     planned_ref = Reference(ws, min_col=min_col, max_col=max_col,
                             min_row=helper_row_planned,
                             max_row=helper_row_planned)
-    chart.add_data(planned_ref, titles_from_data=False)
+    chart.add_data(planned_ref, from_rows=True, titles_from_data=False)
     s_planned = chart.series[0]
     s_planned.tx = SeriesLabel(v="Planned")
     s_planned.graphicalProperties.line.solidFill = "4472C4"
@@ -413,7 +413,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     actual_ref = Reference(ws, min_col=min_col, max_col=max_col,
                            min_row=helper_row_actual,
                            max_row=helper_row_actual)
-    chart.add_data(actual_ref, titles_from_data=False)
+    chart.add_data(actual_ref, from_rows=True, titles_from_data=False)
     s_actual = chart.series[1]
     s_actual.tx = SeriesLabel(v="Actual")
     s_actual.graphicalProperties.line.solidFill = "FF0000"
@@ -422,7 +422,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     ceiling_ref = Reference(ws, min_col=min_col, max_col=max_col,
                             min_row=helper_row_ceiling,
                             max_row=helper_row_ceiling)
-    chart.add_data(ceiling_ref, titles_from_data=False)
+    chart.add_data(ceiling_ref, from_rows=True, titles_from_data=False)
     s_ceiling = chart.series[2]
     s_ceiling.tx = SeriesLabel(v="Ceiling")
     s_ceiling.graphicalProperties.line.solidFill = "808080"

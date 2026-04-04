@@ -711,8 +711,9 @@
     <text x="150" y="380" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Breach In</text>
     <text x="150" y="396" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(months to ceiling)</text>
 
-    <rect x="270" y="362" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="389" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">Breach In &ge; 12 months</text>
+    <rect x="270" y="362" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5" stroke-dasharray="4,2"/>
+    <text x="400" y="385" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">Breach In &ge; 12 months</text>
+    <text x="400" y="400" text-anchor="middle" fill="#a0aec0" font-size="8" font-family="system-ui">(implied — no CF rule)</text>
 
     <rect x="540" y="362" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
     <text x="670" y="389" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">Breach In &lt; 12 months</text>
@@ -1156,7 +1157,7 @@
       <text x="15" y="68" fill="#4a5568" font-size="10" font-family="system-ui">read_team_sheet &rarr; roster + shares</text>
       <text x="15" y="84" fill="#4a5568" font-size="10" font-family="system-ui">read_capacity_sheet &rarr; FTE values</text>
       <text x="15" y="100" fill="#4a5568" font-size="10" font-family="system-ui">read_actuals_values &rarr; EUR values</text>
-      <text x="15" y="116" fill="#4a5568" font-size="10" font-family="system-ui">current_month &larr; Trends!B1</text>
+      <text x="15" y="116" fill="#718096" font-size="10" font-family="system-ui">current_month &larr; Trends!B1 (grouping only)</text>
       <line x1="15" y1="125" x2="265" y2="125" stroke="#e2e8f0"/>
       <text x="15" y="142" fill="#48bb78" font-size="10" font-weight="600" font-family="system-ui">&#x2713; Capacity FTE (normal)</text>
       <text x="15" y="155" fill="#e53e3e" font-size="10" font-weight="600" font-family="system-ui">&#x2717; Capacity FTE (skeleton)</text>
@@ -1238,13 +1239,16 @@
       <text x="200" y="52" fill="#4a5568" font-size="10" font-family="system-ui">Actuals EUR</text>
 
       <text x="350" y="52" fill="#48bb78" font-size="11" font-weight="bold" font-family="system-ui">&#x2713; Preserved (normal)</text>
-      <text x="540" y="52" fill="#4a5568" font-size="10" font-family="system-ui">Capacity FTE, current_month</text>
+      <text x="540" y="52" fill="#4a5568" font-size="10" font-family="system-ui">Capacity FTE</text>
 
       <text x="40" y="72" fill="#e53e3e" font-size="11" font-weight="bold" font-family="system-ui">&#x2717; Cleared (skeleton)</text>
       <text x="210" y="72" fill="#4a5568" font-size="10" font-family="system-ui">Capacity FTE</text>
 
-      <text x="350" y="72" fill="#d69e2e" font-size="11" font-weight="bold" font-family="system-ui">&#x26A0; Dropped with warning</text>
-      <text x="550" y="72" fill="#4a5568" font-size="10" font-family="system-ui">Orphaned data (removed persons/WPs)</text>
+      <text x="350" y="72" fill="#4299e1" font-size="11" font-weight="bold" font-family="system-ui">&#x21BB; Re-seeded on rebuild</text>
+      <text x="530" y="72" fill="#4a5568" font-size="10" font-family="system-ui">current_month (read for column grouping only)</text>
+
+      <text x="730" y="72" fill="#d69e2e" font-size="11" font-weight="bold" font-family="system-ui">&#x26A0; Dropped with warning</text>
+      <text x="920" y="72" fill="#4a5568" font-size="10" font-family="system-ui">Orphaned data</text>
     </g>
   </svg>
 </div>

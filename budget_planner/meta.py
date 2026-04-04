@@ -122,14 +122,15 @@ SHEET: CONFIG (single source of truth for all project parameters)
     Row 5: (blank separator)
 
   SECTION B: WORK PACKAGES TABLE (rows 6+)
-    Row 6: Section header "WORK PACKAGES" (merged A6:G6, section fill)
-    Row 7: Column headers: WP ID | WP Name | FTE Budget | Start Month | End Month | Active Months | Personnel Ceiling (€)
+    Row 6: Section header "WORK PACKAGES" (merged A6:H6, section fill)
+    Row 7: Column headers: WP ID | WP Name | FTE Budget | Start Month | End Month | Type | Active Months | Personnel Ceiling (€)
     Rows {cfg_first_wp}-{cfg_last_wp}: WP data rows
-      Cols A-E: blue input (WP ID, Name, FTE Budget, Start Mo, End Mo)
-      Col F: =E-D+1 (Active Months, black formula)
-      Col G: =C*fte_rate (Personnel Ceiling EUR, black formula)
-    Row {cfg_total_row}: TOTAL row (SUM on cols C and G, light blue fill)
-    Excel Table "tbl_WorkPackages" covers A7:G{cfg_last_wp} (header + data, excludes TOTAL)
+      Cols A-F: blue input (WP ID, Name, FTE Budget, Start Mo, End Mo, Type)
+      Col F Type: distribution curve type (flat/front-loaded/bell/back-loaded)
+      Col G: =E-D+1 (Active Months, black formula)
+      Col H: =C*fte_rate (Personnel Ceiling EUR, black formula)
+    Row {cfg_total_row}: TOTAL row (SUM on cols C and H, light blue fill)
+    Excel Table "tbl_WorkPackages" covers A7:H{cfg_last_wp} (header + data, excludes TOTAL)
     Conditional formatting: yellow fill if Start > End
 
   SECTION C: TEAM ROSTER (below WP TOTAL)
@@ -142,7 +143,13 @@ SHEET: CONFIG (single source of truth for all project parameters)
 SHEET: CAPACITY (primary planning surface)
   Tab color: Purple
 
-  CONFIG BLOCK: EXTERNAL COMMITMENTS (top of sheet)
+  CONFIG BLOCK 1: PERSON-WP ASSIGNMENTS (top of sheet, collapsed row group)
+    Columns: Person, WP, Total FTE, Start Month, End Month
+    Blue input cells. Each row maps one person to one WP with a total FTE allocation.
+    Start/End default to WP active period but can be narrowed by the user.
+    Distribution type comes from Config WP Type column (not repeated here).
+
+  CONFIG BLOCK 2: EXTERNAL COMMITMENTS (below assignments, collapsed row group)
     Columns: Person, Project, Total FTE, Start Month, End Month
     {num_ext} entries from seed data (all input, blue text)
 
@@ -150,8 +157,13 @@ SHEET: CAPACITY (primary planning surface)
 
   PER-PERSON GROUPS: one group per team member ({num_team} people)
     Person Header: bold, section fill, formula ref to Config roster (=Config!A<roster_row>)
-    Programme WP Rows: WP ID/Name formula refs to Config WP table, monthly FTE (input, blue)
-    External Project Rows: project name (input), monthly FTE (input, blue)
+    Programme WP Rows: only ASSIGNED WPs for this person (from config block 1, not all WPs)
+      WP ID/Name formula refs to Config WP table
+      Monthly FTE: static values auto-filled by distribution curves (blue input)
+      Distribution type per WP: flat, front-loaded, bell, back-loaded (from Config Type col)
+      Inactive months: grey fill, empty
+      Users can override individual month cells post-generation for fine-tuning
+    External Project Rows: project name (input), monthly FTE (flat distribution, blue input)
     TOTAL Row: SUM of all rows above (formula)
     REMAINING Row: Config Max FTE - TOTAL (formula, refs Config!B<roster_row>)
 
@@ -160,7 +172,7 @@ SHEET: CAPACITY (primary planning surface)
     TOTAL > 0.8 x Max FTE: amber fill (approaching limit)
     REMAINING < 0: red fill
 
-  VALIDATION COLUMNS: {val_sum_col} = Sum, {val_budget_col} = Budget, {val_diff_col} = Variance (per row)
+  VALIDATION COLUMNS: {val_sum_col} = Sum, {val_budget_col} = Budget (from assignment config block Total FTE), {val_diff_col} = Variance (per row)
 
 ═══ PLAN SHEET STRUCTURE ═══
 
@@ -168,7 +180,7 @@ ROW 1: COMPACT HEADER
   A1 = "Title:", B1 = Project title (green cross-ref to Config!B1, bold 14pt)
   D1 = "Start:", E1 = Project start date (green cross-ref to Config!B2, MMM YYYY)
   F1 = "Rate:",  G1 = FTE Rate (green cross-ref to Config!B4, €#,##0)
-  H1 = "Ceiling:", I1 = Personnel Ceiling (formula: =SUM(Config!G{cfg_first_wp}:G{cfg_last_wp}), €#,##0)
+  H1 = "Ceiling:", I1 = Personnel Ceiling (formula: =SUM(Config!H{cfg_first_wp}:H{cfg_last_wp}), €#,##0)
        I1 also serves as the partner_ceiling named range target.
 
 ROW 2: (blank separator)
@@ -207,7 +219,7 @@ SHEET: ACTUALS (EUR actuals from accountant)
       - Active months initialized to 0 (or preserved from rebuild)
       - Inactive months greyed out and empty (same WP active period as Config)
     Col {val_sum_col} = Sum of monthly EUR (formula: SUM)
-    Col {val_budget_col} = Ceiling EUR from Config col G (green cross-ref: =Config!G<config_row>)
+    Col {val_budget_col} = Ceiling EUR from Config col H (green cross-ref: =Config!H<config_row>)
     Col {val_diff_col} = Variance: Ceiling - Sum (formula). Negative = OVERRUN.
     Col {val_cum_col} = Cum. EUR: SUMPRODUCT cumulative up to current_month (formula)
     Col {val_pct_col} = % Ceiling: Cum. EUR / Ceiling (formula, 0.0% format)
@@ -315,17 +327,21 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
   Config → Capacity → Plan ← Actuals → Summary (no circular refs)
                                   ↘ Trends ↙
 
-  Config WP table (WP IDs, names, budgets) --> all sheets via cross-refs
+  Config WP table (WP IDs, names, budgets, type) --> all sheets via cross-refs
+  Config WP Type column --> Capacity distribution curves (flat/front-loaded/bell/back-loaded)
   Config team roster (names, Max FTE) --> Capacity person headers + REMAINING formulas
   Config derived cols (Active Months, Personnel Ceiling) --> Actuals ceiling validation
-  Capacity monthly FTE (input) --> Plan Planned FTE (SUM formulas across people)
+  Capacity assignment config block (Person-WP mappings) --> per-person filtered WP rows
+  Capacity monthly FTE (static values from distribution) --> Plan Planned FTE (SUM formulas across people)
   Actuals monthly EUR (input) --> Summary actual EUR aggregation
   Plan Planned FTE --> Summary planned FTE/EUR aggregation
   Actuals cumulative columns + Config WP table --> Trends burn rate & exhaustion
   Capacity TOTAL rows + Config roster --> Trends person load
   Plan Planned FTE + Actuals TOTAL --> Trends cumulative chart
 
-  PRIMARY PLANNING SURFACE: Capacity sheet. Edit monthly FTE per person there.
+  PRIMARY PLANNING SURFACE: Capacity sheet config blocks. Edit person-WP assignments and
+  external commitments there. Monthly FTE values are auto-filled by distribution curves on
+  rebuild. Users can override individual month cells post-generation for fine-tuning.
   Plan Planned FTE is formula-driven — do not edit directly.
   Actuals sheet is the input surface for EUR spend — enter accountant figures there.
   Trends sheet is read-only formulas — set current_month (Trends!B1) to update.
@@ -348,7 +364,7 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
 ═══ NAMED RANGES ═══
   project_start   = Config!$B$2   (project start date)
   fte_rate         = Config!$B$4   (monthly EUR rate per person-month)
-  partner_ceiling  = Plan!$I$1     (total personnel ceiling in EUR, =SUM of Config!G WP column)
+  partner_ceiling  = Plan!$I$1     (total personnel ceiling in EUR, =SUM of Config!H WP column)
   current_month    = Trends!$B$1   (last month with completed actuals, blue input)
 
 FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for month iterations.
@@ -356,13 +372,21 @@ FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for mon
 ═══ MODIFICATION GUIDE (for AI agents and PMs) ═══
 
 TO ADD A WORK PACKAGE:
-  1. Add a row to tbl_WorkPackages on the Config sheet (WP ID, Name, FTE, Start, End)
+  1. Add a row to tbl_WorkPackages on the Config sheet (WP ID, Name, FTE, Start, End, Type)
+  2. Add person-WP assignment rows in the Capacity PERSON-WP ASSIGNMENTS config block
+  3. Run: python -m budget_planner rebuild
+  4. Rebuild regenerates all sheets. Existing config block data and Actuals EUR are preserved.
+
+TO ADD A PERSON-WP ASSIGNMENT:
+  1. Add a row to the PERSON-WP ASSIGNMENTS config block on the Capacity sheet
+     (Person, WP, Total FTE, Start Month, End Month)
   2. Run: python -m budget_planner rebuild
-  3. Rebuild regenerates all sheets. Existing Capacity FTE and Actuals EUR are preserved.
+  3. The person's grid will show the new WP with auto-filled monthly FTE values.
 
 TO ADD A TEAM MEMBER:
   1. Add a row to the Config sheet TEAM ROSTER section (Name, Max FTE)
-  2. Run: python -m budget_planner rebuild
+  2. Add person-WP assignment rows in the Capacity PERSON-WP ASSIGNMENTS config block
+  3. Run: python -m budget_planner rebuild
 
 TO CHANGE PROJECT DURATION:
   1. Edit Project Months on the Config sheet (cell B3)
@@ -373,8 +397,8 @@ TO CHANGE FTE RATE:
   Edit cell B4 on Config sheet. All EUR calculations update via the fte_rate named range.
 
 TO REPLACE EXAMPLE DATA:
-  Edit Config sheet (WPs, team roster), Capacity config block
-  (external commitments). Then run: python -m budget_planner rebuild
+  Edit Config sheet (WPs with Type, team roster), Capacity config blocks
+  (person-WP assignments + external commitments). Then run: python -m budget_planner rebuild
 
 SCENARIO PLANNING:
   Use --snapshot to save current state, edit Capacity/Actuals freely, --restore to revert.
@@ -400,6 +424,11 @@ TO CREATE A DEMO WORKBOOK:
    If you rename a WP ID on the Config sheet, rebuild cannot match old Capacity
    and Actuals data to the new ID. Orphaned data is logged in the LAST REBUILD
    LOG section below.
+
+3. MONTHLY OVERRIDES ARE LOST ON REBUILD.
+   Monthly FTE values in Capacity are recalculated from the config block on every
+   rebuild. If you manually override individual month cells for fine-tuning,
+   those overrides will be replaced by distribution-curve values on the next rebuild.
 """.format(
         date=datetime.now().strftime("%Y-%m-%d"),
         pm=project_params["months"],

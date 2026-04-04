@@ -14,15 +14,6 @@ python -m budget_planner init
 # Rebuild from existing workbook (preserves Capacity FTE + Actuals EUR)
 python -m budget_planner rebuild
 
-# Rebuild but clear Capacity allocations (keeps Actuals)
-python -m budget_planner rebuild --skeleton
-
-# Legacy: generate workbook (demo mode -- pre-filled with seed allocations)
-python -m budget_planner
-
-# Legacy: generate skeleton workbook (empty Capacity for manual entry)
-python -m budget_planner --skeleton
-
 # Snapshot / restore for scenario comparison
 python -m budget_planner --snapshot output/budget_plan.xlsx
 python -m budget_planner --restore output/budget_plan.xlsx
@@ -66,7 +57,7 @@ budget-planner/
 ├── CONVENTIONS.md            # Spreadsheet formatting, structural patterns, cross-sheet refs
 ├── CLAUDE.md                 # Claude Code project instructions
 ├── budget_planner/
-│   ├── __main__.py           # CLI: init, rebuild, rebuild --skeleton subcommands
+│   ├── __main__.py           # CLI: init, rebuild subcommands
 │   ├── config.py             # WPs, team, external commitments, constants (seed for init)
 │   ├── config_sheet.py       # Config sheet builder + reader
 │   ├── styles.py             # Font/fill/border constants, column grouping
@@ -106,7 +97,7 @@ budget-planner/
 - Even FTE spread across active months as default, with manual override per cell
 - Single FTE rate -- all EUR derived from FTE x rate
 - Inactive months greyed out and empty to prevent audit issues
-- Demo mode seeds with calculated allocations; skeleton mode leaves cells empty
+- Demo mode seeds with calculated allocations (`init --demo`); plain `init` leaves Capacity cells empty
 - `_META` sheet inside the workbook documents structure for AI agents
 
 ## Dependencies

@@ -1,6 +1,5 @@
 output/*.xlsx
 !output/budget_plan.xlsx
-!output/budget_plan_skeleton.xlsx
 !output/budget_plan_change.xlsx
 !output/budget_plan_demo.xlsx
 __pycache__/

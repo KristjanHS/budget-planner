@@ -54,7 +54,7 @@ EXTERNAL_COMMITMENTS = [
 # Months of actuals to seed in demo mode (end of Year 1)
 DEMO_CURRENT_MONTH = 12
 
-# Capacity assignments for demo mode — written post-hoc by seed_demo_data().
+# Capacity assignments for demo mode — passed to init_workbook(assignments=...).
 # Each entry: person, WP id, total FTE, start month, end month.
 DEMO_CAPACITY_ASSIGNMENTS = [
     {"person": "Alice", "wp": "WP1", "start": 1,  "end": 14, "total_fte": 4.0},

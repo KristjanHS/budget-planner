@@ -118,7 +118,7 @@ def test_actuals_ceiling_refs_plan(actuals_workbook):
             break
     assert first_wp_row is not None
     cell = ws.cell(first_wp_row, VAL_COL_BUDGET)
-    assert cell.value and "Config!G" in str(cell.value)
+    assert cell.value and "Config!H" in str(cell.value)
 
 
 def test_actuals_variance_formula(actuals_workbook):

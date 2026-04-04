@@ -207,9 +207,12 @@ def build_capacity_sheet(ws, wb, team_layout, *,
 
     first_person_header_row = r
 
-    # ── Build per-person assignment lookup ──
-    person_assignments: dict[str, list[dict]] = {}
+    # ── Build per-person assignment lookup (deduplicate by person+wp) ──
+    _dedup: dict[tuple[str, str], dict] = {}
     for entry in assignments:
+        _dedup[(entry["person"], entry["wp"])] = entry
+    person_assignments: dict[str, list[dict]] = {}
+    for entry in _dedup.values():
         person_assignments.setdefault(entry["person"], []).append(entry)
 
     # ── PER-PERSON GROUPS ──
@@ -267,7 +270,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
                     val = monthly_values[active_idx] if active_idx < len(monthly_values) else 0
                     active_idx += 1
                     style_cell(ws, r, c, round(val, 4), font=BLUE_INPUT, fmt="0.00")
-                    if first_wp_row_for_person and not comment_added and val == 0:
+                    if first_wp_row_for_person and not comment_added:
                         ws.cell(row=r, column=c).comment = Comment(
                             "Enter monthly FTE allocation for each work "
                             "package and external project.",

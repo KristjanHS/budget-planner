@@ -102,9 +102,9 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
                      f"{col_letter(month_col_end)}{row}")
         style_cell(ws, row, val_col_sum, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = f"=SUM({sum_range})"
-        # Validation: Ceiling (from Config Personnel Ceiling column G)
+        # Validation: Ceiling (from Config Personnel Ceiling column H)
         style_cell(ws, row, val_col_budget, font=GREEN_XREF,
-                   fmt="\u20ac#,##0").value = f"={SHEET_CONFIG}!G{config_row}"
+                   fmt="\u20ac#,##0").value = f"={SHEET_CONFIG}!H{config_row}"
         # Validation: Variance = Ceiling - Sum
         style_cell(ws, row, val_col_diff, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = (

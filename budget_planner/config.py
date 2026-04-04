@@ -17,20 +17,21 @@ PROJECT_MONTHS = 14                    # Total project duration in months
 DEFAULT_RATE = 7500                    # EUR per person-month (internal rate)
 
 # ── WORK PACKAGES ──
-# Each WP dict must have: id, name, fte (total person-months), start (month number 1-based), end (month number 1-based)
+# Each WP dict must have: id, name, fte (total person-months), start (month number 1-based), end (month number 1-based),
+# type (distribution curve: "flat", "front-loaded", "bell", "back-loaded")
 # start and end define the active period — FTE can only be allocated within this range
 # The funder audits that no time is logged outside a WP's active period
 
 WORK_PACKAGES = [
-    {"id": "WP1", "name": "Project Management",              "fte": 4.0, "start": 1,  "end": 14},
-    {"id": "WP2", "name": "Requirements and concept",     "fte": 6.0,  "start": 1,  "end": 6},
-    {"id": "WP3", "name": "Research and analysis", "fte": 6.0, "start": 1,  "end": 7},
-    {"id": "WP4", "name": "Architecture design",             "fte": 12.0, "start": 2,  "end": 11},
-    {"id": "WP5", "name": "Component design",               "fte": 6.0, "start": 4, "end": 13},
-    {"id": "WP6", "name": "Subsystem design",  "fte": 3.0, "start": 4, "end": 13},
-    {"id": "WP7", "name": "Software development",         "fte": 3.0, "start": 6, "end": 14},
-    {"id": "WP8", "name": "Prototyping",        "fte": 3.0,  "start": 10, "end": 14},
-    {"id": "WP9", "name": "Validation and demo",       "fte": 3.0,  "start": 12, "end": 14},
+    {"id": "WP1", "name": "Project Management",              "fte": 4.0, "start": 1,  "end": 14, "type": "flat"},
+    {"id": "WP2", "name": "Requirements and concept",     "fte": 6.0,  "start": 1,  "end": 6, "type": "front-loaded"},
+    {"id": "WP3", "name": "Research and analysis", "fte": 6.0, "start": 1,  "end": 7, "type": "front-loaded"},
+    {"id": "WP4", "name": "Architecture design",             "fte": 12.0, "start": 2,  "end": 11, "type": "bell"},
+    {"id": "WP5", "name": "Component design",               "fte": 6.0, "start": 4, "end": 13, "type": "bell"},
+    {"id": "WP6", "name": "Subsystem design",  "fte": 3.0, "start": 4, "end": 13, "type": "bell"},
+    {"id": "WP7", "name": "Software development",         "fte": 3.0, "start": 6, "end": 14, "type": "bell"},
+    {"id": "WP8", "name": "Prototyping",        "fte": 3.0,  "start": 10, "end": 14, "type": "back-loaded"},
+    {"id": "WP9", "name": "Validation and demo",       "fte": 3.0,  "start": 12, "end": 14, "type": "back-loaded"},
 ]
 
 # ── TEAM ──
@@ -54,21 +55,21 @@ EXTERNAL_COMMITMENTS = [
 DEMO_CURRENT_MONTH = 12
 
 # Capacity assignments for demo mode — written post-hoc by seed_demo_data().
-# Each entry: person, WP id, start month, end month, monthly FTE value.
+# Each entry: person, WP id, total FTE, start month, end month.
 DEMO_CAPACITY_ASSIGNMENTS = [
-    {"person": "Alice", "wp": "WP1", "start": 1,  "end": 14, "fte": 0.10},
-    {"person": "Alice", "wp": "WP2", "start": 1,  "end": 6, "fte": 0.50},
-    {"person": "Alice", "wp": "WP3", "start": 1,  "end": 7, "fte": 0.15},
-    {"person": "Bob",   "wp": "WP4", "start": 2,  "end": 11, "fte": 0.25},
-    {"person": "Bob",   "wp": "WP5", "start": 4, "end": 13, "fte": 0.50},
-    {"person": "Bob",   "wp": "WP6", "start": 4, "end": 13, "fte": 0.25},
-    {"person": "Carol", "wp": "WP7", "start": 6, "end": 14, "fte": 0.40},
-    {"person": "Carol", "wp": "WP8", "start": 10, "end": 14, "fte": 0.25},
-    {"person": "Carol", "wp": "WP9", "start": 12, "end": 14, "fte": 0.15},
-    {"person": "Dave",  "wp": "WP3", "start": 1,  "end": 7, "fte": 0.10},
-    {"person": "Dave",  "wp": "WP5", "start": 4, "end": 13, "fte": 0.30},
-    {"person": "Dave",  "wp": "WP6", "start": 4, "end": 13, "fte": 0.30},
-    {"person": "Dave",  "wp": "WP8", "start": 10, "end": 14, "fte": 0.15},
+    {"person": "Alice", "wp": "WP1", "start": 1,  "end": 14, "total_fte": 4.0},
+    {"person": "Alice", "wp": "WP2", "start": 1,  "end": 6, "total_fte": 3.0},
+    {"person": "Alice", "wp": "WP3", "start": 1,  "end": 7, "total_fte": 3.0},
+    {"person": "Bob",   "wp": "WP4", "start": 2,  "end": 11, "total_fte": 2.0},
+    {"person": "Bob",   "wp": "WP5", "start": 4, "end": 13, "total_fte": 5.0},
+    {"person": "Bob",   "wp": "WP6", "start": 4, "end": 13, "total_fte": 2.0},
+    {"person": "Carol", "wp": "WP7", "start": 6, "end": 14, "total_fte": 3.0},
+    {"person": "Carol", "wp": "WP8", "start": 10, "end": 14, "total_fte": 3.0},
+    {"person": "Carol", "wp": "WP9", "start": 12, "end": 14, "total_fte": 3.0},
+    {"person": "Dave",  "wp": "WP3", "start": 1,  "end": 7, "total_fte": 6.0},
+    {"person": "Dave",  "wp": "WP5", "start": 4, "end": 13, "total_fte": 1.0},
+    {"person": "Dave",  "wp": "WP6", "start": 4, "end": 13, "total_fte": 1.0},
+    {"person": "Dave",  "wp": "WP8", "start": 10, "end": 14, "total_fte": 3.0},
 ]
 
 # Spending multipliers per WP index for demo actuals.

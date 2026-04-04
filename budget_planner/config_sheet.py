@@ -67,16 +67,16 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
     header_row = 7
     first_data_row = 8
 
-    # Section header — merged A6:G6
+    # Section header — merged A6:H6
     ws.merge_cells(start_row=section_row, start_column=1,
-                   end_row=section_row, end_column=7)
+                   end_row=section_row, end_column=8)
     style_cell(ws, section_row, 1, value="WORK PACKAGES",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
     # Column headers
     headers = [
         "WP ID", "WP Name", "FTE Budget", "Start Month", "End Month",
-        "Active Months", "Personnel Ceiling (\u20ac)",
+        "Type", "Active Months", "Personnel Ceiling (\u20ac)",
     ]
     for col, hdr in enumerate(headers, start=1):
         style_cell(ws, header_row, col, value=hdr,
@@ -90,11 +90,14 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
         for col, (val, fmt) in enumerate(zip(values, wp_formats), start=1):
             style_cell(ws, row_idx, col, value=val, font=BLUE_INPUT, fmt=fmt,
                        border=False)
-        # Col F: Active Months = End - Start + 1 (black formula)
-        style_cell(ws, row_idx, 6, font=BLACK_FORMULA, fmt="0",
+        # Col F: Type (blue input)
+        wp_type = wp.get("type", "flat")
+        style_cell(ws, row_idx, 6, value=wp_type, font=BLUE_INPUT, border=False)
+        # Col G: Active Months = End - Start + 1 (black formula)
+        style_cell(ws, row_idx, 7, font=BLACK_FORMULA, fmt="0",
                    border=False).value = f"=E{row_idx}-D{row_idx}+1"
-        # Col G: Personnel Ceiling = FTE Budget * fte_rate (black formula)
-        style_cell(ws, row_idx, 7, font=BLACK_FORMULA, fmt="\u20ac#,##0",
+        # Col H: Personnel Ceiling = FTE Budget * fte_rate (black formula)
+        style_cell(ws, row_idx, 8, font=BLACK_FORMULA, fmt="\u20ac#,##0",
                    border=False).value = f"=C{row_idx}*fte_rate"
 
     # TOTAL row
@@ -108,13 +111,14 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
     style_cell(ws, wp_total_row, 4, "", fill=LIGHT_BLUE_FILL)
     style_cell(ws, wp_total_row, 5, "", fill=LIGHT_BLUE_FILL)
     style_cell(ws, wp_total_row, 6, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, wp_total_row, 7, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
+    style_cell(ws, wp_total_row, 7, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, wp_total_row, 8, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
                fmt="\u20ac#,##0").value = (
-        f"=SUM(G{first_data_row}:G{last_data_row})"
+        f"=SUM(H{first_data_row}:H{last_data_row})"
     )
 
-    # Excel Table over header + data range (includes derived columns F-G)
-    table_ref = f"A{header_row}:G{last_data_row}"
+    # Excel Table over header + data range (includes derived columns G-H)
+    table_ref = f"A{header_row}:H{last_data_row}"
     table_style = TableStyleInfo(
         name="TableStyleMedium9", showFirstColumn=False,
         showLastColumn=False, showRowStripes=True, showColumnStripes=False,
@@ -129,7 +133,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
             formula=[f"$D{row_idx}>$E{row_idx}"],
             fill=YELLOW_FILL,
         )
-        ws.conditional_formatting.add(f"A{row_idx}:G{row_idx}", rule)
+        ws.conditional_formatting.add(f"A{row_idx}:H{row_idx}", rule)
 
     # ── Section C: Team Roster (below WP table + TOTAL row) ──
     r = wp_total_row + 2  # blank separator row after TOTAL row

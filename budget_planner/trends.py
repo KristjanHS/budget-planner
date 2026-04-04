@@ -396,6 +396,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     chart = LineChart()
     chart.title = "Cumulative EUR: Planned vs Actual"
     chart.style = 10
+    chart.visible_cells_only = False  # helper rows are hidden
     chart.y_axis.title = "EUR"
     chart.x_axis.title = "Month"
     chart.y_axis.numFmt = "\u20ac#,##0"

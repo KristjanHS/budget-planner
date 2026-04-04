@@ -135,7 +135,7 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
                             work_packages=work_packages,
                             project_params=project_params)
 
-    # Trends sheet skeleton + current_month named range
+    # Trends sheet stub + current_month named range
     trends_ws = wb.create_sheet(SHEET_TRENDS)
     trends_ws.sheet_properties.tabColor = "FFD700"
     style_cell(trends_ws, 1, 1, "Current Month:", font=HEADER_FONT, border=False)

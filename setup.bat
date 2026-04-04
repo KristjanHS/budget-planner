@@ -21,7 +21,7 @@ if errorlevel 1 (
 
 echo Installing dependencies...
 call .venv\Scripts\activate.bat
-pip install -e . >nul 2>nul
+pip install -e .
 if errorlevel 1 (
     echo ERROR: Failed to install dependencies.
     pause

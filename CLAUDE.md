@@ -58,7 +58,7 @@ python -m budget_planner init
 # Create a workbook with demo Capacity + Actuals data
 python -m budget_planner init --demo
 
-# Rebuild from existing workbook (preserves Capacity FTE + Actuals EUR)
+# Rebuild from existing workbook (preserves assignments + Actuals EUR)
 python -m budget_planner rebuild
 
 # Snapshot / restore for scenario comparison
@@ -91,6 +91,7 @@ pytest tests/ -v
 | Column layout, month offsets | `docs/deep-dive/Layout and Styling.md` | `layout.py` is the single source; don't duplicate constants |
 | Cost model, funding rules | `docs/grant-domain.md` | 25% indirect is extra budget, not deducted from ceiling |
 | Hardening / refactoring | `docs/plans/hardening-plan.md` | Check if brittleness already identified there |
+| Config column layout | `.claude/rules/dev-workflow.md` | Grep `Config!{letter}` in ALL builders + tests when columns shift |
 
 ## Reference Trigger Index
 

@@ -18,6 +18,7 @@ Subagents create dead code — verify after each task.
 Suggest review before committing.
 Before executing a plan, move completed/superseded plans to docs/plans/old_already_implemented/.
 When a plan claims a module is "unchanged", grep its imports to verify no coupling to changed modules.
+When inserting/removing a Config column, grep ALL formula references (`Config!{letter}`) across every builder AND test file. Column shifts cascade silently — a test asserting the old column letter will mask the bug.
 
 ## Worktrees
 Before starting work in a worktree:

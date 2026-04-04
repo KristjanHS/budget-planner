@@ -102,26 +102,28 @@ budget-planner/
 
 ## Windows Quick Start (no WSL)
 
-Only Python is required. LibreOffice or Excel is needed to view and recalculate the workbook.
+Only Python is required. Excel or LibreOffice is needed to view and recalculate the workbook.
 
 1. Install **Python 3.10+** from [python.org](https://www.python.org/downloads/) — check **"Add to PATH"** during install
-2. Download or clone this repository
-3. Open Command Prompt or PowerShell in the project folder:
+2. Download and extract the repository ZIP
+3. Double-click the batch files:
+
+| File | What it does |
+|------|-------------|
+| `setup.bat` | Creates a virtual environment and installs dependencies (run once) |
+| `init.bat` | Generates an empty workbook |
+| `demo.bat` | Generates a workbook with demo data |
+| `rebuild.bat` | Rebuilds from an existing workbook, preserving your data |
+
+After each generation, open `output\budget_plan.xlsx` in Excel (recalculates automatically) or LibreOffice Calc (`Ctrl+Shift+F9`), then save.
+
+For snapshot/restore and other commands, open a terminal in the project folder:
 
 ```powershell
-pip install -e .
-
-# Generate a workbook
-python -m budget_planner init            # empty
-python -m budget_planner init --demo     # with demo data
-python -m budget_planner rebuild         # rebuild from existing
-
-# Snapshot / restore
+.venv\Scripts\activate
 python -m budget_planner --snapshot output/budget_plan.xlsx
 python -m budget_planner --restore output/budget_plan.xlsx
 ```
-
-**Formula recalculation:** The `scripts/recalc.py` script requires Linux/macOS LibreOffice in headless mode and does not work on native Windows. Instead, open the generated `.xlsx` in Excel (recalculates automatically on open) or LibreOffice Calc (`Ctrl+Shift+F9`), then save.
 
 ## Dependencies
 

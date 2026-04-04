@@ -24,9 +24,10 @@ SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 
 @pytest.fixture(scope="module")
 def demo_wb_path(tmp_path_factory):
-    """Generate a demo workbook (init + seed_demo_data)."""
+    """Generate a demo workbook (init with assignments + seed_demo_data)."""
+    from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
     out = tmp_path_factory.mktemp("e2e") / "demo.xlsx"
-    init_workbook(str(out))
+    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
     seed_demo_data(str(out))
     return str(out)
 

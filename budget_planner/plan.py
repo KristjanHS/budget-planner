@@ -119,7 +119,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     style_cell(ws, 1, 8, "Ceiling:", font=HEADER_FONT, border=False)
     style_cell(ws, 1, 9, font=GREEN_XREF, border=False,
                fmt="\u20ac#,##0").value = (
-        f"=SUM({SHEET_CONFIG}!G{cfg_wp_first}:G{cfg_wp_last})"
+        f"=SUM({SHEET_CONFIG}!H{cfg_wp_first}:H{cfg_wp_last})"
     )
 
     # partner_ceiling named range -> Plan!$I$1

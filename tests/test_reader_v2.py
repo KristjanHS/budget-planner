@@ -1,5 +1,5 @@
 """Tests for reader extensions: read_plan_config,
-read_team_from_config, read_capacity_sheet."""
+read_team_from_config, read_capacity_sheet, read_capacity_assignments."""
 import pytest
 from openpyxl import Workbook
 
@@ -8,9 +8,11 @@ from budget_planner.reader import (
     read_plan_config,
     read_team_from_config,
     read_capacity_sheet,
+    read_capacity_assignments,
 )
 from budget_planner.config import (
     WORK_PACKAGES, TEAM, PROJECT_MONTHS, EXTERNAL_COMMITMENTS,
+    DEMO_CAPACITY_ASSIGNMENTS,
 )
 
 
@@ -50,13 +52,13 @@ def test_read_team_from_config_names_and_fte(fresh_wb_path):
     wb.close()
 
 
-# ── read_capacity_sheet ──
+# ── read_capacity_sheet (with assignments) ──
 
 
-def test_read_capacity_discovers_person_groups(fresh_wb_path):
-    """read_capacity_sheet finds all 4 persons."""
+def test_read_capacity_discovers_person_groups(assigned_wb_path):
+    """read_capacity_sheet finds all persons."""
     import openpyxl
-    wb = openpyxl.load_workbook(fresh_wb_path)
+    wb = openpyxl.load_workbook(assigned_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
     cap = read_capacity_sheet(wb["Capacity"], config_wps)
@@ -66,19 +68,20 @@ def test_read_capacity_discovers_person_groups(fresh_wb_path):
     wb.close()
 
 
-def test_read_capacity_classifies_grant_vs_external_rows(fresh_wb_path):
-    """First person's programme WP rows and external rows match config."""
+def test_read_capacity_classifies_grant_vs_external_rows(assigned_wb_path):
+    """First person's programme WP rows match their assignments."""
     import openpyxl
-    wb = openpyxl.load_workbook(fresh_wb_path)
+    wb = openpyxl.load_workbook(assigned_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
     cap = read_capacity_sheet(wb["Capacity"], config_wps)
 
     member = TEAM[0]
     group = cap["person_groups"][member["name"]]
-    # Every person now has a row for every WP
-    all_wp_ids = {wp["id"] for wp in WORK_PACKAGES}
-    assert set(group["wp_values"].keys()) == all_wp_ids
+    # Person has only their assigned WPs
+    expected_wps = {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS
+                    if a["person"] == member["name"]}
+    assert set(group["wp_values"].keys()) == expected_wps
     expected_ext = {
         e["project"] for e in EXTERNAL_COMMITMENTS
         if e["person"] == member["name"]
@@ -87,55 +90,60 @@ def test_read_capacity_classifies_grant_vs_external_rows(fresh_wb_path):
     wb.close()
 
 
-def test_read_capacity_monthly_values_are_empty(fresh_wb_path):
-    """Monthly values are all None — no share-based seeding."""
+def test_read_capacity_assigned_values_are_distributed(assigned_wb_path):
+    """Assigned WP monthly values have auto-distributed non-None values."""
     import openpyxl
-    wb = openpyxl.load_workbook(fresh_wb_path)
+    wb = openpyxl.load_workbook(assigned_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
     cap = read_capacity_sheet(wb["Capacity"], config_wps)
 
-    # Pick first person's first WP
-    member = TEAM[0]
-    first_wp = WORK_PACKAGES[0]
-    values = cap["person_groups"][member["name"]]["wp_values"][first_wp["id"]]
+    # Pick first person's first assignment
+    asgn = DEMO_CAPACITY_ASSIGNMENTS[0]
+    values = cap["person_groups"][asgn["person"]]["wp_values"][asgn["wp"]]
     assert len(values) == PROJECT_MONTHS
-    # All values should be None (no seeding)
-    assert all(v is None for v in values), (
-        f"Expected all None, got non-None at indices "
-        f"{[i for i, v in enumerate(values) if v is not None]}"
+    # Active months should have non-None values
+    active_values = [values[m - 1] for m in range(asgn["start"], asgn["end"] + 1)]
+    assert all(v is not None for v in active_values), (
+        "Expected distributed values, got None at some active months"
+    )
+    # Total should match total_fte
+    assert sum(v for v in active_values if v is not None) == pytest.approx(
+        asgn["total_fte"], rel=0.01
     )
     wb.close()
 
 
-def test_read_capacity_handles_variable_geometry(fresh_wb_path):
-    """Each person has rows for ALL WPs and matching external set."""
+def test_read_capacity_handles_variable_geometry(assigned_wb_path):
+    """Each person has only their assigned WPs and matching external set."""
     import openpyxl
-    wb = openpyxl.load_workbook(fresh_wb_path)
+    wb = openpyxl.load_workbook(assigned_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
     cap = read_capacity_sheet(wb["Capacity"], config_wps)
 
-    all_wp_ids = {wp["id"] for wp in WORK_PACKAGES}
     for member in TEAM:
-        group = cap["person_groups"][member["name"]]
-        assert set(group["wp_values"].keys()) == all_wp_ids, (
-            f"{member['name']}: WP set mismatch"
+        name = member["name"]
+        group = cap["person_groups"][name]
+        expected_wps = {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS
+                        if a["person"] == name}
+        assert set(group["wp_values"].keys()) == expected_wps, (
+            f"{name}: WP set mismatch"
         )
         expected_ext = {
             e["project"] for e in EXTERNAL_COMMITMENTS
-            if e["person"] == member["name"]
+            if e["person"] == name
         }
         assert set(group["external_values"].keys()) == expected_ext, (
-            f"{member['name']}: external set mismatch"
+            f"{name}: external set mismatch"
         )
     wb.close()
 
 
-def test_read_capacity_external_commitments_round_trip(fresh_wb_path):
+def test_read_capacity_external_commitments_round_trip(assigned_wb_path):
     """read_capacity_sheet extracts external_commitments matching config."""
     import openpyxl
-    wb = openpyxl.load_workbook(fresh_wb_path)
+    wb = openpyxl.load_workbook(assigned_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
     cap = read_capacity_sheet(wb["Capacity"], config_wps)
@@ -151,11 +159,39 @@ def test_read_capacity_external_commitments_round_trip(fresh_wb_path):
     wb.close()
 
 
-# ── Init workbook round-trip (empty capacity) ──
+# ── read_capacity_assignments ──
 
 
-def test_init_capacity_all_monthly_values_none(fresh_wb_path):
-    """Init workbook has all-None monthly values for every person/WP."""
+def test_read_capacity_assignments_round_trip(assigned_wb_path):
+    """Assignments config block round-trips correctly."""
+    import openpyxl
+    wb = openpyxl.load_workbook(assigned_wb_path)
+    assignments = read_capacity_assignments(wb["Capacity"])
+
+    assert len(assignments) == len(DEMO_CAPACITY_ASSIGNMENTS)
+    for got, expected in zip(assignments, DEMO_CAPACITY_ASSIGNMENTS):
+        assert got["person"] == expected["person"]
+        assert got["wp"] == expected["wp"]
+        assert got["total_fte"] == pytest.approx(expected["total_fte"])
+        assert got["start"] == expected["start"]
+        assert got["end"] == expected["end"]
+    wb.close()
+
+
+def test_read_capacity_assignments_empty_for_plain_init(fresh_wb_path):
+    """Plain init workbook has no assignments."""
+    import openpyxl
+    wb = openpyxl.load_workbook(fresh_wb_path)
+    assignments = read_capacity_assignments(wb["Capacity"])
+    assert assignments == []
+    wb.close()
+
+
+# ── Init workbook (no assignments) ──
+
+
+def test_init_capacity_no_wp_rows(fresh_wb_path):
+    """Init workbook without assignments has no WP rows per person."""
     import openpyxl
     wb = openpyxl.load_workbook(fresh_wb_path)
     layout = discover_layout(wb["Plan"])
@@ -165,21 +201,10 @@ def test_init_capacity_all_monthly_values_none(fresh_wb_path):
     assert len(cap["person_groups"]) > 0, "Should discover at least one person"
 
     for name, group in cap["person_groups"].items():
-        for wp_id, values in group["wp_values"].items():
-            assert len(values) == PROJECT_MONTHS, (
-                f"{name} {wp_id}: expected {PROJECT_MONTHS} values, got {len(values)}")
-            assert all(v is None for v in values), (
-                f"{name} {wp_id}: expected all None in init, "
-                f"got non-None at indices "
-                f"{[i for i, v in enumerate(values) if v is not None]}")
-        for ext_name, values in group["external_values"].items():
-            assert len(values) == PROJECT_MONTHS, (
-                f"{name} {ext_name}: expected {PROJECT_MONTHS} values, "
-                f"got {len(values)}")
-            assert all(v is None for v in values), (
-                f"{name} {ext_name}: expected all None in init, "
-                f"got non-None at indices "
-                f"{[i for i, v in enumerate(values) if v is not None]}")
+        # No WP rows in plain init (no assignments)
+        assert len(group["wp_values"]) == 0, (
+            f"{name}: expected no WP rows in plain init, "
+            f"got {set(group['wp_values'].keys())}")
     wb.close()
 
 

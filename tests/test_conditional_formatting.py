@@ -5,7 +5,7 @@ import openpyxl
 
 from budget_planner.workbook import init_workbook
 from budget_planner.layout import _calendar_year_groups
-from budget_planner.config import TEAM, WORK_PACKAGES, PROJECT_MONTHS, PROJECT_START
+from budget_planner.config import TEAM, PROJECT_MONTHS, PROJECT_START, DEMO_CAPACITY_ASSIGNMENTS
 
 
 # ── Fixtures ──
@@ -14,7 +14,7 @@ from budget_planner.config import TEAM, WORK_PACKAGES, PROJECT_MONTHS, PROJECT_S
 def workbook(tmp_path_factory):
     """Generate a full demo workbook and load it."""
     out = tmp_path_factory.mktemp("cf") / "test.xlsx"
-    init_workbook(str(out))
+    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
     return openpyxl.load_workbook(str(out), data_only=False)
 
 
@@ -46,7 +46,7 @@ class TestCapacityConditionalFormatting:
         """Yellow per WP row + 3 per person = expected total."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        total_wp_rows = len(WORK_PACKAGES) * len(TEAM)
+        total_wp_rows = len(DEMO_CAPACITY_ASSIGNMENTS)
         expected = total_wp_rows + 3 * len(TEAM)
         assert len(rules) == expected, (
             f"Expected {expected} CF rules on Capacity, got {len(rules)}"

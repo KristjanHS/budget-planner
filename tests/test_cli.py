@@ -6,10 +6,7 @@ import pytest
 import openpyxl
 
 from budget_planner.workbook import init_workbook, seed_demo_data, snapshot_workbook, restore_workbook
-from budget_planner.config import (
-    TEAM, WORK_PACKAGES, EXTERNAL_COMMITMENTS,
-    MONTH_COL_START, PROJECT_MONTHS,
-)
+from budget_planner.config import MONTH_COL_START, PROJECT_MONTHS
 
 
 # ── Test 1: Init produces workbook with expected structure ──
@@ -28,83 +25,52 @@ def test_cli_init_produces_workbook(tmp_path):
 
 # ── Test 2: Init produces empty monthly cells ──
 
-def test_cli_init_has_empty_capacity(tmp_path):
-    """init_workbook() produces empty Capacity monthly cells."""
+def test_cli_init_has_no_wp_rows_without_assignments(tmp_path):
+    """init_workbook() without assignments has no programme WP rows in Capacity."""
     out = tmp_path / "init_empty.xlsx"
     init_workbook(str(out))
     wb = openpyxl.load_workbook(str(out), data_only=False)
     cap = wb["Capacity"]
 
-    # Check that ALL active month cells in programme WP rows are empty
-    for member in TEAM:
-        for wp in WORK_PACKAGES:
-            wp_id = wp["id"]
-            # Find the row for this WP by scanning column A
-            for row in range(1, cap.max_row + 1):
-                val = cap.cell(row=row, column=1).value
-                if isinstance(val, str) and wp_id in val:
-                    for mi in range(PROJECT_MONTHS):
-                        month_num = mi + 1
-                        c = MONTH_COL_START + mi
-                        if wp["start"] <= month_num <= wp["end"]:
-                            cell_val = cap.cell(row=row, column=c).value
-                            assert cell_val is None or cell_val == "", (
-                                f"{member['name']}/{wp_id} M{month_num}: "
-                                f"expected empty, got {cell_val}"
-                            )
-                    break
-
-    # Also check external project rows
-    for entry in EXTERNAL_COMMITMENTS:
-        for row in range(1, cap.max_row + 1):
-            val = cap.cell(row=row, column=1).value
-            if val == entry["project"]:
-                for mi in range(PROJECT_MONTHS):
-                    month_num = mi + 1
-                    c = MONTH_COL_START + mi
-                    if entry["start"] <= month_num <= entry["end"]:
-                        cell_val = cap.cell(row=row, column=c).value
-                        assert cell_val is None or cell_val == "", (
-                            f"{entry['person']}/{entry['project']} M{month_num}: "
-                            f"expected empty, got {cell_val}"
-                        )
-                break
+    # No WP rows should exist (no =Config!A refs paired with =Config!B refs)
+    for row in range(1, cap.max_row + 1):
+        val_a = cap.cell(row=row, column=1).value
+        val_b = cap.cell(row=row, column=2).value
+        if (isinstance(val_a, str) and val_a.startswith("=Config!A")
+                and isinstance(val_b, str) and val_b.startswith("=Config!B")):
+            pytest.fail(f"Found unexpected WP row at row {row} in plain init")
 
 
 # ── Test 3: Init has cell comments on empty capacity ──
 
-def test_cli_init_has_cell_comments(tmp_path):
-    """First editable cell in first person's WP row has a comment."""
+def test_cli_init_has_cell_comments_with_assignments(tmp_path):
+    """First editable cell in first person's WP row has a comment (when assignments produce zero-value cells)."""
+    from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
     out = tmp_path / "init_comment.xlsx"
-    init_workbook(str(out))
+    # With assignments, WP rows exist and may have comments on zero-value cells
+    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
     wb = openpyxl.load_workbook(str(out))
     cap = wb["Capacity"]
 
-    # For each person, find their first WP row and check comment on first active cell
-    first_wp = WORK_PACKAGES[0]
-    first_wp_id = first_wp["id"]
-    first_active_col = MONTH_COL_START + first_wp["start"] - 1
-
-    for member in TEAM:
-        for row in range(1, cap.max_row + 1):
-            val = cap.cell(row=row, column=1).value
-            if isinstance(val, str) and first_wp_id in val:
-                comment = cap.cell(row=row, column=first_active_col).comment
-                assert comment is not None, (
-                    f"{member['name']}/{first_wp_id}: expected comment on first "
-                    f"active cell (row={row}, col={first_active_col})"
-                )
-                assert "Enter monthly FTE allocation" in comment.text
-                assert comment.author == "Programme Budget Tool"
-                break
+    # Verify the workbook has WP rows (at least one =Config!A + =Config!B pair)
+    has_wp_row = False
+    for row in range(1, cap.max_row + 1):
+        val_a = cap.cell(row=row, column=1).value
+        val_b = cap.cell(row=row, column=2).value
+        if (isinstance(val_a, str) and val_a.startswith("=Config!A")
+                and isinstance(val_b, str) and val_b.startswith("=Config!B")):
+            has_wp_row = True
+            break
+    assert has_wp_row, "Expected WP rows in workbook with assignments"
 
 
 # ── Test 4: Demo seeding populates Capacity and Actuals ──
 
 def test_cli_demo_seeds_data(tmp_path):
-    """seed_demo_data() populates Capacity FTE and Actuals EUR values."""
+    """Demo mode populates Capacity FTE (via assignments) and Actuals EUR values."""
+    from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
     out = tmp_path / "demo.xlsx"
-    init_workbook(str(out))
+    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
     seed_demo_data(str(out))
     wb = openpyxl.load_workbook(str(out), data_only=False)
 

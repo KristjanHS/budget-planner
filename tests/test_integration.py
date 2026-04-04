@@ -7,16 +7,16 @@ from openpyxl.utils import get_column_letter
 from budget_planner.reader import discover_layout, read_capacity_sheet, read_plan_config
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    WORK_PACKAGES, TEAM, MONTH_COL_START, PROJECT_MONTHS, PROJECT_START,
-    NUM_WPS, VAL_COL_SUM,
+    WORK_PACKAGES, MONTH_COL_START, PROJECT_MONTHS, PROJECT_START,
+    NUM_WPS, VAL_COL_SUM, DEMO_CAPACITY_ASSIGNMENTS,
 )
 
 
-# ── Data flow: Capacity → Plan formula linkage ──
+# ���─ Data flow: Capacity → Plan formula linkage (needs assigned workbook) ──
 
-def test_capacity_to_plan_formula_linkage(fresh_wb_path):
+def test_capacity_to_plan_formula_linkage(assigned_wb_path):
     """Plan Planned FTE formulas reference correct Capacity rows."""
-    wb = openpyxl.load_workbook(fresh_wb_path)
+    wb = openpyxl.load_workbook(assigned_wb_path)
     plan = wb["Plan"]
     layout = discover_layout(plan)
 
@@ -32,6 +32,17 @@ def test_capacity_to_plan_formula_linkage(fresh_wb_path):
         c = MONTH_COL_START + first_active_mi
 
         cell_value = plan.cell(row, c).value
+
+        # Count how many persons are assigned to this WP
+        assigned_count = sum(
+            1 for pg in cap_data["person_groups"].values()
+            if wp["id"] in pg["wp_values"]
+        )
+
+        if assigned_count == 0:
+            # No one assigned — cell should be empty or zero
+            continue
+
         assert cell_value is not None, f"Planned cell for {wp['id']} M{wp['start']} is empty"
         assert isinstance(cell_value, str) and cell_value.startswith("="), (
             f"Planned cell for {wp['id']} should be a formula, got: {cell_value}"
@@ -42,13 +53,6 @@ def test_capacity_to_plan_formula_linkage(fresh_wb_path):
 
         # Extract row numbers from formula like =SUM(Capacity!C10,Capacity!C20)
         cap_row_refs = [int(m) for m in re.findall(r"Capacity!\w+(\d+)", cell_value)]
-        assert len(cap_row_refs) > 0, f"No Capacity row refs found in formula: {cell_value}"
-
-        # Count how many persons are assigned to this WP
-        assigned_count = sum(
-            1 for pg in cap_data["person_groups"].values()
-            if wp["id"] in pg["wp_values"]
-        )
         assert len(cap_row_refs) == assigned_count, (
             f"{wp['id']}: formula references {len(cap_row_refs)} rows "
             f"but {assigned_count} persons are assigned"
@@ -57,36 +61,28 @@ def test_capacity_to_plan_formula_linkage(fresh_wb_path):
     wb.close()
 
 
-def test_capacity_all_wps_per_person_no_seeding(fresh_wb_path):
-    """Every person has ALL WPs in Capacity, with no seed values."""
-    wb = openpyxl.load_workbook(fresh_wb_path)
+def test_capacity_assigned_wps_have_distributed_values(assigned_wb_path):
+    """Assigned WPs in Capacity have auto-distributed FTE values."""
+    wb = openpyxl.load_workbook(assigned_wb_path)
     cap = wb["Capacity"]
     plan = wb["Plan"]
     layout = discover_layout(plan)
     config_wps = read_plan_config(plan, layout)
     cap_data = read_capacity_sheet(cap, config_wps)
 
-    all_wp_ids = {wp["id"] for wp in WORK_PACKAGES}
-
-    for member in TEAM:
-        name = member["name"]
-        assert name in cap_data["person_groups"], f"Person {name} not found in Capacity"
+    for asgn in DEMO_CAPACITY_ASSIGNMENTS:
+        name = asgn["person"]
+        wp_id = asgn["wp"]
+        assert name in cap_data["person_groups"], f"Person {name} not found"
         person_group = cap_data["person_groups"][name]
+        assert wp_id in person_group["wp_values"], f"{name} missing {wp_id}"
 
-        # Every person has a row for every WP
-        assert set(person_group["wp_values"].keys()) == all_wp_ids, (
-            f"{name}: expected all WPs, got {set(person_group['wp_values'].keys())}"
-        )
-
-        # All monthly values should be None (no seeding)
-        for wp in WORK_PACKAGES:
-            monthly = person_group["wp_values"][wp["id"]]
-            for mi in range(PROJECT_MONTHS):
-                month_num = mi + 1
-                if month_num < wp["start"] or month_num > wp["end"]:
-                    assert monthly[mi] is None, (
-                        f"{name}/{wp['id']} M{month_num}: inactive month should be None"
-                    )
+        monthly = person_group["wp_values"][wp_id]
+        # Active months should have non-None values
+        for mi in range(asgn["start"] - 1, asgn["end"]):
+            assert monthly[mi] is not None, (
+                f"{name}/{wp_id} M{mi+1}: expected distributed value, got None"
+            )
 
     wb.close()
 
@@ -341,4 +337,3 @@ def test_summary_budget_overview_references(fresh_wb_path):
     )
 
     wb.close()
-

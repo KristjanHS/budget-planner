@@ -76,6 +76,15 @@ def init_path(tmp_path):
     return path
 
 
+@pytest.fixture
+def assigned_init_path(tmp_path):
+    """Create a fresh workbook with demo assignments for rebuild testing."""
+    from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
+    path = str(tmp_path / "test.xlsx")
+    init_workbook(output_path=path, assignments=DEMO_CAPACITY_ASSIGNMENTS)
+    return path
+
+
 # ── Test: Change WP FTE budgets ──
 
 
@@ -263,18 +272,14 @@ class TestRebuildWithChangedTeam:
         )
         wb.close()
 
-    def test_renamed_person_capacity_has_correct_wps(self, init_path):
-        """Renamed person retains all WP rows."""
+    def test_renamed_person_capacity_has_no_wps(self, init_path):
+        """Renamed person has no WP rows (old-name assignments are orphaned)."""
         wb = openpyxl.load_workbook(init_path)
         roster = self._read_roster_with_rows(wb["Config"])
         person = self._find_person_without_externals(roster, wb["Capacity"])
         if person is None:
             wb.close()
             pytest.skip("All team members have external commitments")
-
-        # Every person has ALL WPs
-        _, work_packages = read_config_sheet(wb["Config"])
-        expected_wp_ids = {wp["id"] for wp in work_packages}
 
         new_name = "RenamedPerson"
         _set(wb["Config"], person["row"], 1, new_name)
@@ -289,7 +294,8 @@ class TestRebuildWithChangedTeam:
         config_wps = read_plan_config(plan, layout)
         cap_data = read_capacity_sheet(wb["Capacity"], config_wps)
         group = cap_data["person_groups"][new_name]
-        assert set(group["wp_values"].keys()) == expected_wp_ids
+        # Assignments reference old name → orphaned → no WP rows for renamed person
+        assert set(group["wp_values"].keys()) == set()
         wb.close()
 
 
@@ -299,48 +305,39 @@ class TestRebuildWithChangedTeam:
 class TestRebuildWithChangedAllocations:
     """Modify Capacity FTE values, rebuild, verify preservation."""
 
-    def test_modified_capacity_values_preserved_after_rebuild(self, init_path):
-        """Hand-edited monthly FTE values in Capacity survive rebuild."""
-        wb = openpyxl.load_workbook(init_path)
+    def test_modified_assignment_total_fte_preserved_after_rebuild(self, assigned_init_path):
+        """Modified total_fte in Capacity assignment config block survives rebuild."""
+        from budget_planner.reader import read_capacity_assignments
+
+        wb = openpyxl.load_workbook(assigned_init_path)
         cap_ws = wb["Capacity"]
+        original = read_capacity_assignments(cap_ws)
+        assert len(original) > 0, "Need at least one assignment"
 
-        # Find the first WP data row (col A + col B both reference Config)
-        target_row = None
+        # Find the assignment config block row and modify total_fte
+        # Assignments block: col A=Person, col B=WP, col C=Total FTE, col D=Start, col E=End
         for r in range(1, cap_ws.max_row + 1):
-            val_a = cap_ws.cell(r, 1).value
-            val_b = cap_ws.cell(r, 2).value
-            if (isinstance(val_a, str) and val_a.startswith("=Config!A")
-                    and isinstance(val_b, str) and val_b.startswith("=Config!B")):
-                target_row = r
-                break
-        assert target_row is not None, "Could not find a Capacity WP row"
+            val = cap_ws.cell(r, 1).value
+            if isinstance(val, str) and val == original[0]["person"]:
+                wp_val = cap_ws.cell(r, 2).value
+                if isinstance(wp_val, str) and wp_val == original[0]["wp"]:
+                    new_total_fte = 99.99
+                    _set(cap_ws, r, 3, new_total_fte)
+                    break
+        else:
+            pytest.fail("Could not find assignment config block row")
 
-        # Inject a known value into the first month column
-        first_active_col = MONTH_COL_START
-        new_value = 0.77
-        _set(cap_ws, target_row, first_active_col, new_value)
-        wb.save(init_path)
+        wb.save(assigned_init_path)
         wb.close()
 
-        rebuild_workbook(input_path=init_path)
+        rebuild_workbook(input_path=assigned_init_path)
 
-        # Verify the value is preserved after rebuild
-        wb = openpyxl.load_workbook(init_path)
-        plan = wb["Plan"]
-        layout = discover_layout(plan)
-        config_wps = read_plan_config(plan, layout)
-        rebuilt_cap = read_capacity_sheet(wb["Capacity"], config_wps)
-
-        # Find the value in any person/WP's first month
-        found = False
-        for person_name, groups in rebuilt_cap["person_groups"].items():
-            for wp_id, monthly in groups["wp_values"].items():
-                if monthly[0] is not None and abs(monthly[0] - new_value) < 0.001:
-                    found = True
-                    break
-            if found:
-                break
-        assert found, f"Modified value {new_value} not found after rebuild"
+        wb = openpyxl.load_workbook(assigned_init_path)
+        rebuilt = read_capacity_assignments(wb["Capacity"])
+        first = next(a for a in rebuilt
+                     if a["person"] == original[0]["person"]
+                     and a["wp"] == original[0]["wp"])
+        assert first["total_fte"] == pytest.approx(new_total_fte)
         wb.close()
 
 
@@ -351,11 +348,11 @@ class TestRebuildWithChangedAllocations:
 class TestRebuildFormulaIntegrity:
     """After rebuild, Plan formulas reference correct Capacity rows."""
 
-    def test_plan_formulas_reference_capacity_after_rebuild(self, init_path):
+    def test_plan_formulas_reference_capacity_after_rebuild(self, assigned_init_path):
         """Plan Planned FTE formulas reference Capacity sheet after rebuild."""
-        rebuild_workbook(input_path=init_path)
+        rebuild_workbook(input_path=assigned_init_path)
 
-        wb = openpyxl.load_workbook(init_path)
+        wb = openpyxl.load_workbook(assigned_init_path)
         plan = wb["Plan"]
         layout = discover_layout(plan)
         config_wps = read_plan_config(plan, layout)
@@ -366,6 +363,14 @@ class TestRebuildFormulaIntegrity:
             first_active_col = MONTH_COL_START + wp["start"] - 1
             cell_val = plan.cell(row, first_active_col).value
 
+            # WPs without any person assigned have no Capacity refs
+            assigned_count = sum(
+                1 for pg in cap_data["person_groups"].values()
+                if wp["id"] in pg["wp_values"]
+            )
+            if assigned_count == 0:
+                continue
+
             assert cell_val is not None, f"Planned cell for {wp['id']} is empty"
             assert isinstance(cell_val, str) and "Capacity!" in cell_val, (
                 f"Planned formula for {wp['id']} should reference Capacity"
@@ -373,10 +378,6 @@ class TestRebuildFormulaIntegrity:
 
             # Count person refs in formula should match assigned persons
             cap_refs = re.findall(r"Capacity!\w+(\d+)", cell_val)
-            assigned_count = sum(
-                1 for pg in cap_data["person_groups"].values()
-                if wp["id"] in pg["wp_values"]
-            )
             assert len(cap_refs) == assigned_count, (
                 f"{wp['id']}: formula refs {len(cap_refs)} rows, "
                 f"but {assigned_count} persons assigned"

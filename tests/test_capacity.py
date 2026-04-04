@@ -5,21 +5,21 @@ import openpyxl
 
 from budget_planner.workbook import init_workbook
 from budget_planner.config import (
-    TEAM, WORK_PACKAGES, EXTERNAL_COMMITMENTS,
+    TEAM, WORK_PACKAGES, EXTERNAL_COMMITMENTS, DEMO_CAPACITY_ASSIGNMENTS,
     MONTH_COL_START, MONTH_COL_END, PROJECT_MONTHS,
     VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
 )
 from budget_planner.styles import col_letter
-from budget_planner.capacity import build_capacity_sheet
+from budget_planner.capacity import build_capacity_sheet, distribute
 
 
 # ── Fixtures ──
 
 @pytest.fixture(scope="module")
 def full_wb(tmp_path_factory):
-    """Generate a full workbook and load it for inspection."""
+    """Generate a workbook with demo assignments and load it for inspection."""
     out = tmp_path_factory.mktemp("cap") / "test.xlsx"
-    init_workbook(str(out))
+    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
     wb = openpyxl.load_workbook(str(out), data_only=False)
     return wb
 
@@ -31,10 +31,7 @@ def cap_ws(full_wb):
 
 @pytest.fixture(scope="module")
 def capacity_layout(tmp_path_factory):
-    """Build a full workbook and capture the capacity_layout return value.
-
-    Also exposes config_layout and plan_layout under respective keys.
-    """
+    """Build a full workbook with assignments and capture the capacity_layout."""
     from openpyxl import Workbook as WB
     from budget_planner.plan import build_plan_sheet
     from budget_planner.config_sheet import build_config_sheet
@@ -53,6 +50,7 @@ def capacity_layout(tmp_path_factory):
     cap_ws = wb.create_sheet("Capacity")
     layout = build_capacity_sheet(
         cap_ws, wb, config_layout,
+        assignments=DEMO_CAPACITY_ASSIGNMENTS,
         config_first_wp_row=plan_layout["config_first_wp_row"],
     )
     layout["config_layout"] = config_layout
@@ -60,14 +58,34 @@ def capacity_layout(tmp_path_factory):
     return layout
 
 
+# ── Build person-assignment lookup for assertions ──
+
+def _person_assigned_wps(person_name):
+    """Return set of WP IDs assigned to a person in demo data."""
+    return {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS
+            if a["person"] == person_name}
+
+
 # ── Config block headers ──
 
+def test_capacity_assignments_config_block_exists(cap_ws):
+    """Assignments config block has correct section header."""
+    assert cap_ws.cell(row=1, column=1).value == "PERSON-WP ASSIGNMENTS"
+
+
 def test_capacity_external_config_block_exists(cap_ws):
-    """Config block has correct column headers."""
-    # Row 1 is section header, row 2 is column headers
-    expected = ["Person", "Project", "Total FTE", "Start Month", "End Month"]
-    for ci, h in enumerate(expected, 1):
-        assert cap_ws.cell(row=2, column=ci).value == h
+    """External commitments config block exists below assignments."""
+    # Find EXTERNAL COMMITMENTS section header
+    found = False
+    for r in range(1, cap_ws.max_row + 1):
+        val = cap_ws.cell(r, 1).value
+        if val and "EXTERNAL COMMITMENTS" in str(val):
+            found = True
+            # Check column headers on next row
+            assert cap_ws.cell(r + 1, 1).value == "Person"
+            assert cap_ws.cell(r + 1, 2).value == "Project"
+            break
+    assert found, "EXTERNAL COMMITMENTS section not found"
 
 
 # ── Person groups ──
@@ -78,20 +96,21 @@ def test_capacity_has_person_group_per_team_member(capacity_layout):
     assert set(capacity_layout["person_groups"].keys()) == expected_names
 
 
-# ── Test 6: programme WP rows per person ──
+# ── Test: programme WP rows per person (only assigned WPs) ──
 
-def test_capacity_person_has_grant_wp_rows(capacity_layout):
-    """Each person has rows for ALL WPs."""
-    all_wp_ids = {wp["id"] for wp in WORK_PACKAGES}
+def test_capacity_person_has_assigned_wp_rows(capacity_layout):
+    """Each person has rows only for their assigned WPs."""
     for member in TEAM:
-        group = capacity_layout["person_groups"][member["name"]]
-        assert set(group["wp_rows"].keys()) == all_wp_ids, (
-            f"{member['name']}: expected WPs {all_wp_ids}, "
+        name = member["name"]
+        group = capacity_layout["person_groups"][name]
+        expected_wps = _person_assigned_wps(name)
+        assert set(group["wp_rows"].keys()) == expected_wps, (
+            f"{name}: expected WPs {expected_wps}, "
             f"got {set(group['wp_rows'].keys())}"
         )
 
 
-# ── Test 7: External project rows ──
+# ── Test: External project rows ──
 
 def test_capacity_person_has_external_project_rows(capacity_layout):
     """External project rows present for persons with commitments."""
@@ -108,7 +127,7 @@ def test_capacity_person_has_external_project_rows(capacity_layout):
             assert len(group["external_rows"]) == 0
 
 
-# ── Test 8: TOTAL row ──
+# ─�� Test: TOTAL row ──
 
 def test_capacity_person_has_total_row(cap_ws, capacity_layout):
     """TOTAL row exists per person."""
@@ -118,7 +137,7 @@ def test_capacity_person_has_total_row(cap_ws, capacity_layout):
         assert cap_ws.cell(row=total_row, column=2).value == "TOTAL"
 
 
-# ── Test 9: REMAINING row ──
+# ── Test: REMAINING row ──
 
 def test_capacity_person_has_remaining_row(cap_ws, capacity_layout):
     """REMAINING row exists per person."""
@@ -128,23 +147,25 @@ def test_capacity_person_has_remaining_row(cap_ws, capacity_layout):
         assert cap_ws.cell(row=remaining_row, column=2).value == "REMAINING"
 
 
-# ── Test 10: WP rows are blue input ──
+# ── Test: WP rows are blue input ──
 
 def test_capacity_wp_rows_are_blue_input(cap_ws, capacity_layout):
     """Monthly cells in programme WP rows have blue font."""
     for member in TEAM:
-        group = capacity_layout["person_groups"][member["name"]]
+        name = member["name"]
+        group = capacity_layout["person_groups"][name]
         for wp_id, row in group["wp_rows"].items():
-            # Check first active month cell
-            wp = next(w for w in WORK_PACKAGES if w["id"] == wp_id)
-            c = MONTH_COL_START + wp["start"] - 1  # first active month
+            # Find the assignment to get the start month
+            asgn = next(a for a in DEMO_CAPACITY_ASSIGNMENTS
+                        if a["person"] == name and a["wp"] == wp_id)
+            c = MONTH_COL_START + asgn["start"] - 1  # first active month
             font = cap_ws.cell(row=row, column=c).font
             assert font.color and font.color.rgb in ("0000FF", "000000FF"), (
-                f"{member['name']}/{wp_id} M{wp['start']} font: {font.color}"
+                f"{name}/{wp_id} M{asgn['start']} font: {font.color}"
             )
 
 
-# ── Test 11: TOTAL row SUM formula ──
+# ── Test: TOTAL row SUM formula ──
 
 def test_capacity_total_row_is_sum_formula(cap_ws, capacity_layout):
     """TOTAL monthly cells have SUM formulas."""
@@ -158,7 +179,7 @@ def test_capacity_total_row_is_sum_formula(cap_ws, capacity_layout):
         )
 
 
-# ── Test 12: REMAINING row formula ──
+# ── Test: REMAINING row formula ──
 
 def test_capacity_remaining_row_formula(cap_ws, capacity_layout):
     """REMAINING references Config max_fte minus TOTAL."""
@@ -171,33 +192,29 @@ def test_capacity_remaining_row_formula(cap_ws, capacity_layout):
         )
 
 
-# ── Test 13: Inactive months empty ──
+# ── Test: Inactive months empty ──
 
 def _inactive_params():
-    """Generate (person_name, wp_id) for WPs with inactive months.
-
-    Returns 3 representative pairs covering: end < PROJECT_MONTHS,
-    start > 1, and a second person for variety.
-    """
+    """Generate (person_name, wp_id) for assigned WPs with inactive months."""
     params = []
-    for member in TEAM:
-        for wp in WORK_PACKAGES:
-            if wp["start"] > 1 or wp["end"] < PROJECT_MONTHS:
-                params.append((member["name"], wp["id"]))
+    for asgn in DEMO_CAPACITY_ASSIGNMENTS:
+        if asgn["start"] > 1 or asgn["end"] < PROJECT_MONTHS:
+            params.append((asgn["person"], asgn["wp"]))
     return params[:3]
 
 
 @pytest.mark.parametrize("person_name,wp_id", _inactive_params())
 def test_capacity_inactive_months_empty(cap_ws, capacity_layout, person_name, wp_id):
     """Inactive months have empty value and grey fill."""
-    wp = next(w for w in WORK_PACKAGES if w["id"] == wp_id)
+    asgn = next(a for a in DEMO_CAPACITY_ASSIGNMENTS
+                if a["person"] == person_name and a["wp"] == wp_id)
     group = capacity_layout["person_groups"][person_name]
     row = group["wp_rows"][wp_id]
 
     for mi in range(PROJECT_MONTHS):
         month_num = mi + 1
         c = MONTH_COL_START + mi
-        if month_num < wp["start"] or month_num > wp["end"]:
+        if month_num < asgn["start"] or month_num > asgn["end"]:
             val = cap_ws.cell(row=row, column=c).value
             assert val is None or val == "" or val == 0, (
                 f"{person_name}/{wp_id} M{month_num}: '{val}' in inactive month"
@@ -208,10 +225,10 @@ def test_capacity_inactive_months_empty(cap_ws, capacity_layout, person_name, wp
             )
 
 
-# ── Test 14: WP row Sum formula spans MONTH_COL_START:MONTH_COL_END ──
+# ── Test: WP row Sum formula ──
 
 def test_capacity_wp_row_sum_formula(cap_ws, capacity_layout):
-    """programme WP rows have Sum = SUM(C{row}:BJ{row})."""
+    """programme WP rows have Sum = SUM(C{row}:..{row})."""
     start_cl = col_letter(MONTH_COL_START)
     end_cl = col_letter(MONTH_COL_END)
     for member in TEAM:
@@ -224,28 +241,26 @@ def test_capacity_wp_row_sum_formula(cap_ws, capacity_layout):
             )
 
 
-# ── Test 15: WP row Budget formula = Plan!C{config_row} ──
+# ── Test: WP row Budget formula refs assignment config block ──
 
 def test_capacity_wp_row_budget_formula(cap_ws, capacity_layout):
-    """programme WP rows have Budget = Config!C{config_row} (WP total FTE)."""
-    # Derive Config WP row per WP from plan_layout
-    config_first_wp_row = capacity_layout["plan_layout"]["config_first_wp_row"]
-    wp_config_rows = {
-        wp["id"]: config_first_wp_row + i for i, wp in enumerate(WORK_PACKAGES)
-    }
+    """programme WP rows have Budget = C{assign_config_row} (assignment Total FTE)."""
+    assign_config_rows = capacity_layout["assign_config_rows"]
 
     for member in TEAM:
-        group = capacity_layout["person_groups"][member["name"]]
+        name = member["name"]
+        group = capacity_layout["person_groups"][name]
         for wp_id, row in group["wp_rows"].items():
-            config_row = wp_config_rows[wp_id]
+            asgn_row = assign_config_rows.get((name, wp_id))
+            assert asgn_row is not None, f"{name}/{wp_id} not in assign_config_rows"
             val = cap_ws.cell(row=row, column=VAL_COL_BUDGET).value
-            expected = f"=Config!C{config_row}"
+            expected = f"=C{asgn_row}"
             assert val == expected, (
-                f"{member['name']}/{wp_id} Budget: expected {expected}, got {val}"
+                f"{name}/{wp_id} Budget: expected {expected}, got {val}"
             )
 
 
-# ── Test 16: WP row Variance formula = Budget − Sum ──
+# ── Test: WP row Variance formula = Budget − Sum ──
 
 def test_capacity_wp_row_variance_formula(cap_ws, capacity_layout):
     """programme WP rows have Variance = {budget_col}{row} - {sum_col}{row}."""
@@ -261,10 +276,10 @@ def test_capacity_wp_row_variance_formula(cap_ws, capacity_layout):
             )
 
 
-# ── Test 17: External row Sum/Budget/Variance formulas ──
+# ── Test: External row Sum/Budget/Variance formulas ──
 
 def test_capacity_external_row_validation_formulas(cap_ws, capacity_layout):
-    """External rows: Sum same SUM pattern, Budget refs config Total FTE, Variance same."""
+    """External rows: Sum, Budget refs config Total FTE, Variance."""
     start_cl = col_letter(MONTH_COL_START)
     end_cl = col_letter(MONTH_COL_END)
     budget_cl = col_letter(VAL_COL_BUDGET)
@@ -296,3 +311,45 @@ def test_capacity_external_row_validation_formulas(cap_ws, capacity_layout):
             assert var_val == expected_var, (
                 f"{member['name']}/{project} Variance: expected {expected_var}, got {var_val}"
             )
+
+
+# ── Distribution curve tests ──
+
+def test_distribute_flat():
+    result = distribute(12.0, 6, "flat")
+    assert len(result) == 6
+    assert all(v == pytest.approx(2.0) for v in result)
+    assert sum(result) == pytest.approx(12.0)
+
+
+def test_distribute_front_loaded():
+    result = distribute(10.0, 5, "front-loaded")
+    assert len(result) == 5
+    assert result[0] > result[-1]
+    assert sum(result) == pytest.approx(10.0)
+
+
+def test_distribute_back_loaded():
+    result = distribute(10.0, 5, "back-loaded")
+    assert len(result) == 5
+    assert result[0] < result[-1]
+    assert sum(result) == pytest.approx(10.0)
+
+
+def test_distribute_bell():
+    result = distribute(10.0, 7, "bell")
+    assert len(result) == 7
+    mid = len(result) // 2
+    assert result[mid] > result[0]
+    assert result[mid] > result[-1]
+    assert sum(result) == pytest.approx(10.0)
+
+
+def test_distribute_single_month():
+    result = distribute(5.0, 1, "bell")
+    assert result == [5.0]
+
+
+def test_distribute_zero_months():
+    result = distribute(5.0, 0, "flat")
+    assert result == []

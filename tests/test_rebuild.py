@@ -67,42 +67,37 @@ class TestRebuildRoundTrip:
 
 
 class TestCapacityPreservation:
-    """Capacity FTE values are preserved on rebuild."""
+    """Capacity assignment config block values are preserved on rebuild."""
 
-    def test_modified_capacity_values_preserved(self, init_wb):
-        """Manual edits to Capacity cells survive rebuild."""
-        wb = load_workbook(init_wb)
-        cap = wb["Capacity"]
+    @pytest.fixture
+    def assigned_wb(self, tmp_path):
+        """Create a workbook with demo assignments for rebuild testing."""
+        from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
+        path = str(tmp_path / "assigned.xlsx")
+        init_workbook(output_path=path, assignments=DEMO_CAPACITY_ASSIGNMENTS)
+        return path
 
-        # Find first WP data row in Capacity (col A = Config WP ref, col B also a formula)
-        test_row = None
-        test_col = 3  # Column C = first month
-        for r in range(1, cap.max_row + 1):
-            val_a = cap.cell(r, 1).value
-            val_b = cap.cell(r, 2).value
-            if (isinstance(val_a, str) and val_a.startswith("=Config!A")
-                    and isinstance(val_b, str) and val_b.startswith("=Config!B")):
-                test_row = r
-                break
-        assert test_row is not None, "Could not find a Capacity WP row"
+    def test_assignment_config_block_preserved(self, assigned_wb):
+        """Person-WP assignment config block values survive rebuild."""
+        from budget_planner.reader import read_capacity_assignments
+        from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
 
-        new_value = 0.42
-        _set_cell(cap, test_row, test_col, new_value)
-        wb.save(init_wb)
+        wb = load_workbook(assigned_wb)
+        original = read_capacity_assignments(wb["Capacity"])
+        assert len(original) == len(DEMO_CAPACITY_ASSIGNMENTS)
         wb.close()
 
-        rebuild_workbook(input_path=init_wb)
+        rebuild_workbook(input_path=assigned_wb)
 
-        wb = load_workbook(init_wb)
-        cap = wb["Capacity"]
-        # Row might shift on rebuild but value should be preserved somewhere
-        found = False
-        for r in range(1, cap.max_row + 1):
-            val = cap.cell(r, test_col).value
-            if val == new_value:
-                found = True
-                break
-        assert found, f"Modified value {new_value} not found after rebuild"
+        wb = load_workbook(assigned_wb)
+        rebuilt = read_capacity_assignments(wb["Capacity"])
+        assert len(rebuilt) == len(original)
+        for got, expected in zip(rebuilt, original):
+            assert got["person"] == expected["person"]
+            assert got["wp"] == expected["wp"]
+            assert got["total_fte"] == pytest.approx(expected["total_fte"])
+            assert got["start"] == expected["start"]
+            assert got["end"] == expected["end"]
         wb.close()
 
     def test_rebuild_keeps_structure(self, init_wb):

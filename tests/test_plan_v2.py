@@ -13,9 +13,10 @@ from budget_planner.config import (
 
 @pytest.fixture(scope="module")
 def v2_workbook(tmp_path_factory):
-    """Generate a fresh v2 workbook and load it."""
+    """Generate a workbook with demo assignments for Plan formula testing."""
+    from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
     out = tmp_path_factory.mktemp("plan_v2") / "test.xlsx"
-    init_workbook(str(out))
+    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
     return openpyxl.load_workbook(str(out), data_only=False)
 
 

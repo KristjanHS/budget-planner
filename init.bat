@@ -1,4 +1,5 @@
 @echo off
+pushd "%~dp0"
 if not exist .venv\Scripts\activate.bat (
     echo ERROR: Run setup.bat first.
     pause

@@ -1,4 +1,5 @@
 @echo off
+pushd "%~dp0"
 echo === Budget Planner - Setup ===
 echo.
 

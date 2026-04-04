@@ -106,6 +106,10 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None,
         year_start_col = month_col_start + group_start
         year_end_col = year_start_col + span - 1
 
+        # Leave the first month of each year ungrouped so that
+        # adjacent year-groups don't merge into one big group in Excel.
+        group_col_start = year_start_col + 1
+
         # Determine if this year's group should be collapsed
         if current_month is not None:
             # Expand the group containing current_month (1-based)
@@ -114,11 +118,12 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None,
             # Default: expand first group
             expand = first_group
 
-        ws.column_dimensions.group(
-            col_letter(year_start_col),
-            col_letter(year_end_col),
-            outline_level=1,
-            hidden=not expand,
-        )
+        if group_col_start <= year_end_col:
+            ws.column_dimensions.group(
+                col_letter(group_col_start),
+                col_letter(year_end_col),
+                outline_level=1,
+                hidden=not expand,
+            )
 
         first_group = False

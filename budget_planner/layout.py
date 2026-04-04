@@ -131,7 +131,7 @@ def build_year_month_headers(ws, start_row, project_params, month_col_start,
     for mi in range(project_months):
         c = month_col_start + mi
         cal_date = project_start + relativedelta(months=mi)
-        mlabel = f"M{mi + 1}\n{cal_date.strftime('%b %y')}"
+        mlabel = f"M{mi + 1}-{cal_date.strftime('%b%y')}"
         style_cell(ws, r, c, mlabel, font=Font(name="Arial", size=8),
                    fill=LIGHT_BLUE_FILL, alignment=CENTER)
     for col, _label in val_headers:

@@ -28,13 +28,13 @@ def test_apply_year_groups_basic():
     ws = wb.active
     assert ws is not None
     apply_year_groups(ws, month_col_start=3, project_months=24)
-    # Year 1: cols C-N (3-14), Year 2: cols O-Z (15-26)
-    # Both years should have outlineLevel 1
-    assert ws.column_dimensions[col_letter(3)].outlineLevel == 1
-    assert ws.column_dimensions[col_letter(15)].outlineLevel == 1
+    # First month of each year is ungrouped; group starts at 2nd month
+    # Year 1: col D (4) grouped, Year 2: col P (16) grouped
+    assert ws.column_dimensions[col_letter(4)].outlineLevel == 1
+    assert ws.column_dimensions[col_letter(16)].outlineLevel == 1
     # Default: Year 1 expanded, Year 2 collapsed
-    assert not ws.column_dimensions[col_letter(3)].hidden
-    assert ws.column_dimensions[col_letter(15)].hidden
+    assert not ws.column_dimensions[col_letter(4)].hidden
+    assert ws.column_dimensions[col_letter(16)].hidden
 
 
 def test_apply_year_groups_with_current_month():
@@ -44,9 +44,7 @@ def test_apply_year_groups_with_current_month():
     assert ws is not None
     apply_year_groups(ws, month_col_start=3, project_months=36, current_month=15)
     # Month 15 is in Year 2 (months 13-24), so Year 2 should be expanded
-    # Year 1 (col C) should be hidden
-    assert ws.column_dimensions[col_letter(3)].hidden, "Year 1 should be hidden"
-    # Year 2 (col O) should be expanded
-    assert not ws.column_dimensions[col_letter(15)].hidden, "Year 2 should be expanded"
-    # Year 3 (col AA) should be hidden
-    assert ws.column_dimensions[col_letter(27)].hidden, "Year 3 should be hidden"
+    # Check 2nd month of each year (1st is ungrouped)
+    assert ws.column_dimensions[col_letter(4)].hidden, "Year 1 should be hidden"
+    assert not ws.column_dimensions[col_letter(16)].hidden, "Year 2 should be expanded"
+    assert ws.column_dimensions[col_letter(28)].hidden, "Year 3 should be hidden"

@@ -20,7 +20,11 @@ Before executing a plan, move completed/superseded plans to docs/plans/old_alrea
 When a plan claims a module is "unchanged", grep its imports to verify no coupling to changed modules.
 
 ## Worktrees
-Before starting work in a worktree, verify it's up to date with main: `git log --oneline -1 HEAD` vs `git log --oneline -1 main`. Merge if behind.
+Before starting work in a worktree:
+1. `git fetch origin main`
+2. Check divergence: `git log --oneline HEAD..origin/main | wc -l`
+3. If >0 commits behind, `git merge origin/main` before any edits
+4. If >5 commits behind, grep main for the planned change before implementing — another instance may have already done it
 
 ## Architecture
 Don't propose subpackages or abstractions for codebases under ~2K LOC.

@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budget Planner — Architecture</title>
+<style>
+  /* ── Reset & Base ───────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f7fafc;
+    color: #2d3748;
+    line-height: 1.6;
+  }
+
+  /* ── Layout ─────────────────────────────────────────────── */
+  .page-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem 3rem;
+  }
+
+  /* ── Header Banner ──────────────────────────────────────── */
+  .banner {
+    background: linear-gradient(135deg, #2b6cb0 0%, #4299e1 40%, #9f7aea 100%);
+    color: #fff;
+    padding: 2.5rem 2rem 2rem;
+    text-align: center;
+    margin-bottom: 2.5rem;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+  }
+  .banner h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.35rem;
+  }
+  .banner .subtitle {
+    font-size: 1.05rem;
+    opacity: 0.88;
+    font-weight: 400;
+  }
+
+  /* ── Section Headings ───────────────────────────────────── */
+  .layer-heading {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #2d3748;
+    margin: 2.5rem 0 0.5rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 3px solid #4299e1;
+  }
+  .diagram-heading {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #4a5568;
+    margin: 2rem 0 0.4rem;
+  }
+  .diagram-desc {
+    color: #718096;
+    font-size: 0.95rem;
+    margin-bottom: 1rem;
+    max-width: 52em;
+  }
+
+  /* ── Diagram Container ──────────────────────────────────── */
+  .diagram-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    overflow-x: auto;
+  }
+  .diagram-card svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  /* ── SVG Tooltip (CSS-only) ─────────────────────────────── */
+  .node-group { cursor: default; }
+  .node-group .tooltip-text {
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+  .node-group:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  /* ── Responsive ─────────────────────────────────────────── */
+  /* ── Section containers (Diagrams 3–6) ──────────────────── */
+  .section {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    overflow-x: auto;
+  }
+  .section h2 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 0.4rem;
+  }
+  .section-desc {
+    color: #718096;
+    font-size: 0.95rem;
+    margin-bottom: 1rem;
+    max-width: 52em;
+    line-height: 1.5;
+  }
+  .section-desc code {
+    background: #edf2f7;
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  .section svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  @media (max-width: 640px) {
+    .banner { padding: 1.5rem 1rem 1.2rem; }
+    .banner h1 { font-size: 1.5rem; }
+    .page-wrap { padding: 0 0.75rem 2rem; }
+    .diagram-card { padding: 0.75rem; }
+    .section { padding: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     HEADER BANNER
+     ════════════════════════════════════════════════════════════ -->
+<div class="banner">
+  <h1>Budget Planner &mdash; Architecture</h1>
+  <div class="subtitle">User-facing flow &amp; technical build pipeline</div>
+</div>
+
+<div class="page-wrap">
+
+<!-- ════════════════════════════════════════════════════════════
+     SHARED SVG DEFS  (arrowheads, gradients)
+     ════════════════════════════════════════════════════════════ -->
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <!-- Standard arrowhead (dark) -->
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+    </marker>
+    <!-- Blue arrowhead -->
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4299e1"/>
+    </marker>
+    <!-- Green arrowhead (cross-sheet refs) -->
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#48bb78"/>
+    </marker>
+    <!-- Orange arrowhead -->
+    <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ed8936"/>
+    </marker>
+    <!-- Purple arrowhead (highlighted reverse flow) -->
+    <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#9f7aea"/>
+    </marker>
+    <!-- Red arrowhead -->
+    <marker id="arrow-red" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#e53e3e"/>
+    </marker>
+    <!-- Gold arrowhead -->
+    <marker id="arrow-gold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#d69e2e"/>
+    </marker>
+    <!-- Grey arrowhead (dashed/infrastructure) -->
+    <marker id="arrow-grey" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#a0aec0"/>
+    </marker>
+    <!-- White arrowhead (feedback on dark background) -->
+    <marker id="arrow-white" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fff"/>
+    </marker>
+
+    <!-- Gradient: banner echo (for decorative SVG use) -->
+    <linearGradient id="grad-banner" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2b6cb0"/>
+      <stop offset="50%" stop-color="#4299e1"/>
+      <stop offset="100%" stop-color="#9f7aea"/>
+    </linearGradient>
+    <!-- Gradient: phase arrow fill -->
+    <linearGradient id="grad-phase-arrow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4299e1"/>
+      <stop offset="100%" stop-color="#48bb78"/>
+    </linearGradient>
+    <!-- Drop shadow filter -->
+    <filter id="shadow-sm" x="-4%" y="-4%" width="108%" height="116%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.10"/>
+    </filter>
+    <filter id="shadow-md" x="-4%" y="-4%" width="108%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.13"/>
+    </filter>
+  </defs>
+</svg>
+
+
+<!-- ──────────────────────────────────────────────────────────
+     LAYER 1 — USER-FACING FLOW
+     ────────────────────────────────────────────────────────── -->
+<h2 class="layer-heading">Layer 1 &mdash; User-Facing Flow</h2>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     DIAGRAM 1: PROJECT LIFECYCLE OVERVIEW
+     ══════════════════════════════════════════════════════════ -->
+<h3 class="diagram-heading">Diagram 1: Project Lifecycle Overview</h3>
+<p class="diagram-desc">
+  The four phases of a grant budget project form a continuous cycle. Configuration
+  feeds into planning, which drives actuals tracking, then monitoring closes the loop
+  with a feedback arrow back to Plan &amp; Allocate when adjustments are needed. The
+  CLI command bar below shows which entry point triggers each phase.
+</p>
+
+<div class="diagram-card">
+<svg viewBox="0 0 1100 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Project Lifecycle Overview">
+
+  <!-- ── Phase boxes (swim-lanes) ──────────────────────────── -->
+  <!-- Phase 1: Configure -->
+  <g class="node-group" transform="translate(30, 30)">
+    <rect x="0" y="0" width="220" height="200" rx="10" fill="#fff" stroke="#4299e1" stroke-width="2.5" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="220" height="38" rx="10" fill="#4299e1"/>
+    <rect x="0" y="20" width="220" height="18" fill="#4299e1"/>
+    <text x="110" y="26" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">Configure</text>
+    <text x="14" y="62" fill="#4a5568" font-size="11" font-weight="600">Sheets:</text>
+    <text x="14" y="78" fill="#4a5568" font-size="10.5">Config, Plan config</text>
+    <line x1="14" y1="88" x2="206" y2="88" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="14" y="105" fill="#4a5568" font-size="11" font-weight="600">User Actions:</text>
+    <text x="14" y="121" fill="#718096" font-size="10.5">Set params, define WPs</text>
+    <text x="14" y="135" fill="#718096" font-size="10.5">Set FTE rate</text>
+    <line x1="14" y1="145" x2="206" y2="145" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="14" y="162" fill="#4a5568" font-size="11" font-weight="600">Outputs:</text>
+    <text x="14" y="178" fill="#718096" font-size="10.5">WP table, named ranges</text>
+    <!-- Tooltip -->
+    <rect class="tooltip-text" x="10" y="190" width="200" height="22" rx="4" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="110" y="205" text-anchor="middle" fill="#fff" font-size="10">Initial project setup and parameters</text>
+  </g>
+
+  <!-- Thick arrow 1→2 -->
+  <g>
+    <line x1="256" y1="130" x2="288" y2="130" stroke="#4a5568" stroke-width="4" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- Phase 2: Plan & Allocate -->
+  <g class="node-group" transform="translate(296, 30)">
+    <rect x="0" y="0" width="220" height="200" rx="10" fill="#fff" stroke="#9f7aea" stroke-width="2.5" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="220" height="38" rx="10" fill="#9f7aea"/>
+    <rect x="0" y="20" width="220" height="18" fill="#9f7aea"/>
+    <text x="110" y="26" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">Plan &amp; Allocate</text>
+    <text x="14" y="62" fill="#4a5568" font-size="11" font-weight="600">Sheets:</text>
+    <text x="14" y="78" fill="#4a5568" font-size="10.5">Team, Capacity, Plan FTE</text>
+    <line x1="14" y1="88" x2="206" y2="88" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="14" y="105" fill="#4a5568" font-size="11" font-weight="600">User Actions:</text>
+    <text x="14" y="121" fill="#718096" font-size="10.5">Assign FTE per person/month</text>
+    <text x="14" y="135" fill="#718096" font-size="10.5">Check load, balance</text>
+    <line x1="14" y1="145" x2="206" y2="145" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="14" y="162" fill="#4a5568" font-size="11" font-weight="600">Outputs:</text>
+    <text x="14" y="178" fill="#718096" font-size="10.5">Planned FTE grid</text>
+    <rect class="tooltip-text" x="10" y="190" width="200" height="22" rx="4" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="110" y="205" text-anchor="middle" fill="#fff" font-size="10">Primary surface for FTE allocation</text>
+  </g>
+
+  <!-- Thick arrow 2→3 -->
+  <g>
+    <line x1="522" y1="130" x2="554" y2="130" stroke="#4a5568" stroke-width="4" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- Phase 3: Track Actuals -->
+  <g class="node-group" transform="translate(562, 30)">
+    <rect x="0" y="0" width="220" height="200" rx="10" fill="#fff" stroke="#48bb78" stroke-width="2.5" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="220" height="38" rx="10" fill="#48bb78"/>
+    <rect x="0" y="20" width="220" height="18" fill="#48bb78"/>
+    <text x="110" y="26" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">Track Actuals</text>
+    <text x="14" y="62" fill="#4a5568" font-size="11" font-weight="600">Sheets:</text>
+    <text x="14" y="78" fill="#4a5568" font-size="10.5">Actuals</text>
+    <line x1="14" y1="88" x2="206" y2="88" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="14" y="105" fill="#4a5568" font-size="11" font-weight="600">User Actions:</text>
+    <text x="14" y="121" fill="#718096" font-size="10.5">Enter EUR per WP/month</text>
+    <line x1="14" y1="145" x2="206" y2="145" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="14" y="162" fill="#4a5568" font-size="11" font-weight="600">Outputs:</text>
+    <text x="14" y="178" fill="#718096" font-size="10.5">Cumulative spend</text>
+    <rect class="tooltip-text" x="10" y="190" width="200" height="22" rx="4" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="110" y="205" text-anchor="middle" fill="#fff" font-size="10">Monthly expenditure recording</text>
+  </g>
+
+  <!-- Thick arrow 3→4 -->
+  <g>
+    <line x1="788" y1="130" x2="820" y2="130" stroke="#4a5568" stroke-width="4" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- Phase 4: Monitor & Escalate -->
+  <g class="node-group" transform="translate(828, 30)">
+    <rect x="0" y="0" width="220" height="200" rx="10" fill="#fff" stroke="#e53e3e" stroke-width="2.5" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="220" height="38" rx="10" fill="#e53e3e"/>
+    <rect x="0" y="20" width="220" height="18" fill="#e53e3e"/>
+    <text x="110" y="26" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">Monitor &amp; Escalate</text>
+    <text x="14" y="62" fill="#4a5568" font-size="11" font-weight="600">Sheets:</text>
+    <text x="14" y="78" fill="#4a5568" font-size="10.5">Trends, Summary</text>
+    <line x1="14" y1="88" x2="206" y2="88" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="14" y="105" fill="#4a5568" font-size="11" font-weight="600">User Actions:</text>
+    <text x="14" y="121" fill="#718096" font-size="10.5">Update current_month</text>
+    <text x="14" y="135" fill="#718096" font-size="10.5">Review RAG status</text>
+    <line x1="14" y1="145" x2="206" y2="145" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="14" y="162" fill="#4a5568" font-size="11" font-weight="600">Outputs:</text>
+    <text x="14" y="178" fill="#718096" font-size="10.5">Burn rate alerts, chart</text>
+    <rect class="tooltip-text" x="10" y="190" width="200" height="22" rx="4" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="110" y="205" text-anchor="middle" fill="#fff" font-size="10">RAG status and budget warnings</text>
+  </g>
+
+  <!-- ── Feedback loop: Monitor → Plan & Allocate ─────────── -->
+  <path d="M 938,240 C 938,290 938,300 938,310 C 938,330 920,340 900,340 L 420,340 C 390,340 380,330 380,310 L 380,240"
+        fill="none" stroke="#9f7aea" stroke-width="3" stroke-dasharray="8,4"
+        marker-end="url(#arrow-purple)"/>
+  <rect x="580" y="328" width="160" height="22" rx="4" fill="#f5f0ff" stroke="#9f7aea" stroke-width="1"/>
+  <text x="660" y="343" text-anchor="middle" fill="#9f7aea" font-size="10.5" font-weight="600">Feedback: adjust plan</text>
+
+  <!-- ── CLI Command Bar ──────────────────────────────────── -->
+  <rect x="30" y="372" width="1020" height="40" rx="6" fill="#2d3748" opacity="0.95"/>
+  <text x="50" y="395" fill="#a0aec0" font-size="10" font-weight="600">CLI:</text>
+
+  <!-- init -->
+  <rect x="86" y="379" width="210" height="24" rx="4" fill="#4299e1" opacity="0.18"/>
+  <text x="96" y="396" fill="#90cdf4" font-size="10" font-family="monospace">python -m budget_planner init</text>
+  <line x1="191" y1="372" x2="191" y2="366" stroke="#4299e1" stroke-width="1.5"/>
+
+  <!-- rebuild -->
+  <rect x="316" y="379" width="236" height="24" rx="4" fill="#9f7aea" opacity="0.18"/>
+  <text x="326" y="396" fill="#d6bcfa" font-size="10" font-family="monospace">python -m budget_planner rebuild</text>
+  <line x1="434" y1="372" x2="434" y2="366" stroke="#9f7aea" stroke-width="1.5"/>
+
+  <!-- manual Excel editing -->
+  <rect x="572" y="379" width="188" height="24" rx="4" fill="#48bb78" opacity="0.18"/>
+  <text x="582" y="396" fill="#9ae6b4" font-size="10" font-family="monospace">Manual Excel editing</text>
+  <line x1="666" y1="372" x2="666" y2="366" stroke="#48bb78" stroke-width="1.5"/>
+
+  <!-- update current_month -->
+  <rect x="780" y="379" width="250" height="24" rx="4" fill="#e53e3e" opacity="0.18"/>
+  <text x="790" y="396" fill="#feb2b2" font-size="10" font-family="monospace">Update current_month cell</text>
+  <line x1="905" y1="372" x2="905" y2="366" stroke="#e53e3e" stroke-width="1.5"/>
+</svg>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     DIAGRAM 2: EXCEL SHEET RELATIONSHIPS
+     ══════════════════════════════════════════════════════════ -->
+<h3 class="diagram-heading">Diagram 2: Excel Sheet Relationships</h3>
+<p class="diagram-desc">
+  Config sits at the hub, feeding named ranges and table data to every downstream
+  sheet. Arrows show the direction of data flow; green arrows denote cross-sheet
+  formula references. The highlighted purple arrow from Capacity back to Plan is the
+  critical reverse flow where SUM formulas aggregate individual allocations.
+  _META documents all sheets but carries no data&nbsp;flow.
+</p>
+
+<div class="diagram-card">
+<svg viewBox="0 0 1100 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Excel Sheet Relationships">
+
+  <!-- ─────────────────────────────────────────────────────────
+       SHEET NODES
+       Layout:
+         Config (top center)        _META (far right)
+         Plan (center)
+         Team (left)   Capacity (center-left)
+         Actuals (center-right)   Summary (right)
+         Trends (bottom center)
+       ───────────────────────────────────────────────────────── -->
+
+  <!-- ── Config (top center) ───────────────────────────────── -->
+  <g class="node-group" transform="translate(430, 20)">
+    <rect x="0" y="0" width="200" height="90" rx="8" fill="#fff" stroke="#4472C4" stroke-width="2.5" filter="url(#shadow-md)"/>
+    <rect x="0" y="0" width="200" height="30" rx="8" fill="#4472C4"/>
+    <rect x="0" y="16" width="200" height="14" fill="#4472C4"/>
+    <text x="100" y="22" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">Config</text>
+    <text x="12" y="52" fill="#4a5568" font-size="10.5">project_start, fte_rate</text>
+    <text x="12" y="67" fill="#4a5568" font-size="10.5">tbl_WorkPackages</text>
+    <text x="12" y="82" fill="#718096" font-size="9.5" font-style="italic">Named ranges origin</text>
+    <rect class="tooltip-text" x="5" y="70" width="190" height="18" rx="3" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="100" y="83" text-anchor="middle" fill="#fff" font-size="9.5">Tab: #4472C4 | build_config_sheet()</text>
+  </g>
+
+  <!-- ── Plan (center, below Config) ──────────────────────── -->
+  <g class="node-group" transform="translate(430, 175)">
+    <rect x="0" y="0" width="200" height="90" rx="8" fill="#fff" stroke="#a0aec0" stroke-width="2" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="200" height="30" rx="8" fill="#cbd5e0"/>
+    <rect x="0" y="16" width="200" height="14" fill="#cbd5e0"/>
+    <text x="100" y="22" text-anchor="middle" fill="#4a5568" font-size="13" font-weight="700">Plan</text>
+    <text x="12" y="52" fill="#4a5568" font-size="10.5">Global params, config table</text>
+    <text x="12" y="67" fill="#4a5568" font-size="10.5">Planned FTE block (SUMs)</text>
+    <text x="12" y="82" fill="#718096" font-size="9.5" font-style="italic">partner_ceiling named range</text>
+    <rect class="tooltip-text" x="5" y="70" width="190" height="18" rx="3" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="100" y="83" text-anchor="middle" fill="#fff" font-size="9.5">No tab color | build_plan_sheet()</text>
+  </g>
+
+  <!-- ── Team (left of center) ─────────────────────────────── -->
+  <g class="node-group" transform="translate(120, 310)">
+    <rect x="0" y="0" width="200" height="90" rx="8" fill="#fff" stroke="#FFA500" stroke-width="2.5" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="200" height="30" rx="8" fill="#FFA500"/>
+    <rect x="0" y="16" width="200" height="14" fill="#FFA500"/>
+    <text x="100" y="22" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">Team</text>
+    <text x="12" y="52" fill="#4a5568" font-size="10.5">Roster + max FTE</text>
+    <text x="12" y="67" fill="#4a5568" font-size="10.5">WP share matrix</text>
+    <text x="12" y="82" fill="#718096" font-size="9.5" font-style="italic">Person names, participation</text>
+    <rect class="tooltip-text" x="5" y="70" width="190" height="18" rx="3" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="100" y="83" text-anchor="middle" fill="#fff" font-size="9.5">Tab: #FFA500 | build_team_sheet()</text>
+  </g>
+
+  <!-- ── Capacity (center-left, emphasized) ────────────────── -->
+  <g class="node-group" transform="translate(390, 330)">
+    <rect x="-4" y="-4" width="218" height="108" rx="12" fill="none" stroke="#9f7aea" stroke-width="3" stroke-dasharray="0" opacity="0.4"/>
+    <rect x="0" y="0" width="210" height="100" rx="8" fill="#fff" stroke="#7030A0" stroke-width="3" filter="url(#shadow-md)"/>
+    <rect x="0" y="0" width="210" height="32" rx="8" fill="#7030A0"/>
+    <rect x="0" y="18" width="210" height="14" fill="#7030A0"/>
+    <text x="105" y="23" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">Capacity</text>
+    <text x="146" y="23" fill="#e9d8fd" font-size="8" font-weight="600">PRIMARY</text>
+    <text x="12" y="54" fill="#4a5568" font-size="10.5">Per-person monthly FTE</text>
+    <text x="12" y="69" fill="#4a5568" font-size="10.5">External commitments, CF</text>
+    <text x="12" y="84" fill="#9f7aea" font-size="10" font-weight="600">Primary editing surface</text>
+    <rect class="tooltip-text" x="5" y="78" width="200" height="18" rx="3" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="105" y="91" text-anchor="middle" fill="#fff" font-size="9.5">Tab: #7030A0 | build_capacity_sheet()</text>
+  </g>
+
+  <!-- ── Actuals (center-right) ────────────────────────────── -->
+  <g class="node-group" transform="translate(680, 310)">
+    <rect x="0" y="0" width="200" height="90" rx="8" fill="#fff" stroke="#0000FF" stroke-width="2.5" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="200" height="30" rx="8" fill="#0000FF"/>
+    <rect x="0" y="16" width="200" height="14" fill="#0000FF"/>
+    <text x="100" y="22" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">Actuals</text>
+    <text x="12" y="52" fill="#4a5568" font-size="10.5">EUR per WP per month</text>
+    <text x="12" y="67" fill="#4a5568" font-size="10.5">Cumulative formulas, CF</text>
+    <text x="12" y="82" fill="#718096" font-size="9.5" font-style="italic">Blue input cells for entry</text>
+    <rect class="tooltip-text" x="5" y="70" width="190" height="18" rx="3" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="100" y="83" text-anchor="middle" fill="#fff" font-size="9.5">Tab: #0000FF | build_actuals_sheet()</text>
+  </g>
+
+  <!-- ── Summary (right) ──────────────────────────────────── -->
+  <g class="node-group" transform="translate(800, 490)">
+    <rect x="0" y="0" width="200" height="90" rx="8" fill="#fff" stroke="#008000" stroke-width="2.5" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="200" height="30" rx="8" fill="#008000"/>
+    <rect x="0" y="16" width="200" height="14" fill="#008000"/>
+    <text x="100" y="22" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">Summary</text>
+    <text x="12" y="52" fill="#4a5568" font-size="10.5">Annual FTE + EUR aggregation</text>
+    <text x="12" y="67" fill="#4a5568" font-size="10.5">Per-WP yearly totals</text>
+    <text x="12" y="82" fill="#718096" font-size="9.5" font-style="italic">Read-only overview</text>
+    <rect class="tooltip-text" x="5" y="70" width="190" height="18" rx="3" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="100" y="83" text-anchor="middle" fill="#fff" font-size="9.5">Tab: #008000 | build_summary_sheet()</text>
+  </g>
+
+  <!-- ── Trends (bottom center) ────────────────────────────── -->
+  <g class="node-group" transform="translate(380, 530)">
+    <rect x="0" y="0" width="220" height="100" rx="8" fill="#fff" stroke="#FFD700" stroke-width="2.5" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="220" height="30" rx="8" fill="#FFD700"/>
+    <rect x="0" y="16" width="220" height="14" fill="#FFD700"/>
+    <text x="110" y="22" text-anchor="middle" fill="#4a5568" font-size="13" font-weight="700">Trends</text>
+    <text x="12" y="52" fill="#4a5568" font-size="10.5">Burn rate, exhaustion dates</text>
+    <text x="12" y="67" fill="#4a5568" font-size="10.5">Person load table, chart</text>
+    <text x="12" y="82" fill="#d69e2e" font-size="10" font-weight="600">current_month (Trends!B1)</text>
+    <text x="12" y="94" fill="#718096" font-size="9.5" font-style="italic">RAG conditional formatting</text>
+    <rect class="tooltip-text" x="5" y="78" width="210" height="18" rx="3" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="110" y="91" text-anchor="middle" fill="#fff" font-size="9.5">Tab: #FFD700 | build_trends_sheet()</text>
+  </g>
+
+  <!-- ── _META (far right, floating) ──────────────────────── -->
+  <g class="node-group" transform="translate(910, 140)">
+    <rect x="0" y="0" width="160" height="80" rx="8" fill="#fafafa" stroke="#a0aec0" stroke-width="2" stroke-dasharray="6,3" filter="url(#shadow-sm)"/>
+    <rect x="0" y="0" width="160" height="28" rx="8" fill="#e2e8f0"/>
+    <rect x="0" y="14" width="160" height="14" fill="#e2e8f0"/>
+    <text x="80" y="20" text-anchor="middle" fill="#4a5568" font-size="13" font-weight="700">_META</text>
+    <text x="10" y="48" fill="#718096" font-size="10.5">AI-readable documentation</text>
+    <text x="10" y="63" fill="#718096" font-size="10.5">Layout dicts from builders</text>
+    <rect class="tooltip-text" x="5" y="60" width="150" height="18" rx="3" fill="#2d3748" opacity="0.92"/>
+    <text class="tooltip-text" x="80" y="73" text-anchor="middle" fill="#fff" font-size="9.5">Tab: red | build_meta_sheet()</text>
+  </g>
+
+
+  <!-- ─────────────────────────────────────────────────────────
+       ARROWS (data-flow relationships)
+       ───────────────────────────────────────────────────────── -->
+
+  <!-- Config → Plan: project_start, fte_rate -->
+  <line x1="530" y1="112" x2="530" y2="170" stroke="#4299e1" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+  <rect x="540" y="130" width="130" height="16" rx="3" fill="#ebf8ff"/>
+  <text x="546" y="142" fill="#2b6cb0" font-size="9.5" font-weight="600">project_start, fte_rate</text>
+
+  <!-- Plan config → Capacity: green cross-sheet refs (WP ID/Name) -->
+  <path d="M 480,268 L 480,325" fill="none" stroke="#48bb78" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="395" y="286" width="135" height="16" rx="3" fill="#f0fff4"/>
+  <text x="401" y="298" fill="#276749" font-size="9" font-weight="500">WP ID/Name (green refs)</text>
+
+  <!-- Plan config → Actuals: green cross-sheet refs (WP ID/Name) -->
+  <path d="M 600,268 C 650,290 700,300 740,305" fill="none" stroke="#48bb78" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="620" y="278" width="135" height="16" rx="3" fill="#f0fff4"/>
+  <text x="626" y="290" fill="#276749" font-size="9" font-weight="500">WP ID/Name (green refs)</text>
+
+  <!-- Team → Capacity: green cross-sheet refs (person names, max FTE) -->
+  <path d="M 322, 355 L 385,365" fill="none" stroke="#48bb78" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="314" y="340" width="80" height="30" rx="3" fill="#f0fff4"/>
+  <text x="320" y="352" fill="#276749" font-size="9" font-weight="500">person names</text>
+  <text x="320" y="364" fill="#276749" font-size="9" font-weight="500">max FTE</text>
+
+  <!-- ★ Capacity → Plan (REVERSE, highlighted): SUM formulas -->
+  <path d="M 494,326 C 490,300 488,290 486,272"
+        fill="none" stroke="#9f7aea" stroke-width="3.5" marker-end="url(#arrow-purple)"/>
+  <rect x="430" y="290" width="155" height="18" rx="3" fill="#f5f0ff" stroke="#9f7aea" stroke-width="1"/>
+  <text x="438" y="303" fill="#6b46c1" font-size="9.5" font-weight="700">SUM formulas (reverse!)</text>
+
+  <!-- Plan → Trends: partner_ceiling named range -->
+  <path d="M 460,268 C 430,380 420,460 450,525"
+        fill="none" stroke="#d69e2e" stroke-width="2" marker-end="url(#arrow-gold)"/>
+  <rect x="365" y="450" width="120" height="16" rx="3" fill="#fffff0"/>
+  <text x="371" y="462" fill="#975a16" font-size="9" font-weight="500">partner_ceiling</text>
+
+  <!-- Actuals → Trends: cumulative EUR refs -->
+  <path d="M 740,402 C 700,460 620,500 600,528"
+        fill="none" stroke="#d69e2e" stroke-width="2" marker-end="url(#arrow-gold)"/>
+  <rect x="640" y="460" width="120" height="16" rx="3" fill="#fffff0"/>
+  <text x="646" y="472" fill="#975a16" font-size="9" font-weight="500">cumulative EUR</text>
+
+  <!-- Actuals → Summary: annual aggregation -->
+  <path d="M 842,402 C 870,430 880,460 890,485"
+        fill="none" stroke="#48bb78" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="862" y="440" width="110" height="16" rx="3" fill="#f0fff4"/>
+  <text x="868" y="452" fill="#276749" font-size="9" font-weight="500">annual EUR agg.</text>
+
+  <!-- Plan → Summary: annual FTE aggregation -->
+  <path d="M 632,240 C 730,300 810,400 860,485"
+        fill="none" stroke="#48bb78" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="740" y="370" width="110" height="16" rx="3" fill="#f0fff4"/>
+  <text x="746" y="382" fill="#276749" font-size="9" font-weight="500">annual FTE agg.</text>
+
+  <!-- current_month named range indicator (self-referential on Trends) -->
+  <rect x="330" y="630" width="170" height="22" rx="5" fill="#fffff0" stroke="#d69e2e" stroke-width="1.5"/>
+  <text x="340" y="645" fill="#975a16" font-size="10" font-weight="600">current_month</text>
+  <text x="440" y="645" fill="#718096" font-size="9">Trends!B1</text>
+  <path d="M 415,630 L 415,628 L 490,580"
+        fill="none" stroke="#d69e2e" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arrow-gold)"/>
+
+  <!-- ── Dashed arrows from all sheets to _META ───────────── -->
+  <!-- Config → _META -->
+  <path d="M 635,55 C 740,55 860,90 920,155"
+        fill="none" stroke="#a0aec0" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow-grey)"/>
+  <!-- Plan → _META -->
+  <path d="M 635,200 C 740,190 860,180 920,175"
+        fill="none" stroke="#a0aec0" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow-grey)"/>
+  <!-- Team → _META -->
+  <path d="M 322,340 C 500,280 780,220 910,185"
+        fill="none" stroke="#a0aec0" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow-grey)"/>
+  <!-- Capacity → _META -->
+  <path d="M 604,360 C 720,310 850,240 918,200"
+        fill="none" stroke="#a0aec0" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow-grey)"/>
+  <!-- Actuals → _META -->
+  <path d="M 882,340 C 910,300 930,250 960,222"
+        fill="none" stroke="#a0aec0" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow-grey)"/>
+  <!-- Summary → _META -->
+  <path d="M 970,490 C 980,400 985,300 985,222"
+        fill="none" stroke="#a0aec0" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow-grey)"/>
+  <!-- Trends → _META -->
+  <path d="M 602,560 C 750,500 900,350 970,222"
+        fill="none" stroke="#a0aec0" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow-grey)"/>
+
+  <!-- ── Legend ────────────────────────────────────────────── -->
+  <g transform="translate(30, 650)">
+    <rect x="0" y="0" width="420" height="58" rx="6" fill="#f7fafc" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="12" y="18" fill="#4a5568" font-size="10.5" font-weight="700">Legend</text>
+
+    <!-- Blue: named ranges -->
+    <line x1="12" y1="32" x2="36" y2="32" stroke="#4299e1" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+    <text x="42" y="36" fill="#4a5568" font-size="9.5">Named ranges</text>
+
+    <!-- Green: cross-sheet formula ref -->
+    <line x1="140" y1="32" x2="164" y2="32" stroke="#48bb78" stroke-width="2" marker-end="url(#arrow-green)"/>
+    <text x="170" y="36" fill="#4a5568" font-size="9.5">Cross-sheet refs</text>
+
+    <!-- Purple: reverse SUM -->
+    <line x1="280" y1="32" x2="304" y2="32" stroke="#9f7aea" stroke-width="3" marker-end="url(#arrow-purple)"/>
+    <text x="310" y="36" fill="#4a5568" font-size="9.5">Reverse SUM</text>
+
+    <!-- Gold: Trends data -->
+    <line x1="12" y1="50" x2="36" y2="50" stroke="#d69e2e" stroke-width="2" marker-end="url(#arrow-gold)"/>
+    <text x="42" y="54" fill="#4a5568" font-size="9.5">Trends data</text>
+
+    <!-- Grey dashed: _META documentation -->
+    <line x1="140" y1="50" x2="164" y2="50" stroke="#a0aec0" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow-grey)"/>
+    <text x="170" y="54" fill="#4a5568" font-size="9.5">Documentation (_META)</text>
+
+    <!-- Emphasis box -->
+    <rect x="280" y="42" width="12" height="12" rx="2" fill="none" stroke="#9f7aea" stroke-width="2.5"/>
+    <text x="298" y="54" fill="#4a5568" font-size="9.5">Emphasized (primary)</text>
+  </g>
+
+</svg>
+</div>
+
+<!-- Parts 2 & 3 continue below -->
+<!-- ============================================================ -->
+<!-- Diagram 3: RAG Escalation Model                              -->
+<!-- ============================================================ -->
+<div class="section">
+  <h2>Diagram 3: RAG Escalation Model</h2>
+  <p class="section-desc">
+    The workbook uses a three-tier traffic-light system (Green / Amber / Red)
+    implemented via Excel conditional formatting. Lower-priority rules (green, amber)
+    are applied first; higher-priority rules (red) are added second and override.
+    Thresholds are derived from the actual openpyxl <code>FormulaRule</code>
+    definitions in each builder module.
+  </p>
+
+  <svg viewBox="0 0 1100 820" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+    <!-- Background -->
+    <rect width="1100" height="820" fill="#f8fafc" rx="8"/>
+
+    <!-- ===== Column headers ===== -->
+    <rect x="40" y="20" width="220" height="40" rx="4" fill="#718096"/>
+    <text x="150" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Metric</text>
+
+    <rect x="270" y="20" width="260" height="40" rx="4" fill="#48bb78"/>
+    <text x="400" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Green (OK)</text>
+
+    <rect x="540" y="20" width="260" height="40" rx="4" fill="#d69e2e"/>
+    <text x="670" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Amber (Watch)</text>
+
+    <rect x="810" y="20" width="260" height="40" rx="4" fill="#e53e3e"/>
+    <text x="940" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Red (Critical)</text>
+
+    <!-- ===== Section 1: Capacity (person load) ===== -->
+    <rect x="20" y="72" width="1060" height="30" rx="4" fill="#9f7aea" opacity="0.15"/>
+    <text x="40" y="92" fill="#9f7aea" font-size="13" font-weight="bold" font-family="system-ui">CAPACITY SHEET &mdash; Person Load</text>
+
+    <!-- Row: TOTAL vs Max FTE -->
+    <rect x="40" y="110" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="128" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">TOTAL row</text>
+    <text x="150" y="144" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(per person, per month)</text>
+
+    <rect x="270" y="110" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="137" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">TOTAL &le; 0.8 &times; Max FTE</text>
+
+    <rect x="540" y="110" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="137" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">TOTAL &gt; 0.8 &times; Max FTE</text>
+
+    <rect x="810" y="110" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="137" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">TOTAL &gt; Max FTE</text>
+
+    <!-- Row: REMAINING -->
+    <rect x="40" y="162" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="180" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">REMAINING row</text>
+    <text x="150" y="196" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(Max FTE &minus; TOTAL)</text>
+
+    <rect x="270" y="162" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="189" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">REMAINING &ge; 0</text>
+
+    <rect x="540" y="162" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="189" text-anchor="middle" fill="#92400e" font-size="10" font-family="system-ui" font-style="italic">(no amber rule)</text>
+
+    <rect x="810" y="162" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="189" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">REMAINING &lt; 0</text>
+
+    <!-- ===== Section 2: Actuals (WP spend) ===== -->
+    <rect x="20" y="220" width="1060" height="30" rx="4" fill="#4299e1" opacity="0.15"/>
+    <text x="40" y="240" fill="#2b6cb0" font-size="13" font-weight="bold" font-family="system-ui">ACTUALS SHEET &mdash; WP Spend</text>
+
+    <!-- Row: Variance -->
+    <rect x="40" y="258" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="276" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Variance</text>
+    <text x="150" y="292" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(Ceiling &minus; Cumulative)</text>
+
+    <rect x="270" y="258" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="285" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">Variance &ge; 0</text>
+
+    <rect x="540" y="258" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="285" text-anchor="middle" fill="#92400e" font-size="10" font-family="system-ui" font-style="italic">(no amber rule)</text>
+
+    <rect x="810" y="258" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="285" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">Variance &lt; 0 (overspend)</text>
+
+    <!-- Row: % Ceiling -->
+    <rect x="40" y="310" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="328" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">% Ceiling</text>
+    <text x="150" y="344" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(Cumulative / Ceiling)</text>
+
+    <rect x="270" y="310" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="337" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">% Ceiling &le; 85%</text>
+
+    <rect x="540" y="310" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="337" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">% Ceiling &gt; 85%</text>
+
+    <rect x="810" y="310" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="337" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">% Ceiling &gt; 100%</text>
+
+    <!-- Row: Breach In -->
+    <rect x="40" y="362" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="380" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Breach In</text>
+    <text x="150" y="396" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(months to ceiling)</text>
+
+    <rect x="270" y="362" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="389" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">Breach In &ge; 12 months</text>
+
+    <rect x="540" y="362" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="389" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">Breach In &lt; 12 months</text>
+
+    <rect x="810" y="362" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="389" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">Breach In &lt; 6 months</text>
+
+    <!-- ===== Section 3: Trends - burn rate ===== -->
+    <rect x="20" y="420" width="1060" height="30" rx="4" fill="#d69e2e" opacity="0.15"/>
+    <text x="40" y="440" fill="#975a16" font-size="13" font-weight="bold" font-family="system-ui">TRENDS SHEET &mdash; WP Burn Rate</text>
+
+    <!-- Row: Burn Delta -->
+    <rect x="40" y="458" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="476" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Burn Delta %</text>
+    <text x="150" y="492" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(% Budget &minus; % Time)</text>
+
+    <rect x="270" y="458" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="485" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">|Delta| &le; 5%</text>
+
+    <rect x="540" y="458" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="479" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">Delta 5&ndash;15% (overspend)</text>
+    <text x="670" y="495" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">Delta &lt; &minus;10% (slow)</text>
+
+    <rect x="810" y="458" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="485" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">Delta &gt; 15%</text>
+
+    <!-- Row: Status -->
+    <rect x="40" y="510" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="537" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Status</text>
+
+    <rect x="270" y="510" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="537" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">"OK"</text>
+
+    <rect x="540" y="510" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="537" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">"WATCH" or "SLOW"</text>
+
+    <rect x="810" y="510" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="537" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">"OVER"</text>
+
+    <!-- Row: Exhaustion Month -->
+    <rect x="40" y="562" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="580" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Exhaustion Month</text>
+    <text x="150" y="596" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(linear projection)</text>
+
+    <rect x="270" y="562" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="589" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">Exhaustion &ge; WP end</text>
+
+    <rect x="540" y="562" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="589" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">Within 3 months of end</text>
+
+    <rect x="810" y="562" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="589" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">Exhaustion &gt; 3 months early</text>
+
+    <!-- ===== Section 4: Trends - person load ===== -->
+    <rect x="20" y="620" width="1060" height="30" rx="4" fill="#d69e2e" opacity="0.15"/>
+    <text x="40" y="640" fill="#975a16" font-size="13" font-weight="bold" font-family="system-ui">TRENDS SHEET &mdash; Person Load</text>
+
+    <!-- Row: Remaining Avg vs Max FTE -->
+    <rect x="40" y="658" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="676" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Remaining Avg FTE</text>
+    <text x="150" y="692" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(future months avg)</text>
+
+    <rect x="270" y="658" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="685" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">avg &le; 0.8 &times; Max FTE</text>
+
+    <rect x="540" y="658" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="685" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">0.8 &times; Max &lt; avg &le; Max</text>
+
+    <rect x="810" y="658" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="685" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">avg &gt; Max FTE</text>
+
+    <!-- Row: Person Status -->
+    <rect x="40" y="710" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
+    <text x="150" y="737" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Status</text>
+
+    <rect x="270" y="710" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
+    <text x="400" y="737" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">"OK"</text>
+
+    <rect x="540" y="710" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
+    <text x="670" y="737" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">"WATCH"</text>
+
+    <rect x="810" y="710" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
+    <text x="940" y="737" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">"OVER"</text>
+
+    <!-- ===== Annotation bar ===== -->
+    <rect x="20" y="770" width="1060" height="40" rx="6" fill="#edf2f7" stroke="#cbd5e0"/>
+    <text x="40" y="788" fill="#4a5568" font-size="11" font-family="system-ui">
+      <tspan font-weight="bold">Priority order:</tspan> Green/Amber CF rules added first (lower priority); Red rules added second (override).
+    </text>
+    <text x="40" y="803" fill="#4a5568" font-size="11" font-family="system-ui">
+      <tspan font-weight="bold">Font color convention:</tspan>
+      <tspan fill="#4299e1" font-weight="bold">Blue = input</tspan> &nbsp;|&nbsp;
+      <tspan fill="#2d3748" font-weight="bold">Black = formula</tspan> &nbsp;|&nbsp;
+      <tspan fill="#48bb78" font-weight="bold">Green = cross-sheet ref</tspan>
+    </text>
+  </svg>
+</div>
+
+<!-- ============================================================ -->
+<!-- Layer 2 — Technical Pipeline                                  -->
+<!-- ============================================================ -->
+<div class="section">
+  <h2>Layer 2 &mdash; Technical Pipeline</h2>
+  <p class="section-desc">
+    Under the hood, the Budget Planner is a Python pipeline that generates
+    a fully-wired Excel workbook. Every sheet is built by a dedicated module,
+    and each builder returns a <code>layout</code> dictionary used by downstream steps.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<!-- Diagram 4: Build Pipeline                                     -->
+<!-- ============================================================ -->
+<div class="section">
+  <h2>Diagram 4: Build Pipeline</h2>
+  <p class="section-desc">
+    The 14-step common pipeline is shared by both <code>init</code> (from seed data)
+    and <code>rebuild</code> (from existing workbook). The init/rebuild fork converges
+    at step 1. Step 5 is the critical cross-sheet wiring where Capacity FTE values
+    flow back into Plan via SUM formulas. Steps 6 and 9 show the Trends split:
+    the skeleton (current_month named range) is created early, content is populated
+    after Actuals and Summary are built.
+  </p>
+
+  <svg viewBox="0 0 1160 880" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+    <!-- Arrowhead definition (local fallback if parent defs missing) -->
+    <defs>
+      <marker id="arrow-pipe" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="8" markerHeight="6" orient="auto-start-auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#718096"/>
+      </marker>
+      <marker id="arrow-pipe-orange" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="8" markerHeight="6" orient="auto-start-auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#ed8936"/>
+      </marker>
+      <marker id="arrow-pipe-blue" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="8" markerHeight="6" orient="auto-start-auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#4299e1"/>
+      </marker>
+      <marker id="arrow-pipe-purple" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="8" markerHeight="6" orient="auto-start-auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#9f7aea"/>
+      </marker>
+    </defs>
+
+    <!-- Background -->
+    <rect width="1160" height="880" fill="#f8fafc" rx="8"/>
+
+    <!-- ===== FORK SECTION ===== -->
+    <!-- Init path box -->
+    <rect x="30" y="30" width="240" height="130" rx="8" fill="#ebf8ff" stroke="#4299e1" stroke-width="2"/>
+    <text x="150" y="55" text-anchor="middle" fill="#2b6cb0" font-size="14" font-weight="bold" font-family="system-ui">Init Path</text>
+    <line x1="60" y1="64" x2="240" y2="64" stroke="#bee3f8" stroke-width="1"/>
+    <text x="150" y="82" text-anchor="middle" fill="#4a5568" font-size="11" font-family="system-ui">Source: config.py seed data</text>
+    <text x="150" y="98" text-anchor="middle" fill="#4a5568" font-size="11" font-family="system-ui">(WPs, team, external commits)</text>
+    <!-- Skeleton/demo toggle icon -->
+    <rect x="80" y="112" width="140" height="30" rx="14" fill="white" stroke="#a0aec0" stroke-width="1.5"/>
+    <rect x="82" y="114" width="66" height="26" rx="12" fill="#a0aec0"/>
+    <text x="115" y="132" text-anchor="middle" fill="white" font-size="9" font-weight="bold" font-family="system-ui">skeleton</text>
+    <rect x="152" y="114" width="66" height="26" rx="12" fill="#4299e1"/>
+    <text x="185" y="132" text-anchor="middle" fill="white" font-size="9" font-weight="bold" font-family="system-ui">demo</text>
+
+    <!-- Rebuild path box -->
+    <rect x="30" y="180" width="240" height="150" rx="8" fill="#fff5eb" stroke="#ed8936" stroke-width="2"/>
+    <text x="150" y="205" text-anchor="middle" fill="#c05621" font-size="14" font-weight="bold" font-family="system-ui">Rebuild Path</text>
+    <line x1="60" y1="214" x2="240" y2="214" stroke="#feebc8" stroke-width="1"/>
+    <text x="150" y="232" text-anchor="middle" fill="#4a5568" font-size="11" font-family="system-ui">Source: existing .xlsx</text>
+    <text x="150" y="248" text-anchor="middle" fill="#4a5568" font-size="11" font-family="system-ui">via reader.py</text>
+    <text x="60" y="272" fill="#718096" font-size="10" font-family="system-ui">1. read Config params + WPs</text>
+    <text x="60" y="286" fill="#718096" font-size="10" font-family="system-ui">2. read Team roster + shares</text>
+    <text x="60" y="300" fill="#718096" font-size="10" font-family="system-ui">3. read Capacity FTE values</text>
+    <text x="60" y="314" fill="#718096" font-size="10" font-family="system-ui">4. read Actuals EUR values</text>
+
+    <!-- Validation gate -->
+    <rect x="60" y="336" width="180" height="22" rx="3" fill="#fed7d7" stroke="#e53e3e" stroke-width="1"/>
+    <text x="150" y="351" text-anchor="middle" fill="#9b2c2c" font-size="10" font-weight="bold" font-family="system-ui">Validate cross-refs (gate)</text>
+
+    <!-- Fork convergence arrows -->
+    <line x1="270" y1="95" x2="330" y2="95" stroke="#4299e1" stroke-width="2" marker-end="url(#arrow-pipe-blue)"/>
+    <line x1="330" y1="95" x2="330" y2="210" stroke="#718096" stroke-width="2"/>
+    <line x1="270" y1="255" x2="330" y2="255" stroke="#ed8936" stroke-width="2" marker-end="url(#arrow-pipe-orange)"/>
+    <line x1="330" y1="95" x2="330" y2="255" stroke="#718096" stroke-width="2"/>
+
+    <!-- Convergence point -->
+    <circle cx="330" cy="210" r="8" fill="#718096"/>
+    <line x1="338" y1="210" x2="370" y2="210" stroke="#718096" stroke-width="2" marker-end="url(#arrow-pipe)"/>
+
+    <!-- ===== COMMON PIPELINE (14 steps) ===== -->
+    <!-- Pipeline background -->
+    <rect x="370" y="20" width="770" height="840" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="755" y="48" text-anchor="middle" fill="#a0aec0" font-size="12" font-weight="bold" font-family="system-ui" letter-spacing="2">COMMON PIPELINE (14 STEPS)</text>
+
+    <!-- Step positioning: 2 columns x 7 rows -->
+    <!-- Left column: steps 1-7, Right column: steps 8-14 -->
+
+    <!-- Step 1: Config sheet -->
+    <rect x="400" y="68" width="320" height="48" rx="6" fill="#ebf8ff" stroke="#4299e1" stroke-width="1.5"/>
+    <circle cx="420" cy="92" r="12" fill="#4299e1"/>
+    <text x="420" y="97" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">1</text>
+    <text x="440" y="87" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">Config sheet</text>
+    <text x="440" y="103" fill="#718096" font-size="10" font-family="system-ui">config_sheet.py &mdash; params + tbl_WorkPackages + named ranges</text>
+
+    <!-- layout return arrow from Step 1 -->
+    <text x="698" y="86" fill="#a0aec0" font-size="9" font-style="italic" font-family="system-ui">layout</text>
+    <line x1="690" y1="88" x2="720" y2="88" stroke="#a0aec0" stroke-width="1" stroke-dasharray="3,3"/>
+
+    <!-- Arrow 1->2 -->
+    <line x1="560" y1="116" x2="560" y2="130" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 2: Plan sheet -->
+    <rect x="400" y="130" width="320" height="48" rx="6" fill="#ebf8ff" stroke="#4299e1" stroke-width="1.5"/>
+    <circle cx="420" cy="154" r="12" fill="#4299e1"/>
+    <text x="420" y="159" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">2</text>
+    <text x="440" y="149" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">Plan sheet</text>
+    <text x="440" y="165" fill="#718096" font-size="10" font-family="system-ui">plan.py &mdash; global params, config table, seed Planned FTE</text>
+
+    <!-- Arrow 2->3 -->
+    <line x1="560" y1="178" x2="560" y2="192" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 3: Team sheet -->
+    <rect x="400" y="192" width="320" height="48" rx="6" fill="#fff5eb" stroke="#ed8936" stroke-width="1.5"/>
+    <circle cx="420" cy="216" r="12" fill="#ed8936"/>
+    <text x="420" y="221" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">3</text>
+    <text x="440" y="211" fill="#c05621" font-size="12" font-weight="bold" font-family="system-ui">Team sheet</text>
+    <text x="440" y="227" fill="#718096" font-size="10" font-family="system-ui">team.py &mdash; roster + WP share matrix</text>
+
+    <!-- Arrow 3->4 -->
+    <line x1="560" y1="240" x2="560" y2="254" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 4: Capacity sheet (with skeleton/demo icon) -->
+    <rect x="400" y="254" width="320" height="52" rx="6" fill="#faf5ff" stroke="#9f7aea" stroke-width="1.5"/>
+    <circle cx="420" cy="280" r="12" fill="#9f7aea"/>
+    <text x="420" y="285" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">4</text>
+    <text x="440" y="273" fill="#6b46c1" font-size="12" font-weight="bold" font-family="system-ui">Capacity sheet</text>
+    <text x="440" y="289" fill="#718096" font-size="10" font-family="system-ui">capacity.py &mdash; per-person FTE grid, external commits, CF</text>
+    <!-- Skeleton/demo toggle indicator -->
+    <rect x="685" y="269" width="25" height="15" rx="7" fill="#a0aec0"/>
+    <circle cx="703" cy="277" r="5" fill="white"/>
+    <text x="686" y="298" fill="#a0aec0" font-size="8" font-family="system-ui">mode</text>
+
+    <!-- Arrow 4->5 -->
+    <line x1="560" y1="306" x2="560" y2="320" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 5: Patch Plan <- Capacity (HIGHLIGHTED) -->
+    <rect x="395" y="320" width="330" height="56" rx="6" fill="#fefce8" stroke="#d69e2e" stroke-width="3"/>
+    <rect x="395" y="320" width="330" height="56" rx="6" fill="none" stroke="#e53e3e" stroke-width="1" stroke-dasharray="4,2"/>
+    <circle cx="420" cy="348" r="14" fill="#d69e2e"/>
+    <text x="420" y="353" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="system-ui">5</text>
+    <text x="442" y="340" fill="#975a16" font-size="12" font-weight="bold" font-family="system-ui">Patch Plan &larr; Capacity</text>
+    <text x="442" y="355" fill="#718096" font-size="10" font-family="system-ui">plan.py:_apply_planned_formulas</text>
+    <text x="442" y="368" fill="#e53e3e" font-size="9" font-weight="bold" font-family="system-ui">KEY: overwrite Plan FTE with SUM formulas from Capacity</text>
+
+    <!-- Reverse arrow icon between step 4 and step 5 -->
+    <path d="M 730 300 C 750 300, 750 340, 730 340" fill="none" stroke="#9f7aea" stroke-width="2" stroke-dasharray="4,2" marker-end="url(#arrow-pipe-purple)"/>
+    <text x="755" y="324" fill="#9f7aea" font-size="9" font-weight="bold" font-family="system-ui">reverse</text>
+    <text x="755" y="336" fill="#9f7aea" font-size="9" font-family="system-ui">flow</text>
+
+    <!-- Arrow 5->6 -->
+    <line x1="560" y1="376" x2="560" y2="390" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 6: Trends skeleton -->
+    <rect x="400" y="390" width="320" height="48" rx="6" fill="#fffff0" stroke="#d69e2e" stroke-width="1.5"/>
+    <circle cx="420" cy="414" r="12" fill="#d69e2e"/>
+    <text x="420" y="419" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">6</text>
+    <text x="440" y="409" fill="#975a16" font-size="12" font-weight="bold" font-family="system-ui">Trends skeleton</text>
+    <text x="440" y="425" fill="#718096" font-size="10" font-family="system-ui">current_month cell + named range (created early)</text>
+
+    <!-- Arrow 6->7 -->
+    <line x1="560" y1="438" x2="560" y2="452" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 7: Actuals sheet -->
+    <rect x="400" y="452" width="320" height="48" rx="6" fill="#ebf8ff" stroke="#4299e1" stroke-width="1.5"/>
+    <circle cx="420" cy="476" r="12" fill="#4299e1"/>
+    <text x="420" y="481" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">7</text>
+    <text x="440" y="471" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">Actuals sheet</text>
+    <text x="440" y="487" fill="#718096" font-size="10" font-family="system-ui">actuals.py &mdash; EUR grid, cumulative formulas, CF</text>
+
+    <!-- Arrow 7->8 -->
+    <line x1="560" y1="500" x2="560" y2="514" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 8: Summary sheet -->
+    <rect x="400" y="514" width="320" height="48" rx="6" fill="#f0fff4" stroke="#48bb78" stroke-width="1.5"/>
+    <circle cx="420" cy="538" r="12" fill="#48bb78"/>
+    <text x="420" y="543" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">8</text>
+    <text x="440" y="533" fill="#276749" font-size="12" font-weight="bold" font-family="system-ui">Summary sheet</text>
+    <text x="440" y="549" fill="#718096" font-size="10" font-family="system-ui">summary.py &mdash; annual aggregation</text>
+
+    <!-- Arrow 8->9 -->
+    <line x1="560" y1="562" x2="560" y2="576" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 9: Trends content -->
+    <rect x="400" y="576" width="320" height="48" rx="6" fill="#fffff0" stroke="#d69e2e" stroke-width="1.5"/>
+    <circle cx="420" cy="600" r="12" fill="#d69e2e"/>
+    <text x="420" y="605" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">9</text>
+    <text x="440" y="595" fill="#975a16" font-size="12" font-weight="bold" font-family="system-ui">Trends content</text>
+    <text x="440" y="611" fill="#718096" font-size="10" font-family="system-ui">trends.py &mdash; burn rate table, person load, chart, CF</text>
+
+    <!-- Dashed line connecting Step 6 and Step 9 (Trends split) -->
+    <line x1="750" y1="414" x2="780" y2="414" stroke="#d69e2e" stroke-width="2" stroke-dasharray="6,3"/>
+    <line x1="780" y1="414" x2="780" y2="600" stroke="#d69e2e" stroke-width="2" stroke-dasharray="6,3"/>
+    <line x1="780" y1="600" x2="750" y2="600" stroke="#d69e2e" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrow-pipe-orange)"/>
+    <text x="786" y="500" fill="#d69e2e" font-size="10" font-weight="bold" font-family="system-ui" transform="rotate(90, 786, 500)">Trends split</text>
+
+    <!-- Arrow 9->10 -->
+    <line x1="560" y1="624" x2="560" y2="638" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 10: _META sheet -->
+    <rect x="400" y="638" width="320" height="48" rx="6" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5"/>
+    <circle cx="420" cy="662" r="12" fill="#a0aec0"/>
+    <text x="420" y="667" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">10</text>
+    <text x="440" y="657" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">_META sheet</text>
+    <text x="440" y="673" fill="#718096" font-size="10" font-family="system-ui">meta.py &mdash; AI-readable docs from all layout dicts</text>
+
+    <!-- Arrow 10->11 -->
+    <line x1="560" y1="686" x2="560" y2="700" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 11: Sheet protection -->
+    <rect x="400" y="700" width="320" height="42" rx="6" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5"/>
+    <circle cx="420" cy="721" r="12" fill="#a0aec0"/>
+    <text x="420" y="726" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">11</text>
+    <text x="440" y="718" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Sheet protection</text>
+    <text x="440" y="732" fill="#718096" font-size="10" font-family="system-ui">all sheets, password "grant", blue cells unlocked</text>
+
+    <!-- Arrow 11->12 -->
+    <line x1="560" y1="742" x2="560" y2="754" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 12: Column grouping -->
+    <rect x="400" y="754" width="320" height="42" rx="6" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5"/>
+    <circle cx="420" cy="775" r="12" fill="#a0aec0"/>
+    <text x="420" y="780" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">12</text>
+    <text x="440" y="772" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Column grouping</text>
+    <text x="440" y="786" fill="#718096" font-size="10" font-family="system-ui">styles.py:apply_year_groups &mdash; 12-month groups</text>
+
+    <!-- Arrow 12->13 -->
+    <line x1="560" y1="796" x2="560" y2="808" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 13: Save .xlsx -->
+    <rect x="400" y="808" width="154" height="42" rx="6" fill="#f0fff4" stroke="#48bb78" stroke-width="1.5"/>
+    <circle cx="420" cy="829" r="12" fill="#48bb78"/>
+    <text x="420" y="834" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">13</text>
+    <text x="504" y="826" text-anchor="middle" fill="#276749" font-size="12" font-weight="bold" font-family="system-ui">Save .xlsx</text>
+    <text x="504" y="840" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">backup first</text>
+
+    <!-- Arrow 13->14 -->
+    <line x1="554" y1="829" x2="570" y2="829" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
+
+    <!-- Step 14: Post-save recalc (external) -->
+    <rect x="580" y="808" width="180" height="42" rx="6" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <circle cx="600" cy="829" r="12" fill="#a0aec0"/>
+    <text x="600" y="834" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">14</text>
+    <text x="678" y="824" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold" font-family="system-ui">recalc.py</text>
+    <text x="678" y="840" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">LibreOffice headless</text>
+
+    <!-- External indicator -->
+    <text x="770" y="831" fill="#a0aec0" font-size="9" font-style="italic" font-family="system-ui">(external)</text>
+
+    <!-- ===== Layout dict return flow (right side annotation) ===== -->
+    <rect x="830" y="68" width="280" height="96" rx="6" fill="#faf5ff" stroke="#9f7aea" stroke-width="1" stroke-dasharray="4,2"/>
+    <text x="970" y="90" text-anchor="middle" fill="#6b46c1" font-size="12" font-weight="bold" font-family="system-ui">layout dict return values</text>
+    <line x1="850" y1="98" x2="1090" y2="98" stroke="#e9d8fd" stroke-width="1"/>
+    <text x="850" y="116" fill="#718096" font-size="10" font-family="system-ui">Each builder returns a dict with:</text>
+    <text x="860" y="132" fill="#718096" font-size="10" font-family="system-ui">- row numbers (first_wp_row, total_row, ...)</text>
+    <text x="860" y="148" fill="#718096" font-size="10" font-family="system-ui">- column positions (cum_col, month_start, ...)</text>
+
+    <!-- Legend box -->
+    <rect x="830" y="180" width="280" height="155" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="970" y="200" text-anchor="middle" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Legend</text>
+    <line x1="850" y1="208" x2="1090" y2="208" stroke="#e2e8f0" stroke-width="1"/>
+
+    <rect x="850" y="218" width="14" height="14" rx="2" fill="#ebf8ff" stroke="#4299e1"/>
+    <text x="872" y="230" fill="#4a5568" font-size="10" font-family="system-ui">Config / data sheets</text>
+
+    <rect x="850" y="238" width="14" height="14" rx="2" fill="#fff5eb" stroke="#ed8936"/>
+    <text x="872" y="250" fill="#4a5568" font-size="10" font-family="system-ui">Processing / builders</text>
+
+    <rect x="850" y="258" width="14" height="14" rx="2" fill="#faf5ff" stroke="#9f7aea"/>
+    <text x="872" y="270" fill="#4a5568" font-size="10" font-family="system-ui">Capacity / planning</text>
+
+    <rect x="850" y="278" width="14" height="14" rx="2" fill="#fffff0" stroke="#d69e2e"/>
+    <text x="872" y="290" fill="#4a5568" font-size="10" font-family="system-ui">Trends / warnings</text>
+
+    <rect x="850" y="298" width="14" height="14" rx="2" fill="#f0fff4" stroke="#48bb78"/>
+    <text x="872" y="310" fill="#4a5568" font-size="10" font-family="system-ui">Outputs / success</text>
+
+    <rect x="850" y="318" width="14" height="14" rx="2" fill="#f7fafc" stroke="#a0aec0" stroke-dasharray="3,2"/>
+    <text x="872" y="330" fill="#4a5568" font-size="10" font-family="system-ui">Infrastructure / external</text>
+  </svg>
+</div>
+<!-- ============================================================ -->
+<!-- Diagram 5: Round-Trip / Rebuild Flow                         -->
+<!-- ============================================================ -->
+<div class="section">
+  <h2>Diagram 5: Round-Trip / Rebuild Flow</h2>
+  <p class="section-desc">
+    The rebuild cycle preserves user-entered data (Capacity FTE allocations and
+    Actuals EUR costs) while regenerating all formulas, formatting, and cross-sheet
+    wiring. Skeleton mode (<code>--skeleton</code>) clears Capacity allocations
+    but always keeps Actuals. A snapshot/restore mechanism enables scenario comparison.
+  </p>
+
+  <svg viewBox="0 0 1100 700" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+    <defs>
+      <marker id="arrow-rt" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="10" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,3.5 L0,7 Z" fill="#4a5568"/>
+      </marker>
+      <marker id="arrow-rt-green" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="10" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,3.5 L0,7 Z" fill="#48bb78"/>
+      </marker>
+      <marker id="arrow-rt-blue" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="10" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,3.5 L0,7 Z" fill="#4299e1"/>
+      </marker>
+    </defs>
+
+    <rect width="1100" height="700" fill="#f8fafc" rx="8"/>
+
+    <!-- ===== Title ===== -->
+    <text x="420" y="30" font-size="15" font-weight="bold" fill="#2d3748" font-family="system-ui">Rebuild Cycle</text>
+
+    <!-- ===== Node 1: Live Workbook (top center, emphasized) ===== -->
+    <g transform="translate(340, 50)">
+      <rect width="320" height="120" rx="12" fill="#ebf8ff" stroke="#4299e1" stroke-width="3"/>
+      <rect width="320" height="32" rx="12" fill="#4299e1"/>
+      <rect x="0" y="16" width="320" height="16" fill="#4299e1"/>
+      <text x="160" y="23" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Live Workbook</text>
+      <text x="160" y="55" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">User edits in Excel:</text>
+      <text x="20" y="75" fill="#2b6cb0" font-size="11" font-family="system-ui">&#x25CF; Capacity FTE (blue input cells)</text>
+      <text x="20" y="92" fill="#2b6cb0" font-size="11" font-family="system-ui">&#x25CF; Actuals EUR (blue input cells)</text>
+      <text x="20" y="109" fill="#2b6cb0" font-size="11" font-family="system-ui">&#x25CF; current_month (Trends!B1)</text>
+    </g>
+
+    <!-- ===== Node 2: Extract (right) ===== -->
+    <g transform="translate(750, 230)">
+      <rect width="280" height="160" rx="10" fill="#fff5eb" stroke="#ed8936" stroke-width="2"/>
+      <rect width="280" height="30" rx="10" fill="#ed8936"/>
+      <rect x="0" y="15" width="280" height="15" fill="#ed8936"/>
+      <text x="140" y="22" text-anchor="middle" fill="white" font-size="13" font-weight="bold" font-family="system-ui">Extract (reader.py)</text>
+      <text x="15" y="52" fill="#4a5568" font-size="10" font-family="system-ui">read_config_sheet &rarr; params + WPs</text>
+      <text x="15" y="68" fill="#4a5568" font-size="10" font-family="system-ui">read_team_sheet &rarr; roster + shares</text>
+      <text x="15" y="84" fill="#4a5568" font-size="10" font-family="system-ui">read_capacity_sheet &rarr; FTE values</text>
+      <text x="15" y="100" fill="#4a5568" font-size="10" font-family="system-ui">read_actuals_values &rarr; EUR values</text>
+      <text x="15" y="116" fill="#4a5568" font-size="10" font-family="system-ui">current_month &larr; Trends!B1</text>
+      <line x1="15" y1="125" x2="265" y2="125" stroke="#e2e8f0"/>
+      <text x="15" y="142" fill="#48bb78" font-size="10" font-weight="600" font-family="system-ui">&#x2713; Capacity FTE (normal)</text>
+      <text x="15" y="155" fill="#e53e3e" font-size="10" font-weight="600" font-family="system-ui">&#x2717; Capacity FTE (skeleton)</text>
+    </g>
+
+    <!-- ===== Node 3: Validate (bottom center) ===== -->
+    <g transform="translate(340, 450)">
+      <rect width="320" height="120" rx="10" fill="#fff5f5" stroke="#e53e3e" stroke-width="2"/>
+      <rect width="320" height="30" rx="10" fill="#e53e3e"/>
+      <rect x="0" y="15" width="320" height="15" fill="#e53e3e"/>
+      <text x="160" y="22" text-anchor="middle" fill="white" font-size="13" font-weight="bold" font-family="system-ui">Validate (_validate_config)</text>
+      <text x="15" y="52" fill="#4a5568" font-size="10" font-family="system-ui">&#x25CF; WP IDs unique, months 1-120, rate > 0</text>
+      <text x="15" y="68" fill="#4a5568" font-size="10" font-family="system-ui">&#x25CF; Team roster non-empty, no dup WPs</text>
+      <text x="15" y="84" fill="#4a5568" font-size="10" font-family="system-ui">&#x25CF; External commitment persons exist in team</text>
+      <text x="15" y="100" fill="#4a5568" font-size="10" font-family="system-ui">&#x25CF; Orphan detection: removed persons/WPs</text>
+      <text x="30" y="114" fill="#d69e2e" font-size="10" font-style="italic" font-family="system-ui">&rarr; silently dropped + warning to console &amp; _META</text>
+    </g>
+
+    <!-- ===== Node 4: Regenerate (left) ===== -->
+    <g transform="translate(40, 230)">
+      <rect width="280" height="160" rx="10" fill="#f0fff4" stroke="#48bb78" stroke-width="2"/>
+      <rect width="280" height="30" rx="10" fill="#48bb78"/>
+      <rect x="0" y="15" width="280" height="15" fill="#48bb78"/>
+      <text x="140" y="22" text-anchor="middle" fill="white" font-size="13" font-weight="bold" font-family="system-ui">Regenerate (_build_all_sheets)</text>
+      <text x="15" y="52" fill="#4a5568" font-size="10" font-family="system-ui">Full 14-step build pipeline</text>
+      <text x="15" y="68" fill="#4a5568" font-size="10" font-family="system-ui">Preserved values injected at build steps:</text>
+      <text x="25" y="84" fill="#48bb78" font-size="10" font-family="system-ui">&#x2713; Capacity FTE &rarr; step 4</text>
+      <text x="25" y="100" fill="#48bb78" font-size="10" font-family="system-ui">&#x2713; Actuals EUR &rarr; step 7</text>
+      <text x="15" y="120" fill="#4a5568" font-size="10" font-family="system-ui">Timestamped backup before overwrite</text>
+      <text x="15" y="136" fill="#4a5568" font-size="10" font-family="system-ui">Protection + column grouping applied</text>
+      <text x="15" y="152" fill="#4a5568" font-size="10" font-family="system-ui">Output: updated .xlsx &rarr; Live Workbook</text>
+    </g>
+
+    <!-- ===== Connecting arrows (clockwise) ===== -->
+    <!-- Live Workbook → Extract (top-right to right-top) -->
+    <path d="M660,130 Q750,130 750,230" fill="none" stroke="#4a5568" stroke-width="2.5" marker-end="url(#arrow-rt)"/>
+    <text x="710" y="165" fill="#4a5568" font-size="10" font-family="system-ui" font-weight="600">rebuild</text>
+
+    <!-- Extract → Validate (right-bottom to bottom-right) -->
+    <path d="M890,390 Q890,510 660,510" fill="none" stroke="#4a5568" stroke-width="2.5" marker-end="url(#arrow-rt)"/>
+    <text x="790" y="460" fill="#4a5568" font-size="10" font-family="system-ui" font-weight="600">check</text>
+
+    <!-- Validate → Regenerate (bottom-left to left-bottom) -->
+    <path d="M340,510 Q180,510 180,390" fill="none" stroke="#4a5568" stroke-width="2.5" marker-end="url(#arrow-rt)"/>
+    <text x="230" y="465" fill="#4a5568" font-size="10" font-family="system-ui" font-weight="600">valid</text>
+
+    <!-- Regenerate → Live Workbook (left-top to top-left) -->
+    <path d="M180,230 Q180,130 340,110" fill="none" stroke="#48bb78" stroke-width="2.5" marker-end="url(#arrow-rt-green)"/>
+    <text x="210" y="165" fill="#48bb78" font-size="10" font-family="system-ui" font-weight="600">save .xlsx</text>
+
+    <!-- ===== Snapshot/Restore sidebar ===== -->
+    <g transform="translate(750, 50)">
+      <rect width="280" height="140" rx="8" fill="white" stroke="#a0aec0" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="140" y="22" text-anchor="middle" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Snapshot / Restore</text>
+      <line x1="15" y1="30" x2="265" y2="30" stroke="#e2e8f0"/>
+      <text x="20" y="52" fill="#4299e1" font-size="11" font-family="system-ui" font-weight="600">--snapshot</text>
+      <text x="110" y="52" fill="#4a5568" font-size="10" font-family="system-ui">saves .snapshot.xlsx copy</text>
+      <text x="20" y="72" fill="#4299e1" font-size="11" font-family="system-ui" font-weight="600">--restore</text>
+      <text x="110" y="72" fill="#4a5568" font-size="10" font-family="system-ui">reverts to snapshot</text>
+      <text x="30" y="90" fill="#718096" font-size="10" font-style="italic" font-family="system-ui">(current file backed up first)</text>
+
+      <!-- bidirectional arrow icon -->
+      <line x1="60" y1="108" x2="220" y2="108" stroke="#4299e1" stroke-width="1.5"/>
+      <polygon points="60,108 68,104 68,112" fill="#4299e1"/>
+      <polygon points="220,108 212,104 212,112" fill="#4299e1"/>
+      <text x="140" y="130" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">Both directions supported</text>
+    </g>
+
+    <!-- Arrow from Live Workbook to Snapshot sidebar -->
+    <line x1="660" y1="85" x2="750" y2="85" stroke="#4299e1" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-rt-blue)"/>
+
+    <!-- ===== Preservation Legend ===== -->
+    <g transform="translate(40, 600)">
+      <rect width="1020" height="80" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+      <text x="510" y="22" text-anchor="middle" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Preservation Legend</text>
+      <line x1="20" y1="30" x2="1000" y2="30" stroke="#e2e8f0"/>
+
+      <text x="40" y="52" fill="#48bb78" font-size="11" font-weight="bold" font-family="system-ui">&#x2713; Always preserved</text>
+      <text x="200" y="52" fill="#4a5568" font-size="10" font-family="system-ui">Actuals EUR</text>
+
+      <text x="350" y="52" fill="#48bb78" font-size="11" font-weight="bold" font-family="system-ui">&#x2713; Preserved (normal)</text>
+      <text x="540" y="52" fill="#4a5568" font-size="10" font-family="system-ui">Capacity FTE, current_month</text>
+
+      <text x="40" y="72" fill="#e53e3e" font-size="11" font-weight="bold" font-family="system-ui">&#x2717; Cleared (skeleton)</text>
+      <text x="210" y="72" fill="#4a5568" font-size="10" font-family="system-ui">Capacity FTE</text>
+
+      <text x="350" y="72" fill="#d69e2e" font-size="11" font-weight="bold" font-family="system-ui">&#x26A0; Dropped with warning</text>
+      <text x="550" y="72" fill="#4a5568" font-size="10" font-family="system-ui">Orphaned data (removed persons/WPs)</text>
+    </g>
+  </svg>
+</div>
+
+<!-- ============================================================ -->
+<!-- Diagram 6: Module Dependency Map                              -->
+<!-- ============================================================ -->
+<div class="section">
+  <h2>Diagram 6: Module Dependency Map</h2>
+  <p class="section-desc">
+    Three horizontal bands show call flow from CLI orchestration through sheet builders
+    to shared infrastructure. Solid arrows indicate always-used dependencies;
+    dashed arrows are conditional (init-only or rebuild-only). Each builder returns
+    a <code>layout</code> dictionary consumed by downstream steps.
+  </p>
+
+  <svg viewBox="0 0 1100 660" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+    <defs>
+      <marker id="arrow-mod" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="10" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,3.5 L0,7 Z" fill="#4a5568"/>
+      </marker>
+      <marker id="arrow-mod-orange" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="10" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,3.5 L0,7 Z" fill="#ed8936"/>
+      </marker>
+      <marker id="arrow-mod-purple" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="10" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,3.5 L0,7 Z" fill="#9f7aea"/>
+      </marker>
+      <marker id="arrow-mod-grey" viewBox="0 0 10 7" refX="10" refY="3.5"
+              markerWidth="10" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,3.5 L0,7 Z" fill="#a0aec0"/>
+      </marker>
+    </defs>
+
+    <rect width="1100" height="660" fill="#f8fafc" rx="8"/>
+
+    <!-- ===== Band 1: Orchestration (top) ===== -->
+    <rect x="20" y="20" width="1060" height="110" rx="8" fill="#ebf8ff" stroke="#4299e1" stroke-width="1.5" opacity="0.5"/>
+    <text x="40" y="42" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">BAND 1 &mdash; Orchestration</text>
+
+    <!-- __main__.py -->
+    <g transform="translate(120, 55)">
+      <rect width="160" height="55" rx="6" fill="white" stroke="#4299e1" stroke-width="2"/>
+      <text x="80" y="22" text-anchor="middle" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">__main__.py</text>
+      <text x="80" y="40" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">CLI argument parsing</text>
+      <text x="80" y="50" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">subcommand dispatch</text>
+    </g>
+
+    <!-- Arrow __main__ → workbook -->
+    <line x1="280" y1="82" x2="420" y2="82" stroke="#4a5568" stroke-width="2" marker-end="url(#arrow-mod)"/>
+
+    <!-- workbook.py -->
+    <g transform="translate(420, 55)">
+      <rect width="260" height="55" rx="6" fill="white" stroke="#4299e1" stroke-width="2"/>
+      <text x="130" y="22" text-anchor="middle" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">workbook.py</text>
+      <text x="130" y="38" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">init_workbook() &bull; rebuild_workbook()</text>
+      <text x="130" y="50" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">snapshot_workbook() &bull; restore_workbook()</text>
+    </g>
+
+    <!-- ===== Band 2: Builders (middle) ===== -->
+    <rect x="20" y="155" width="1060" height="240" rx="8" fill="#fff5eb" stroke="#ed8936" stroke-width="1.5" opacity="0.3"/>
+    <text x="40" y="177" fill="#c05621" font-size="12" font-weight="bold" font-family="system-ui">BAND 2 &mdash; Builders (called by workbook.py in build order)</text>
+
+    <!-- Builder modules — row 1 -->
+    <g transform="translate(40, 195)">
+      <rect width="120" height="50" rx="5" fill="white" stroke="#4299e1" stroke-width="1.5"/>
+      <text x="60" y="22" text-anchor="middle" fill="#2b6cb0" font-size="10" font-weight="bold" font-family="system-ui">config_sheet.py</text>
+      <text x="60" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Config sheet</text>
+    </g>
+    <line x1="160" y1="220" x2="178" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
+
+    <g transform="translate(178, 195)">
+      <rect width="100" height="50" rx="5" fill="white" stroke="#ed8936" stroke-width="2"/>
+      <text x="50" y="22" text-anchor="middle" fill="#c05621" font-size="10" font-weight="bold" font-family="system-ui">plan.py</text>
+      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Plan sheet</text>
+    </g>
+    <line x1="278" y1="220" x2="296" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
+
+    <g transform="translate(296, 195)">
+      <rect width="100" height="50" rx="5" fill="white" stroke="#ed8936" stroke-width="1.5"/>
+      <text x="50" y="22" text-anchor="middle" fill="#c05621" font-size="10" font-weight="bold" font-family="system-ui">team.py</text>
+      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Team sheet</text>
+    </g>
+    <line x1="396" y1="220" x2="414" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
+
+    <g transform="translate(414, 195)">
+      <rect width="110" height="50" rx="5" fill="white" stroke="#9f7aea" stroke-width="2"/>
+      <text x="55" y="22" text-anchor="middle" fill="#6b46c1" font-size="10" font-weight="bold" font-family="system-ui">capacity.py</text>
+      <text x="55" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Capacity sheet</text>
+    </g>
+
+    <!-- Bidirectional arrow: plan.py ↔ capacity.py (formula patch — highlighted) -->
+    <rect x="200" y="248" width="300" height="24" rx="4" fill="#faf5ff" stroke="#9f7aea" stroke-width="1.5"/>
+    <line x1="228" y1="260" x2="480" y2="260" stroke="#9f7aea" stroke-width="2"/>
+    <polygon points="228,260 236,256 236,264" fill="#9f7aea"/>
+    <polygon points="480,260 472,256 472,264" fill="#9f7aea"/>
+    <text x="354" y="258" text-anchor="middle" fill="#6b46c1" font-size="9" font-weight="bold" font-family="system-ui">_apply_planned_formulas (step 5)</text>
+
+    <!-- Continuation arrow from capacity → rest -->
+    <line x1="524" y1="220" x2="542" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
+
+    <!-- Builder modules — row 1 continued -->
+    <g transform="translate(542, 195)">
+      <rect width="110" height="50" rx="5" fill="white" stroke="#4299e1" stroke-width="1.5"/>
+      <text x="55" y="22" text-anchor="middle" fill="#2b6cb0" font-size="10" font-weight="bold" font-family="system-ui">actuals.py</text>
+      <text x="55" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Actuals sheet</text>
+    </g>
+    <line x1="652" y1="220" x2="670" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
+
+    <g transform="translate(670, 195)">
+      <rect width="110" height="50" rx="5" fill="white" stroke="#48bb78" stroke-width="1.5"/>
+      <text x="55" y="22" text-anchor="middle" fill="#276749" font-size="10" font-weight="bold" font-family="system-ui">summary.py</text>
+      <text x="55" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Summary sheet</text>
+    </g>
+    <line x1="780" y1="220" x2="798" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
+
+    <g transform="translate(798, 195)">
+      <rect width="100" height="50" rx="5" fill="white" stroke="#d69e2e" stroke-width="1.5"/>
+      <text x="50" y="22" text-anchor="middle" fill="#975a16" font-size="10" font-weight="bold" font-family="system-ui">trends.py</text>
+      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Trends sheet</text>
+    </g>
+    <line x1="898" y1="220" x2="916" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
+
+    <g transform="translate(916, 195)">
+      <rect width="100" height="50" rx="5" fill="white" stroke="#a0aec0" stroke-width="1.5"/>
+      <text x="50" y="22" text-anchor="middle" fill="#4a5568" font-size="10" font-weight="bold" font-family="system-ui">meta.py</text>
+      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">_META sheet</text>
+    </g>
+
+    <!-- Trends split annotation (steps 6 & 9 dashed line) -->
+    <rect x="700" y="280" width="340" height="22" rx="3" fill="#fffff0" stroke="#d69e2e" stroke-width="1" stroke-dasharray="3,2"/>
+    <text x="870" y="295" text-anchor="middle" fill="#975a16" font-size="9" font-style="italic" font-family="system-ui">Trends split: skeleton (step 6) early, content (step 9) late</text>
+
+    <!-- layout dict return arrows (upward to workbook.py) -->
+    <text x="550" y="148" text-anchor="middle" fill="#9f7aea" font-size="9" font-weight="600" font-family="system-ui">layout dicts returned &#x2191;</text>
+    <line x1="350" y1="153" x2="750" y2="153" stroke="#9f7aea" stroke-width="1" stroke-dasharray="4,3"/>
+
+    <!-- Arrows from workbook.py down to builder band -->
+    <line x1="550" y1="110" x2="550" y2="155" stroke="#4a5568" stroke-width="1.5" marker-end="url(#arrow-mod)"/>
+
+    <!-- ===== Band 3: Infrastructure (bottom) ===== -->
+    <rect x="20" y="320" width="1060" height="160" rx="8" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5" opacity="0.4"/>
+    <text x="40" y="342" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">BAND 3 &mdash; Infrastructure</text>
+
+    <!-- styles.py -->
+    <g transform="translate(80, 360)">
+      <rect width="200" height="65" rx="6" fill="white" stroke="#a0aec0" stroke-width="1.5"/>
+      <text x="100" y="20" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold" font-family="system-ui">styles.py</text>
+      <text x="100" y="36" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">Font/fill/border constants</text>
+      <text x="100" y="48" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">style_cell() &bull; apply_year_groups()</text>
+      <text x="100" y="60" text-anchor="middle" fill="#48bb78" font-size="8" font-family="system-ui">Used by all builders</text>
+    </g>
+
+    <!-- Dashed arrow from builders to styles.py -->
+    <line x1="180" y1="310" x2="180" y2="360" stroke="#a0aec0" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-mod-grey)"/>
+
+    <!-- reader.py -->
+    <g transform="translate(370, 360)">
+      <rect width="200" height="65" rx="6" fill="white" stroke="#ed8936" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="100" y="20" text-anchor="middle" fill="#c05621" font-size="11" font-weight="bold" font-family="system-ui">reader.py</text>
+      <text x="100" y="36" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">Layout detection + extraction</text>
+      <text x="100" y="48" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">Config/Team/Capacity/Actuals readers</text>
+      <text x="100" y="60" text-anchor="middle" fill="#ed8936" font-size="8" font-weight="600" font-family="system-ui">Rebuild-only (dashed)</text>
+    </g>
+
+    <!-- Dashed arrow from workbook.py to reader.py -->
+    <line x1="470" y1="310" x2="470" y2="360" stroke="#ed8936" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow-mod-orange)"/>
+
+    <!-- config.py -->
+    <g transform="translate(660, 360)">
+      <rect width="200" height="65" rx="6" fill="white" stroke="#4299e1" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="100" y="20" text-anchor="middle" fill="#2b6cb0" font-size="11" font-weight="bold" font-family="system-ui">config.py</text>
+      <text x="100" y="36" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">Seed data: WPs, team,</text>
+      <text x="100" y="48" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">external commitments, constants</text>
+      <text x="100" y="60" text-anchor="middle" fill="#4299e1" font-size="8" font-weight="600" font-family="system-ui">Init-only (dashed)</text>
+    </g>
+
+    <!-- Dashed arrow from workbook.py to config.py -->
+    <line x1="760" y1="310" x2="760" y2="360" stroke="#4299e1" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow-mod)"/>
+
+    <!-- ===== External: scripts/recalc.py ===== -->
+    <g transform="translate(370, 510)">
+      <rect width="350" height="55" rx="6" fill="white" stroke="#a0aec0" stroke-width="2" stroke-dasharray="6,3"/>
+      <text x="175" y="22" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold" font-family="system-ui">scripts/recalc.py (External)</text>
+      <text x="175" y="40" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">LibreOffice headless &mdash; mandatory formula recalculation</text>
+      <text x="175" y="52" text-anchor="middle" fill="#e53e3e" font-size="8" font-weight="600" font-family="system-ui">Required post-processing step (not called by workbook.py)</text>
+    </g>
+
+    <!-- ===== Legend ===== -->
+    <g transform="translate(40, 590)">
+      <rect width="1020" height="55" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+      <text x="510" y="18" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold" font-family="system-ui">Legend</text>
+      <line x1="20" y1="25" x2="1000" y2="25" stroke="#e2e8f0"/>
+
+      <line x1="40" y1="42" x2="90" y2="42" stroke="#4a5568" stroke-width="2"/>
+      <text x="100" y="46" fill="#4a5568" font-size="10" font-family="system-ui">Always-used dependency</text>
+
+      <line x1="280" y1="42" x2="330" y2="42" stroke="#a0aec0" stroke-width="2" stroke-dasharray="5,3"/>
+      <text x="340" y="46" fill="#4a5568" font-size="10" font-family="system-ui">Conditional (init-only / rebuild-only)</text>
+
+      <line x1="560" y1="42" x2="610" y2="42" stroke="#9f7aea" stroke-width="2"/>
+      <polygon points="560,42 568,38 568,46" fill="#9f7aea"/>
+      <polygon points="610,42 602,38 602,46" fill="#9f7aea"/>
+      <text x="620" y="46" fill="#4a5568" font-size="10" font-family="system-ui">Bidirectional (formula patch)</text>
+
+      <line x1="810" y1="42" x2="860" y2="42" stroke="#9f7aea" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="870" y="46" fill="#4a5568" font-size="10" font-family="system-ui">layout dict return</text>
+    </g>
+  </svg>
+</div>
+
+<!-- ============================================================ -->
+<!-- Footer                                                        -->
+<!-- ============================================================ -->
+<footer style="text-align:center; padding:2rem 0 1.5rem; color:#a0aec0; font-size:0.85rem; border-top:1px solid #e2e8f0; margin-top:2rem;">
+  Budget Planner &mdash; Architecture Diagram &bull;
+  Generated 2026-04-03 from design spec &bull;
+  <span style="color:#cbd5e0;">v1.0</span>
+</footer>
+
+</div><!-- .page-wrap -->
+</body>
+</html>

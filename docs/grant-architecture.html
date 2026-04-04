@@ -94,7 +94,9 @@
     opacity: 1;
   }
 
-  /* ── Responsive ─────────────────────────────────────────── */
+  /* ── SVG Text Defaults ──────────────────────────────────── */
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
   /* ── Section containers (Diagrams 3–6) ──────────────────── */
   .section {
     background: #fff;
@@ -168,17 +170,9 @@
     <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
       <polygon points="0 0, 10 3.5, 0 7" fill="#48bb78"/>
     </marker>
-    <!-- Orange arrowhead -->
-    <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#ed8936"/>
-    </marker>
     <!-- Purple arrowhead (highlighted reverse flow) -->
     <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
       <polygon points="0 0, 10 3.5, 0 7" fill="#9f7aea"/>
-    </marker>
-    <!-- Red arrowhead -->
-    <marker id="arrow-red" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#e53e3e"/>
     </marker>
     <!-- Gold arrowhead -->
     <marker id="arrow-gold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
@@ -188,22 +182,6 @@
     <marker id="arrow-grey" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
       <polygon points="0 0, 10 3.5, 0 7" fill="#a0aec0"/>
     </marker>
-    <!-- White arrowhead (feedback on dark background) -->
-    <marker id="arrow-white" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#fff"/>
-    </marker>
-
-    <!-- Gradient: banner echo (for decorative SVG use) -->
-    <linearGradient id="grad-banner" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#2b6cb0"/>
-      <stop offset="50%" stop-color="#4299e1"/>
-      <stop offset="100%" stop-color="#9f7aea"/>
-    </linearGradient>
-    <!-- Gradient: phase arrow fill -->
-    <linearGradient id="grad-phase-arrow" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#4299e1"/>
-      <stop offset="100%" stop-color="#48bb78"/>
-    </linearGradient>
     <!-- Drop shadow filter -->
     <filter id="shadow-sm" x="-4%" y="-4%" width="108%" height="116%">
       <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.10"/>
@@ -611,7 +589,6 @@
 </svg>
 </div>
 
-<!-- Parts 2 & 3 continue below -->
 <!-- ============================================================ -->
 <!-- Diagram 3: RAG Escalation Model                              -->
 <!-- ============================================================ -->
@@ -625,185 +602,185 @@
     definitions in each builder module.
   </p>
 
-  <svg viewBox="0 0 1100 820" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+  <svg viewBox="0 0 1100 820" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="RAG Escalation Model" style="width:100%;height:auto;">
     <!-- Background -->
     <rect width="1100" height="820" fill="#f8fafc" rx="8"/>
 
     <!-- ===== Column headers ===== -->
     <rect x="40" y="20" width="220" height="40" rx="4" fill="#718096"/>
-    <text x="150" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Metric</text>
+    <text x="150" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Metric</text>
 
     <rect x="270" y="20" width="260" height="40" rx="4" fill="#48bb78"/>
-    <text x="400" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Green (OK)</text>
+    <text x="400" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Green (OK)</text>
 
     <rect x="540" y="20" width="260" height="40" rx="4" fill="#d69e2e"/>
-    <text x="670" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Amber (Watch)</text>
+    <text x="670" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Amber (Watch)</text>
 
     <rect x="810" y="20" width="260" height="40" rx="4" fill="#e53e3e"/>
-    <text x="940" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Red (Critical)</text>
+    <text x="940" y="46" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Red (Critical)</text>
 
     <!-- ===== Section 1: Capacity (person load) ===== -->
     <rect x="20" y="72" width="1060" height="30" rx="4" fill="#9f7aea" opacity="0.15"/>
-    <text x="40" y="92" fill="#9f7aea" font-size="13" font-weight="bold" font-family="system-ui">CAPACITY SHEET &mdash; Person Load</text>
+    <text x="40" y="92" fill="#9f7aea" font-size="13" font-weight="bold">CAPACITY SHEET &mdash; Person Load</text>
 
     <!-- Row: TOTAL vs Max FTE -->
     <rect x="40" y="110" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="128" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">TOTAL row</text>
-    <text x="150" y="144" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(per person, per month)</text>
+    <text x="150" y="128" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">TOTAL row</text>
+    <text x="150" y="144" text-anchor="middle" fill="#718096" font-size="10">(per person, per month)</text>
 
     <rect x="270" y="110" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="137" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">TOTAL &le; 0.8 &times; Max FTE</text>
+    <text x="400" y="137" text-anchor="middle" fill="#276749" font-size="11">TOTAL &le; 0.8 &times; Max FTE</text>
 
     <rect x="540" y="110" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="137" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">TOTAL &gt; 0.8 &times; Max FTE</text>
+    <text x="670" y="137" text-anchor="middle" fill="#92400e" font-size="11">TOTAL &gt; 0.8 &times; Max FTE</text>
 
     <rect x="810" y="110" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="137" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">TOTAL &gt; Max FTE</text>
+    <text x="940" y="137" text-anchor="middle" fill="#9b2c2c" font-size="11">TOTAL &gt; Max FTE</text>
 
     <!-- Row: REMAINING -->
     <rect x="40" y="162" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="180" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">REMAINING row</text>
-    <text x="150" y="196" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(Max FTE &minus; TOTAL)</text>
+    <text x="150" y="180" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">REMAINING row</text>
+    <text x="150" y="196" text-anchor="middle" fill="#718096" font-size="10">(Max FTE &minus; TOTAL)</text>
 
     <rect x="270" y="162" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="189" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">REMAINING &ge; 0</text>
+    <text x="400" y="189" text-anchor="middle" fill="#276749" font-size="11">REMAINING &ge; 0</text>
 
     <rect x="540" y="162" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="189" text-anchor="middle" fill="#92400e" font-size="10" font-family="system-ui" font-style="italic">(no amber rule)</text>
+    <text x="670" y="189" text-anchor="middle" fill="#92400e" font-size="10" font-style="italic">(no amber rule)</text>
 
     <rect x="810" y="162" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="189" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">REMAINING &lt; 0</text>
+    <text x="940" y="189" text-anchor="middle" fill="#9b2c2c" font-size="11">REMAINING &lt; 0</text>
 
     <!-- ===== Section 2: Actuals (WP spend) ===== -->
     <rect x="20" y="220" width="1060" height="30" rx="4" fill="#4299e1" opacity="0.15"/>
-    <text x="40" y="240" fill="#2b6cb0" font-size="13" font-weight="bold" font-family="system-ui">ACTUALS SHEET &mdash; WP Spend</text>
+    <text x="40" y="240" fill="#2b6cb0" font-size="13" font-weight="bold">ACTUALS SHEET &mdash; WP Spend</text>
 
     <!-- Row: Variance -->
     <rect x="40" y="258" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="276" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Variance</text>
-    <text x="150" y="292" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(Ceiling &minus; Cumulative)</text>
+    <text x="150" y="276" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">Variance</text>
+    <text x="150" y="292" text-anchor="middle" fill="#718096" font-size="10">(Ceiling &minus; Cumulative)</text>
 
     <rect x="270" y="258" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="285" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">Variance &ge; 0</text>
+    <text x="400" y="285" text-anchor="middle" fill="#276749" font-size="11">Variance &ge; 0</text>
 
     <rect x="540" y="258" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="285" text-anchor="middle" fill="#92400e" font-size="10" font-family="system-ui" font-style="italic">(no amber rule)</text>
+    <text x="670" y="285" text-anchor="middle" fill="#92400e" font-size="10" font-style="italic">(no amber rule)</text>
 
     <rect x="810" y="258" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="285" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">Variance &lt; 0 (overspend)</text>
+    <text x="940" y="285" text-anchor="middle" fill="#9b2c2c" font-size="11">Variance &lt; 0 (overspend)</text>
 
     <!-- Row: % Ceiling -->
     <rect x="40" y="310" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="328" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">% Ceiling</text>
-    <text x="150" y="344" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(Cumulative / Ceiling)</text>
+    <text x="150" y="328" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">% Ceiling</text>
+    <text x="150" y="344" text-anchor="middle" fill="#718096" font-size="10">(Cumulative / Ceiling)</text>
 
     <rect x="270" y="310" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="337" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">% Ceiling &le; 85%</text>
+    <text x="400" y="337" text-anchor="middle" fill="#276749" font-size="11">% Ceiling &le; 85%</text>
 
     <rect x="540" y="310" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="337" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">% Ceiling &gt; 85%</text>
+    <text x="670" y="337" text-anchor="middle" fill="#92400e" font-size="11">% Ceiling &gt; 85%</text>
 
     <rect x="810" y="310" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="337" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">% Ceiling &gt; 100%</text>
+    <text x="940" y="337" text-anchor="middle" fill="#9b2c2c" font-size="11">% Ceiling &gt; 100%</text>
 
     <!-- Row: Breach In -->
     <rect x="40" y="362" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="380" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Breach In</text>
-    <text x="150" y="396" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(months to ceiling)</text>
+    <text x="150" y="380" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">Breach In</text>
+    <text x="150" y="396" text-anchor="middle" fill="#718096" font-size="10">(months to ceiling)</text>
 
     <rect x="270" y="362" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5" stroke-dasharray="4,2"/>
-    <text x="400" y="385" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">Breach In &ge; 12 months</text>
-    <text x="400" y="400" text-anchor="middle" fill="#a0aec0" font-size="8" font-family="system-ui">(implied — no CF rule)</text>
+    <text x="400" y="385" text-anchor="middle" fill="#276749" font-size="11">Breach In &ge; 12 months</text>
+    <text x="400" y="400" text-anchor="middle" fill="#a0aec0" font-size="8">(implied — no CF rule)</text>
 
     <rect x="540" y="362" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="389" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">Breach In &lt; 12 months</text>
+    <text x="670" y="389" text-anchor="middle" fill="#92400e" font-size="11">Breach In &lt; 12 months</text>
 
     <rect x="810" y="362" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="389" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">Breach In &lt; 6 months</text>
+    <text x="940" y="389" text-anchor="middle" fill="#9b2c2c" font-size="11">Breach In &lt; 6 months</text>
 
     <!-- ===== Section 3: Trends - burn rate ===== -->
     <rect x="20" y="420" width="1060" height="30" rx="4" fill="#d69e2e" opacity="0.15"/>
-    <text x="40" y="440" fill="#975a16" font-size="13" font-weight="bold" font-family="system-ui">TRENDS SHEET &mdash; WP Burn Rate</text>
+    <text x="40" y="440" fill="#975a16" font-size="13" font-weight="bold">TRENDS SHEET &mdash; WP Burn Rate</text>
 
     <!-- Row: Burn Delta -->
     <rect x="40" y="458" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="476" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Burn Delta %</text>
-    <text x="150" y="492" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(% Budget &minus; % Time)</text>
+    <text x="150" y="476" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">Burn Delta %</text>
+    <text x="150" y="492" text-anchor="middle" fill="#718096" font-size="10">(% Budget &minus; % Time)</text>
 
     <rect x="270" y="458" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="485" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">|Delta| &le; 5%</text>
+    <text x="400" y="485" text-anchor="middle" fill="#276749" font-size="11">|Delta| &le; 5%</text>
 
     <rect x="540" y="458" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="479" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">Delta 5&ndash;15% (overspend)</text>
-    <text x="670" y="495" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">Delta &lt; &minus;10% (slow)</text>
+    <text x="670" y="479" text-anchor="middle" fill="#92400e" font-size="11">Delta 5&ndash;15% (overspend)</text>
+    <text x="670" y="495" text-anchor="middle" fill="#92400e" font-size="11">Delta &lt; &minus;10% (slow)</text>
 
     <rect x="810" y="458" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="485" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">Delta &gt; 15%</text>
+    <text x="940" y="485" text-anchor="middle" fill="#9b2c2c" font-size="11">Delta &gt; 15%</text>
 
     <!-- Row: Status -->
     <rect x="40" y="510" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="537" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Status</text>
+    <text x="150" y="537" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">Status</text>
 
     <rect x="270" y="510" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="537" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">"OK"</text>
+    <text x="400" y="537" text-anchor="middle" fill="#276749" font-size="11">"OK"</text>
 
     <rect x="540" y="510" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="537" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">"WATCH" or "SLOW"</text>
+    <text x="670" y="537" text-anchor="middle" fill="#92400e" font-size="11">"WATCH" or "SLOW"</text>
 
     <rect x="810" y="510" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="537" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">"OVER"</text>
+    <text x="940" y="537" text-anchor="middle" fill="#9b2c2c" font-size="11">"OVER"</text>
 
     <!-- Row: Exhaustion Month -->
     <rect x="40" y="562" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="580" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Exhaustion Month</text>
-    <text x="150" y="596" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(linear projection)</text>
+    <text x="150" y="580" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">Exhaustion Month</text>
+    <text x="150" y="596" text-anchor="middle" fill="#718096" font-size="10">(linear projection)</text>
 
     <rect x="270" y="562" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="589" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">Exhaustion &ge; WP end</text>
+    <text x="400" y="589" text-anchor="middle" fill="#276749" font-size="11">Exhaustion &ge; WP end</text>
 
     <rect x="540" y="562" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="589" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">Within 3 months of end</text>
+    <text x="670" y="589" text-anchor="middle" fill="#92400e" font-size="11">Within 3 months of end</text>
 
     <rect x="810" y="562" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="589" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">Exhaustion &gt; 3 months early</text>
+    <text x="940" y="589" text-anchor="middle" fill="#9b2c2c" font-size="11">Exhaustion &gt; 3 months early</text>
 
     <!-- ===== Section 4: Trends - person load ===== -->
     <rect x="20" y="620" width="1060" height="30" rx="4" fill="#d69e2e" opacity="0.15"/>
-    <text x="40" y="640" fill="#975a16" font-size="13" font-weight="bold" font-family="system-ui">TRENDS SHEET &mdash; Person Load</text>
+    <text x="40" y="640" fill="#975a16" font-size="13" font-weight="bold">TRENDS SHEET &mdash; Person Load</text>
 
     <!-- Row: Remaining Avg vs Max FTE -->
     <rect x="40" y="658" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="676" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Remaining Avg FTE</text>
-    <text x="150" y="692" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">(future months avg)</text>
+    <text x="150" y="676" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">Remaining Avg FTE</text>
+    <text x="150" y="692" text-anchor="middle" fill="#718096" font-size="10">(future months avg)</text>
 
     <rect x="270" y="658" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="685" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">avg &le; 0.8 &times; Max FTE</text>
+    <text x="400" y="685" text-anchor="middle" fill="#276749" font-size="11">avg &le; 0.8 &times; Max FTE</text>
 
     <rect x="540" y="658" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="685" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">0.8 &times; Max &lt; avg &le; Max</text>
+    <text x="670" y="685" text-anchor="middle" fill="#92400e" font-size="11">0.8 &times; Max &lt; avg &le; Max</text>
 
     <rect x="810" y="658" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="685" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">avg &gt; Max FTE</text>
+    <text x="940" y="685" text-anchor="middle" fill="#9b2c2c" font-size="11">avg &gt; Max FTE</text>
 
     <!-- Row: Person Status -->
     <rect x="40" y="710" width="220" height="44" rx="3" fill="white" stroke="#cbd5e0"/>
-    <text x="150" y="737" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">Status</text>
+    <text x="150" y="737" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">Status</text>
 
     <rect x="270" y="710" width="260" height="44" rx="3" fill="#f0fff4" stroke="#c6f6d5"/>
-    <text x="400" y="737" text-anchor="middle" fill="#276749" font-size="11" font-family="system-ui">"OK"</text>
+    <text x="400" y="737" text-anchor="middle" fill="#276749" font-size="11">"OK"</text>
 
     <rect x="540" y="710" width="260" height="44" rx="3" fill="#fefce8" stroke="#fde68a"/>
-    <text x="670" y="737" text-anchor="middle" fill="#92400e" font-size="11" font-family="system-ui">"WATCH"</text>
+    <text x="670" y="737" text-anchor="middle" fill="#92400e" font-size="11">"WATCH"</text>
 
     <rect x="810" y="710" width="260" height="44" rx="3" fill="#fff5f5" stroke="#fed7d7"/>
-    <text x="940" y="737" text-anchor="middle" fill="#9b2c2c" font-size="11" font-family="system-ui">"OVER"</text>
+    <text x="940" y="737" text-anchor="middle" fill="#9b2c2c" font-size="11">"OVER"</text>
 
     <!-- ===== Annotation bar ===== -->
     <rect x="20" y="770" width="1060" height="40" rx="6" fill="#edf2f7" stroke="#cbd5e0"/>
-    <text x="40" y="788" fill="#4a5568" font-size="11" font-family="system-ui">
+    <text x="40" y="788" fill="#4a5568" font-size="11">
       <tspan font-weight="bold">Priority order:</tspan> Green/Amber CF rules added first (lower priority); Red rules added second (override).
     </text>
-    <text x="40" y="803" fill="#4a5568" font-size="11" font-family="system-ui">
+    <text x="40" y="803" fill="#4a5568" font-size="11">
       <tspan font-weight="bold">Font color convention:</tspan>
       <tspan fill="#4299e1" font-weight="bold">Blue = input</tspan> &nbsp;|&nbsp;
       <tspan fill="#2d3748" font-weight="bold">Black = formula</tspan> &nbsp;|&nbsp;
@@ -838,7 +815,7 @@
     after Actuals and Summary are built.
   </p>
 
-  <svg viewBox="0 0 1160 880" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+  <svg viewBox="0 0 1160 880" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Build Pipeline" style="width:100%;height:auto;">
     <!-- Arrowhead definition (local fallback if parent defs missing) -->
     <defs>
       <marker id="arrow-pipe" viewBox="0 0 10 7" refX="10" refY="3.5"
@@ -865,31 +842,31 @@
     <!-- ===== FORK SECTION ===== -->
     <!-- Init path box -->
     <rect x="30" y="30" width="240" height="130" rx="8" fill="#ebf8ff" stroke="#4299e1" stroke-width="2"/>
-    <text x="150" y="55" text-anchor="middle" fill="#2b6cb0" font-size="14" font-weight="bold" font-family="system-ui">Init Path</text>
+    <text x="150" y="55" text-anchor="middle" fill="#2b6cb0" font-size="14" font-weight="bold">Init Path</text>
     <line x1="60" y1="64" x2="240" y2="64" stroke="#bee3f8" stroke-width="1"/>
-    <text x="150" y="82" text-anchor="middle" fill="#4a5568" font-size="11" font-family="system-ui">Source: config.py seed data</text>
-    <text x="150" y="98" text-anchor="middle" fill="#4a5568" font-size="11" font-family="system-ui">(WPs, team, external commits)</text>
+    <text x="150" y="82" text-anchor="middle" fill="#4a5568" font-size="11">Source: config.py seed data</text>
+    <text x="150" y="98" text-anchor="middle" fill="#4a5568" font-size="11">(WPs, team, external commits)</text>
     <!-- Skeleton/demo toggle icon -->
     <rect x="80" y="112" width="140" height="30" rx="14" fill="white" stroke="#a0aec0" stroke-width="1.5"/>
     <rect x="82" y="114" width="66" height="26" rx="12" fill="#a0aec0"/>
-    <text x="115" y="132" text-anchor="middle" fill="white" font-size="9" font-weight="bold" font-family="system-ui">skeleton</text>
+    <text x="115" y="132" text-anchor="middle" fill="white" font-size="9" font-weight="bold">skeleton</text>
     <rect x="152" y="114" width="66" height="26" rx="12" fill="#4299e1"/>
-    <text x="185" y="132" text-anchor="middle" fill="white" font-size="9" font-weight="bold" font-family="system-ui">demo</text>
+    <text x="185" y="132" text-anchor="middle" fill="white" font-size="9" font-weight="bold">demo</text>
 
     <!-- Rebuild path box -->
     <rect x="30" y="180" width="240" height="150" rx="8" fill="#fff5eb" stroke="#ed8936" stroke-width="2"/>
-    <text x="150" y="205" text-anchor="middle" fill="#c05621" font-size="14" font-weight="bold" font-family="system-ui">Rebuild Path</text>
+    <text x="150" y="205" text-anchor="middle" fill="#c05621" font-size="14" font-weight="bold">Rebuild Path</text>
     <line x1="60" y1="214" x2="240" y2="214" stroke="#feebc8" stroke-width="1"/>
-    <text x="150" y="232" text-anchor="middle" fill="#4a5568" font-size="11" font-family="system-ui">Source: existing .xlsx</text>
-    <text x="150" y="248" text-anchor="middle" fill="#4a5568" font-size="11" font-family="system-ui">via reader.py</text>
-    <text x="60" y="272" fill="#718096" font-size="10" font-family="system-ui">1. read Config params + WPs</text>
-    <text x="60" y="286" fill="#718096" font-size="10" font-family="system-ui">2. read Team roster + shares</text>
-    <text x="60" y="300" fill="#718096" font-size="10" font-family="system-ui">3. read Capacity FTE values</text>
-    <text x="60" y="314" fill="#718096" font-size="10" font-family="system-ui">4. read Actuals EUR values</text>
+    <text x="150" y="232" text-anchor="middle" fill="#4a5568" font-size="11">Source: existing .xlsx</text>
+    <text x="150" y="248" text-anchor="middle" fill="#4a5568" font-size="11">via reader.py</text>
+    <text x="60" y="272" fill="#718096" font-size="10">1. read Config params + WPs</text>
+    <text x="60" y="286" fill="#718096" font-size="10">2. read Team roster + shares</text>
+    <text x="60" y="300" fill="#718096" font-size="10">3. read Capacity FTE values</text>
+    <text x="60" y="314" fill="#718096" font-size="10">4. read Actuals EUR values</text>
 
     <!-- Validation gate -->
     <rect x="60" y="336" width="180" height="22" rx="3" fill="#fed7d7" stroke="#e53e3e" stroke-width="1"/>
-    <text x="150" y="351" text-anchor="middle" fill="#9b2c2c" font-size="10" font-weight="bold" font-family="system-ui">Validate cross-refs (gate)</text>
+    <text x="150" y="351" text-anchor="middle" fill="#9b2c2c" font-size="10" font-weight="bold">Validate cross-refs (gate)</text>
 
     <!-- Fork convergence arrows -->
     <line x1="270" y1="95" x2="330" y2="95" stroke="#4299e1" stroke-width="2" marker-end="url(#arrow-pipe-blue)"/>
@@ -904,7 +881,7 @@
     <!-- ===== COMMON PIPELINE (14 steps) ===== -->
     <!-- Pipeline background -->
     <rect x="370" y="20" width="770" height="840" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-    <text x="755" y="48" text-anchor="middle" fill="#a0aec0" font-size="12" font-weight="bold" font-family="system-ui" letter-spacing="2">COMMON PIPELINE (14 STEPS)</text>
+    <text x="755" y="48" text-anchor="middle" fill="#a0aec0" font-size="12" font-weight="bold" letter-spacing="2">COMMON PIPELINE (14 STEPS)</text>
 
     <!-- Step positioning: 2 columns x 7 rows -->
     <!-- Left column: steps 1-7, Right column: steps 8-14 -->
@@ -912,12 +889,12 @@
     <!-- Step 1: Config sheet -->
     <rect x="400" y="68" width="320" height="48" rx="6" fill="#ebf8ff" stroke="#4299e1" stroke-width="1.5"/>
     <circle cx="420" cy="92" r="12" fill="#4299e1"/>
-    <text x="420" y="97" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">1</text>
-    <text x="440" y="87" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">Config sheet</text>
-    <text x="440" y="103" fill="#718096" font-size="10" font-family="system-ui">config_sheet.py &mdash; params + tbl_WorkPackages + named ranges</text>
+    <text x="420" y="97" text-anchor="middle" fill="white" font-size="11" font-weight="bold">1</text>
+    <text x="440" y="87" fill="#2b6cb0" font-size="12" font-weight="bold">Config sheet</text>
+    <text x="440" y="103" fill="#718096" font-size="10">config_sheet.py &mdash; params + tbl_WorkPackages + named ranges</text>
 
     <!-- layout return arrow from Step 1 -->
-    <text x="698" y="86" fill="#a0aec0" font-size="9" font-style="italic" font-family="system-ui">layout</text>
+    <text x="698" y="86" fill="#a0aec0" font-size="9" font-style="italic">layout</text>
     <line x1="690" y1="88" x2="720" y2="88" stroke="#a0aec0" stroke-width="1" stroke-dasharray="3,3"/>
 
     <!-- Arrow 1->2 -->
@@ -926,9 +903,9 @@
     <!-- Step 2: Plan sheet -->
     <rect x="400" y="130" width="320" height="48" rx="6" fill="#ebf8ff" stroke="#4299e1" stroke-width="1.5"/>
     <circle cx="420" cy="154" r="12" fill="#4299e1"/>
-    <text x="420" y="159" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">2</text>
-    <text x="440" y="149" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">Plan sheet</text>
-    <text x="440" y="165" fill="#718096" font-size="10" font-family="system-ui">plan.py &mdash; global params, config table, seed Planned FTE</text>
+    <text x="420" y="159" text-anchor="middle" fill="white" font-size="11" font-weight="bold">2</text>
+    <text x="440" y="149" fill="#2b6cb0" font-size="12" font-weight="bold">Plan sheet</text>
+    <text x="440" y="165" fill="#718096" font-size="10">plan.py &mdash; global params, config table, seed Planned FTE</text>
 
     <!-- Arrow 2->3 -->
     <line x1="560" y1="178" x2="560" y2="192" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -936,9 +913,9 @@
     <!-- Step 3: Team sheet -->
     <rect x="400" y="192" width="320" height="48" rx="6" fill="#fff5eb" stroke="#ed8936" stroke-width="1.5"/>
     <circle cx="420" cy="216" r="12" fill="#ed8936"/>
-    <text x="420" y="221" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">3</text>
-    <text x="440" y="211" fill="#c05621" font-size="12" font-weight="bold" font-family="system-ui">Team sheet</text>
-    <text x="440" y="227" fill="#718096" font-size="10" font-family="system-ui">team.py &mdash; roster + WP share matrix</text>
+    <text x="420" y="221" text-anchor="middle" fill="white" font-size="11" font-weight="bold">3</text>
+    <text x="440" y="211" fill="#c05621" font-size="12" font-weight="bold">Team sheet</text>
+    <text x="440" y="227" fill="#718096" font-size="10">team.py &mdash; roster + WP share matrix</text>
 
     <!-- Arrow 3->4 -->
     <line x1="560" y1="240" x2="560" y2="254" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -946,13 +923,13 @@
     <!-- Step 4: Capacity sheet (with skeleton/demo icon) -->
     <rect x="400" y="254" width="320" height="52" rx="6" fill="#faf5ff" stroke="#9f7aea" stroke-width="1.5"/>
     <circle cx="420" cy="280" r="12" fill="#9f7aea"/>
-    <text x="420" y="285" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">4</text>
-    <text x="440" y="273" fill="#6b46c1" font-size="12" font-weight="bold" font-family="system-ui">Capacity sheet</text>
-    <text x="440" y="289" fill="#718096" font-size="10" font-family="system-ui">capacity.py &mdash; per-person FTE grid, external commits, CF</text>
+    <text x="420" y="285" text-anchor="middle" fill="white" font-size="11" font-weight="bold">4</text>
+    <text x="440" y="273" fill="#6b46c1" font-size="12" font-weight="bold">Capacity sheet</text>
+    <text x="440" y="289" fill="#718096" font-size="10">capacity.py &mdash; per-person FTE grid, external commits, CF</text>
     <!-- Skeleton/demo toggle indicator -->
     <rect x="685" y="269" width="25" height="15" rx="7" fill="#a0aec0"/>
     <circle cx="703" cy="277" r="5" fill="white"/>
-    <text x="686" y="298" fill="#a0aec0" font-size="8" font-family="system-ui">mode</text>
+    <text x="686" y="298" fill="#a0aec0" font-size="8">mode</text>
 
     <!-- Arrow 4->5 -->
     <line x1="560" y1="306" x2="560" y2="320" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -961,15 +938,15 @@
     <rect x="395" y="320" width="330" height="56" rx="6" fill="#fefce8" stroke="#d69e2e" stroke-width="3"/>
     <rect x="395" y="320" width="330" height="56" rx="6" fill="none" stroke="#e53e3e" stroke-width="1" stroke-dasharray="4,2"/>
     <circle cx="420" cy="348" r="14" fill="#d69e2e"/>
-    <text x="420" y="353" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="system-ui">5</text>
-    <text x="442" y="340" fill="#975a16" font-size="12" font-weight="bold" font-family="system-ui">Patch Plan &larr; Capacity</text>
-    <text x="442" y="355" fill="#718096" font-size="10" font-family="system-ui">plan.py:_apply_planned_formulas</text>
-    <text x="442" y="368" fill="#e53e3e" font-size="9" font-weight="bold" font-family="system-ui">KEY: overwrite Plan FTE with SUM formulas from Capacity</text>
+    <text x="420" y="353" text-anchor="middle" fill="white" font-size="12" font-weight="bold">5</text>
+    <text x="442" y="340" fill="#975a16" font-size="12" font-weight="bold">Patch Plan &larr; Capacity</text>
+    <text x="442" y="355" fill="#718096" font-size="10">plan.py:_apply_planned_formulas</text>
+    <text x="442" y="368" fill="#e53e3e" font-size="9" font-weight="bold">KEY: overwrite Plan FTE with SUM formulas from Capacity</text>
 
     <!-- Reverse arrow icon between step 4 and step 5 -->
     <path d="M 730 300 C 750 300, 750 340, 730 340" fill="none" stroke="#9f7aea" stroke-width="2" stroke-dasharray="4,2" marker-end="url(#arrow-pipe-purple)"/>
-    <text x="755" y="324" fill="#9f7aea" font-size="9" font-weight="bold" font-family="system-ui">reverse</text>
-    <text x="755" y="336" fill="#9f7aea" font-size="9" font-family="system-ui">flow</text>
+    <text x="755" y="324" fill="#9f7aea" font-size="9" font-weight="bold">reverse</text>
+    <text x="755" y="336" fill="#9f7aea" font-size="9">flow</text>
 
     <!-- Arrow 5->6 -->
     <line x1="560" y1="376" x2="560" y2="390" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -977,9 +954,9 @@
     <!-- Step 6: Trends skeleton -->
     <rect x="400" y="390" width="320" height="48" rx="6" fill="#fffff0" stroke="#d69e2e" stroke-width="1.5"/>
     <circle cx="420" cy="414" r="12" fill="#d69e2e"/>
-    <text x="420" y="419" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">6</text>
-    <text x="440" y="409" fill="#975a16" font-size="12" font-weight="bold" font-family="system-ui">Trends skeleton</text>
-    <text x="440" y="425" fill="#718096" font-size="10" font-family="system-ui">current_month cell + named range (created early)</text>
+    <text x="420" y="419" text-anchor="middle" fill="white" font-size="11" font-weight="bold">6</text>
+    <text x="440" y="409" fill="#975a16" font-size="12" font-weight="bold">Trends skeleton</text>
+    <text x="440" y="425" fill="#718096" font-size="10">current_month cell + named range (created early)</text>
 
     <!-- Arrow 6->7 -->
     <line x1="560" y1="438" x2="560" y2="452" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -987,9 +964,9 @@
     <!-- Step 7: Actuals sheet -->
     <rect x="400" y="452" width="320" height="48" rx="6" fill="#ebf8ff" stroke="#4299e1" stroke-width="1.5"/>
     <circle cx="420" cy="476" r="12" fill="#4299e1"/>
-    <text x="420" y="481" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">7</text>
-    <text x="440" y="471" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">Actuals sheet</text>
-    <text x="440" y="487" fill="#718096" font-size="10" font-family="system-ui">actuals.py &mdash; EUR grid, cumulative formulas, CF</text>
+    <text x="420" y="481" text-anchor="middle" fill="white" font-size="11" font-weight="bold">7</text>
+    <text x="440" y="471" fill="#2b6cb0" font-size="12" font-weight="bold">Actuals sheet</text>
+    <text x="440" y="487" fill="#718096" font-size="10">actuals.py &mdash; EUR grid, cumulative formulas, CF</text>
 
     <!-- Arrow 7->8 -->
     <line x1="560" y1="500" x2="560" y2="514" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -997,9 +974,9 @@
     <!-- Step 8: Summary sheet -->
     <rect x="400" y="514" width="320" height="48" rx="6" fill="#f0fff4" stroke="#48bb78" stroke-width="1.5"/>
     <circle cx="420" cy="538" r="12" fill="#48bb78"/>
-    <text x="420" y="543" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">8</text>
-    <text x="440" y="533" fill="#276749" font-size="12" font-weight="bold" font-family="system-ui">Summary sheet</text>
-    <text x="440" y="549" fill="#718096" font-size="10" font-family="system-ui">summary.py &mdash; annual aggregation</text>
+    <text x="420" y="543" text-anchor="middle" fill="white" font-size="11" font-weight="bold">8</text>
+    <text x="440" y="533" fill="#276749" font-size="12" font-weight="bold">Summary sheet</text>
+    <text x="440" y="549" fill="#718096" font-size="10">summary.py &mdash; annual aggregation</text>
 
     <!-- Arrow 8->9 -->
     <line x1="560" y1="562" x2="560" y2="576" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -1007,15 +984,15 @@
     <!-- Step 9: Trends content -->
     <rect x="400" y="576" width="320" height="48" rx="6" fill="#fffff0" stroke="#d69e2e" stroke-width="1.5"/>
     <circle cx="420" cy="600" r="12" fill="#d69e2e"/>
-    <text x="420" y="605" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">9</text>
-    <text x="440" y="595" fill="#975a16" font-size="12" font-weight="bold" font-family="system-ui">Trends content</text>
-    <text x="440" y="611" fill="#718096" font-size="10" font-family="system-ui">trends.py &mdash; burn rate table, person load, chart, CF</text>
+    <text x="420" y="605" text-anchor="middle" fill="white" font-size="11" font-weight="bold">9</text>
+    <text x="440" y="595" fill="#975a16" font-size="12" font-weight="bold">Trends content</text>
+    <text x="440" y="611" fill="#718096" font-size="10">trends.py &mdash; burn rate table, person load, chart, CF</text>
 
     <!-- Dashed line connecting Step 6 and Step 9 (Trends split) -->
     <line x1="750" y1="414" x2="780" y2="414" stroke="#d69e2e" stroke-width="2" stroke-dasharray="6,3"/>
     <line x1="780" y1="414" x2="780" y2="600" stroke="#d69e2e" stroke-width="2" stroke-dasharray="6,3"/>
     <line x1="780" y1="600" x2="750" y2="600" stroke="#d69e2e" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrow-pipe-orange)"/>
-    <text x="786" y="500" fill="#d69e2e" font-size="10" font-weight="bold" font-family="system-ui" transform="rotate(90, 786, 500)">Trends split</text>
+    <text x="786" y="500" fill="#d69e2e" font-size="10" font-weight="bold" transform="rotate(90, 786, 500)">Trends split</text>
 
     <!-- Arrow 9->10 -->
     <line x1="560" y1="624" x2="560" y2="638" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -1023,9 +1000,9 @@
     <!-- Step 10: _META sheet -->
     <rect x="400" y="638" width="320" height="48" rx="6" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5"/>
     <circle cx="420" cy="662" r="12" fill="#a0aec0"/>
-    <text x="420" y="667" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">10</text>
-    <text x="440" y="657" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">_META sheet</text>
-    <text x="440" y="673" fill="#718096" font-size="10" font-family="system-ui">meta.py &mdash; AI-readable docs from all layout dicts</text>
+    <text x="420" y="667" text-anchor="middle" fill="white" font-size="11" font-weight="bold">10</text>
+    <text x="440" y="657" fill="#4a5568" font-size="12" font-weight="bold">_META sheet</text>
+    <text x="440" y="673" fill="#718096" font-size="10">meta.py &mdash; AI-readable docs from all layout dicts</text>
 
     <!-- Arrow 10->11 -->
     <line x1="560" y1="686" x2="560" y2="700" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -1033,9 +1010,9 @@
     <!-- Step 11: Sheet protection -->
     <rect x="400" y="700" width="320" height="42" rx="6" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5"/>
     <circle cx="420" cy="721" r="12" fill="#a0aec0"/>
-    <text x="420" y="726" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">11</text>
-    <text x="440" y="718" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Sheet protection</text>
-    <text x="440" y="732" fill="#718096" font-size="10" font-family="system-ui">all sheets, password "grant", blue cells unlocked</text>
+    <text x="420" y="726" text-anchor="middle" fill="white" font-size="11" font-weight="bold">11</text>
+    <text x="440" y="718" fill="#4a5568" font-size="12" font-weight="bold">Sheet protection</text>
+    <text x="440" y="732" fill="#718096" font-size="10">all sheets, password "grant", blue cells unlocked</text>
 
     <!-- Arrow 11->12 -->
     <line x1="560" y1="742" x2="560" y2="754" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -1043,9 +1020,9 @@
     <!-- Step 12: Column grouping -->
     <rect x="400" y="754" width="320" height="42" rx="6" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5"/>
     <circle cx="420" cy="775" r="12" fill="#a0aec0"/>
-    <text x="420" y="780" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">12</text>
-    <text x="440" y="772" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Column grouping</text>
-    <text x="440" y="786" fill="#718096" font-size="10" font-family="system-ui">styles.py:apply_year_groups &mdash; 12-month groups</text>
+    <text x="420" y="780" text-anchor="middle" fill="white" font-size="11" font-weight="bold">12</text>
+    <text x="440" y="772" fill="#4a5568" font-size="12" font-weight="bold">Column grouping</text>
+    <text x="440" y="786" fill="#718096" font-size="10">styles.py:apply_year_groups &mdash; 12-month groups</text>
 
     <!-- Arrow 12->13 -->
     <line x1="560" y1="796" x2="560" y2="808" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -1053,9 +1030,9 @@
     <!-- Step 13: Save .xlsx -->
     <rect x="400" y="808" width="154" height="42" rx="6" fill="#f0fff4" stroke="#48bb78" stroke-width="1.5"/>
     <circle cx="420" cy="829" r="12" fill="#48bb78"/>
-    <text x="420" y="834" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">13</text>
-    <text x="504" y="826" text-anchor="middle" fill="#276749" font-size="12" font-weight="bold" font-family="system-ui">Save .xlsx</text>
-    <text x="504" y="840" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">backup first</text>
+    <text x="420" y="834" text-anchor="middle" fill="white" font-size="11" font-weight="bold">13</text>
+    <text x="504" y="826" text-anchor="middle" fill="#276749" font-size="12" font-weight="bold">Save .xlsx</text>
+    <text x="504" y="840" text-anchor="middle" fill="#718096" font-size="9">backup first</text>
 
     <!-- Arrow 13->14 -->
     <line x1="554" y1="829" x2="570" y2="829" stroke="#718096" stroke-width="1.5" marker-end="url(#arrow-pipe)"/>
@@ -1063,43 +1040,43 @@
     <!-- Step 14: Post-save recalc (external) -->
     <rect x="580" y="808" width="180" height="42" rx="6" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5" stroke-dasharray="5,3"/>
     <circle cx="600" cy="829" r="12" fill="#a0aec0"/>
-    <text x="600" y="834" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="system-ui">14</text>
-    <text x="678" y="824" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold" font-family="system-ui">recalc.py</text>
-    <text x="678" y="840" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">LibreOffice headless</text>
+    <text x="600" y="834" text-anchor="middle" fill="white" font-size="11" font-weight="bold">14</text>
+    <text x="678" y="824" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold">recalc.py</text>
+    <text x="678" y="840" text-anchor="middle" fill="#718096" font-size="9">LibreOffice headless</text>
 
     <!-- External indicator -->
-    <text x="770" y="831" fill="#a0aec0" font-size="9" font-style="italic" font-family="system-ui">(external)</text>
+    <text x="770" y="831" fill="#a0aec0" font-size="9" font-style="italic">(external)</text>
 
     <!-- ===== Layout dict return flow (right side annotation) ===== -->
     <rect x="830" y="68" width="280" height="96" rx="6" fill="#faf5ff" stroke="#9f7aea" stroke-width="1" stroke-dasharray="4,2"/>
-    <text x="970" y="90" text-anchor="middle" fill="#6b46c1" font-size="12" font-weight="bold" font-family="system-ui">layout dict return values</text>
+    <text x="970" y="90" text-anchor="middle" fill="#6b46c1" font-size="12" font-weight="bold">layout dict return values</text>
     <line x1="850" y1="98" x2="1090" y2="98" stroke="#e9d8fd" stroke-width="1"/>
-    <text x="850" y="116" fill="#718096" font-size="10" font-family="system-ui">Each builder returns a dict with:</text>
-    <text x="860" y="132" fill="#718096" font-size="10" font-family="system-ui">- row numbers (first_wp_row, total_row, ...)</text>
-    <text x="860" y="148" fill="#718096" font-size="10" font-family="system-ui">- column positions (cum_col, month_start, ...)</text>
+    <text x="850" y="116" fill="#718096" font-size="10">Each builder returns a dict with:</text>
+    <text x="860" y="132" fill="#718096" font-size="10">- row numbers (first_wp_row, total_row, ...)</text>
+    <text x="860" y="148" fill="#718096" font-size="10">- column positions (cum_col, month_start, ...)</text>
 
     <!-- Legend box -->
     <rect x="830" y="180" width="280" height="155" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-    <text x="970" y="200" text-anchor="middle" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Legend</text>
+    <text x="970" y="200" text-anchor="middle" fill="#4a5568" font-size="12" font-weight="bold">Legend</text>
     <line x1="850" y1="208" x2="1090" y2="208" stroke="#e2e8f0" stroke-width="1"/>
 
     <rect x="850" y="218" width="14" height="14" rx="2" fill="#ebf8ff" stroke="#4299e1"/>
-    <text x="872" y="230" fill="#4a5568" font-size="10" font-family="system-ui">Config / data sheets</text>
+    <text x="872" y="230" fill="#4a5568" font-size="10">Config / data sheets</text>
 
     <rect x="850" y="238" width="14" height="14" rx="2" fill="#fff5eb" stroke="#ed8936"/>
-    <text x="872" y="250" fill="#4a5568" font-size="10" font-family="system-ui">Processing / builders</text>
+    <text x="872" y="250" fill="#4a5568" font-size="10">Processing / builders</text>
 
     <rect x="850" y="258" width="14" height="14" rx="2" fill="#faf5ff" stroke="#9f7aea"/>
-    <text x="872" y="270" fill="#4a5568" font-size="10" font-family="system-ui">Capacity / planning</text>
+    <text x="872" y="270" fill="#4a5568" font-size="10">Capacity / planning</text>
 
     <rect x="850" y="278" width="14" height="14" rx="2" fill="#fffff0" stroke="#d69e2e"/>
-    <text x="872" y="290" fill="#4a5568" font-size="10" font-family="system-ui">Trends / warnings</text>
+    <text x="872" y="290" fill="#4a5568" font-size="10">Trends / warnings</text>
 
     <rect x="850" y="298" width="14" height="14" rx="2" fill="#f0fff4" stroke="#48bb78"/>
-    <text x="872" y="310" fill="#4a5568" font-size="10" font-family="system-ui">Outputs / success</text>
+    <text x="872" y="310" fill="#4a5568" font-size="10">Outputs / success</text>
 
     <rect x="850" y="318" width="14" height="14" rx="2" fill="#f7fafc" stroke="#a0aec0" stroke-dasharray="3,2"/>
-    <text x="872" y="330" fill="#4a5568" font-size="10" font-family="system-ui">Infrastructure / external</text>
+    <text x="872" y="330" fill="#4a5568" font-size="10">Infrastructure / external</text>
   </svg>
 </div>
 <!-- ============================================================ -->
@@ -1114,7 +1091,7 @@
     but always keeps Actuals. A snapshot/restore mechanism enables scenario comparison.
   </p>
 
-  <svg viewBox="0 0 1100 700" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+  <svg viewBox="0 0 1100 700" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Round-Trip Rebuild Flow" style="width:100%;height:auto;">
     <defs>
       <marker id="arrow-rt" viewBox="0 0 10 7" refX="10" refY="3.5"
               markerWidth="10" markerHeight="7" orient="auto-start-reverse">
@@ -1133,18 +1110,18 @@
     <rect width="1100" height="700" fill="#f8fafc" rx="8"/>
 
     <!-- ===== Title ===== -->
-    <text x="420" y="30" font-size="15" font-weight="bold" fill="#2d3748" font-family="system-ui">Rebuild Cycle</text>
+    <text x="420" y="30" font-size="15" font-weight="bold" fill="#2d3748">Rebuild Cycle</text>
 
     <!-- ===== Node 1: Live Workbook (top center, emphasized) ===== -->
     <g transform="translate(340, 50)">
       <rect width="320" height="120" rx="12" fill="#ebf8ff" stroke="#4299e1" stroke-width="3"/>
       <rect width="320" height="32" rx="12" fill="#4299e1"/>
       <rect x="0" y="16" width="320" height="16" fill="#4299e1"/>
-      <text x="160" y="23" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">Live Workbook</text>
-      <text x="160" y="55" text-anchor="middle" fill="#2d3748" font-size="11" font-family="system-ui" font-weight="600">User edits in Excel:</text>
-      <text x="20" y="75" fill="#2b6cb0" font-size="11" font-family="system-ui">&#x25CF; Capacity FTE (blue input cells)</text>
-      <text x="20" y="92" fill="#2b6cb0" font-size="11" font-family="system-ui">&#x25CF; Actuals EUR (blue input cells)</text>
-      <text x="20" y="109" fill="#2b6cb0" font-size="11" font-family="system-ui">&#x25CF; current_month (Trends!B1)</text>
+      <text x="160" y="23" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Live Workbook</text>
+      <text x="160" y="55" text-anchor="middle" fill="#2d3748" font-size="11" font-weight="600">User edits in Excel:</text>
+      <text x="20" y="75" fill="#2b6cb0" font-size="11">&#x25CF; Capacity FTE (blue input cells)</text>
+      <text x="20" y="92" fill="#2b6cb0" font-size="11">&#x25CF; Actuals EUR (blue input cells)</text>
+      <text x="20" y="109" fill="#2b6cb0" font-size="11">&#x25CF; current_month (Trends!B1)</text>
     </g>
 
     <!-- ===== Node 2: Extract (right) ===== -->
@@ -1152,15 +1129,15 @@
       <rect width="280" height="160" rx="10" fill="#fff5eb" stroke="#ed8936" stroke-width="2"/>
       <rect width="280" height="30" rx="10" fill="#ed8936"/>
       <rect x="0" y="15" width="280" height="15" fill="#ed8936"/>
-      <text x="140" y="22" text-anchor="middle" fill="white" font-size="13" font-weight="bold" font-family="system-ui">Extract (reader.py)</text>
-      <text x="15" y="52" fill="#4a5568" font-size="10" font-family="system-ui">read_config_sheet &rarr; params + WPs</text>
-      <text x="15" y="68" fill="#4a5568" font-size="10" font-family="system-ui">read_team_sheet &rarr; roster + shares</text>
-      <text x="15" y="84" fill="#4a5568" font-size="10" font-family="system-ui">read_capacity_sheet &rarr; FTE values</text>
-      <text x="15" y="100" fill="#4a5568" font-size="10" font-family="system-ui">read_actuals_values &rarr; EUR values</text>
-      <text x="15" y="116" fill="#718096" font-size="10" font-family="system-ui">current_month &larr; Trends!B1 (grouping only)</text>
+      <text x="140" y="22" text-anchor="middle" fill="white" font-size="13" font-weight="bold">Extract (reader.py)</text>
+      <text x="15" y="52" fill="#4a5568" font-size="10">read_config_sheet &rarr; params + WPs</text>
+      <text x="15" y="68" fill="#4a5568" font-size="10">read_team_sheet &rarr; roster + shares</text>
+      <text x="15" y="84" fill="#4a5568" font-size="10">read_capacity_sheet &rarr; FTE values</text>
+      <text x="15" y="100" fill="#4a5568" font-size="10">read_actuals_values &rarr; EUR values</text>
+      <text x="15" y="116" fill="#718096" font-size="10">current_month &larr; Trends!B1 (grouping only)</text>
       <line x1="15" y1="125" x2="265" y2="125" stroke="#e2e8f0"/>
-      <text x="15" y="142" fill="#48bb78" font-size="10" font-weight="600" font-family="system-ui">&#x2713; Capacity FTE (normal)</text>
-      <text x="15" y="155" fill="#e53e3e" font-size="10" font-weight="600" font-family="system-ui">&#x2717; Capacity FTE (skeleton)</text>
+      <text x="15" y="142" fill="#48bb78" font-size="10" font-weight="600">&#x2713; Capacity FTE (normal)</text>
+      <text x="15" y="155" fill="#e53e3e" font-size="10" font-weight="600">&#x2717; Capacity FTE (skeleton)</text>
     </g>
 
     <!-- ===== Node 3: Validate (bottom center) ===== -->
@@ -1168,12 +1145,12 @@
       <rect width="320" height="120" rx="10" fill="#fff5f5" stroke="#e53e3e" stroke-width="2"/>
       <rect width="320" height="30" rx="10" fill="#e53e3e"/>
       <rect x="0" y="15" width="320" height="15" fill="#e53e3e"/>
-      <text x="160" y="22" text-anchor="middle" fill="white" font-size="13" font-weight="bold" font-family="system-ui">Validate (_validate_config)</text>
-      <text x="15" y="52" fill="#4a5568" font-size="10" font-family="system-ui">&#x25CF; WP IDs unique, months 1-120, rate > 0</text>
-      <text x="15" y="68" fill="#4a5568" font-size="10" font-family="system-ui">&#x25CF; Team roster non-empty, no dup WPs</text>
-      <text x="15" y="84" fill="#4a5568" font-size="10" font-family="system-ui">&#x25CF; External commitment persons exist in team</text>
-      <text x="15" y="100" fill="#4a5568" font-size="10" font-family="system-ui">&#x25CF; Orphan detection: removed persons/WPs</text>
-      <text x="30" y="114" fill="#d69e2e" font-size="10" font-style="italic" font-family="system-ui">&rarr; silently dropped + warning to console &amp; _META</text>
+      <text x="160" y="22" text-anchor="middle" fill="white" font-size="13" font-weight="bold">Validate (_validate_config)</text>
+      <text x="15" y="52" fill="#4a5568" font-size="10">&#x25CF; WP IDs unique, months 1-120, rate > 0</text>
+      <text x="15" y="68" fill="#4a5568" font-size="10">&#x25CF; Team roster non-empty, no dup WPs</text>
+      <text x="15" y="84" fill="#4a5568" font-size="10">&#x25CF; External commitment persons exist in team</text>
+      <text x="15" y="100" fill="#4a5568" font-size="10">&#x25CF; Orphan detection: removed persons/WPs</text>
+      <text x="30" y="114" fill="#d69e2e" font-size="10" font-style="italic">&rarr; silently dropped + warning to console &amp; _META</text>
     </g>
 
     <!-- ===== Node 4: Regenerate (left) ===== -->
@@ -1181,49 +1158,49 @@
       <rect width="280" height="160" rx="10" fill="#f0fff4" stroke="#48bb78" stroke-width="2"/>
       <rect width="280" height="30" rx="10" fill="#48bb78"/>
       <rect x="0" y="15" width="280" height="15" fill="#48bb78"/>
-      <text x="140" y="22" text-anchor="middle" fill="white" font-size="13" font-weight="bold" font-family="system-ui">Regenerate (_build_all_sheets)</text>
-      <text x="15" y="52" fill="#4a5568" font-size="10" font-family="system-ui">Full 14-step build pipeline</text>
-      <text x="15" y="68" fill="#4a5568" font-size="10" font-family="system-ui">Preserved values injected at build steps:</text>
-      <text x="25" y="84" fill="#48bb78" font-size="10" font-family="system-ui">&#x2713; Capacity FTE &rarr; step 4</text>
-      <text x="25" y="100" fill="#48bb78" font-size="10" font-family="system-ui">&#x2713; Actuals EUR &rarr; step 7</text>
-      <text x="15" y="120" fill="#4a5568" font-size="10" font-family="system-ui">Timestamped backup before overwrite</text>
-      <text x="15" y="136" fill="#4a5568" font-size="10" font-family="system-ui">Protection + column grouping applied</text>
-      <text x="15" y="152" fill="#4a5568" font-size="10" font-family="system-ui">Output: updated .xlsx &rarr; Live Workbook</text>
+      <text x="140" y="22" text-anchor="middle" fill="white" font-size="13" font-weight="bold">Regenerate (_build_all_sheets)</text>
+      <text x="15" y="52" fill="#4a5568" font-size="10">Full 14-step build pipeline</text>
+      <text x="15" y="68" fill="#4a5568" font-size="10">Preserved values injected at build steps:</text>
+      <text x="25" y="84" fill="#48bb78" font-size="10">&#x2713; Capacity FTE &rarr; step 4</text>
+      <text x="25" y="100" fill="#48bb78" font-size="10">&#x2713; Actuals EUR &rarr; step 7</text>
+      <text x="15" y="120" fill="#4a5568" font-size="10">Timestamped backup before overwrite</text>
+      <text x="15" y="136" fill="#4a5568" font-size="10">Protection + column grouping applied</text>
+      <text x="15" y="152" fill="#4a5568" font-size="10">Output: updated .xlsx &rarr; Live Workbook</text>
     </g>
 
     <!-- ===== Connecting arrows (clockwise) ===== -->
     <!-- Live Workbook → Extract (top-right to right-top) -->
     <path d="M660,130 Q750,130 750,230" fill="none" stroke="#4a5568" stroke-width="2.5" marker-end="url(#arrow-rt)"/>
-    <text x="710" y="165" fill="#4a5568" font-size="10" font-family="system-ui" font-weight="600">rebuild</text>
+    <text x="710" y="165" fill="#4a5568" font-size="10" font-weight="600">rebuild</text>
 
     <!-- Extract → Validate (right-bottom to bottom-right) -->
     <path d="M890,390 Q890,510 660,510" fill="none" stroke="#4a5568" stroke-width="2.5" marker-end="url(#arrow-rt)"/>
-    <text x="790" y="460" fill="#4a5568" font-size="10" font-family="system-ui" font-weight="600">check</text>
+    <text x="790" y="460" fill="#4a5568" font-size="10" font-weight="600">check</text>
 
     <!-- Validate → Regenerate (bottom-left to left-bottom) -->
     <path d="M340,510 Q180,510 180,390" fill="none" stroke="#4a5568" stroke-width="2.5" marker-end="url(#arrow-rt)"/>
-    <text x="230" y="465" fill="#4a5568" font-size="10" font-family="system-ui" font-weight="600">valid</text>
+    <text x="230" y="465" fill="#4a5568" font-size="10" font-weight="600">valid</text>
 
     <!-- Regenerate → Live Workbook (left-top to top-left) -->
     <path d="M180,230 Q180,130 340,110" fill="none" stroke="#48bb78" stroke-width="2.5" marker-end="url(#arrow-rt-green)"/>
-    <text x="210" y="165" fill="#48bb78" font-size="10" font-family="system-ui" font-weight="600">save .xlsx</text>
+    <text x="210" y="165" fill="#48bb78" font-size="10" font-weight="600">save .xlsx</text>
 
     <!-- ===== Snapshot/Restore sidebar ===== -->
     <g transform="translate(750, 50)">
       <rect width="280" height="140" rx="8" fill="white" stroke="#a0aec0" stroke-width="1.5" stroke-dasharray="5,3"/>
-      <text x="140" y="22" text-anchor="middle" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Snapshot / Restore</text>
+      <text x="140" y="22" text-anchor="middle" fill="#4a5568" font-size="12" font-weight="bold">Snapshot / Restore</text>
       <line x1="15" y1="30" x2="265" y2="30" stroke="#e2e8f0"/>
-      <text x="20" y="52" fill="#4299e1" font-size="11" font-family="system-ui" font-weight="600">--snapshot</text>
-      <text x="110" y="52" fill="#4a5568" font-size="10" font-family="system-ui">saves .snapshot.xlsx copy</text>
-      <text x="20" y="72" fill="#4299e1" font-size="11" font-family="system-ui" font-weight="600">--restore</text>
-      <text x="110" y="72" fill="#4a5568" font-size="10" font-family="system-ui">reverts to snapshot</text>
-      <text x="30" y="90" fill="#718096" font-size="10" font-style="italic" font-family="system-ui">(current file backed up first)</text>
+      <text x="20" y="52" fill="#4299e1" font-size="11" font-weight="600">--snapshot</text>
+      <text x="110" y="52" fill="#4a5568" font-size="10">saves .snapshot.xlsx copy</text>
+      <text x="20" y="72" fill="#4299e1" font-size="11" font-weight="600">--restore</text>
+      <text x="110" y="72" fill="#4a5568" font-size="10">reverts to snapshot</text>
+      <text x="30" y="90" fill="#718096" font-size="10" font-style="italic">(current file backed up first)</text>
 
       <!-- bidirectional arrow icon -->
       <line x1="60" y1="108" x2="220" y2="108" stroke="#4299e1" stroke-width="1.5"/>
       <polygon points="60,108 68,104 68,112" fill="#4299e1"/>
       <polygon points="220,108 212,104 212,112" fill="#4299e1"/>
-      <text x="140" y="130" text-anchor="middle" fill="#718096" font-size="10" font-family="system-ui">Both directions supported</text>
+      <text x="140" y="130" text-anchor="middle" fill="#718096" font-size="10">Both directions supported</text>
     </g>
 
     <!-- Arrow from Live Workbook to Snapshot sidebar -->
@@ -1232,23 +1209,23 @@
     <!-- ===== Preservation Legend ===== -->
     <g transform="translate(40, 600)">
       <rect width="1020" height="80" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-      <text x="510" y="22" text-anchor="middle" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">Preservation Legend</text>
+      <text x="510" y="22" text-anchor="middle" fill="#4a5568" font-size="12" font-weight="bold">Preservation Legend</text>
       <line x1="20" y1="30" x2="1000" y2="30" stroke="#e2e8f0"/>
 
-      <text x="40" y="52" fill="#48bb78" font-size="11" font-weight="bold" font-family="system-ui">&#x2713; Always preserved</text>
-      <text x="200" y="52" fill="#4a5568" font-size="10" font-family="system-ui">Actuals EUR</text>
+      <text x="40" y="52" fill="#48bb78" font-size="11" font-weight="bold">&#x2713; Always preserved</text>
+      <text x="200" y="52" fill="#4a5568" font-size="10">Actuals EUR</text>
 
-      <text x="350" y="52" fill="#48bb78" font-size="11" font-weight="bold" font-family="system-ui">&#x2713; Preserved (normal)</text>
-      <text x="540" y="52" fill="#4a5568" font-size="10" font-family="system-ui">Capacity FTE</text>
+      <text x="350" y="52" fill="#48bb78" font-size="11" font-weight="bold">&#x2713; Preserved (normal)</text>
+      <text x="540" y="52" fill="#4a5568" font-size="10">Capacity FTE</text>
 
-      <text x="40" y="72" fill="#e53e3e" font-size="11" font-weight="bold" font-family="system-ui">&#x2717; Cleared (skeleton)</text>
-      <text x="210" y="72" fill="#4a5568" font-size="10" font-family="system-ui">Capacity FTE</text>
+      <text x="40" y="72" fill="#e53e3e" font-size="11" font-weight="bold">&#x2717; Cleared (skeleton)</text>
+      <text x="210" y="72" fill="#4a5568" font-size="10">Capacity FTE</text>
 
-      <text x="350" y="72" fill="#4299e1" font-size="11" font-weight="bold" font-family="system-ui">&#x21BB; Re-seeded on rebuild</text>
-      <text x="530" y="72" fill="#4a5568" font-size="10" font-family="system-ui">current_month (read for column grouping only)</text>
+      <text x="350" y="72" fill="#4299e1" font-size="11" font-weight="bold">&#x21BB; Re-seeded on rebuild</text>
+      <text x="530" y="72" fill="#4a5568" font-size="10">current_month (read for column grouping only)</text>
 
-      <text x="730" y="72" fill="#d69e2e" font-size="11" font-weight="bold" font-family="system-ui">&#x26A0; Dropped with warning</text>
-      <text x="920" y="72" fill="#4a5568" font-size="10" font-family="system-ui">Orphaned data</text>
+      <text x="730" y="72" fill="#d69e2e" font-size="11" font-weight="bold">&#x26A0; Dropped with warning</text>
+      <text x="920" y="72" fill="#4a5568" font-size="10">Orphaned data</text>
     </g>
   </svg>
 </div>
@@ -1265,7 +1242,7 @@
     a <code>layout</code> dictionary consumed by downstream steps.
   </p>
 
-  <svg viewBox="0 0 1100 660" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+  <svg viewBox="0 0 1100 660" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Module Dependency Map" style="width:100%;height:auto;">
     <defs>
       <marker id="arrow-mod" viewBox="0 0 10 7" refX="10" refY="3.5"
               markerWidth="10" markerHeight="7" orient="auto-start-reverse">
@@ -1289,14 +1266,14 @@
 
     <!-- ===== Band 1: Orchestration (top) ===== -->
     <rect x="20" y="20" width="1060" height="110" rx="8" fill="#ebf8ff" stroke="#4299e1" stroke-width="1.5" opacity="0.5"/>
-    <text x="40" y="42" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">BAND 1 &mdash; Orchestration</text>
+    <text x="40" y="42" fill="#2b6cb0" font-size="12" font-weight="bold">BAND 1 &mdash; Orchestration</text>
 
     <!-- __main__.py -->
     <g transform="translate(120, 55)">
       <rect width="160" height="55" rx="6" fill="white" stroke="#4299e1" stroke-width="2"/>
-      <text x="80" y="22" text-anchor="middle" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">__main__.py</text>
-      <text x="80" y="40" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">CLI argument parsing</text>
-      <text x="80" y="50" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">subcommand dispatch</text>
+      <text x="80" y="22" text-anchor="middle" fill="#2b6cb0" font-size="12" font-weight="bold">__main__.py</text>
+      <text x="80" y="40" text-anchor="middle" fill="#718096" font-size="9">CLI argument parsing</text>
+      <text x="80" y="50" text-anchor="middle" fill="#718096" font-size="9">subcommand dispatch</text>
     </g>
 
     <!-- Arrow __main__ → workbook -->
@@ -1305,41 +1282,41 @@
     <!-- workbook.py -->
     <g transform="translate(420, 55)">
       <rect width="260" height="55" rx="6" fill="white" stroke="#4299e1" stroke-width="2"/>
-      <text x="130" y="22" text-anchor="middle" fill="#2b6cb0" font-size="12" font-weight="bold" font-family="system-ui">workbook.py</text>
-      <text x="130" y="38" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">init_workbook() &bull; rebuild_workbook()</text>
-      <text x="130" y="50" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">snapshot_workbook() &bull; restore_workbook()</text>
+      <text x="130" y="22" text-anchor="middle" fill="#2b6cb0" font-size="12" font-weight="bold">workbook.py</text>
+      <text x="130" y="38" text-anchor="middle" fill="#718096" font-size="9">init_workbook() &bull; rebuild_workbook()</text>
+      <text x="130" y="50" text-anchor="middle" fill="#718096" font-size="9">snapshot_workbook() &bull; restore_workbook()</text>
     </g>
 
     <!-- ===== Band 2: Builders (middle) ===== -->
     <rect x="20" y="155" width="1060" height="240" rx="8" fill="#fff5eb" stroke="#ed8936" stroke-width="1.5" opacity="0.3"/>
-    <text x="40" y="177" fill="#c05621" font-size="12" font-weight="bold" font-family="system-ui">BAND 2 &mdash; Builders (called by workbook.py in build order)</text>
+    <text x="40" y="177" fill="#c05621" font-size="12" font-weight="bold">BAND 2 &mdash; Builders (called by workbook.py in build order)</text>
 
     <!-- Builder modules — row 1 -->
     <g transform="translate(40, 195)">
       <rect width="120" height="50" rx="5" fill="white" stroke="#4299e1" stroke-width="1.5"/>
-      <text x="60" y="22" text-anchor="middle" fill="#2b6cb0" font-size="10" font-weight="bold" font-family="system-ui">config_sheet.py</text>
-      <text x="60" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Config sheet</text>
+      <text x="60" y="22" text-anchor="middle" fill="#2b6cb0" font-size="10" font-weight="bold">config_sheet.py</text>
+      <text x="60" y="38" text-anchor="middle" fill="#718096" font-size="8">Config sheet</text>
     </g>
     <line x1="160" y1="220" x2="178" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
 
     <g transform="translate(178, 195)">
       <rect width="100" height="50" rx="5" fill="white" stroke="#ed8936" stroke-width="2"/>
-      <text x="50" y="22" text-anchor="middle" fill="#c05621" font-size="10" font-weight="bold" font-family="system-ui">plan.py</text>
-      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Plan sheet</text>
+      <text x="50" y="22" text-anchor="middle" fill="#c05621" font-size="10" font-weight="bold">plan.py</text>
+      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8">Plan sheet</text>
     </g>
     <line x1="278" y1="220" x2="296" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
 
     <g transform="translate(296, 195)">
       <rect width="100" height="50" rx="5" fill="white" stroke="#ed8936" stroke-width="1.5"/>
-      <text x="50" y="22" text-anchor="middle" fill="#c05621" font-size="10" font-weight="bold" font-family="system-ui">team.py</text>
-      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Team sheet</text>
+      <text x="50" y="22" text-anchor="middle" fill="#c05621" font-size="10" font-weight="bold">team.py</text>
+      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8">Team sheet</text>
     </g>
     <line x1="396" y1="220" x2="414" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
 
     <g transform="translate(414, 195)">
       <rect width="110" height="50" rx="5" fill="white" stroke="#9f7aea" stroke-width="2"/>
-      <text x="55" y="22" text-anchor="middle" fill="#6b46c1" font-size="10" font-weight="bold" font-family="system-ui">capacity.py</text>
-      <text x="55" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Capacity sheet</text>
+      <text x="55" y="22" text-anchor="middle" fill="#6b46c1" font-size="10" font-weight="bold">capacity.py</text>
+      <text x="55" y="38" text-anchor="middle" fill="#718096" font-size="8">Capacity sheet</text>
     </g>
 
     <!-- Bidirectional arrow: plan.py ↔ capacity.py (formula patch — highlighted) -->
@@ -1347,7 +1324,7 @@
     <line x1="228" y1="260" x2="480" y2="260" stroke="#9f7aea" stroke-width="2"/>
     <polygon points="228,260 236,256 236,264" fill="#9f7aea"/>
     <polygon points="480,260 472,256 472,264" fill="#9f7aea"/>
-    <text x="354" y="258" text-anchor="middle" fill="#6b46c1" font-size="9" font-weight="bold" font-family="system-ui">_apply_planned_formulas (step 5)</text>
+    <text x="354" y="258" text-anchor="middle" fill="#6b46c1" font-size="9" font-weight="bold">_apply_planned_formulas (step 5)</text>
 
     <!-- Continuation arrow from capacity → rest -->
     <line x1="524" y1="220" x2="542" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
@@ -1355,37 +1332,37 @@
     <!-- Builder modules — row 1 continued -->
     <g transform="translate(542, 195)">
       <rect width="110" height="50" rx="5" fill="white" stroke="#4299e1" stroke-width="1.5"/>
-      <text x="55" y="22" text-anchor="middle" fill="#2b6cb0" font-size="10" font-weight="bold" font-family="system-ui">actuals.py</text>
-      <text x="55" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Actuals sheet</text>
+      <text x="55" y="22" text-anchor="middle" fill="#2b6cb0" font-size="10" font-weight="bold">actuals.py</text>
+      <text x="55" y="38" text-anchor="middle" fill="#718096" font-size="8">Actuals sheet</text>
     </g>
     <line x1="652" y1="220" x2="670" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
 
     <g transform="translate(670, 195)">
       <rect width="110" height="50" rx="5" fill="white" stroke="#48bb78" stroke-width="1.5"/>
-      <text x="55" y="22" text-anchor="middle" fill="#276749" font-size="10" font-weight="bold" font-family="system-ui">summary.py</text>
-      <text x="55" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Summary sheet</text>
+      <text x="55" y="22" text-anchor="middle" fill="#276749" font-size="10" font-weight="bold">summary.py</text>
+      <text x="55" y="38" text-anchor="middle" fill="#718096" font-size="8">Summary sheet</text>
     </g>
     <line x1="780" y1="220" x2="798" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
 
     <g transform="translate(798, 195)">
       <rect width="100" height="50" rx="5" fill="white" stroke="#d69e2e" stroke-width="1.5"/>
-      <text x="50" y="22" text-anchor="middle" fill="#975a16" font-size="10" font-weight="bold" font-family="system-ui">trends.py</text>
-      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">Trends sheet</text>
+      <text x="50" y="22" text-anchor="middle" fill="#975a16" font-size="10" font-weight="bold">trends.py</text>
+      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8">Trends sheet</text>
     </g>
     <line x1="898" y1="220" x2="916" y2="220" stroke="#ed8936" stroke-width="1.5" marker-end="url(#arrow-mod-orange)"/>
 
     <g transform="translate(916, 195)">
       <rect width="100" height="50" rx="5" fill="white" stroke="#a0aec0" stroke-width="1.5"/>
-      <text x="50" y="22" text-anchor="middle" fill="#4a5568" font-size="10" font-weight="bold" font-family="system-ui">meta.py</text>
-      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8" font-family="system-ui">_META sheet</text>
+      <text x="50" y="22" text-anchor="middle" fill="#4a5568" font-size="10" font-weight="bold">meta.py</text>
+      <text x="50" y="38" text-anchor="middle" fill="#718096" font-size="8">_META sheet</text>
     </g>
 
     <!-- Trends split annotation (steps 6 & 9 dashed line) -->
     <rect x="700" y="280" width="340" height="22" rx="3" fill="#fffff0" stroke="#d69e2e" stroke-width="1" stroke-dasharray="3,2"/>
-    <text x="870" y="295" text-anchor="middle" fill="#975a16" font-size="9" font-style="italic" font-family="system-ui">Trends split: skeleton (step 6) early, content (step 9) late</text>
+    <text x="870" y="295" text-anchor="middle" fill="#975a16" font-size="9" font-style="italic">Trends split: skeleton (step 6) early, content (step 9) late</text>
 
     <!-- layout dict return arrows (upward to workbook.py) -->
-    <text x="550" y="148" text-anchor="middle" fill="#9f7aea" font-size="9" font-weight="600" font-family="system-ui">layout dicts returned &#x2191;</text>
+    <text x="550" y="148" text-anchor="middle" fill="#9f7aea" font-size="9" font-weight="600">layout dicts returned &#x2191;</text>
     <line x1="350" y1="153" x2="750" y2="153" stroke="#9f7aea" stroke-width="1" stroke-dasharray="4,3"/>
 
     <!-- Arrows from workbook.py down to builder band -->
@@ -1393,15 +1370,15 @@
 
     <!-- ===== Band 3: Infrastructure (bottom) ===== -->
     <rect x="20" y="320" width="1060" height="160" rx="8" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.5" opacity="0.4"/>
-    <text x="40" y="342" fill="#4a5568" font-size="12" font-weight="bold" font-family="system-ui">BAND 3 &mdash; Infrastructure</text>
+    <text x="40" y="342" fill="#4a5568" font-size="12" font-weight="bold">BAND 3 &mdash; Infrastructure</text>
 
     <!-- styles.py -->
     <g transform="translate(80, 360)">
       <rect width="200" height="65" rx="6" fill="white" stroke="#a0aec0" stroke-width="1.5"/>
-      <text x="100" y="20" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold" font-family="system-ui">styles.py</text>
-      <text x="100" y="36" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">Font/fill/border constants</text>
-      <text x="100" y="48" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">style_cell() &bull; apply_year_groups()</text>
-      <text x="100" y="60" text-anchor="middle" fill="#48bb78" font-size="8" font-family="system-ui">Used by all builders</text>
+      <text x="100" y="20" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold">styles.py</text>
+      <text x="100" y="36" text-anchor="middle" fill="#718096" font-size="9">Font/fill/border constants</text>
+      <text x="100" y="48" text-anchor="middle" fill="#718096" font-size="9">style_cell() &bull; apply_year_groups()</text>
+      <text x="100" y="60" text-anchor="middle" fill="#48bb78" font-size="8">Used by all builders</text>
     </g>
 
     <!-- Dashed arrow from builders to styles.py -->
@@ -1410,10 +1387,10 @@
     <!-- reader.py -->
     <g transform="translate(370, 360)">
       <rect width="200" height="65" rx="6" fill="white" stroke="#ed8936" stroke-width="1.5" stroke-dasharray="5,3"/>
-      <text x="100" y="20" text-anchor="middle" fill="#c05621" font-size="11" font-weight="bold" font-family="system-ui">reader.py</text>
-      <text x="100" y="36" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">Layout detection + extraction</text>
-      <text x="100" y="48" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">Config/Team/Capacity/Actuals readers</text>
-      <text x="100" y="60" text-anchor="middle" fill="#ed8936" font-size="8" font-weight="600" font-family="system-ui">Rebuild-only (dashed)</text>
+      <text x="100" y="20" text-anchor="middle" fill="#c05621" font-size="11" font-weight="bold">reader.py</text>
+      <text x="100" y="36" text-anchor="middle" fill="#718096" font-size="9">Layout detection + extraction</text>
+      <text x="100" y="48" text-anchor="middle" fill="#718096" font-size="9">Config/Team/Capacity/Actuals readers</text>
+      <text x="100" y="60" text-anchor="middle" fill="#ed8936" font-size="8" font-weight="600">Rebuild-only (dashed)</text>
     </g>
 
     <!-- Dashed arrow from workbook.py to reader.py -->
@@ -1422,10 +1399,10 @@
     <!-- config.py -->
     <g transform="translate(660, 360)">
       <rect width="200" height="65" rx="6" fill="white" stroke="#4299e1" stroke-width="1.5" stroke-dasharray="5,3"/>
-      <text x="100" y="20" text-anchor="middle" fill="#2b6cb0" font-size="11" font-weight="bold" font-family="system-ui">config.py</text>
-      <text x="100" y="36" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">Seed data: WPs, team,</text>
-      <text x="100" y="48" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">external commitments, constants</text>
-      <text x="100" y="60" text-anchor="middle" fill="#4299e1" font-size="8" font-weight="600" font-family="system-ui">Init-only (dashed)</text>
+      <text x="100" y="20" text-anchor="middle" fill="#2b6cb0" font-size="11" font-weight="bold">config.py</text>
+      <text x="100" y="36" text-anchor="middle" fill="#718096" font-size="9">Seed data: WPs, team,</text>
+      <text x="100" y="48" text-anchor="middle" fill="#718096" font-size="9">external commitments, constants</text>
+      <text x="100" y="60" text-anchor="middle" fill="#4299e1" font-size="8" font-weight="600">Init-only (dashed)</text>
     </g>
 
     <!-- Dashed arrow from workbook.py to config.py -->
@@ -1434,30 +1411,30 @@
     <!-- ===== External: scripts/recalc.py ===== -->
     <g transform="translate(370, 510)">
       <rect width="350" height="55" rx="6" fill="white" stroke="#a0aec0" stroke-width="2" stroke-dasharray="6,3"/>
-      <text x="175" y="22" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold" font-family="system-ui">scripts/recalc.py (External)</text>
-      <text x="175" y="40" text-anchor="middle" fill="#718096" font-size="9" font-family="system-ui">LibreOffice headless &mdash; mandatory formula recalculation</text>
-      <text x="175" y="52" text-anchor="middle" fill="#e53e3e" font-size="8" font-weight="600" font-family="system-ui">Required post-processing step (not called by workbook.py)</text>
+      <text x="175" y="22" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold">scripts/recalc.py (External)</text>
+      <text x="175" y="40" text-anchor="middle" fill="#718096" font-size="9">LibreOffice headless &mdash; mandatory formula recalculation</text>
+      <text x="175" y="52" text-anchor="middle" fill="#e53e3e" font-size="8" font-weight="600">Required post-processing step (not called by workbook.py)</text>
     </g>
 
     <!-- ===== Legend ===== -->
     <g transform="translate(40, 590)">
       <rect width="1020" height="55" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-      <text x="510" y="18" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold" font-family="system-ui">Legend</text>
+      <text x="510" y="18" text-anchor="middle" fill="#4a5568" font-size="11" font-weight="bold">Legend</text>
       <line x1="20" y1="25" x2="1000" y2="25" stroke="#e2e8f0"/>
 
       <line x1="40" y1="42" x2="90" y2="42" stroke="#4a5568" stroke-width="2"/>
-      <text x="100" y="46" fill="#4a5568" font-size="10" font-family="system-ui">Always-used dependency</text>
+      <text x="100" y="46" fill="#4a5568" font-size="10">Always-used dependency</text>
 
       <line x1="280" y1="42" x2="330" y2="42" stroke="#a0aec0" stroke-width="2" stroke-dasharray="5,3"/>
-      <text x="340" y="46" fill="#4a5568" font-size="10" font-family="system-ui">Conditional (init-only / rebuild-only)</text>
+      <text x="340" y="46" fill="#4a5568" font-size="10">Conditional (init-only / rebuild-only)</text>
 
       <line x1="560" y1="42" x2="610" y2="42" stroke="#9f7aea" stroke-width="2"/>
       <polygon points="560,42 568,38 568,46" fill="#9f7aea"/>
       <polygon points="610,42 602,38 602,46" fill="#9f7aea"/>
-      <text x="620" y="46" fill="#4a5568" font-size="10" font-family="system-ui">Bidirectional (formula patch)</text>
+      <text x="620" y="46" fill="#4a5568" font-size="10">Bidirectional (formula patch)</text>
 
       <line x1="810" y1="42" x2="860" y2="42" stroke="#9f7aea" stroke-width="1" stroke-dasharray="4,3"/>
-      <text x="870" y="46" fill="#4a5568" font-size="10" font-family="system-ui">layout dict return</text>
+      <text x="870" y="46" fill="#4a5568" font-size="10">layout dict return</text>
     </g>
   </svg>
 </div>

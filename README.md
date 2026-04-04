@@ -70,6 +70,10 @@ budget-planner/
 │   ├── meta.py               # _META sheet builder
 │   ├── reader.py             # Round-trip reader (Config, Team, Capacity, Actuals)
 │   └── workbook.py           # Orchestrator: init_workbook() + rebuild_workbook()
+├── setup.bat                 # Windows: create venv + install deps
+├── init.bat                  # Windows: generate empty workbook
+├── demo.bat                  # Windows: generate demo workbook
+├── rebuild.bat               # Windows: rebuild from existing workbook
 ├── tests/                    # pytest suite
 ├── scripts/
 │   ├── recalc.py             # LibreOffice formula recalculator

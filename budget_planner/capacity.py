@@ -11,7 +11,7 @@ from budget_planner.layout import (
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    YELLOW_FILL, AMBER_FILL, RED_FILL, CENTER, style_cell, col_letter,
+    AMBER_FILL, RED_FILL, CENTER, style_cell, col_letter,
     write_section_header,
 )
 
@@ -303,11 +303,11 @@ def build_capacity_sheet(ws, wb, team_layout, *,
                 f"-{col_letter(val_col_sum)}{r}"
             )
 
-            # CF: yellow if Sum > Budget (variance < 0)
+            # CF: red if variance < 0 (overallocated)
             diff_cl = col_letter(val_col_diff)
             ws.conditional_formatting.add(
                 f"{diff_cl}{r}:{diff_cl}{r}",
-                FormulaRule(formula=[f"{diff_cl}{r}<0"], fill=YELLOW_FILL),
+                FormulaRule(formula=[f"{diff_cl}{r}<0"], fill=RED_FILL),
             )
 
             wp_rows[wp_id] = r
@@ -383,6 +383,14 @@ def build_capacity_sheet(ws, wb, team_layout, *,
                        fmt="0.00").value = (
                 f"=SUM({cl}{data_row_start}:{cl}{data_row_end})"
             )
+        # Sum/Budget/Variance for TOTAL row
+        scl, bcl = col_letter(val_col_sum), col_letter(val_col_budget)
+        style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+                   fmt="0.00").value = f"=SUM({scl}{data_row_start}:{scl}{data_row_end})"
+        style_cell(ws, r, val_col_budget, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+                   fmt="0.00").value = f"=SUM({bcl}{data_row_start}:{bcl}{data_row_end})"
+        style_cell(ws, r, val_col_diff, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+                   fmt="0.00").value = f"={bcl}{r}-{scl}{r}"
         r += 1
 
         # REMAINING row
@@ -397,11 +405,18 @@ def build_capacity_sheet(ws, wb, team_layout, *,
                        fmt="0.00").value = (
                 f"={SHEET_CONFIG}!B{roster_row}-{cl}{total_row}"
             )
+        # Sum/Budget/Variance for REMAINING row
+        style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+                   fmt="0.00").value = f"={SHEET_CONFIG}!B{roster_row}-{scl}{total_row}"
+        style_cell(ws, r, val_col_budget, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+                   fmt="0.00")
+        style_cell(ws, r, val_col_diff, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+                   fmt="0.00")
         r += 1
 
         # Conditional formatting for TOTAL row
         total_range = (f"{col_letter(month_col_start)}{total_row}:"
-                       f"{col_letter(month_col_end)}{total_row}")
+                       f"{col_letter(val_col_diff)}{total_row}")
         # Amber if > CAPACITY_AMBER_LOAD x Max FTE (added first, lower priority)
         ws.conditional_formatting.add(total_range, FormulaRule(
             formula=[f"{col_letter(month_col_start)}{total_row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}"],
@@ -413,9 +428,16 @@ def build_capacity_sheet(ws, wb, team_layout, *,
             fill=RED_FILL,
         ))
 
-        # Conditional formatting for REMAINING row — red if < 0
+        # Conditional formatting for REMAINING row
         remaining_range = (f"{col_letter(month_col_start)}{remaining_row}:"
-                           f"{col_letter(month_col_end)}{remaining_row}")
+                           f"{col_letter(val_col_diff)}{remaining_row}")
+        # Amber if remaining < 20% of Max FTE (added first, lower priority)
+        remaining_amber_threshold = 1 - CAPACITY_AMBER_LOAD
+        ws.conditional_formatting.add(remaining_range, FormulaRule(
+            formula=[f"{col_letter(month_col_start)}{remaining_row}<{remaining_amber_threshold}*{SHEET_CONFIG}!$B${roster_row}"],
+            fill=AMBER_FILL,
+        ))
+        # Red if < 0 (overallocated — added second, overrides amber)
         ws.conditional_formatting.add(remaining_range, FormulaRule(
             formula=[f"{col_letter(month_col_start)}{remaining_row}<0"],
             fill=RED_FILL,
@@ -430,7 +452,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
         }
 
     # Freeze panes
-    ws.freeze_panes = f"C{first_person_header_row + 1}"
+    ws.freeze_panes = f"C{first_person_header_row}"
 
     return {
         "assign_first_row": assign_first_row,

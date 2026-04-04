@@ -11,7 +11,7 @@ from budget_planner.layout import (
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     GREY_FILL, LIGHT_GREEN_FILL,
-    YELLOW_FILL, style_cell, col_letter, write_section_header,
+    RED_FILL, style_cell, col_letter, write_section_header,
 )
 
 
@@ -211,11 +211,11 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     style_cell(ws, r, val_col_diff, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="0.00").value = f"=SUM({diff_range})"
 
-    # Conditional formatting: yellow fill on variance if nonzero
+    # Conditional formatting: red fill on negative variance
     diff_col_l = col_letter(val_col_diff)
     cell_range = f"{diff_col_l}{first_wp_row}:{diff_col_l}{last_wp_row}"
     ws.conditional_formatting.add(cell_range, FormulaRule(
-        formula=[f"ABS({diff_col_l}{first_wp_row})>0.01"], fill=YELLOW_FILL,
+        formula=[f"{diff_col_l}{first_wp_row}<0"], fill=RED_FILL,
     ))
 
     # Freeze panes: freeze WP ID/Name columns and header rows

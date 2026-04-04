@@ -40,14 +40,14 @@ def _collect_cf_rules(ws):
 # ── Capacity sheet conditional formatting ──
 
 class TestCapacityConditionalFormatting:
-    """Capacity sheet CF: yellow per WP variance + 3 per person (amber/red TOTAL, red REMAINING)."""
+    """Capacity sheet CF: yellow per WP variance + 4 per person (amber/red TOTAL, amber/red REMAINING)."""
 
     def test_capacity_rule_count(self, workbook):
-        """Yellow per WP row + 3 per person = expected total."""
+        """Yellow per WP row + 4 per person = expected total."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
         total_wp_rows = len(DEMO_CAPACITY_ASSIGNMENTS)
-        expected = total_wp_rows + 3 * len(TEAM)
+        expected = total_wp_rows + 4 * len(TEAM)
         assert len(rules) == expected, (
             f"Expected {expected} CF rules on Capacity, got {len(rules)}"
         )
@@ -196,19 +196,19 @@ class TestSummaryConditionalFormatting:
 class TestPlanConditionalFormatting:
     """Plan sheet has yellow fill on variance column when ABS() > 0.01."""
 
-    def test_plan_variance_yellow(self, workbook):
-        """Planned variance column has yellow fill for nonzero differences."""
+    def test_plan_variance_red(self, workbook):
+        """Planned variance column has red fill for negative values."""
         ws = workbook["Plan"]
         rules = _collect_cf_rules(ws)
-        # Plan has exactly 1 CF rule (yellow on variance)
+        # Plan has exactly 1 CF rule (red on negative variance)
         assert len(rules) == 1, f"Expected 1 CF rule on Plan, got {len(rules)}"
         sqref, formulas, fg_color = rules[0]
         assert len(formulas) == 1
-        assert "ABS(" in formulas[0] and ">0.01" in formulas[0], (
-            f"Plan variance formula should contain 'ABS(...)>0.01', got: {formulas[0]}"
+        assert "<0" in formulas[0], (
+            f"Plan variance formula should contain '<0', got: {formulas[0]}"
         )
-        assert fg_color is not None and fg_color.endswith("FFFF00"), (
-            f"Expected YELLOW_FILL (FFFF00), got: {fg_color}"
+        assert fg_color is not None and fg_color.endswith("FFC7CE"), (
+            f"Expected RED_FILL (FFC7CE), got: {fg_color}"
         )
 
 

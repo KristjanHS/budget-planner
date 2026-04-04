@@ -138,7 +138,15 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     trends_ws = wb.create_sheet(SHEET_TRENDS)
     trends_ws.sheet_properties.tabColor = "FFD700"
     style_cell(trends_ws, 1, 1, "Current Month:", font=HEADER_FONT, border=False)
-    style_cell(trends_ws, 1, 2, 1, font=BLUE_INPUT, border=False)
+    # Calculate current_month from project start and today's date
+    from datetime import date
+    from dateutil.relativedelta import relativedelta as _rd
+    _today = date.today()
+    _pstart = project_params["start"]
+    _delta = _rd(_today, _pstart.date() if hasattr(_pstart, 'date') else _pstart)
+    _current_month = max(1, min(_delta.years * 12 + _delta.months + 1,
+                                project_params["months"]))
+    style_cell(trends_ws, 1, 2, _current_month, font=BLUE_INPUT, border=False)
     trends_ws["B1"].comment = Comment(
         "Set to the last month with completed actuals (e.g., 12 for end of Year 1)",
         "Programme Budget Tool",
@@ -173,8 +181,9 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
                      external_commitments=external_commitments,
                      rebuild_warnings=rebuild_warnings)
 
-    # Sheets: _META, Config, Plan, Capacity, Trends, Actuals, Summary
+    # Tab order: _META, Config, Plan, Capacity, Actuals, Trends, Summary
     wb.move_sheet(SHEET_META, offset=0)
+    wb.move_sheet(SHEET_TRENDS, offset=1)  # move after Actuals
 
 
 def _apply_protection(wb):
@@ -315,12 +324,14 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             existing_wb[SHEET_ACTUALS], project_params["months"],
         )
 
-    # Read current_month from Trends for column grouping
-    current_month = 1
-    if SHEET_TRENDS in existing_wb.sheetnames:
-        cm = existing_wb[SHEET_TRENDS].cell(1, 2).value
-        if isinstance(cm, (int, float)):
-            current_month = int(cm)
+    # Calculate current_month from project start and today's date
+    from datetime import date
+    from dateutil.relativedelta import relativedelta as _rd
+    _today = date.today()
+    _pstart = project_params["start"]
+    _delta = _rd(_today, _pstart.date() if hasattr(_pstart, 'date') else _pstart)
+    current_month = max(1, min(_delta.years * 12 + _delta.months + 1,
+                               project_params["months"]))
 
     existing_wb.close()
 

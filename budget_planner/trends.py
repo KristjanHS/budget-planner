@@ -397,9 +397,12 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     chart.title = "Cumulative EUR: Planned vs Actual"
     chart.style = 10
     chart.visible_cells_only = False  # helper rows are hidden
-    chart.y_axis.title = "EUR"
-    chart.x_axis.title = "Month"
     chart.y_axis.numFmt = "\u20ac#,##0"
+    chart.y_axis.tickLblPos = "nextTo"
+    chart.y_axis.delete = False
+    chart.x_axis.axPos = "b"
+    chart.x_axis.tickLblPos = "nextTo"
+    chart.x_axis.delete = False
 
     sheet_name = "Trends"
     range_str = f"'{sheet_name}'!${ms}${{}}:${me}${{}}"
@@ -411,7 +414,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         c = month_col_start + m_idx
         cal_date = project_start + relativedelta(months=m_idx)
         ws.cell(row=helper_row_labels, column=c,
-                value=cal_date.strftime("%b %y"))
+                value=f"M{m_idx + 1}-{cal_date.strftime('%b%y')}")
     ws.row_dimensions[helper_row_labels].hidden = True
 
     cat_ref = AxDataSource(strRef=StrRef(

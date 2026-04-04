@@ -20,7 +20,7 @@
 | `docs/grant-budget-resource-scheduling-flow.md` | 170 | programme lifecycle flow |
 | `docs/grant-actual-cost-budgeting-logic.md` | 143 | programme budgeting logic |
 | `docs/plans/old_already_implemented/` (9 files) | 3,272 | Archived plans |
-| `docs/diagrams/` (5 files) | — | Visual diagrams (jsx, html, mmd) |
+| `grant-architecture.html` | — | Self-contained HTML architecture diagram |
 
 ---
 
@@ -197,4 +197,4 @@ Parallel groups:
 - `CONVENTIONS.md` — already the best-structured doc, single source of truth for formatting
 - `.claude/rules/dev-workflow.md` — practical, non-duplicated
 - `.claude/rules/common-tasks.md` — practical, non-duplicated
-- `docs/diagrams/` — visual assets, no text duplication
+- `grant-architecture.html` — self-contained HTML architecture diagram, no text duplication

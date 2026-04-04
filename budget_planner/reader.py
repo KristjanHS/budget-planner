@@ -91,6 +91,7 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
             "fte": float(ws.cell(r, 3).value or 0),
             "start": int(ws.cell(r, 4).value or 1),
             "end": int(ws.cell(r, 5).value or 1),
+            "type": str(ws.cell(r, 6).value or "flat"),
         })
         r += 1
 
@@ -167,6 +168,42 @@ def read_team_from_config(ws) -> list[dict]:
     return roster
 
 
+def read_capacity_assignments(ws) -> list[dict]:
+    """Read Person-WP Assignments config block from Capacity sheet.
+
+    Returns:
+        List of dicts with keys: person, wp, total_fte, start, end.
+        Empty list if the block is not found.
+    """
+    assignments_header = _find_header_row(
+        ws, "PERSON-WP ASSIGNMENTS", required=False
+    )
+    if assignments_header is None:
+        return []
+
+    # Skip section header + column headers
+    r = assignments_header + 2
+    assignments: list[dict] = []
+    while r <= ws.max_row:
+        person = ws.cell(r, 1).value
+        if person is None or str(person).strip() == "":
+            break
+        wp = ws.cell(r, 2).value
+        total_fte = ws.cell(r, 3).value
+        start = ws.cell(r, 4).value
+        end = ws.cell(r, 5).value
+        assignments.append({
+            "person": str(person),
+            "wp": str(wp or ""),
+            "total_fte": float(total_fte or 0),
+            "start": int(start or 1),
+            "end": int(end or 1),
+        })
+        r += 1
+
+    return assignments
+
+
 def read_capacity_sheet(ws, config_wps, project_months=None,
                         month_col_start=MONTH_COL_START) -> dict:
     """Read Capacity sheet person groups.
@@ -197,6 +234,9 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
 
     # Build WP ID lookup from config_wps
     wp_ids = {wp["id"] for wp in config_wps}
+
+    # ── Read person-WP assignments config block ──
+    assignments = read_capacity_assignments(ws)
 
     # ── Read external commitments config block ──
     external_commitments = []
@@ -335,6 +375,7 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
         }
 
     return {
+        "assignments": assignments,
         "external_commitments": external_commitments,
         "person_groups": person_groups,
     }

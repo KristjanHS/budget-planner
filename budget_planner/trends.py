@@ -1,7 +1,9 @@
 """Trends sheet builder — WP burn rate, cumulative chart, person load."""
 
-from openpyxl.chart import LineChart, Reference
-from openpyxl.chart.series import SeriesLabel
+from dateutil.relativedelta import relativedelta
+from openpyxl.chart import LineChart
+from openpyxl.chart.data_source import AxDataSource, NumDataSource, NumRef, StrRef
+from openpyxl.chart.series import Series, SeriesLabel
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import PatternFill
@@ -389,6 +391,8 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     ws.row_dimensions[helper_row_ceiling].hidden = True
 
     # -- Build the LineChart --
+    # NOTE: Series are constructed manually (not via chart.add_data) because
+    # LibreOffice's recalc macro strips val/tx/cat from add_data-created series.
     chart = LineChart()
     chart.title = "Cumulative EUR: Planned vs Actual"
     chart.style = 10
@@ -396,49 +400,49 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     chart.x_axis.title = "Month"
     chart.y_axis.numFmt = "\u20ac#,##0"
 
-    # Data references (columns C through BJ = cols 3..62)
-    min_col = month_col_start
-    max_col = month_col_end
+    sheet_name = "Trends"
+    range_str = f"'{sheet_name}'!${ms}${{}}:${me}${{}}"
 
-    # Series 1: Cumulative planned (blue solid)
-    planned_ref = Reference(ws, min_col=min_col, max_col=max_col,
-                            min_row=helper_row_planned,
-                            max_row=helper_row_planned)
-    chart.add_data(planned_ref, from_rows=True, titles_from_data=False)
-    s_planned = chart.series[0]
-    s_planned.tx = SeriesLabel(v="Planned")
-    s_planned.graphicalProperties.line.solidFill = "4472C4"
-
-    # Series 2: Cumulative actual (red solid)
-    actual_ref = Reference(ws, min_col=min_col, max_col=max_col,
-                           min_row=helper_row_actual,
-                           max_row=helper_row_actual)
-    chart.add_data(actual_ref, from_rows=True, titles_from_data=False)
-    s_actual = chart.series[1]
-    s_actual.tx = SeriesLabel(v="Actual")
-    s_actual.graphicalProperties.line.solidFill = "FF0000"
-
-    # Series 3: Ceiling (grey dashed)
-    ceiling_ref = Reference(ws, min_col=min_col, max_col=max_col,
-                            min_row=helper_row_ceiling,
-                            max_row=helper_row_ceiling)
-    chart.add_data(ceiling_ref, from_rows=True, titles_from_data=False)
-    s_ceiling = chart.series[2]
-    s_ceiling.tx = SeriesLabel(v="Ceiling")
-    s_ceiling.graphicalProperties.line.solidFill = "808080"
-    s_ceiling.graphicalProperties.line.dashStyle = "dash"
-
-    # X-axis categories: M1..M60 labels
-    # Create labels in a helper area (row after ceiling, hidden)
+    # X-axis category labels (month-year, e.g. "Nov 25")
     helper_row_labels = helper_row_ceiling + 1
+    project_start = project_params["start"]
     for m_idx in range(project_params["months"]):
         c = month_col_start + m_idx
-        ws.cell(row=helper_row_labels, column=c, value=f"M{m_idx + 1}")
+        cal_date = project_start + relativedelta(months=m_idx)
+        ws.cell(row=helper_row_labels, column=c,
+                value=cal_date.strftime("%b %y"))
     ws.row_dimensions[helper_row_labels].hidden = True
 
-    cats = Reference(ws, min_col=min_col, max_col=max_col,
-                     min_row=helper_row_labels, max_row=helper_row_labels)
-    chart.set_categories(cats)
+    cat_ref = AxDataSource(strRef=StrRef(
+        f=range_str.format(helper_row_labels, helper_row_labels)))
+
+    # Series 1: Cumulative planned (blue solid)
+    s_planned = Series(idx=0, order=0)
+    s_planned.tx = SeriesLabel(v="Planned")
+    s_planned.val = NumDataSource(numRef=NumRef(
+        f=range_str.format(helper_row_planned, helper_row_planned)))
+    s_planned.cat = cat_ref
+    s_planned.graphicalProperties.line.solidFill = "4472C4"
+    chart.series.append(s_planned)
+
+    # Series 2: Cumulative actual (red solid)
+    s_actual = Series(idx=1, order=1)
+    s_actual.tx = SeriesLabel(v="Actual")
+    s_actual.val = NumDataSource(numRef=NumRef(
+        f=range_str.format(helper_row_actual, helper_row_actual)))
+    s_actual.cat = cat_ref
+    s_actual.graphicalProperties.line.solidFill = "FF0000"
+    chart.series.append(s_actual)
+
+    # Series 3: Ceiling (grey dashed)
+    s_ceiling = Series(idx=2, order=2)
+    s_ceiling.tx = SeriesLabel(v="Ceiling")
+    s_ceiling.val = NumDataSource(numRef=NumRef(
+        f=range_str.format(helper_row_ceiling, helper_row_ceiling)))
+    s_ceiling.cat = cat_ref
+    s_ceiling.graphicalProperties.line.solidFill = "808080"
+    s_ceiling.graphicalProperties.line.dashStyle = "dash"
+    chart.series.append(s_ceiling)
 
     # Chart dimensions and placement
     chart.width = 30

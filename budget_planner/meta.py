@@ -293,7 +293,7 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
     Cumulative planned EUR per month (running sum of Plan FTE * fte_rate)
     Cumulative actual EUR per month (running sum of Actuals TOTAL row)
     Ceiling line (partner_ceiling repeated per month)
-    Month labels M1-M{pm} for chart X-axis
+    Month-year labels (e.g. "Nov 25") for chart X-axis
 
 ═══ CONVENTIONS ═══
   FONT COLORS (financial model standard):

@@ -8,6 +8,7 @@ import os
 import platform
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 from office.soffice import get_soffice_env
@@ -111,13 +112,32 @@ def recalc(filename, timeout=30):
     elif platform.system() == "Darwin" and has_gtimeout():
         cmd = ["gtimeout", str(timeout)] + cmd
 
+    # Preserve chart XML — LibreOffice strips series data references on save
+    chart_backups = {}
+    with zipfile.ZipFile(abs_path, "r") as zin:
+        for name in zin.namelist():
+            if name.startswith("xl/charts/") and name.endswith(".xml"):
+                chart_backups[name] = zin.read(name)
+
     result = subprocess.run(cmd, capture_output=True, text=True, env=get_soffice_env())
 
-    if result.returncode != 0 and result.returncode != 124:  
+    if result.returncode != 0 and result.returncode != 124:
         error_msg = result.stderr or "Unknown error during recalculation"
         if "Module1" in error_msg or "RecalculateAndSave" not in error_msg:
             return {"error": "LibreOffice macro not configured properly"}
         return {"error": error_msg}
+
+    # Restore chart XML that LibreOffice mangled
+    if chart_backups:
+        tmp_path = abs_path + ".tmp"
+        with zipfile.ZipFile(abs_path, "r") as zin, \
+             zipfile.ZipFile(tmp_path, "w") as zout:
+            for item in zin.infolist():
+                if item.filename in chart_backups:
+                    zout.writestr(item, chart_backups[item.filename])
+                else:
+                    zout.writestr(item, zin.read(item.filename))
+        os.replace(tmp_path, abs_path)
 
     try:
         wb = load_workbook(filename, data_only=True)

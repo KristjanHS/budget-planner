@@ -17,35 +17,86 @@ from budget_planner.styles import (
 
 
 def _wp_config_row(wp_id, work_packages, config_first_wp_row):
-    """Return the Plan config table row for a WP ID."""
+    """Return the Config sheet WP table row for a WP ID."""
     for i, wp in enumerate(work_packages):
         if wp["id"] == wp_id:
             return config_first_wp_row + i
     raise ValueError(f"Unknown WP ID: {wp_id}")
 
 
+# ── Distribution curves ──
+
+def distribute(total_fte: float, num_months: int, curve: str) -> list[float]:
+    """Distribute total_fte across num_months using the given curve.
+
+    All distributions sum exactly to total_fte.
+
+    Args:
+        total_fte: Total person-months to distribute.
+        num_months: Number of active months.
+        curve: One of "flat", "front-loaded", "bell", "back-loaded".
+
+    Returns:
+        List of float values, one per month, summing to total_fte.
+    """
+    if num_months <= 0:
+        return []
+    if num_months == 1:
+        return [total_fte]
+
+    if curve == "flat":
+        per_month = total_fte / num_months
+        return [per_month] * num_months
+
+    if curve == "front-loaded":
+        # Linearly decreasing: weight[i] = num_months - i
+        weights = [num_months - i for i in range(num_months)]
+        total_w = sum(weights)
+        return [total_fte * w / total_w for w in weights]
+
+    if curve == "back-loaded":
+        # Linearly increasing: weight[i] = i + 1
+        weights = [i + 1 for i in range(num_months)]
+        total_w = sum(weights)
+        return [total_fte * w / total_w for w in weights]
+
+    if curve == "bell":
+        # Triangular: ramp up to midpoint, symmetric ramp down
+        mid = (num_months - 1) / 2.0
+        weights = [mid - abs(i - mid) + 1 for i in range(num_months)]
+        total_w = sum(weights)
+        return [total_fte * w / total_w for w in weights]
+
+    # Unknown curve — fall back to flat
+    per_month = total_fte / num_months
+    return [per_month] * num_months
+
+
 def build_capacity_sheet(ws, wb, team_layout, *,
                          project_params=None, work_packages=None,
                          team=None, external_commitments=None,
+                         assignments=None,
                          preserved=None, config_first_wp_row=None):
-    """Build the Capacity sheet: external commitments config + per-person groups.
+    """Build the Capacity sheet: config blocks + per-person groups.
 
-    Monthly FTE cells are always left empty for manual entry (or demo seeding).
-    When ``preserved`` is provided (rebuild), those values are restored.
+    When ``assignments`` is provided, per-person grids show only assigned
+    WPs with auto-distributed monthly values. When empty or None, persons
+    have no programme WP rows (empty template for manual assignment).
 
     Args:
         ws: The Capacity worksheet to populate.
         wb: The parent Workbook.
         team_layout: dict from build_config_sheet with person_rows, etc.
         project_params: dict with keys title, start, months, rate.
-            When None, lazy-imports from config.
-        work_packages: list of WP dicts. When None, lazy-imports from config.
-        team: list of team member dicts. When None, lazy-imports from config.
+        work_packages: list of WP dicts (now includes 'type').
+        team: list of team member dicts.
         external_commitments: list of external commitment dicts.
-            When None, lazy-imports from config.
+        assignments: list of person-WP assignment dicts with keys
+            person, wp, total_fte, start, end. When None, no WP rows.
         preserved: dict keyed by (person_name, wp_id) -> list of monthly
-            float values for round-trip rebuild mode.
-        config_first_wp_row: First WP row in Plan config table. Required.
+            float values for round-trip rebuild mode. NOT USED in new design
+            (monthly values are always recalculated from assignments).
+        config_first_wp_row: First WP row in Config WP table. Required.
 
     Returns:
         capacity_layout dict with row/column positions for all key elements.
@@ -62,6 +113,9 @@ def build_capacity_sheet(ws, wb, team_layout, *,
         if external_commitments is None:
             external_commitments = config.EXTERNAL_COMMITMENTS
 
+    if assignments is None:
+        assignments = []
+
     assert project_params is not None
     assert work_packages is not None
     assert team is not None
@@ -75,23 +129,55 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     val_col_budget = _vcols["budget"]
     val_col_diff = _vcols["diff"]
 
+    # Build WP type lookup
+    wp_type_map = {wp["id"]: wp.get("type", "flat") for wp in work_packages}
+
     ws.sheet_properties.tabColor = "7030A0"
     r = 1
 
     person_rows = team_layout["person_rows"]
 
-    # ── CONFIG BLOCK: EXTERNAL COMMITMENTS ──
-    write_section_header(ws, r, "EXTERNAL COMMITMENTS", merge_end=5)
+    # ── CONFIG BLOCK 1: PERSON-WP ASSIGNMENTS ──
+    write_section_header(ws, r, "PERSON-WP ASSIGNMENTS", merge_end=5)
     r += 1
 
-    config_col_headers = ["Person", "Project", "Total FTE", "Start Month", "End Month"]
-    for ci, h in enumerate(config_col_headers, 1):
+    assign_col_headers = ["Person", "WP", "Total FTE", "Start Month", "End Month"]
+    for ci, h in enumerate(assign_col_headers, 1):
         style_cell(ws, r, ci, h, font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
                    alignment=CENTER)
     r += 1
 
-    config_first_row = r
-    external_config_rows = {}
+    assign_first_row = r
+    assign_config_rows: dict[tuple[str, str], int] = {}
+    for entry in assignments:
+        style_cell(ws, r, 1, entry["person"], font=BLUE_INPUT)
+        style_cell(ws, r, 2, entry["wp"], font=BLUE_INPUT)
+        style_cell(ws, r, 3, entry["total_fte"], font=BLUE_INPUT, fmt="0.00")
+        style_cell(ws, r, 4, entry["start"], font=BLUE_INPUT, fmt="0")
+        style_cell(ws, r, 5, entry["end"], font=BLUE_INPUT, fmt="0")
+        assign_config_rows[(entry["person"], entry["wp"])] = r
+        r += 1
+    assign_last_row = r - 1 if assignments else r
+
+    # Collapse assignments block
+    if assignments:
+        ws.row_dimensions.group(assign_first_row - 1, assign_last_row, hidden=True)
+
+    # Gap row
+    r += 1
+
+    # ── CONFIG BLOCK 2: EXTERNAL COMMITMENTS ──
+    write_section_header(ws, r, "EXTERNAL COMMITMENTS", merge_end=5)
+    r += 1
+
+    ext_col_headers = ["Person", "Project", "Total FTE", "Start Month", "End Month"]
+    for ci, h in enumerate(ext_col_headers, 1):
+        style_cell(ws, r, ci, h, font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
+                   alignment=CENTER)
+    r += 1
+
+    ext_first_row = r
+    external_config_rows: dict[tuple[str, str], int] = {}
     for entry in external_commitments:
         style_cell(ws, r, 1, entry["person"], font=BLUE_INPUT)
         style_cell(ws, r, 2, entry["project"], font=BLUE_INPUT)
@@ -100,7 +186,11 @@ def build_capacity_sheet(ws, wb, team_layout, *,
         style_cell(ws, r, 5, entry["end"], font=BLUE_INPUT, fmt="0")
         external_config_rows[(entry["person"], entry["project"])] = r
         r += 1
-    config_last_row = r - 1 if external_commitments else r
+    ext_last_row = r - 1 if external_commitments else r
+
+    # Collapse external commitments block
+    if external_commitments:
+        ws.row_dimensions.group(ext_first_row - 1, ext_last_row, hidden=True)
 
     # Gap row
     r += 1
@@ -117,8 +207,13 @@ def build_capacity_sheet(ws, wb, team_layout, *,
 
     first_person_header_row = r
 
+    # ── Build per-person assignment lookup ──
+    person_assignments: dict[str, list[dict]] = {}
+    for entry in assignments:
+        person_assignments.setdefault(entry["person"], []).append(entry)
+
     # ── PER-PERSON GROUPS ──
-    person_groups = {}
+    person_groups: dict[str, dict] = {}
 
     for member in team:
         name = member["name"]
@@ -136,13 +231,17 @@ def build_capacity_sheet(ws, wb, team_layout, *,
 
         # Track all data rows for this person (for TOTAL formula)
         data_row_start = r
-        wp_rows = {}
-        external_rows = {}
+        wp_rows: dict[str, int] = {}
+        external_rows: dict[str, int] = {}
 
-        # Programme WP rows — one row per WP for every person
+        # Programme WP rows — only assigned WPs for this person
+        my_assignments = person_assignments.get(name, [])
         first_wp_row_for_person = True
-        for wp in work_packages:
-            wp_id = wp["id"]
+        for asgn in my_assignments:
+            wp_id = asgn["wp"]
+            wp = next((w for w in work_packages if w["id"] == wp_id), None)
+            if wp is None:
+                continue
             config_row = _wp_config_row(wp_id, work_packages, config_first_wp_row)
 
             # Col A: formula ref to Config WP ID
@@ -150,31 +249,25 @@ def build_capacity_sheet(ws, wb, team_layout, *,
             # Col B: formula ref to Config WP Name
             style_cell(ws, r, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
-            # Monthly cells
-            # Check for preserved round-trip data
-            if preserved and (name, wp_id) in preserved:
-                monthly_values = preserved[(name, wp_id)]
-            else:
-                monthly_values = None
+            # Calculate distribution
+            asgn_start = asgn["start"]
+            asgn_end = asgn["end"]
+            num_active = asgn_end - asgn_start + 1
+            wp_curve = wp_type_map.get(wp_id, "flat")
+            monthly_values = distribute(asgn["total_fte"], num_active, wp_curve)
 
+            # Write monthly cells
             comment_added = False
+            active_idx = 0
             for mi in range(project_params["months"]):
                 c = month_col_start + mi
                 month_num = mi + 1
 
-                if wp["start"] <= month_num <= wp["end"]:
-                    if monthly_values is not None and mi < len(monthly_values) and monthly_values[mi] is not None:
-                        seed_value = monthly_values[mi]
-                    else:
-                        seed_value = None
-
-                    if seed_value is not None:
-                        style_cell(ws, r, c, seed_value, font=BLUE_INPUT, fmt="0.00")
-                    else:
-                        style_cell(ws, r, c, font=BLUE_INPUT, fmt="0.00")
-                    # Add comment on first active cell of first WP row per person
-                    if (first_wp_row_for_person and not comment_added
-                            and seed_value is None):
+                if asgn_start <= month_num <= asgn_end:
+                    val = monthly_values[active_idx] if active_idx < len(monthly_values) else 0
+                    active_idx += 1
+                    style_cell(ws, r, c, round(val, 4), font=BLUE_INPUT, fmt="0.00")
+                    if first_wp_row_for_person and not comment_added and val == 0:
                         ws.cell(row=r, column=c).comment = Comment(
                             "Enter monthly FTE allocation for each work "
                             "package and external project.",
@@ -191,11 +284,14 @@ def build_capacity_sheet(ws, wb, team_layout, *,
             style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                        fmt="0.00").value = f"=SUM({sum_range})"
 
-            # Budget: WP total FTE from Config WP table
-            style_cell(ws, r, val_col_budget, font=GREEN_XREF,
-                       fmt="0.00").value = (
-                f"={SHEET_CONFIG}!C{config_row}"
-            )
+            # Budget: ref to assignment config block Total FTE
+            asgn_row = assign_config_rows.get((name, wp_id))
+            if asgn_row is not None:
+                style_cell(ws, r, val_col_budget, font=GREEN_XREF,
+                           fmt="0.00").value = f"=C{asgn_row}"
+            else:
+                style_cell(ws, r, val_col_budget, font=GREEN_XREF,
+                           fmt="0.00").value = f"={SHEET_CONFIG}!C{config_row}"
 
             # Variance: Budget - Sum
             style_cell(ws, r, val_col_diff, font=BLACK_FORMULA,
@@ -226,13 +322,21 @@ def build_capacity_sheet(ws, wb, team_layout, *,
             # Col B: empty
             style_cell(ws, r, 2, font=BLUE_INPUT)
 
-            # Monthly cells — always empty for manual entry
+            # Distribute external commitment using flat curve
+            ext_start = entry["start"]
+            ext_end = entry["end"]
+            ext_months = ext_end - ext_start + 1
+            ext_values = distribute(entry["fte"], ext_months, "flat")
+
+            ext_idx = 0
             for mi in range(project_params["months"]):
                 c = month_col_start + mi
                 month_num = mi + 1
 
-                if entry["start"] <= month_num <= entry["end"]:
-                    style_cell(ws, r, c, font=BLUE_INPUT, fmt="0.00")
+                if ext_start <= month_num <= ext_end:
+                    val = ext_values[ext_idx] if ext_idx < len(ext_values) else 0
+                    ext_idx += 1
+                    style_cell(ws, r, c, round(val, 4), font=BLUE_INPUT, fmt="0.00")
                 else:
                     style_cell(ws, r, c, "", font=BLUE_INPUT, fill=GREY_FILL,
                                fmt="0.00")
@@ -258,6 +362,12 @@ def build_capacity_sheet(ws, wb, team_layout, *,
             r += 1
 
         data_row_end = r - 1
+
+        # Handle case where person has no data rows
+        if data_row_end < data_row_start:
+            data_row_end = data_row_start
+            # Write an empty placeholder row so TOTAL SUM has a range
+            r += 1
 
         # TOTAL row
         total_row = r
@@ -320,10 +430,13 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     ws.freeze_panes = f"C{first_person_header_row + 1}"
 
     return {
-        "config_first_row": config_first_row,
-        "config_last_row": config_last_row,
+        "assign_first_row": assign_first_row,
+        "assign_last_row": assign_last_row,
+        "config_first_row": ext_first_row,
+        "config_last_row": ext_last_row,
         "year_header_row": year_header_row,
         "month_header_row": month_header_row,
         "person_groups": person_groups,
         "external_config_rows": external_config_rows,
+        "assign_config_rows": assign_config_rows,
     }

@@ -28,9 +28,13 @@ def _subcommand_mode():
                             default="output/budget_plan.xlsx")
         args = parser.parse_args(sys.argv[2:])
         output = args.output
-        init_workbook(output_path=output)
         if args.demo:
+            from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
+            init_workbook(output_path=output,
+                          assignments=DEMO_CAPACITY_ASSIGNMENTS)
             seed_demo_data(output)
+        else:
+            init_workbook(output_path=output)
 
     elif command == "rebuild":
         parser.add_argument("path", nargs="?",

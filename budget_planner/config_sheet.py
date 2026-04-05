@@ -20,7 +20,8 @@ from budget_planner.styles import (
 )
 
 
-def build_config_sheet(ws, wb, project_params, work_packages, team=None):
+def build_config_sheet(ws, wb, project_params, work_packages, team=None,
+                       reporting_periods=None):
     """Build the Config sheet with project parameters, work packages table, and team roster.
 
     Args:
@@ -29,6 +30,8 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
         project_params: dict with keys 'title', 'start', 'months', 'rate'.
         work_packages: list of dicts with keys 'id', 'name', 'fte', 'start', 'end'.
         team: list of dicts with keys 'name', 'max_fte'. When None, lazy-imports from config.
+        reporting_periods: list of dicts with keys 'id', 'start', 'end'.
+            When None, lazy-imports from config.
 
     Returns:
         config_layout dict with keys:
@@ -41,6 +44,8 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
             'roster_first_row': int,
             'roster_last_row': int,
             'person_rows': dict mapping person name to row number,
+            'rp_first_row': int,
+            'rp_last_row': int,
     """
     if team is None:
         from budget_planner import config
@@ -165,6 +170,36 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
         r += 1
     roster_last_row = r - 1
 
+    # ── Section D: Reporting Periods ──
+    if reporting_periods is None:
+        from budget_planner.config import REPORTING_PERIODS
+        reporting_periods = REPORTING_PERIODS
+
+    r = roster_last_row + 2  # gap row after roster
+
+    # Section header — merged A:C
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+    style_cell(ws, r, 1, value="REPORTING PERIODS",
+               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
+    for c in range(2, 4):
+        style_cell(ws, r, c, fill=SECTION_FILL)
+    r += 1
+
+    # Column headers
+    for col, hdr in enumerate(["Period", "Start Month", "End Month"], start=1):
+        style_cell(ws, r, col, hdr, font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
+                   alignment=CENTER)
+    r += 1
+
+    # RP data rows
+    rp_first_row = r
+    for rp in reporting_periods:
+        style_cell(ws, r, 1, rp["id"], font=BLUE_INPUT, border=False)
+        style_cell(ws, r, 2, rp["start"], font=BLUE_INPUT, fmt="0", border=False)
+        style_cell(ws, r, 3, rp["end"], font=BLUE_INPUT, fmt="0", border=False)
+        r += 1
+    rp_last_row = r - 1
+
     # ── Named Ranges ──
     start_row = param_rows["Project Start"]
     dn_start = DefinedName("project_start", attr_text=f"{SHEET_CONFIG}!$B${start_row}")
@@ -194,4 +229,6 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
         "roster_first_row": roster_first_row,
         "roster_last_row": roster_last_row,
         "person_rows": person_rows,
+        "rp_first_row": rp_first_row,
+        "rp_last_row": rp_last_row,
     }

@@ -85,6 +85,8 @@ def test_config_sheet_layout_keys():
     assert "roster_first_row" in layout
     assert "roster_last_row" in layout
     assert "person_rows" in layout
+    assert "rp_first_row" in layout
+    assert "rp_last_row" in layout
 
 
 def test_config_sheet_blue_font():
@@ -128,6 +130,49 @@ def test_config_eu_ceiling_named_range():
     build_config_sheet(ws, wb, _sample_params(), _sample_wps())
     names = set(wb.defined_names.keys())
     assert "eu_annual_ceiling_pm" in names
+
+
+def test_reporting_periods_section():
+    """Config sheet has REPORTING PERIODS section with correct data."""
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    rps = [
+        {"id": "RP1", "start": 1, "end": 6},
+        {"id": "RP2", "start": 7, "end": 12},
+    ]
+    layout = build_config_sheet(ws, wb, _sample_params(), _sample_wps(),
+                                reporting_periods=rps)
+
+    # Find REPORTING PERIODS section header
+    rp_header_row = None
+    for r in range(1, ws.max_row + 1):
+        val = ws.cell(r, 1).value
+        if val and "REPORTING PERIODS" in str(val).upper():
+            rp_header_row = r
+            break
+    assert rp_header_row is not None, "REPORTING PERIODS section not found"
+
+    # Column headers row
+    col_header_row = rp_header_row + 1
+    assert ws.cell(col_header_row, 1).value == "Period"
+    assert ws.cell(col_header_row, 2).value == "Start Month"
+    assert ws.cell(col_header_row, 3).value == "End Month"
+
+    # Data rows — should match seed data count
+    first_data_row = col_header_row + 1
+    for i, rp in enumerate(rps):
+        row = first_data_row + i
+        assert ws.cell(row, 1).value == rp["id"]
+        assert ws.cell(row, 2).value == rp["start"]
+        assert ws.cell(row, 3).value == rp["end"]
+        # Blue input font
+        assert ws.cell(row, 1).font.color.rgb == "000000FF"
+
+    # Layout dict includes RP rows
+    assert layout["rp_first_row"] == first_data_row
+    assert layout["rp_last_row"] == first_data_row + len(rps) - 1
 
 
 def test_config_round_trip_eu_ceiling():

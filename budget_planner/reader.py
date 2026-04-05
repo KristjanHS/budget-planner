@@ -354,8 +354,8 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
             col_a = ws.cell(dr, 1).value
             col_b = ws.cell(dr, 2).value
 
-            # Skip TOTAL and REMAINING rows
-            if col_b and str(col_b).upper() in ("TOTAL", "REMAINING"):
+            # Skip TOTAL, REMAINING, and EU TOTAL rows
+            if col_b and str(col_b).upper() in ("TOTAL", "REMAINING", "EU TOTAL"):
                 continue
 
             # Try to classify the row

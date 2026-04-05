@@ -11,7 +11,7 @@ from budget_planner.layout import (
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT, TITLE_FONT,
     SECTION_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    AMBER_FILL, RED_FILL, CENTER, style_cell, col_letter,
+    CF_AMBER_FILL, CF_RED_FILL, CENTER, style_cell, col_letter,
     write_section_header,
 )
 
@@ -178,7 +178,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
         var_col_l = col_letter(var_col)
         var_range = f"{var_col_l}{SUMMARY_FIRST_WP_ROW}:{var_col_l}{SUMMARY_LAST_WP_ROW}"
         summary.conditional_formatting.add(var_range, FormulaRule(
-            formula=[f"{var_col_l}{SUMMARY_FIRST_WP_ROW}<0"], fill=RED_FILL,
+            formula=[f"{var_col_l}{SUMMARY_FIRST_WP_ROW}<0"], fill=CF_RED_FILL,
         ))
 
     # Conditional formatting: red on negative Variance EUR (project total)
@@ -186,7 +186,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
     total_var_col_l = col_letter(total_var_col)
     total_var_range = f"{total_var_col_l}{SUMMARY_FIRST_WP_ROW}:{total_var_col_l}{SUMMARY_LAST_WP_ROW}"
     summary.conditional_formatting.add(total_var_range, FormulaRule(
-        formula=[f"{total_var_col_l}{SUMMARY_FIRST_WP_ROW}<0"], fill=RED_FILL,
+        formula=[f"{total_var_col_l}{SUMMARY_FIRST_WP_ROW}<0"], fill=CF_RED_FILL,
     ))
 
     # ── BUDGET OVERVIEW ──
@@ -234,12 +234,12 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
     # Amber if < 10% of ceiling
     summary.conditional_formatting.add(
         f"B{remaining_row}", FormulaRule(
-            formula=[f"B{remaining_row}<B{ceiling_row}*0.1"], fill=AMBER_FILL,
+            formula=[f"B{remaining_row}<B{ceiling_row}*0.1"], fill=CF_AMBER_FILL,
         ))
     # Red if negative
     summary.conditional_formatting.add(
         f"B{remaining_row}", FormulaRule(
-            formula=[f"B{remaining_row}<0"], fill=RED_FILL,
+            formula=[f"B{remaining_row}<0"], fill=CF_RED_FILL,
         ))
 
     summary.freeze_panes = f"C{SUMMARY_FIRST_WP_ROW}"

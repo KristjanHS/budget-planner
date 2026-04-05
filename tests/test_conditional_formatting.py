@@ -31,8 +31,13 @@ def _collect_cf_rules(ws):
         for rule in cf.rules:
             formulas = list(rule.formula) if rule.formula else []
             fg = None
-            if rule.dxf and rule.dxf.fill and rule.dxf.fill.fgColor:
-                fg = str(rule.dxf.fill.fgColor.rgb)
+            if rule.dxf and rule.dxf.fill:
+                # CF fills use bgColor (DXF context); fall back to fgColor
+                fill = rule.dxf.fill
+                if fill.bgColor and str(fill.bgColor.rgb) != "00000000":
+                    fg = str(fill.bgColor.rgb)
+                elif fill.fgColor and str(fill.fgColor.rgb) != "00000000":
+                    fg = str(fill.fgColor.rgb)
             results.append((sqref, formulas, fg))
     return results
 

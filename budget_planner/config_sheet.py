@@ -13,7 +13,7 @@ from budget_planner.styles import (
     SECTION_FILL,
     TITLE_FONT,
     LIGHT_BLUE_FILL,
-    YELLOW_FILL,
+    CF_YELLOW_FILL,
     CENTER,
     style_cell,
 )
@@ -131,7 +131,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
     for row_idx in range(first_data_row, last_data_row + 1):
         rule = FormulaRule(
             formula=[f"$D{row_idx}>$E{row_idx}"],
-            fill=YELLOW_FILL,
+            fill=CF_YELLOW_FILL,
         )
         ws.conditional_formatting.add(f"A{row_idx}:H{row_idx}", rule)
 

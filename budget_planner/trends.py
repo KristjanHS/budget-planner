@@ -6,7 +6,6 @@ from openpyxl.chart.data_source import AxDataSource, NumDataSource, NumRef, StrR
 from openpyxl.chart.series import Series, SeriesLabel
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
-from openpyxl.styles import PatternFill
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS, SHEET_CAPACITY,
@@ -19,10 +18,10 @@ from budget_planner.styles import (
     CENTER, style_cell, col_letter, write_section_header,
 )
 
-# Local fill constants for conditional formatting
-_GREEN_CF_FILL = PatternFill("solid", fgColor="E2EFDA")
-_AMBER_CF_FILL = PatternFill("solid", fgColor="FFD966")
-_RED_CF_FILL = PatternFill("solid", fgColor="FFC7CE")
+# CF fills imported from styles — DXF context requires bgColor
+from budget_planner.styles import CF_GREEN_FILL as _GREEN_CF_FILL
+from budget_planner.styles import CF_AMBER_FILL as _AMBER_CF_FILL
+from budget_planner.styles import CF_RED_FILL as _RED_CF_FILL
 
 
 def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_layout, *,

@@ -11,7 +11,7 @@ from budget_planner.layout import (
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    AMBER_FILL, RED_FILL, CENTER, style_cell, col_letter,
+    CF_AMBER_FILL, CF_RED_FILL, CENTER, style_cell, col_letter,
     write_section_header,
 )
 
@@ -307,7 +307,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
             diff_cl = col_letter(val_col_diff)
             ws.conditional_formatting.add(
                 f"{diff_cl}{r}:{diff_cl}{r}",
-                FormulaRule(formula=[f"{diff_cl}{r}<0"], fill=RED_FILL),
+                FormulaRule(formula=[f"{diff_cl}{r}<0"], fill=CF_RED_FILL),
             )
 
             wp_rows[wp_id] = r
@@ -420,12 +420,12 @@ def build_capacity_sheet(ws, wb, team_layout, *,
         # Amber if > CAPACITY_AMBER_LOAD x Max FTE (added first, lower priority)
         ws.conditional_formatting.add(total_range, FormulaRule(
             formula=[f"{col_letter(month_col_start)}{total_row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}"],
-            fill=AMBER_FILL,
+            fill=CF_AMBER_FILL,
         ))
         # Red if > Max FTE (added second, overrides amber for overcommitted cells)
         ws.conditional_formatting.add(total_range, FormulaRule(
             formula=[f"{col_letter(month_col_start)}{total_row}>{SHEET_CONFIG}!$B${roster_row}"],
-            fill=RED_FILL,
+            fill=CF_RED_FILL,
         ))
 
         # Conditional formatting for REMAINING row
@@ -435,12 +435,12 @@ def build_capacity_sheet(ws, wb, team_layout, *,
         remaining_amber_threshold = 1 - CAPACITY_AMBER_LOAD
         ws.conditional_formatting.add(remaining_range, FormulaRule(
             formula=[f"{col_letter(month_col_start)}{remaining_row}<{remaining_amber_threshold}*{SHEET_CONFIG}!$B${roster_row}"],
-            fill=AMBER_FILL,
+            fill=CF_AMBER_FILL,
         ))
         # Red if < 0 (overallocated — added second, overrides amber)
         ws.conditional_formatting.add(remaining_range, FormulaRule(
             formula=[f"{col_letter(month_col_start)}{remaining_row}<0"],
-            fill=RED_FILL,
+            fill=CF_RED_FILL,
         ))
 
         person_groups[name] = {

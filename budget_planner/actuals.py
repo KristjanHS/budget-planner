@@ -10,7 +10,7 @@ from budget_planner.layout import (
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     GREY_FILL, LIGHT_GREEN_FILL,
-    RED_FILL, AMBER_FILL, style_cell, col_letter, write_section_header,
+    CF_RED_FILL, CF_AMBER_FILL, style_cell, col_letter, write_section_header,
 )
 
 
@@ -185,7 +185,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
     diff_col_l = col_letter(val_col_diff)
     cell_range = f"{diff_col_l}{first_wp_row}:{diff_col_l}{last_wp_row}"
     ws.conditional_formatting.add(cell_range, FormulaRule(
-        formula=[f"{diff_col_l}{first_wp_row}<0"], fill=RED_FILL,
+        formula=[f"{diff_col_l}{first_wp_row}<0"], fill=CF_RED_FILL,
     ))
 
     # -- Conditional formatting: % Ceiling column (amber >ACTUALS_AMBER_PCT_CEIL, red >100%) --
@@ -193,10 +193,10 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
     pct_range = f"{pct_col_l}{first_wp_row}:{pct_col_l}{last_wp_row}"
     # Amber first (lower priority), then red overrides
     ws.conditional_formatting.add(pct_range, FormulaRule(
-        formula=[f"{pct_col_l}{first_wp_row}>{ACTUALS_AMBER_PCT_CEIL}"], fill=AMBER_FILL,
+        formula=[f"{pct_col_l}{first_wp_row}>{ACTUALS_AMBER_PCT_CEIL}"], fill=CF_AMBER_FILL,
     ))
     ws.conditional_formatting.add(pct_range, FormulaRule(
-        formula=[f"{pct_col_l}{first_wp_row}>1"], fill=RED_FILL,
+        formula=[f"{pct_col_l}{first_wp_row}>1"], fill=CF_RED_FILL,
     ))
 
     # -- Conditional formatting: Breach In column (amber <ACTUALS_AMBER_BREACH_MONTHS, red <ACTUALS_RED_BREACH_MONTHS) --
@@ -204,10 +204,10 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
     breach_range = f"{breach_col_l}{first_wp_row}:{breach_col_l}{last_wp_row}"
     # Amber first (lower priority), then red overrides
     ws.conditional_formatting.add(breach_range, FormulaRule(
-        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_AMBER_BREACH_MONTHS}"], fill=AMBER_FILL,
+        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_AMBER_BREACH_MONTHS}"], fill=CF_AMBER_FILL,
     ))
     ws.conditional_formatting.add(breach_range, FormulaRule(
-        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_RED_BREACH_MONTHS}"], fill=RED_FILL,
+        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_RED_BREACH_MONTHS}"], fill=CF_RED_FILL,
     ))
 
     # Freeze panes

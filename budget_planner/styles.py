@@ -19,6 +19,12 @@ AMBER_FILL = PatternFill("solid", fgColor="FFD966")
 RED_FILL = PatternFill("solid", fgColor="FFC7CE")
 WHITE_FILL = PatternFill("solid", fgColor="FFFFFF")
 
+# CF (conditional formatting) fills — DXF context requires bgColor, not fgColor
+CF_YELLOW_FILL = PatternFill(bgColor="FFFF00")
+CF_AMBER_FILL = PatternFill(bgColor="FFD966")
+CF_RED_FILL = PatternFill(bgColor="FFC7CE")
+CF_GREEN_FILL = PatternFill(bgColor="E2EFDA")
+
 THIN_BORDER = Border(
     left=Side(style="thin"), right=Side(style="thin"),
     top=Side(style="thin"), bottom=Side(style="thin")

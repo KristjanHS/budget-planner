@@ -154,20 +154,19 @@ def read_team_from_config(ws) -> list[dict]:
         ws, "Person", col=1, max_row=roster_section + 5,
     )
 
-    # Read roster rows until empty name or next section header
+    # Read roster rows until empty name or non-numeric max_fte (next section)
     roster: list[dict] = []
     r = person_header + 1
     while r <= ws.max_row:
         name = ws.cell(r, 1).value
         if name is None or str(name).strip() == "":
             break
-        name_str = str(name).strip()
-        # Stop at next section header (all-caps labels like "REPORTING PERIODS")
-        if name_str.isupper() and len(name_str) > 3:
-            break
         max_fte = ws.cell(r, 2).value
+        # Roster rows have numeric max_fte; a string means we hit a header row
+        if max_fte is not None and not isinstance(max_fte, (int, float)):
+            break
         roster.append({
-            "name": name_str,
+            "name": str(name).strip(),
             "max_fte": float(max_fte or 0),
         })
         r += 1

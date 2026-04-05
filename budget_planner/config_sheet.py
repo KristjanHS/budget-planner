@@ -198,7 +198,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
         style_cell(ws, r, 2, rp["start"], font=BLUE_INPUT, fmt="0", border=False)
         style_cell(ws, r, 3, rp["end"], font=BLUE_INPUT, fmt="0", border=False)
         r += 1
-    rp_last_row = r - 1
+    rp_last_row = r - 1 if reporting_periods else rp_first_row
 
     # ── Named Ranges ──
     start_row = param_rows["Project Start"]

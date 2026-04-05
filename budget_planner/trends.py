@@ -50,6 +50,10 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         if team is None:
             team = config.TEAM
 
+    if reporting_periods is None:
+        from budget_planner.config import REPORTING_PERIODS
+        reporting_periods = REPORTING_PERIODS
+
     assert project_params is not None
     assert work_packages is not None
     assert team is not None
@@ -418,6 +422,17 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
                 value=f"M{m_idx + 1}-{cal_date.strftime('%b%y')}")
     ws.row_dimensions[helper_row_labels].hidden = True
 
+    # Helper Row 5: RP boundary markers (ceiling value at each RP end month)
+    helper_row_rp = helper_row_labels + 1
+    for rp in reporting_periods:
+        boundary_col = month_col_start + rp["end"] - 1
+        if boundary_col <= month_col_end:
+            style_cell(ws, helper_row_rp, boundary_col,
+                       font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+                "=partner_ceiling"
+            )
+    ws.row_dimensions[helper_row_rp].hidden = True
+
     cat_ref = AxDataSource(strRef=StrRef(
         f=range_str.format(helper_row_labels, helper_row_labels)))
 
@@ -449,6 +464,21 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     s_ceiling.graphicalProperties.line.dashStyle = "dash"
     chart.series.append(s_ceiling)
 
+    # Series 4: RP boundaries (green diamond markers at ceiling level)
+    from openpyxl.chart.marker import Marker
+    s_rp = Series(idx=3, order=3)
+    s_rp.tx = SeriesLabel(v="RP End")
+    s_rp.val = NumDataSource(numRef=NumRef(
+        f=range_str.format(helper_row_rp, helper_row_rp)))
+    s_rp.cat = cat_ref
+    s_rp.graphicalProperties.line.solidFill = "00B050"
+    s_rp.graphicalProperties.line.dashStyle = "dot"
+    rp_marker = Marker(symbol="diamond", size=10)
+    assert rp_marker.graphicalProperties is not None
+    rp_marker.graphicalProperties.solidFill = "00B050"
+    s_rp.marker = rp_marker
+    chart.series.append(s_rp)
+
     # Chart dimensions and placement
     chart.width = 30
     chart.height = 15
@@ -477,4 +507,5 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         "helper_row_actual": helper_row_actual,
         "helper_row_ceiling": helper_row_ceiling,
         "helper_row_labels": helper_row_labels,
+        "helper_row_rp": helper_row_rp,
     }

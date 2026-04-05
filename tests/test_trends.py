@@ -1,7 +1,13 @@
 """Tests for the Trends sheet builder."""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import pytest
 import openpyxl
+
+if TYPE_CHECKING:
+    from openpyxl.worksheet.worksheet import Worksheet
 
 from budget_planner.workbook import init_workbook, seed_demo_data
 from budget_planner.config import (
@@ -259,12 +265,12 @@ def test_cumulative_chart_exists(trends_ws):
     assert len(trends_ws._charts) >= 1
 
 
-def test_chart_has_three_source_rows(trends_ws):
-    """Chart data spans 3 helper rows (planned, actual, ceiling).
+def test_chart_has_four_source_rows(trends_ws):
+    """Chart data spans 4 helper rows (planned, actual, ceiling, rp).
 
     Note: openpyxl expands multi-column References into individual series
     on save/load roundtrip, so we check chart title + that series count
-    is a multiple of 3 (one per month column per source row).
+    is a multiple of 4 (one per month column per source row).
     """
     chart = trends_ws._charts[0]
     # After roundtrip the title is a rich Title object; extract text runs
@@ -272,9 +278,9 @@ def test_chart_has_three_source_rows(trends_ws):
         run.t for p in chart.title.tx.rich.paragraphs for run in p.r
     )
     assert "Planned vs Actual" in title_text
-    # 60 months * 3 rows = 180 series after roundtrip expansion
-    assert len(chart.series) >= 3
-    assert len(chart.series) % 3 == 0
+    # 60 months * 4 rows = 240 series after roundtrip expansion
+    assert len(chart.series) >= 4
+    assert len(chart.series) % 4 == 0
 
 
 def test_helper_rows_hidden(trends_ws):
@@ -284,8 +290,8 @@ def test_helper_rows_hidden(trends_ws):
         r for r in range(1, trends_ws.max_row + 1)
         if trends_ws.row_dimensions[r].hidden
     ]
-    assert len(hidden_rows) == 4, (
-        f"Expected 4 hidden helper rows (planned, actual, ceiling, labels), "
+    assert len(hidden_rows) == 5, (
+        f"Expected 5 hidden helper rows (planned, actual, ceiling, labels, rp), "
         f"found {len(hidden_rows)}: {hidden_rows}"
     )
     # Verify they are contiguous
@@ -326,10 +332,11 @@ def _make_team(n, work_packages):
     ]
 
 
-def _build_trends_only(num_wps, num_team):
+def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
     """Build a workbook with given WP/team counts and return the Trends ws + layout."""
     from datetime import datetime
     from openpyxl import Workbook as WB
+    from openpyxl.worksheet.worksheet import Worksheet
     from budget_planner.workbook import _build_all_sheets
     from budget_planner.layout import SHEET_META, SHEET_TRENDS
 
@@ -350,6 +357,7 @@ def _build_trends_only(num_wps, num_team):
                       external_commitments)
 
     trends_ws = wb[SHEET_TRENDS]
+    assert isinstance(trends_ws, Worksheet)
     return trends_ws
 
 
@@ -403,8 +411,8 @@ def test_trends_no_row_collisions(num_wps, num_team):
         r for r in range(1, ws.max_row + 1)
         if ws.row_dimensions[r].hidden
     )
-    assert len(hidden_rows) == 4, (
-        f"Expected 4 hidden helper rows, found {len(hidden_rows)}: {hidden_rows}"
+    assert len(hidden_rows) == 5, (
+        f"Expected 5 hidden helper rows, found {len(hidden_rows)}: {hidden_rows}"
     )
 
     # Verify no overlaps
@@ -428,3 +436,24 @@ def test_trends_no_row_collisions(num_wps, num_team):
         assert hidden_rows[i] == hidden_rows[i - 1] + 1, (
             f"Hidden helper rows not contiguous: {hidden_rows}"
         )
+
+
+def test_chart_has_rp_boundary_series():
+    """Trends cumulative chart has an RP boundary marker series."""
+    ws = _build_trends_only(num_wps=3, num_team=2)
+
+    # Find the chart
+    assert len(ws._charts) == 1  # type: ignore[attr-defined]
+    chart = ws._charts[0]  # type: ignore[attr-defined]
+
+    # Should have 4 series: Planned, Actual, Ceiling, RP End
+    assert len(chart.series) == 4, (
+        f"Expected 4 chart series, got {len(chart.series)}"
+    )
+
+    # Last series should be "RP End"
+    rp_series = chart.series[3]
+    assert rp_series.tx is not None
+    # SeriesLabel value should contain "RP"
+    label_val = getattr(rp_series.tx, 'v', None)
+    assert label_val is not None and "RP" in label_val

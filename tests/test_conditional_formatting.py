@@ -45,14 +45,17 @@ def _collect_cf_rules(ws):
 # ── Capacity sheet conditional formatting ──
 
 class TestCapacityConditionalFormatting:
-    """Capacity sheet CF: yellow per WP variance + 4 per person (amber/red TOTAL, amber/red REMAINING)."""
+    """Capacity sheet CF: yellow per WP variance + 4 per person (amber/red TOTAL,
+    amber/red REMAINING) + 2*years per person (EU ceiling red/amber)."""
 
     def test_capacity_rule_count(self, workbook):
-        """Yellow per WP row + 4 per person = expected total."""
+        """Yellow per WP row + 4 per person + 2*years per person (EU ceiling)."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
         total_wp_rows = len(DEMO_CAPACITY_ASSIGNMENTS)
-        expected = total_wp_rows + 4 * len(TEAM)
+        num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
+        # yellow per WP + 4 per person (TOTAL/REMAINING) + 2*years per person (EU ceiling)
+        expected = total_wp_rows + (4 + 2 * num_years) * len(TEAM)
         assert len(rules) == expected, (
             f"Expected {expected} CF rules on Capacity, got {len(rules)}"
         )
@@ -80,11 +83,12 @@ class TestCapacityConditionalFormatting:
         """Each person's TOTAL row has a red fill for > Max FTE."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        # Find red TOTAL rules: FFC7CE fill with >Config! pattern (no 0.8)
+        # Find red TOTAL rules: FFC7CE fill with >Config! pattern (no 0.8, no SUM — excludes EU ceiling)
         red_total_rules = [(i, r) for i, r in enumerate(rules)
                            if r[2] is not None and r[2].endswith("FFC7CE")
                            and any(">Config!$B$" in f for f in r[1])
-                           and not any("0.8" in f for f in r[1])]
+                           and not any("0.8" in f for f in r[1])
+                           and not any("SUM(" in f for f in r[1])]
         assert len(red_total_rules) >= person_idx + 1, (
             f"Expected at least {person_idx + 1} red TOTAL rules, got {len(red_total_rules)}"
         )
@@ -107,6 +111,35 @@ class TestCapacityConditionalFormatting:
         )
         _, (sqref, formulas, fg_color) = red_remaining_rules[person_idx]
         assert "<0" in formulas[0]
+
+    def test_capacity_eu_ceiling_red_rules(self, workbook):
+        """Each person's EU TOTAL row has red CF for annual EU total > ceiling."""
+        ws = workbook["Capacity"]
+        rules = _collect_cf_rules(ws)
+        # Red rules referencing SUM(...) > Config!$B$ (annual ceiling)
+        # These have FFC7CE fill and SUM formula with Config ref
+        eu_red_rules = [
+            r for r in rules
+            if r[2] is not None and r[2].endswith("FFC7CE")
+            and any("SUM(" in f and "Config!$B$" in f for f in r[1])
+        ]
+        # At least one per person per calendar year
+        assert len(eu_red_rules) >= len(TEAM), (
+            f"Expected at least {len(TEAM)} EU ceiling red rules, got {len(eu_red_rules)}"
+        )
+
+    def test_capacity_eu_ceiling_amber_rules(self, workbook):
+        """Each person's EU TOTAL row has amber CF for annual EU total > ceiling-1."""
+        ws = workbook["Capacity"]
+        rules = _collect_cf_rules(ws)
+        eu_amber_rules = [
+            r for r in rules
+            if r[2] is not None and r[2].endswith("FFD966")
+            and any("SUM(" in f and "Config!$B$" in f for f in r[1])
+        ]
+        assert len(eu_amber_rules) >= len(TEAM), (
+            f"Expected at least {len(TEAM)} EU ceiling amber rules, got {len(eu_amber_rules)}"
+        )
 
 
 # ── Summary sheet conditional formatting ──

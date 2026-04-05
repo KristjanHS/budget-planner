@@ -7,6 +7,7 @@ from openpyxl.formatting.rule import FormulaRule
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_CONFIG, CAPACITY_AMBER_LOAD,
     build_year_month_headers, month_col_end as _month_col_end, val_columns,
+    _calendar_year_groups,
 )
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
@@ -485,6 +486,29 @@ def build_capacity_sheet(ws, wb, team_layout, *,
             formula=[f"{col_letter(month_col_start)}{remaining_row}<{remaining_amber_threshold}*{SHEET_CONFIG}!$B${roster_row}"],
             fill=CF_AMBER_FILL,
         ))
+
+        # Conditional formatting for EU TOTAL — per calendar year
+        ceiling_row = team_layout["param_rows"]["EU Annual Ceiling (PM)"]
+        for group_start, span in _calendar_year_groups(
+            project_params["start"], project_params["months"]
+        ):
+            yr_first_col = month_col_start + group_start
+            yr_last_col = yr_first_col + span - 1
+            yr_range = (f"{col_letter(yr_first_col)}{eu_total_row}:"
+                        f"{col_letter(yr_last_col)}{eu_total_row}")
+            # Absolute refs so formula doesn't shift across the range
+            sum_expr = (f"SUM(${col_letter(yr_first_col)}${eu_total_row}"
+                        f":${col_letter(yr_last_col)}${eu_total_row})")
+            # Red if annual EU total > ceiling (added first = higher priority)
+            ws.conditional_formatting.add(yr_range, FormulaRule(
+                formula=[f"{sum_expr}>{SHEET_CONFIG}!$B${ceiling_row}"],
+                fill=CF_RED_FILL,
+            ))
+            # Amber if annual EU total > ceiling - 1
+            ws.conditional_formatting.add(yr_range, FormulaRule(
+                formula=[f"{sum_expr}>{SHEET_CONFIG}!$B${ceiling_row}-1"],
+                fill=CF_AMBER_FILL,
+            ))
 
         person_groups[name] = {
             "header_row": header_row,

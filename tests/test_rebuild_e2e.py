@@ -27,9 +27,9 @@ from budget_planner.config import MONTH_COL_START
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
-# Config sheet layout: WP data rows start at row 8
-# (rows 1-4 = params, 5 = gap, 6 = section header, 7 = column headers)
-CONFIG_FIRST_WP_ROW = 8
+# Config sheet layout: WP data rows start at row 9
+# (rows 1-5 = params, 6 = gap, 7 = section header, 8 = column headers)
+CONFIG_FIRST_WP_ROW = 9
 
 
 # ── Helpers ──

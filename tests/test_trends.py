@@ -68,8 +68,13 @@ def test_current_month_named_range(trends_workbook):
 
 
 def test_current_month_default_value(trends_ws):
-    from budget_planner.config import DEMO_CURRENT_MONTH
-    assert trends_ws["B1"].value == DEMO_CURRENT_MONTH
+    """B1 has auto-calculating formula referencing project_start and TODAY()."""
+    val = trends_ws["B1"].value
+    assert isinstance(val, str) and val.startswith("="), (
+        f"Expected formula in Trends!B1, got {val}"
+    )
+    assert "TODAY()" in val
+    assert "project_start" in val
 
 
 # ================================================================

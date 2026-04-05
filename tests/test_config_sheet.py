@@ -118,3 +118,17 @@ def test_config_eu_ceiling_named_range():
     build_config_sheet(ws, wb, _sample_params(), _sample_wps())
     names = set(wb.defined_names.keys())
     assert "eu_annual_ceiling_pm" in names
+
+
+def test_config_round_trip_eu_ceiling():
+    """EU ceiling param survives write → read round-trip."""
+    from budget_planner.reader import read_config_sheet
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    params = {**_sample_params(), "eu_ceiling_pm": 10.0}
+    build_config_sheet(ws, wb, params, _sample_wps())
+    read_params, read_wps = read_config_sheet(ws)
+    assert read_params["eu_ceiling_pm"] == 10.0
+    assert len(read_wps) == 2  # WPs still read correctly after row shift

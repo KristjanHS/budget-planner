@@ -102,9 +102,12 @@ def test_cli_demo_seeds_data(tmp_path):
             break
     assert has_eur, "Demo seeding should populate Actuals with EUR values"
 
-    # Trends current_month should be set to DEMO_CURRENT_MONTH
-    from budget_planner.config import DEMO_CURRENT_MONTH
-    assert wb["Trends"]["B1"].value == DEMO_CURRENT_MONTH
+    # Trends current_month should have auto-calculating formula
+    val = wb["Trends"]["B1"].value
+    assert isinstance(val, str) and val.startswith("="), (
+        f"Expected formula in Trends!B1, got {val}"
+    )
+    assert "TODAY()" in val
 
 
 # ── Test 5: Snapshot creates copy ──

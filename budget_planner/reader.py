@@ -52,16 +52,18 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
 
     Returns:
         Tuple of (project_params, work_packages) where:
-        - project_params: dict with keys 'title', 'start', 'months', 'rate'
+        - project_params: dict with keys 'title', 'start', 'months', 'rate',
+          'eu_ceiling_pm'
         - work_packages: list of dicts with keys 'id', 'name', 'fte',
           'start', 'end'
     """
-    # Validate expected labels in column A (rows 1-4)
+    # Validate expected labels in column A (rows 1-5)
     _expected_labels = [
         (1, "title", "Project Title"),
         (2, "start", "Project Start"),
         (3, "months", "Project Months"),
         (4, "rate", "FTE Rate"),
+        (5, "ceiling", "EU Annual Ceiling"),
     ]
     for row, keyword, full_label in _expected_labels:
         label = ws.cell(row, 1).value
@@ -76,11 +78,13 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
         "start": ws.cell(2, 2).value,
         "months": int(ws.cell(3, 2).value or 60),
         "rate": float(ws.cell(4, 2).value or 7500),
+        "eu_ceiling_pm": float(ws.cell(5, 2).value or 12.0),
     }
 
-    # Work packages start at row 8 (row 6 = section header, row 7 = headers)
+    # Work packages — find dynamically so adding param rows doesn't break
+    wp_section = _find_header_row(ws, "WORK PACKAGES")
     work_packages: list[dict] = []
-    r = 8
+    r = wp_section + 2  # skip section header + column headers
     while r <= ws.max_row:
         wp_id = ws.cell(r, 1).value
         if wp_id is None or str(wp_id).strip() == "":

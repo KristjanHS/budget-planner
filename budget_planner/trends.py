@@ -3,6 +3,7 @@
 from dateutil.relativedelta import relativedelta
 from openpyxl.chart import LineChart
 from openpyxl.chart.data_source import AxDataSource, NumDataSource, NumRef, StrRef
+from openpyxl.chart.marker import Marker
 from openpyxl.chart.series import Series, SeriesLabel
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
@@ -465,7 +466,6 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     chart.series.append(s_ceiling)
 
     # Series 4: RP boundaries (green diamond markers at ceiling level)
-    from openpyxl.chart.marker import Marker
     s_rp = Series(idx=3, order=3)
     s_rp.tx = SeriesLabel(v="RP End")
     s_rp.val = NumDataSource(numRef=NumRef(

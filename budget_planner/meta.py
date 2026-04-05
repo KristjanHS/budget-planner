@@ -326,7 +326,7 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
     Conditional formatting: green/amber/red on Status and Peak Month (per-person rules)
 
   BLOCK 3: Cumulative EUR LineChart (anchored 2 rows below TOTAL, ~15 rows tall)
-    LineChart: Planned (blue solid) vs Actual (red solid) vs Ceiling (grey dashed)
+    LineChart: Planned (blue solid) vs Actual (red solid) vs Ceiling (grey dashed) vs RP End (green dotted, diamond markers)
     Data from hidden helper rows below person load section
 
   HIDDEN HELPER ROWS (below person load):
@@ -334,6 +334,7 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
     Cumulative actual EUR per month (running sum of Actuals TOTAL row)
     Ceiling line (partner_ceiling repeated per month)
     Month-year labels (e.g. "Nov 25") for chart X-axis
+    RP boundary markers (partner_ceiling value at each RP end month, sparse — only RP end months populated)
 
 ═══ CONVENTIONS ═══
   FONT COLORS (financial model standard):

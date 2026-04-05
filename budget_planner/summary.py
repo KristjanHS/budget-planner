@@ -484,14 +484,16 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
                 f"={col_letter(prev_act_col)}{cum_row}"
                 f"+{col_letter(act_col)}{eligible_row}"
             )
-    # Project total cumulative = same as last RP cumulative (or total eligible)
+    # Project total cumulative = last RP's cumulative value
+    last_rp_cum_col = RP_GROUP_START + (num_rps - 1) * COLS_PER_RP + 2
     style_cell(summary, r, total_act_col, font=BLACK_FORMULA,
                fmt="\u20ac#,##0", border=False).value = (
-        f"={col_letter(total_act_col)}{eligible_row}"
+        f"={col_letter(last_rp_cum_col)}{cum_row}"
     )
     r += 1
 
     # CFS Required? — flag when cumulative > EUR 430k
+    CFS_THRESHOLD = 430_000  # EUR — audit certificate required above this
     cfs_row = r
     style_cell(summary, r, 1, "CFS Required?", font=HEADER_FONT, border=False)
     style_cell(summary, r, 2, "", border=False)
@@ -499,11 +501,11 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
         act_col = RP_GROUP_START + rp_idx * COLS_PER_RP + 2
         style_cell(summary, r, act_col, font=BLACK_FORMULA,
                    border=False).value = (
-            f'=IF({col_letter(act_col)}{cum_row}>430000,"YES","No")'
+            f'=IF({col_letter(act_col)}{cum_row}>{CFS_THRESHOLD},"YES","No")'
         )
     style_cell(summary, r, total_act_col, font=BLACK_FORMULA,
                border=False).value = (
-        f'=IF({col_letter(total_act_col)}{cum_row}>430000,"YES","No")'
+        f'=IF({col_letter(total_act_col)}{cum_row}>{CFS_THRESHOLD},"YES","No")'
     )
 
     # CF on CFS Required: amber fill on "YES"

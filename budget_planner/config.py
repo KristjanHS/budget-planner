@@ -15,6 +15,7 @@ PROJECT_TITLE = "Programme Project Budget Plan"
 PROJECT_START = datetime(2026, 11, 1)  # First month of the project
 PROJECT_MONTHS = 14                    # Total project duration in months
 DEFAULT_RATE = 7500                    # EUR per person-month (internal rate)
+EU_ANNUAL_CEILING_PM = 12.0              # Max PM per calendar year across all EU grants (≈215 days)
 
 # ── WORK PACKAGES ──
 # Each WP dict must have: id, name, fte (total person-months), start (month number 1-based), end (month number 1-based),
@@ -110,4 +111,5 @@ def default_project_params():
         "start": PROJECT_START,
         "months": PROJECT_MONTHS,
         "rate": DEFAULT_RATE,
+        "eu_ceiling_pm": EU_ANNUAL_CEILING_PM,
     }

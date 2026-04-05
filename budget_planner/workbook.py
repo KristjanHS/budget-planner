@@ -240,6 +240,7 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
         "start": config.PROJECT_START,
         "months": config.PROJECT_MONTHS,
         "rate": config.DEFAULT_RATE,
+        "eu_ceiling_pm": config.EU_ANNUAL_CEILING_PM,
     }
     work_packages = config.WORK_PACKAGES
     team = config.TEAM

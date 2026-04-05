@@ -139,6 +139,12 @@ SHEET: CONFIG (single source of truth for all project parameters)
     Row {cfg_roster_header}: Column headers: Person | Max FTE
     Rows {cfg_roster_first}+: Team member data rows (blue input, {num_team} people)
 
+  SECTION D: REPORTING PERIODS (below Team Roster)
+    Col A: Period ID (e.g. RP1) — blue input
+    Col B: Start Month — blue input
+    Col C: End Month — blue input
+    User-editable: add/remove/modify periods for Form C reporting boundaries.
+
 ═══ CAPACITY SHEET STRUCTURE ═══
 
 SHEET: CAPACITY (primary planning surface)
@@ -267,6 +273,22 @@ SHEET: SUMMARY (calendar-year budget aggregation)
     Remaining = Ceiling - Personnel Actual
     % Consumed = Personnel Actual / Ceiling
     Conditional formatting: amber if Remaining < 10% of Ceiling, red if negative
+
+  REPORTING PERIOD SUMMARY section (below Budget Overview):
+    Same 4-column-per-group layout as the annual summary above,
+    but grouped by user-defined reporting periods from Config.
+    Columns per RP: Plan FTE, Plan EUR, Act EUR, Var EUR
+    PROJECT TOTAL group at the end.
+
+    FORM C PREPARATION rows below RP TOTAL:
+      A. Personnel EUR — actual personnel costs per reporting period
+      E. Indirect (25%) — 25% flat rate on personnel (minimum; excludes travel/equipment)
+      Total Eligible — A + E
+      Cum. Eligible — running cumulative across reporting periods
+      CFS Required? — "YES" if cumulative eligible > EUR 430,000 (programme audit threshold)
+
+    Note: Indirect costs shown are a lower bound (personnel-only base).
+    Actual indirect should include travel, equipment, and other direct costs.
 
   Freeze panes: C{sum_first_wp}
 

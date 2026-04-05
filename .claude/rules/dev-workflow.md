@@ -52,9 +52,6 @@ When debugging chart issues, inspect the zip XML directly (`zipfile` + `ElementT
 Tests must not hardcode config.py seed values (WP names, person names, FTE amounts, start/end months).
 Derive expected values from config imports or from the generated workbook. Tests must pass after user changes data to real values in Excel and runs rebuild.
 
-## Invariants
-- Excel formulas only — never hardcode calculated values
-- Font color: Blue=input, Black=formula, Green=cross-sheet
-- _META sheet must reflect current workbook structure
+## Invariants (extends CLAUDE.md Critical Rules)
 - When updating meta.py, verify text against the actual builder (e.g., count summary columns in summary.py, not the plan)
 - On rebuild, all config data comes from the existing workbook (Config sheet + Capacity config block), never from config.py. Builders receive config as function parameters.

@@ -93,12 +93,10 @@ pytest tests/ -v
 | Hardening / refactoring | `docs/plans/hardening-plan.md` | Check if brittleness already identified there |
 | Config column layout | `.claude/rules/dev-workflow.md` | Grep `Config!{letter}` in ALL builders + tests when columns shift |
 
-## Reference Trigger Index
+## Rules Index (path-gated — auto-loaded when touching `**/*.py`)
 
-| Trigger | Document | Key content |
-|---------|----------|-------------|
-| Programme cost model, funding rates, 25% indirect | `docs/grant-domain.md` | Cost categories, PM->EUR chain, reallocation rules |
-| How sheets are built, builder interface | `docs/deep-dive/Sheet Builders.md` | Builder contract, stateless pattern |
-| Reader breaks, rebuild loses data | `docs/deep-dive/Reader and Rebuild.md` | Formula reference chains, fragile parsing |
-| Column offsets, month positioning, styles | `docs/deep-dive/Layout and Styling.md` | `layout.py` constants, `styles.py` patterns |
-| Brittleness, hardening tasks | `docs/plans/hardening-plan.md` | Duplicated constants, silent corruption risks |
+| Rule file | Key content |
+|-----------|-------------|
+| `.claude/rules/dev-workflow.md` | Build/test, linting, openpyxl patterns, worktree protocol |
+| `.claude/rules/architecture.md` | Directory map (function → file) |
+| `.claude/rules/common-tasks.md` | Step-by-step for "add WP", "add team member", etc. |

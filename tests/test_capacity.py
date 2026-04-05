@@ -353,3 +353,18 @@ def test_distribute_single_month():
 def test_distribute_zero_months():
     result = distribute(5.0, 0, "flat")
     assert result == []
+
+
+# ── Test: External commitments EU Grant column ──
+
+def test_capacity_external_config_has_eu_column(cap_ws):
+    """External commitments config block has EU Grant column."""
+    for r in range(1, cap_ws.max_row + 1):
+        val = cap_ws.cell(r, 1).value
+        if val and "EXTERNAL COMMITMENTS" in str(val):
+            # Column headers on next row
+            header_row = r + 1
+            assert cap_ws.cell(header_row, 6).value == "EU Grant"
+            break
+    else:
+        pytest.fail("EXTERNAL COMMITMENTS section not found")

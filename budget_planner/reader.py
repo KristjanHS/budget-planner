@@ -259,12 +259,14 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
             fte = ws.cell(r, 3).value
             start = ws.cell(r, 4).value
             end = ws.cell(r, 5).value
+            is_eu_val = ws.cell(r, 6).value
             external_commitments.append({
                 "person": str(person),
                 "project": str(project or ""),
                 "fte": float(fte or 0),
                 "start": int(start or 1),
                 "end": int(end or 1),
+                "is_eu": str(is_eu_val).strip().upper() in ("YES", "TRUE", "1"),
             })
             r += 1
 

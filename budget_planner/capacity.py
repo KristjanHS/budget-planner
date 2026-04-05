@@ -167,10 +167,10 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     r += 1
 
     # ── CONFIG BLOCK 2: EXTERNAL COMMITMENTS ──
-    write_section_header(ws, r, "EXTERNAL COMMITMENTS", merge_end=5)
+    write_section_header(ws, r, "EXTERNAL COMMITMENTS", merge_end=6)
     r += 1
 
-    ext_col_headers = ["Person", "Project", "Total FTE", "Start Month", "End Month"]
+    ext_col_headers = ["Person", "Project", "Total FTE", "Start Month", "End Month", "EU Grant"]
     for ci, h in enumerate(ext_col_headers, 1):
         style_cell(ws, r, ci, h, font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
                    alignment=CENTER)
@@ -184,6 +184,8 @@ def build_capacity_sheet(ws, wb, team_layout, *,
         style_cell(ws, r, 3, entry["fte"], font=BLUE_INPUT, fmt="0.00")
         style_cell(ws, r, 4, entry["start"], font=BLUE_INPUT, fmt="0")
         style_cell(ws, r, 5, entry["end"], font=BLUE_INPUT, fmt="0")
+        style_cell(ws, r, 6, "Yes" if entry.get("is_eu", False) else "No",
+                   font=BLUE_INPUT)
         external_config_rows[(entry["person"], entry["project"])] = r
         r += 1
     ext_last_row = r - 1 if external_commitments else r

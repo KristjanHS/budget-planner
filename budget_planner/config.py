@@ -47,8 +47,9 @@ TEAM = [
 # ── EXTERNAL COMMITMENTS ──
 # Seed data only — Excel Capacity sheet is primary after first generation
 EXTERNAL_COMMITMENTS = [
-    {"person": "Alice", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 11},
-    {"person": "Bob",   "project": "ProjectX", "fte": 2.0, "start": 1, "end": 14},
+    {"person": "Alice", "project": "ProjectX",        "fte": 2.0, "start": 1, "end": 11, "is_eu": False},
+    {"person": "Bob",   "project": "ProjectX",        "fte": 2.0, "start": 1, "end": 14, "is_eu": False},
+    {"person": "Bob",   "project": "HorizonEU-Alpha", "fte": 2.0, "start": 1, "end": 7, "is_eu": True},
 ]
 
 # ── DEMO MODE ──

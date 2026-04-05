@@ -16,6 +16,8 @@ PROJECT_START = datetime(2026, 11, 1)  # First month of the project
 PROJECT_MONTHS = 14                    # Total project duration in months
 DEFAULT_RATE = 7500                    # EUR per person-month (internal rate)
 EU_ANNUAL_CEILING_PM = 12.0              # Max PM per calendar year across all EU grants (≈215 days)
+CFS_THRESHOLD = 430_000                  # EUR — CFS audit certificate required above this
+DEFAULT_RP_LENGTH = 6                   # Months per reporting period (programme typical: 12-18)
 
 # ── WORK PACKAGES ──
 # Each WP dict must have: id, name, fte (total person-months), start (month number 1-based), end (month number 1-based),
@@ -50,6 +52,15 @@ EXTERNAL_COMMITMENTS = [
     {"person": "Alice", "project": "ProjectX",        "fte": 2.0, "start": 1, "end": 11, "is_eu": False},
     {"person": "Bob",   "project": "ProjectX",        "fte": 2.0, "start": 1, "end": 14, "is_eu": False},
     {"person": "Bob",   "project": "HorizonEU-Alpha", "fte": 2.0, "start": 1, "end": 7, "is_eu": True},
+]
+
+# ── REPORTING PERIODS ──
+# Seed data only — Config sheet is primary after first generation
+# Boundaries define when Form C / financial statements are due
+REPORTING_PERIODS = [
+    {"id": "RP1", "start": 1, "end": 6},
+    {"id": "RP2", "start": 7, "end": 12},
+    {"id": "RP3", "start": 13, "end": 14},
 ]
 
 # ── DEMO MODE ──
@@ -114,3 +125,19 @@ def default_project_params():
         "rate": DEFAULT_RATE,
         "eu_ceiling_pm": EU_ANNUAL_CEILING_PM,
     }
+
+
+def default_reporting_periods(project_months, rp_length=DEFAULT_RP_LENGTH):
+    """Generate default reporting periods from project duration.
+
+    Returns list of dicts with keys: id, start, end.
+    """
+    periods = []
+    m = 1
+    rp_num = 1
+    while m <= project_months:
+        end = min(m + rp_length - 1, project_months)
+        periods.append({"id": f"RP{rp_num}", "start": m, "end": end})
+        m = end + 1
+        rp_num += 1
+    return periods

@@ -4,7 +4,6 @@ paths: "**/*.py"
 # Dev Workflow
 
 ## Build + Test
-After code changes: `pytest tests/ -v`
 LibreOffice is a required dependency — install it, don't skip recalc tests.
 Use uv for venv and dependency management.
 Run pytest once per step. Never re-run to "confirm".

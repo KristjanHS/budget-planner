@@ -425,3 +425,36 @@ def test_rebuild_preserves_eu_total_structure(tmp_path):
         f"Expected {len(TEAM)} EU TOTAL rows after rebuild, got {eu_total_count}"
     )
     wb.close()
+
+
+# ── Form C preparation rows ─────────────────────────────────────────────
+
+def test_form_c_rows_exist(fresh_wb_path):
+    """Summary sheet has Form C prep rows with indirect costs and CFS flag."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(fresh_wb_path)
+    ws = wb["Summary"]
+
+    # Find "A. Personnel" label
+    personnel_row = None
+    for r in range(1, ws.max_row + 1):
+        val = str(ws.cell(r, 1).value or "")
+        if "Personnel" in val and val.startswith("A."):
+            personnel_row = r
+            break
+    assert personnel_row is not None, "Form C 'A. Personnel' row not found"
+
+    # Check subsequent rows
+    assert "Indirect" in str(ws.cell(personnel_row + 1, 1).value or "")
+    assert "Total Eligible" in str(ws.cell(personnel_row + 2, 1).value or "")
+    assert "Cum" in str(ws.cell(personnel_row + 3, 1).value or "")
+    assert "CFS" in str(ws.cell(personnel_row + 4, 1).value or "")
+
+    # CFS cell should have a formula with 430000
+    cfs_row = personnel_row + 4
+    # Check col C (first RP Act EUR position)
+    cfs_val = str(ws.cell(cfs_row, 3 + 2).value or "")  # offset +2 = Act EUR col
+    assert "430000" in cfs_val or "CFS" in str(ws.cell(cfs_row, 1).value)
+
+    wb.close()

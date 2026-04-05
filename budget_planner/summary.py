@@ -410,6 +410,112 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
         formula=[f"{rp_total_var_col_l}{RP_FIRST_WP_ROW}<0"], fill=CF_RED_FILL,
     ))
 
-    r = rp_totals_row
+    # ── FORM C PREPARATION ──
+    r = rp_totals_row + 2
+
+    # Row labels and formulas use only the Act EUR sub-column (offset +2) per RP
+    # A. Personnel EUR — reference TOTAL Act EUR for each RP
+    personnel_fc_row = r
+    style_cell(summary, r, 1, "A. Personnel EUR", font=HEADER_FONT, border=False)
+    style_cell(summary, r, 2, "", border=False)
+    for rp_idx in range(num_rps):
+        act_col = RP_GROUP_START + rp_idx * COLS_PER_RP + 2
+        style_cell(summary, r, act_col, font=BLACK_FORMULA,
+                   fmt="\u20ac#,##0", border=False).value = (
+            f"={col_letter(act_col)}{rp_totals_row}"
+        )
+    # Project total
+    total_act_col = RP_TOTAL_GROUP_START + 2
+    style_cell(summary, r, total_act_col, font=BLACK_FORMULA,
+               fmt="\u20ac#,##0", border=False).value = (
+        f"={col_letter(total_act_col)}{rp_totals_row}"
+    )
+    r += 1
+
+    # E. Indirect (25%) — 25% of Personnel EUR
+    indirect_row = r
+    style_cell(summary, r, 1, "E. Indirect (25%)", font=HEADER_FONT, border=False)
+    style_cell(summary, r, 2, "", border=False)
+    for rp_idx in range(num_rps):
+        act_col = RP_GROUP_START + rp_idx * COLS_PER_RP + 2
+        style_cell(summary, r, act_col, font=BLACK_FORMULA,
+                   fmt="\u20ac#,##0", border=False).value = (
+            f"={col_letter(act_col)}{personnel_fc_row}*0.25"
+        )
+    style_cell(summary, r, total_act_col, font=BLACK_FORMULA,
+               fmt="\u20ac#,##0", border=False).value = (
+        f"={col_letter(total_act_col)}{personnel_fc_row}*0.25"
+    )
+    r += 1
+
+    # Total Eligible = Personnel + Indirect
+    eligible_row = r
+    style_cell(summary, r, 1, "Total Eligible", font=HEADER_FONT, border=False)
+    style_cell(summary, r, 2, "", border=False)
+    for rp_idx in range(num_rps):
+        act_col = RP_GROUP_START + rp_idx * COLS_PER_RP + 2
+        style_cell(summary, r, act_col, font=BLACK_FORMULA,
+                   fmt="\u20ac#,##0", border=False).value = (
+            f"={col_letter(act_col)}{personnel_fc_row}"
+            f"+{col_letter(act_col)}{indirect_row}"
+        )
+    style_cell(summary, r, total_act_col, font=BLACK_FORMULA,
+               fmt="\u20ac#,##0", border=False).value = (
+        f"={col_letter(total_act_col)}{personnel_fc_row}"
+        f"+{col_letter(total_act_col)}{indirect_row}"
+    )
+    r += 1
+
+    # Cumulative Eligible — running sum across RPs
+    cum_row = r
+    style_cell(summary, r, 1, "Cum. Eligible", font=HEADER_FONT, border=False)
+    style_cell(summary, r, 2, "", border=False)
+    for rp_idx in range(num_rps):
+        act_col = RP_GROUP_START + rp_idx * COLS_PER_RP + 2
+        if rp_idx == 0:
+            style_cell(summary, r, act_col, font=BLACK_FORMULA,
+                       fmt="\u20ac#,##0", border=False).value = (
+                f"={col_letter(act_col)}{eligible_row}"
+            )
+        else:
+            prev_act_col = RP_GROUP_START + (rp_idx - 1) * COLS_PER_RP + 2
+            style_cell(summary, r, act_col, font=BLACK_FORMULA,
+                       fmt="\u20ac#,##0", border=False).value = (
+                f"={col_letter(prev_act_col)}{cum_row}"
+                f"+{col_letter(act_col)}{eligible_row}"
+            )
+    # Project total cumulative = same as last RP cumulative (or total eligible)
+    style_cell(summary, r, total_act_col, font=BLACK_FORMULA,
+               fmt="\u20ac#,##0", border=False).value = (
+        f"={col_letter(total_act_col)}{eligible_row}"
+    )
+    r += 1
+
+    # CFS Required? — flag when cumulative > EUR 430k
+    cfs_row = r
+    style_cell(summary, r, 1, "CFS Required?", font=HEADER_FONT, border=False)
+    style_cell(summary, r, 2, "", border=False)
+    for rp_idx in range(num_rps):
+        act_col = RP_GROUP_START + rp_idx * COLS_PER_RP + 2
+        style_cell(summary, r, act_col, font=BLACK_FORMULA,
+                   border=False).value = (
+            f'=IF({col_letter(act_col)}{cum_row}>430000,"YES","No")'
+        )
+    style_cell(summary, r, total_act_col, font=BLACK_FORMULA,
+               border=False).value = (
+        f'=IF({col_letter(total_act_col)}{cum_row}>430000,"YES","No")'
+    )
+
+    # CF on CFS Required: amber fill on "YES"
+    for rp_idx in range(num_rps):
+        act_col = RP_GROUP_START + rp_idx * COLS_PER_RP + 2
+        cell_ref = f"{col_letter(act_col)}{cfs_row}"
+        summary.conditional_formatting.add(cell_ref, FormulaRule(
+            formula=[f'{cell_ref}="YES"'], fill=CF_AMBER_FILL,
+        ))
+    total_cfs_ref = f"{col_letter(total_act_col)}{cfs_row}"
+    summary.conditional_formatting.add(total_cfs_ref, FormulaRule(
+        formula=[f'{total_cfs_ref}="YES"'], fill=CF_AMBER_FILL,
+    ))
 
     summary.freeze_panes = f"C{SUMMARY_FIRST_WP_ROW}"

@@ -106,7 +106,8 @@ def test_summary_wp_count(workbook):
         val = summary.cell(r, 1).value
         if val and isinstance(val, str) and val.startswith("="):
             count += 1
-    assert count == NUM_WPS, f"Summary has {count} WP rows, expected {NUM_WPS}"
+    # Budget Overview + RP Summary each have one formula row per WP
+    assert count == NUM_WPS * 2, f"Summary has {count} WP rows, expected {NUM_WPS * 2}"
 
 
 # ── _META ──

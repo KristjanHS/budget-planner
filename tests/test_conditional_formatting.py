@@ -182,10 +182,14 @@ class TestSummaryConditionalFormatting:
             and any("<0" in f for f in r[1])
             and ":" in r[0]
         ]
-        # Year variance + project total variance = num_years + 1 total range-based red rules
-        assert len(variance_red_rules) == num_years + 1, (
-            f"Expected {num_years + 1} red variance range rules (year + total), "
-            f"got {len(variance_red_rules)}"
+        # Budget Overview: num_years + 1 (year variance + project total)
+        # RP Summary: num_rps + 1 (per-RP variance + project total)
+        from budget_planner.config import REPORTING_PERIODS
+        num_rps = len(REPORTING_PERIODS)
+        expected = (num_years + 1) + (num_rps + 1)
+        assert len(variance_red_rules) == expected, (
+            f"Expected {expected} red variance range rules "
+            f"(year + total + RP + RP total), got {len(variance_red_rules)}"
         )
 
     def test_summary_remaining_amber(self, workbook):

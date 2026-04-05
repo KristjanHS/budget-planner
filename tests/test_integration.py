@@ -339,6 +339,70 @@ def test_summary_budget_overview_references(fresh_wb_path):
     wb.close()
 
 
+# ── Reporting Period Summary section ─────────────────────────────────────
+
+def test_rp_summary_section_exists(fresh_wb_path):
+    """Summary sheet has REPORTING PERIOD SUMMARY section."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(fresh_wb_path)
+    ws = wb["Summary"]
+
+    # Find REPORTING PERIOD SUMMARY section header
+    rp_header_row = None
+    for r in range(1, ws.max_row + 1):
+        val = ws.cell(r, 1).value
+        if val and "REPORTING PERIOD" in str(val).upper():
+            rp_header_row = r
+            break
+    assert rp_header_row is not None, "REPORTING PERIOD SUMMARY section not found"
+
+    wb.close()
+
+
+def test_rp_summary_has_wp_rows(fresh_wb_path):
+    """RP summary has one row per WP with cross-sheet formula refs."""
+    from openpyxl import load_workbook
+    from budget_planner.config import WORK_PACKAGES
+
+    wb = load_workbook(fresh_wb_path)
+    ws = wb["Summary"]
+
+    # Find section header
+    rp_header_row = None
+    for r in range(1, ws.max_row + 1):
+        val = ws.cell(r, 1).value
+        if val and "REPORTING PERIOD" in str(val).upper():
+            rp_header_row = r
+            break
+    assert rp_header_row is not None
+
+    # Find first WP data row (skip header rows — look for Config!A cross-ref)
+    first_wp_row = None
+    for r in range(rp_header_row + 1, rp_header_row + 10):
+        val = str(ws.cell(r, 1).value or "")
+        if "Config!" in val:
+            first_wp_row = r
+            break
+    assert first_wp_row is not None, "No WP data rows found in RP summary"
+
+    # Count WP rows
+    wp_count = 0
+    for r in range(first_wp_row, first_wp_row + len(WORK_PACKAGES) + 5):
+        val = str(ws.cell(r, 1).value or "")
+        if "Config!" in val:
+            wp_count += 1
+        else:
+            break
+    assert wp_count == len(WORK_PACKAGES)
+
+    # First WP row col C should be a Plan formula referencing Plan sheet
+    val_c = str(ws.cell(first_wp_row, 3).value or "")
+    assert "Plan!" in val_c, f"Expected Plan! cross-ref, got: {val_c}"
+
+    wb.close()
+
+
 # ── Rebuild round-trip: EU TOTAL row preservation ──────────────────────────
 
 def test_rebuild_preserves_eu_total_structure(tmp_path):

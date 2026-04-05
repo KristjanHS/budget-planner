@@ -32,12 +32,14 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
     work_packages : list[dict], optional
         List of WP dicts. Lazy-imports from config if None.
     """
-    if project_params is None or work_packages is None:
+    if project_params is None or work_packages is None or reporting_periods is None:
         from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
+        if reporting_periods is None:
+            reporting_periods = config.REPORTING_PERIODS
 
     month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
@@ -242,5 +244,172 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
         f"B{remaining_row}", FormulaRule(
             formula=[f"B{remaining_row}<B{ceiling_row}*0.1"], fill=CF_AMBER_FILL,
         ))
+
+    # ── REPORTING PERIOD SUMMARY ──
+    r += 2
+    write_section_header(summary, r, "REPORTING PERIOD SUMMARY", merge_end=2)
+    r += 2
+
+    num_rps = len(reporting_periods)
+    RP_GROUP_START = 3
+    COLS_PER_RP = 4  # Plan FTE, Plan EUR, Act EUR, Var EUR
+
+    RP_TOTAL_GROUP_START = RP_GROUP_START + num_rps * COLS_PER_RP
+    RP_TOTAL_COLS = 4
+
+    # RP headers row
+    style_cell(summary, r, 1, "", fill=LIGHT_BLUE_FILL)
+    style_cell(summary, r, 2, "", fill=LIGHT_BLUE_FILL)
+    for rp_idx, rp in enumerate(reporting_periods):
+        start_col = RP_GROUP_START + rp_idx * COLS_PER_RP
+        end_col = start_col + COLS_PER_RP - 1
+        label = f"{rp['id']} (M{rp['start']}\u2013M{rp['end']})"
+        summary.merge_cells(start_row=r, start_column=start_col,
+                            end_row=r, end_column=end_col)
+        style_cell(summary, r, start_col, label, font=HEADER_FONT,
+                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
+        for c2 in range(start_col + 1, end_col + 1):
+            style_cell(summary, r, c2, fill=LIGHT_BLUE_FILL)
+
+    summary.merge_cells(start_row=r, start_column=RP_TOTAL_GROUP_START,
+                        end_row=r, end_column=RP_TOTAL_GROUP_START + RP_TOTAL_COLS - 1)
+    style_cell(summary, r, RP_TOTAL_GROUP_START,
+               font=Font(name="Arial", bold=True, size=10, color="FFFFFF"),
+               fill=SECTION_FILL, alignment=CENTER).value = "PROJECT TOTAL"
+    for c2 in range(RP_TOTAL_GROUP_START + 1, RP_TOTAL_GROUP_START + RP_TOTAL_COLS):
+        style_cell(summary, r, c2, fill=SECTION_FILL)
+    r += 1
+
+    # RP sub-headers row
+    style_cell(summary, r, 1, "WP ID", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
+               alignment=CENTER)
+    style_cell(summary, r, 2, "WP Name", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
+               alignment=CENTER)
+    rp_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Var \u20ac"]
+    for rp_idx in range(num_rps):
+        for si, sh in enumerate(rp_sub):
+            c = RP_GROUP_START + rp_idx * COLS_PER_RP + si
+            style_cell(summary, r, c, sh, font=HEADER_FONT,
+                       fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    rp_total_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Var \u20ac"]
+    for si, sh in enumerate(rp_total_sub):
+        c = RP_TOTAL_GROUP_START + si
+        style_cell(summary, r, c, sh, font=HEADER_FONT,
+                   fill=LIGHT_GREEN_FILL, alignment=CENTER)
+    r += 1
+
+    RP_FIRST_WP_ROW = r
+
+    # RP WP data rows
+    for i, wp in enumerate(work_packages):
+        row = r + i
+        config_row = config_first_wp_row + i
+        style_cell(summary, row, 1, font=GREEN_XREF).value = (
+            f"={SHEET_CONFIG}!A{config_row}"
+        )
+        style_cell(summary, row, 2, font=GREEN_XREF).value = (
+            f"={SHEET_CONFIG}!B{config_row}"
+        )
+
+        for rp_idx, rp in enumerate(reporting_periods):
+            first_col_l = col_letter(month_col_start + rp["start"] - 1)
+            last_col_l = col_letter(month_col_start + rp["end"] - 1)
+
+            sc = RP_GROUP_START + rp_idx * COLS_PER_RP
+            plan_wp_row = planned_first_wp_row + i
+            actuals_wp_row = actuals_first_wp_row + i
+
+            # Plan FTE
+            style_cell(summary, row, sc, font=GREEN_XREF, fmt="0.00").value = (
+                f"=SUM({SHEET_PLAN}!{first_col_l}{plan_wp_row}:"
+                f"{last_col_l}{plan_wp_row})"
+            )
+            # Plan EUR = Plan FTE * fte_rate
+            style_cell(summary, row, sc + 1, font=BLACK_FORMULA,
+                       fmt="\u20ac#,##0").value = (
+                f"={col_letter(sc)}{row}*fte_rate"
+            )
+            # Actual EUR
+            style_cell(summary, row, sc + 2, font=GREEN_XREF,
+                       fmt="\u20ac#,##0").value = (
+                f"=SUM({SHEET_ACTUALS}!{first_col_l}{actuals_wp_row}:"
+                f"{last_col_l}{actuals_wp_row})"
+            )
+            # Variance EUR = Plan EUR - Actual EUR
+            style_cell(summary, row, sc + 3, font=BLACK_FORMULA,
+                       fmt="\u20ac#,##0").value = (
+                f"={col_letter(sc + 1)}{row}-{col_letter(sc + 2)}{row}"
+            )
+
+        # RP Project totals (sum across RP groups)
+        tc = RP_TOTAL_GROUP_START
+        rp_plan_cols = [col_letter(RP_GROUP_START + rp_idx * COLS_PER_RP)
+                        for rp_idx in range(num_rps)]
+        style_cell(summary, row, tc, font=BLACK_FORMULA, fmt="0.00").value = (
+            "=" + "+".join(f"{cl}{row}" for cl in rp_plan_cols)
+        )
+        rp_plan_eur_cols = [col_letter(RP_GROUP_START + rp_idx * COLS_PER_RP + 1)
+                            for rp_idx in range(num_rps)]
+        style_cell(summary, row, tc + 1, font=BLACK_FORMULA,
+                   fmt="\u20ac#,##0").value = (
+            "=" + "+".join(f"{cl}{row}" for cl in rp_plan_eur_cols)
+        )
+        rp_act_eur_cols = [col_letter(RP_GROUP_START + rp_idx * COLS_PER_RP + 2)
+                           for rp_idx in range(num_rps)]
+        style_cell(summary, row, tc + 2, font=BLACK_FORMULA,
+                   fmt="\u20ac#,##0").value = (
+            "=" + "+".join(f"{cl}{row}" for cl in rp_act_eur_cols)
+        )
+        style_cell(summary, row, tc + 3, font=BLACK_FORMULA,
+                   fmt="\u20ac#,##0").value = (
+            f"={col_letter(tc + 1)}{row}-{col_letter(tc + 2)}{row}"
+        )
+
+    RP_LAST_WP_ROW = RP_FIRST_WP_ROW + num_wps - 1
+    rp_totals_row = RP_LAST_WP_ROW + 1
+
+    # RP TOTAL row
+    style_cell(summary, rp_totals_row, 1, "", fill=LIGHT_GREEN_FILL)
+    style_cell(summary, rp_totals_row, 2, "TOTAL", font=HEADER_FONT,
+               fill=LIGHT_GREEN_FILL)
+    for rp_idx in range(num_rps):
+        for si in range(COLS_PER_RP):
+            c = RP_GROUP_START + rp_idx * COLS_PER_RP + si
+            fmt = "0.00" if si == 0 else "\u20ac#,##0"
+            col_range = (f"{col_letter(c)}{RP_FIRST_WP_ROW}:"
+                         f"{col_letter(c)}{RP_LAST_WP_ROW}")
+            style_cell(summary, rp_totals_row, c, font=BLACK_FORMULA,
+                       fill=LIGHT_GREEN_FILL, fmt=fmt).value = (
+                f"=SUM({col_range})"
+            )
+    for si in range(RP_TOTAL_COLS):
+        c = RP_TOTAL_GROUP_START + si
+        fmt = "0.00" if si == 0 else "\u20ac#,##0"
+        col_range = (f"{col_letter(c)}{RP_FIRST_WP_ROW}:"
+                     f"{col_letter(c)}{RP_LAST_WP_ROW}")
+        style_cell(summary, rp_totals_row, c, font=BLACK_FORMULA,
+                   fill=LIGHT_GREEN_FILL, fmt=fmt).value = (
+            f"=SUM({col_range})"
+        )
+
+    # CF: red on negative RP Variance EUR
+    for rp_idx in range(num_rps):
+        var_col = RP_GROUP_START + rp_idx * COLS_PER_RP + 3
+        var_col_l = col_letter(var_col)
+        var_range = (f"{var_col_l}{RP_FIRST_WP_ROW}:"
+                     f"{var_col_l}{RP_LAST_WP_ROW}")
+        summary.conditional_formatting.add(var_range, FormulaRule(
+            formula=[f"{var_col_l}{RP_FIRST_WP_ROW}<0"], fill=CF_RED_FILL,
+        ))
+    # CF: red on negative PROJECT TOTAL Variance EUR
+    rp_total_var_col = RP_TOTAL_GROUP_START + 3
+    rp_total_var_col_l = col_letter(rp_total_var_col)
+    rp_total_var_range = (f"{rp_total_var_col_l}{RP_FIRST_WP_ROW}:"
+                          f"{rp_total_var_col_l}{RP_LAST_WP_ROW}")
+    summary.conditional_formatting.add(rp_total_var_range, FormulaRule(
+        formula=[f"{rp_total_var_col_l}{RP_FIRST_WP_ROW}<0"], fill=CF_RED_FILL,
+    ))
+
+    r = rp_totals_row
 
     summary.freeze_panes = f"C{SUMMARY_FIRST_WP_ROW}"

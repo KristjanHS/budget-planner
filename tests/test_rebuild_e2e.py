@@ -565,7 +565,8 @@ class TestRebuildFormulaIntegrity:
             val = summary.cell(r, 1).value
             if isinstance(val, str) and val.startswith("=Config!A"):
                 wp_formula_rows += 1
-        assert wp_formula_rows == len(wps)
+        # Budget Overview + RP Summary each have one formula row per WP
+        assert wp_formula_rows == len(wps) * 2
         wb.close()
 
 

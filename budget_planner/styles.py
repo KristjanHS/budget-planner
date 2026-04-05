@@ -134,3 +134,19 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None,
             )
 
         first_group = False
+
+
+def auto_fit_columns(ws, *, min_width=8, max_width=40):
+    """Set column widths based on non-formula cell content."""
+    for col_cells in ws.columns:
+        max_len = 0
+        for cell in col_cells:
+            val = cell.value
+            if val is None or (isinstance(val, str) and val.startswith("=")):
+                continue
+            max_len = max(max_len, len(str(val)))
+        if max_len > 0:
+            col_letter_str = col_cells[0].column_letter
+            ws.column_dimensions[col_letter_str].width = min(
+                max(max_len + 2, min_width), max_width
+            )

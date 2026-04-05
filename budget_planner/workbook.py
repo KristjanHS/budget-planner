@@ -18,7 +18,7 @@ from budget_planner.layout import (
     SHEET_META, SHEET_CONFIG, SHEET_PLAN, SHEET_CAPACITY,
     SHEET_ACTUALS, SHEET_TRENDS,
 )
-from budget_planner.styles import BLUE_INPUT, HEADER_FONT, style_cell, apply_year_groups
+from budget_planner.styles import BLACK_FORMULA, HEADER_FONT, style_cell, apply_year_groups
 
 
 def snapshot_workbook(filepath: str) -> str:
@@ -138,17 +138,17 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     trends_ws = wb.create_sheet(SHEET_TRENDS)
     trends_ws.sheet_properties.tabColor = "FFD700"
     style_cell(trends_ws, 1, 1, "Current Month:", font=HEADER_FONT, border=False)
-    # Calculate current_month from project start and today's date
-    from datetime import date
-    from dateutil.relativedelta import relativedelta as _rd
-    _today = date.today()
-    _pstart = project_params["start"]
-    _delta = _rd(_today, _pstart.date() if hasattr(_pstart, 'date') else _pstart)
-    _current_month = max(1, min(_delta.years * 12 + _delta.months + 1,
-                                project_params["months"]))
-    style_cell(trends_ws, 1, 2, _current_month, font=BLUE_INPUT, border=False)
+    # Formula: auto-calculate from project start date and TODAY()
+    _cm_formula = (
+        f"=MAX(1,MIN({SHEET_CONFIG}!B3,"
+        f"(YEAR(TODAY())-YEAR(project_start))*12"
+        f"+MONTH(TODAY())-MONTH(project_start)+1))"
+    )
+    style_cell(trends_ws, 1, 2, font=BLACK_FORMULA, border=False)
+    trends_ws["B1"].value = _cm_formula
     trends_ws["B1"].comment = Comment(
-        "Set to the last month with completed actuals (e.g., 12 for end of Year 1)",
+        "Auto-calculated from project start and today's date. "
+        "Override with a static number to freeze.",
         "Programme Budget Tool",
     )
     wb.defined_names.add(DefinedName("current_month", attr_text=f"{SHEET_TRENDS}!$B$1"))
@@ -254,7 +254,14 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
                       assignments=assignments)
 
     # _apply_protection(wb)  # Temporarily disabled
-    _apply_all_year_groups(wb, project_params)
+    from datetime import date
+    from dateutil.relativedelta import relativedelta as _rd
+    _today = date.today()
+    _pstart = project_params["start"]
+    _delta = _rd(_today, _pstart.date() if hasattr(_pstart, 'date') else _pstart)
+    _current_month = max(1, min(_delta.years * 12 + _delta.months + 1,
+                                project_params["months"]))
+    _apply_all_year_groups(wb, project_params, current_month=_current_month)
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     _backup_existing(output_path)
@@ -439,10 +446,6 @@ def seed_demo_data(workbook_path: str) -> str:
                 col = MONTH_COL_START + m_idx
                 eur_value = round(monthly_planned * multiplier)
                 act_ws.cell(row, col).value = eur_value
-
-    # ── Set current_month on Trends ──
-    if SHEET_TRENDS in wb.sheetnames:
-        wb[SHEET_TRENDS]["B1"].value = DEMO_CURRENT_MONTH
 
     wb.save(workbook_path)
     wb.close()

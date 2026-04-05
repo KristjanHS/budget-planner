@@ -13,6 +13,7 @@ from budget_planner.styles import (
     SECTION_FILL,
     TITLE_FONT,
     LIGHT_BLUE_FILL,
+    auto_fit_columns,
     CF_YELLOW_FILL,
     CENTER,
     style_cell,
@@ -121,7 +122,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
     table_ref = f"A{header_row}:H{last_data_row}"
     table_style = TableStyleInfo(
         name="TableStyleMedium9", showFirstColumn=False,
-        showLastColumn=False, showRowStripes=True, showColumnStripes=False,
+        showLastColumn=False, showRowStripes=False, showColumnStripes=False,
     )
     table = Table(displayName="tbl_WorkPackages", ref=table_ref)
     table.tableStyleInfo = table_style
@@ -173,6 +174,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
     # ── Sheet Appearance ──
     ws.sheet_properties.tabColor = "4472C4"
     ws.freeze_panes = "A6"
+    auto_fit_columns(ws)
 
     return {
         "param_rows": param_rows,

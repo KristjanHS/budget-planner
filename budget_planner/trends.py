@@ -16,6 +16,7 @@ from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     CENTER, style_cell, col_letter, write_section_header,
+    auto_fit_columns,
 )
 
 # CF fills imported from styles — DXF context requires bgColor
@@ -451,6 +452,11 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     chart.width = 30
     chart.height = 15
     ws.add_chart(chart, f"A{chart_anchor_row}")
+
+    # ================================================================
+    # Column widths
+    # ================================================================
+    auto_fit_columns(ws)
 
     # ================================================================
     # Return layout dict

@@ -230,16 +230,16 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
         f"=IF(B{ceiling_row}=0,0,B{actual_row}/B{ceiling_row})"
     )
 
-    # Conditional formatting on Remaining (amber before red per openpyxl convention)
-    # Amber if < 10% of ceiling
-    summary.conditional_formatting.add(
-        f"B{remaining_row}", FormulaRule(
-            formula=[f"B{remaining_row}<B{ceiling_row}*0.1"], fill=CF_AMBER_FILL,
-        ))
+    # Conditional formatting on Remaining — red first = highest priority
     # Red if negative
     summary.conditional_formatting.add(
         f"B{remaining_row}", FormulaRule(
             formula=[f"B{remaining_row}<0"], fill=CF_RED_FILL,
+        ))
+    # Amber if < 10% of ceiling
+    summary.conditional_formatting.add(
+        f"B{remaining_row}", FormulaRule(
+            formula=[f"B{remaining_row}<B{ceiling_row}*0.1"], fill=CF_AMBER_FILL,
         ))
 
     summary.freeze_panes = f"C{SUMMARY_FIRST_WP_ROW}"

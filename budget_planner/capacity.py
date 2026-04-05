@@ -405,9 +405,9 @@ def build_capacity_sheet(ws, wb, team_layout, *,
                        fmt="0.00").value = (
                 f"={SHEET_CONFIG}!B{roster_row}-{cl}{total_row}"
             )
-        # Sum/Budget/Variance for REMAINING row
+        # Sum/Budget/Variance for REMAINING row (all empty — per-month only)
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-                   fmt="0.00").value = f"={SHEET_CONFIG}!B{roster_row}-{scl}{total_row}"
+                   fmt="0.00")
         style_cell(ws, r, val_col_budget, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                    fmt="0.00")
         style_cell(ws, r, val_col_diff, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
@@ -415,32 +415,34 @@ def build_capacity_sheet(ws, wb, team_layout, *,
         r += 1
 
         # Conditional formatting for TOTAL row
+        # Excel CF priority: lower number = higher priority = wins conflicts.
+        # openpyxl assigns priority sequentially, so add red first (wins when both match).
         total_range = (f"{col_letter(month_col_start)}{total_row}:"
-                       f"{col_letter(val_col_diff)}{total_row}")
-        # Amber if > CAPACITY_AMBER_LOAD x Max FTE (added first, lower priority)
-        ws.conditional_formatting.add(total_range, FormulaRule(
-            formula=[f"{col_letter(month_col_start)}{total_row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}"],
-            fill=CF_AMBER_FILL,
-        ))
-        # Red if > Max FTE (added second, overrides amber for overcommitted cells)
+                       f"{col_letter(month_col_end)}{total_row}")
+        # Red if > Max FTE (added first = highest priority, wins over amber)
         ws.conditional_formatting.add(total_range, FormulaRule(
             formula=[f"{col_letter(month_col_start)}{total_row}>{SHEET_CONFIG}!$B${roster_row}"],
             fill=CF_RED_FILL,
         ))
+        # Amber if > CAPACITY_AMBER_LOAD x Max FTE (lower priority, only visible when red doesn't match)
+        ws.conditional_formatting.add(total_range, FormulaRule(
+            formula=[f"{col_letter(month_col_start)}{total_row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}"],
+            fill=CF_AMBER_FILL,
+        ))
 
         # Conditional formatting for REMAINING row
         remaining_range = (f"{col_letter(month_col_start)}{remaining_row}:"
-                           f"{col_letter(val_col_diff)}{remaining_row}")
-        # Amber if remaining < 20% of Max FTE (added first, lower priority)
+                           f"{col_letter(month_col_end)}{remaining_row}")
         remaining_amber_threshold = 1 - CAPACITY_AMBER_LOAD
-        ws.conditional_formatting.add(remaining_range, FormulaRule(
-            formula=[f"{col_letter(month_col_start)}{remaining_row}<{remaining_amber_threshold}*{SHEET_CONFIG}!$B${roster_row}"],
-            fill=CF_AMBER_FILL,
-        ))
-        # Red if < 0 (overallocated — added second, overrides amber)
+        # Red if < 0 (added first = highest priority, wins over amber)
         ws.conditional_formatting.add(remaining_range, FormulaRule(
             formula=[f"{col_letter(month_col_start)}{remaining_row}<0"],
             fill=CF_RED_FILL,
+        ))
+        # Amber if remaining < 20% of Max FTE (lower priority, only visible when red doesn't match)
+        ws.conditional_formatting.add(remaining_range, FormulaRule(
+            formula=[f"{col_letter(month_col_start)}{remaining_row}<{remaining_amber_threshold}*{SHEET_CONFIG}!$B${roster_row}"],
+            fill=CF_AMBER_FILL,
         ))
 
         person_groups[name] = {

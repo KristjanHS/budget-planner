@@ -189,25 +189,25 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
     ))
 
     # -- Conditional formatting: % Ceiling column (amber >ACTUALS_AMBER_PCT_CEIL, red >100%) --
+    # Red first = highest priority (lower number wins in Excel CF)
     pct_col_l = col_letter(val_col_pct_ceil)
     pct_range = f"{pct_col_l}{first_wp_row}:{pct_col_l}{last_wp_row}"
-    # Amber first (lower priority), then red overrides
-    ws.conditional_formatting.add(pct_range, FormulaRule(
-        formula=[f"{pct_col_l}{first_wp_row}>{ACTUALS_AMBER_PCT_CEIL}"], fill=CF_AMBER_FILL,
-    ))
     ws.conditional_formatting.add(pct_range, FormulaRule(
         formula=[f"{pct_col_l}{first_wp_row}>1"], fill=CF_RED_FILL,
     ))
+    ws.conditional_formatting.add(pct_range, FormulaRule(
+        formula=[f"{pct_col_l}{first_wp_row}>{ACTUALS_AMBER_PCT_CEIL}"], fill=CF_AMBER_FILL,
+    ))
 
     # -- Conditional formatting: Breach In column (amber <ACTUALS_AMBER_BREACH_MONTHS, red <ACTUALS_RED_BREACH_MONTHS) --
+    # Red first = highest priority
     breach_col_l = col_letter(val_col_breach)
     breach_range = f"{breach_col_l}{first_wp_row}:{breach_col_l}{last_wp_row}"
-    # Amber first (lower priority), then red overrides
-    ws.conditional_formatting.add(breach_range, FormulaRule(
-        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_AMBER_BREACH_MONTHS}"], fill=CF_AMBER_FILL,
-    ))
     ws.conditional_formatting.add(breach_range, FormulaRule(
         formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_RED_BREACH_MONTHS}"], fill=CF_RED_FILL,
+    ))
+    ws.conditional_formatting.add(breach_range, FormulaRule(
+        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_AMBER_BREACH_MONTHS}"], fill=CF_AMBER_FILL,
     ))
 
     # Freeze panes

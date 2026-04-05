@@ -48,7 +48,7 @@ All CF formulas and priority ordering reviewed — **no logic issues found**:
 | Summary | per-year + 3 | Red, Amber | Variance + Remaining OK |
 | Trends | 10 + 3/WP + 4/person | Green, Amber, Red | All thresholds correct |
 
-Priority order (amber first, red last) is correct everywhere.
+Priority order fixed (2026-04-05): red first (highest priority), amber second.
 Per-row rules used correctly where each row needs different Config refs.
 
 ## Fix Plan

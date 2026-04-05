@@ -368,3 +368,27 @@ def test_capacity_external_config_has_eu_column(cap_ws):
             break
     else:
         pytest.fail("EXTERNAL COMMITMENTS section not found")
+
+
+# ── Test: EU TOTAL row ──
+
+def test_capacity_person_has_eu_total_row(cap_ws, capacity_layout):
+    """EU TOTAL row exists per person."""
+    for member in TEAM:
+        group = capacity_layout["person_groups"][member["name"]]
+        eu_total_row = group.get("eu_total_row")
+        assert eu_total_row is not None, f"{member['name']} missing eu_total_row"
+        assert cap_ws.cell(row=eu_total_row, column=2).value == "EU TOTAL"
+
+
+def test_capacity_eu_total_row_formula(cap_ws, capacity_layout):
+    """EU TOTAL monthly cells have SUM formulas referencing WP rows."""
+    for member in TEAM:
+        name = member["name"]
+        group = capacity_layout["person_groups"][name]
+        eu_total_row = group["eu_total_row"]
+        val = cap_ws.cell(row=eu_total_row, column=MONTH_COL_START).value
+        # Should be a SUM formula (or =0 if no WP rows)
+        assert isinstance(val, str) and val.startswith("="), (
+            f"{name} EU TOTAL M1: expected formula, got {val}"
+        )

@@ -416,6 +416,45 @@ def build_capacity_sheet(ws, wb, team_layout, *,
                    fmt="0.00")
         r += 1
 
+        # EU TOTAL row — sum of programme WP rows + EU-flagged external rows
+        eu_total_row = r
+        style_cell(ws, r, 1, fill=LIGHT_BLUE_FILL)
+        style_cell(ws, r, 2, "EU TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
+
+        # Build list of rows that count toward EU total
+        eu_row_refs = list(wp_rows.values())  # All programme WPs are EU
+        for proj, ext_row in external_rows.items():
+            # Check if this external commitment is EU
+            entry = next((e for e in person_externals
+                          if e["project"] == proj), None)
+            if entry and entry.get("is_eu", False):
+                eu_row_refs.append(ext_row)
+
+        for mi in range(project_params["months"]):
+            c = month_col_start + mi
+            cl = col_letter(c)
+            if eu_row_refs:
+                cell_refs = ",".join(f"{cl}{row}" for row in eu_row_refs)
+                formula = f"=SUM({cell_refs})"
+            else:
+                formula = "=0"
+            style_cell(ws, r, c, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
+                       fmt="0.00").value = formula
+
+        # Sum validation column for EU TOTAL
+        if eu_row_refs:
+            sum_refs = ",".join(f"{col_letter(val_col_sum)}{row}"
+                                for row in eu_row_refs)
+            style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
+                       fill=LIGHT_BLUE_FILL, fmt="0.00").value = f"=SUM({sum_refs})"
+        else:
+            style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
+                       fill=LIGHT_BLUE_FILL, fmt="0.00").value = "=0"
+        # Budget and Variance columns left empty for EU TOTAL
+        style_cell(ws, r, val_col_budget, fill=LIGHT_BLUE_FILL, fmt="0.00")
+        style_cell(ws, r, val_col_diff, fill=LIGHT_BLUE_FILL, fmt="0.00")
+        r += 1
+
         # Conditional formatting for TOTAL row
         # Excel CF priority: lower number = higher priority = wins conflicts.
         # openpyxl assigns priority sequentially, so add red first (wins when both match).
@@ -453,6 +492,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
             "external_rows": external_rows,
             "total_row": total_row,
             "remaining_row": remaining_row,
+            "eu_total_row": eu_total_row,
         }
 
     # Freeze panes

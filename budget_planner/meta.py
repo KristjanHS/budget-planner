@@ -101,7 +101,7 @@ PURPOSE: Track planned FTE allocation and actual EUR spend per work package per 
 
 ═══ SHEET INDEX ═══
 1. _META        — This sheet. AI-agent-readable documentation of workbook structure, conventions, and modification instructions.
-2. Config       — Project parameters (rows 1-4) + WP table (rows 6+) + team roster (below WP TOTAL).
+2. Config       — Project parameters (rows 1-5) + WP table (rows 7+) + team roster (below WP TOTAL).
 3. Plan         — Compact 1-row header + Planned FTE block (formulas from Capacity).
 4. Capacity     — Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects.
 5. Actuals      — EUR actuals per WP per month (input from accountant). Tab color: Blue.
@@ -112,18 +112,19 @@ PURPOSE: Track planned FTE allocation and actual EUR spend per work package per 
 
 SHEET: CONFIG (single source of truth for all project parameters)
   Tab color: Blue (4472C4)
-  Freeze panes: A6
+  Freeze panes: A7
 
-  SECTION A: PROJECT PARAMETERS (rows 1-4)
-    Row 1: A1="Project Title",    B1=<title>           (blue input)
-    Row 2: A2="Project Start",    B2=<date>            (blue input, MMM YYYY)
-    Row 3: A3="Project Months",   B3=<integer>         (blue input)
-    Row 4: A4="FTE Rate (EUR)",   B4=<rate>            (blue input, €#,##0)
-    Row 5: (blank separator)
+  SECTION A: PROJECT PARAMETERS (rows 1-5)
+    Row 1: A1="Project Title",            B1=<title>           (blue input)
+    Row 2: A2="Project Start",            B2=<date>            (blue input, MMM YYYY)
+    Row 3: A3="Project Months",           B3=<integer>         (blue input)
+    Row 4: A4="FTE Rate (EUR)",           B4=<rate>            (blue input, €#,##0)
+    Row 5: A5="EU Annual Ceiling (PM)",   B5=<ceiling>         (blue input, 0.00; default 12.0 ≈ 215 days/year)
+    Row 6: (blank separator)
 
-  SECTION B: WORK PACKAGES TABLE (rows 6+)
-    Row 6: Section header "WORK PACKAGES" (merged A6:H6, section fill)
-    Row 7: Column headers: WP ID | WP Name | FTE Budget | Start Month | End Month | Type | Active Months | Personnel Ceiling (€)
+  SECTION B: WORK PACKAGES TABLE (rows 7+)
+    Row 7: Section header "WORK PACKAGES" (merged A7:H7, section fill)
+    Row 8: Column headers: WP ID | WP Name | FTE Budget | Start Month | End Month | Type | Active Months | Personnel Ceiling (€)
     Rows {cfg_first_wp}-{cfg_last_wp}: WP data rows
       Cols A-F: blue input (WP ID, Name, FTE Budget, Start Mo, End Mo, Type)
       Col F Type: distribution curve type (flat/front-loaded/bell/back-loaded)
@@ -164,13 +165,18 @@ SHEET: CAPACITY (primary planning surface)
       Inactive months: grey fill, empty
       Users can override individual month cells post-generation for fine-tuning
     External Project Rows: project name (input), monthly FTE (flat distribution, blue input)
+      Config block 2 has "EU Grant" column (Yes/No) marking EU-funded externals
     TOTAL Row: SUM of all rows above (formula)
     REMAINING Row: Config Max FTE - TOTAL (formula, refs Config!B<roster_row>)
+    EU TOTAL Row: SUM of programme WP rows + EU-flagged external rows (light blue fill)
+      Tracks total EU commitment per person per month across all EU grants
 
   CONDITIONAL FORMATTING:
     TOTAL > Max FTE: red fill (overcommitted)
     TOTAL > 0.8 x Max FTE: amber fill (approaching limit)
     REMAINING < 0: red fill
+    EU TOTAL per calendar year > EU Annual Ceiling: red fill (exceeds 215-day limit)
+    EU TOTAL per calendar year > EU Annual Ceiling - 1: amber fill (approaching limit)
 
   VALIDATION COLUMNS: {val_sum_col} = Sum, {val_budget_col} = Budget (from assignment config block Total FTE), {val_diff_col} = Variance (per row)
 
@@ -362,10 +368,11 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
   Trends content populated after Actuals/Summary so their layouts are known.
 
 ═══ NAMED RANGES ═══
-  project_start   = Config!$B$2   (project start date)
-  fte_rate         = Config!$B$4   (monthly EUR rate per person-month)
-  partner_ceiling  = Plan!$I$1     (total personnel ceiling in EUR, =SUM of Config!H WP column)
-  current_month    = Trends!$B$1   (last month with completed actuals, blue input)
+  project_start        = Config!$B$2   (project start date)
+  fte_rate              = Config!$B$4   (monthly EUR rate per person-month)
+  eu_annual_ceiling_pm = Config!$B$5   (max PM per calendar year across all EU grants; ≈215 days)
+  partner_ceiling      = Plan!$I$1     (total personnel ceiling in EUR, =SUM of Config!H WP column)
+  current_month        = Trends!$B$1   (last month with completed actuals, blue input)
 
 FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for month iterations.
 

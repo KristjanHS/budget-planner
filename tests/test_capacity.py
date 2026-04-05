@@ -392,3 +392,27 @@ def test_capacity_eu_total_row_formula(cap_ws, capacity_layout):
         assert isinstance(val, str) and val.startswith("="), (
             f"{name} EU TOTAL M1: expected formula, got {val}"
         )
+
+
+def test_capacity_eu_total_includes_eu_external(cap_ws, capacity_layout):
+    """EU TOTAL formula includes EU-flagged external rows, excludes non-EU."""
+    from budget_planner.config import EXTERNAL_COMMITMENTS
+    for member in TEAM:
+        name = member["name"]
+        group = capacity_layout["person_groups"][name]
+        eu_total_row = group["eu_total_row"]
+        formula = str(cap_ws.cell(row=eu_total_row, column=MONTH_COL_START).value)
+        # EU-flagged externals should be in the formula
+        for ext in EXTERNAL_COMMITMENTS:
+            if ext["person"] == name and ext.get("is_eu"):
+                ext_row = group["external_rows"][ext["project"]]
+                assert str(ext_row) in formula, (
+                    f"{name} EU TOTAL should reference EU external row {ext_row}"
+                )
+        # Non-EU externals should NOT be in the formula
+        for ext in EXTERNAL_COMMITMENTS:
+            if ext["person"] == name and not ext.get("is_eu"):
+                ext_row = group["external_rows"][ext["project"]]
+                assert str(ext_row) not in formula, (
+                    f"{name} EU TOTAL should NOT reference non-EU external row {ext_row}"
+                )

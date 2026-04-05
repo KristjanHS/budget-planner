@@ -36,8 +36,11 @@ def _get_config_first_wp_row():
     try:
         init_workbook(path)
         wb = openpyxl.load_workbook(path)
-        from budget_planner.reader import _find_header_row
-        return _find_header_row(wb["Config"], "WORK PACKAGES") + 2
+        try:
+            from budget_planner.reader import _find_header_row
+            return _find_header_row(wb["Config"], "WORK PACKAGES") + 2
+        finally:
+            wb.close()
     finally:
         import os
         os.unlink(path)

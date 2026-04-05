@@ -175,6 +175,43 @@ def read_team_from_config(ws) -> list[dict]:
     return roster
 
 
+def read_reporting_periods(ws, fallback_months=None):
+    """Read reporting period definitions from Config sheet.
+
+    Args:
+        ws: Config worksheet.
+        fallback_months: If section not found, generate default periods
+            for this many months. If None and section missing, returns [].
+
+    Returns:
+        List of dicts with keys: id, start, end.
+    """
+    rp_section = _find_header_row(ws, "REPORTING PERIODS", required=False)
+    if rp_section is None:
+        if fallback_months is not None:
+            from budget_planner.config import default_reporting_periods
+            return default_reporting_periods(fallback_months)
+        return []
+
+    # Skip section header + column headers
+    r = rp_section + 2
+    periods: list[dict] = []
+    while r <= ws.max_row:
+        period_id = ws.cell(r, 1).value
+        if period_id is None or str(period_id).strip() == "":
+            break
+        start = ws.cell(r, 2).value
+        end = ws.cell(r, 3).value
+        periods.append({
+            "id": str(period_id),
+            "start": int(start or 1),
+            "end": int(end or 1),
+        })
+        r += 1
+
+    return periods
+
+
 def read_capacity_assignments(ws) -> list[dict]:
     """Read Person-WP Assignments config block from Capacity sheet.
 

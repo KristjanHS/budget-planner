@@ -286,3 +286,44 @@ class TestActualsReaderValidation:
         assert "WP1" in result
         assert result["WP1"] == [42.0]
         wb.close()
+
+
+def test_read_reporting_periods(fresh_wb_path):
+    """Reader extracts reporting periods from Config sheet."""
+    from openpyxl import load_workbook
+    from budget_planner.reader import read_reporting_periods
+    from budget_planner.config import REPORTING_PERIODS
+
+    wb = load_workbook(fresh_wb_path)
+    ws = wb["Config"]
+    rps = read_reporting_periods(ws)
+    wb.close()
+
+    assert len(rps) == len(REPORTING_PERIODS)
+    for actual, expected in zip(rps, REPORTING_PERIODS):
+        assert actual["id"] == expected["id"]
+        assert actual["start"] == expected["start"]
+        assert actual["end"] == expected["end"]
+
+
+def test_read_reporting_periods_fallback():
+    """Reader returns default periods when section is missing."""
+    from openpyxl import Workbook
+    from budget_planner.reader import read_reporting_periods
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    # Empty sheet — no REPORTING PERIODS section
+    ws.cell(1, 1, "Project Title")
+    ws.cell(1, 2, "Test")
+
+    rps = read_reporting_periods(ws, fallback_months=14)
+    wb.close()
+
+    # Should get default 6-month periods for 14-month project
+    assert len(rps) == 3
+    assert rps[0] == {"id": "RP1", "start": 1, "end": 6}
+    assert rps[1] == {"id": "RP2", "start": 7, "end": 12}
+    assert rps[2] == {"id": "RP3", "start": 13, "end": 14}

@@ -98,7 +98,7 @@ def _validate_config(project_params, work_packages, team, external_commitments):
 
 def _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
                       *, assignments=None, preserved_actuals=None,
-                      rebuild_warnings=None):
+                      rebuild_warnings=None, reporting_periods=None):
     """Build all sheets into the workbook.
 
     Expects wb to already have a '_META' sheet as the active/first sheet.
@@ -110,7 +110,8 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     # Config sheet (holds project params + WP table + team roster)
     config_ws = wb.create_sheet(SHEET_CONFIG)
     config_layout = build_config_sheet(config_ws, wb, project_params, work_packages,
-                                       team=team)
+                                       team=team,
+                                       reporting_periods=reporting_periods)
 
     # Plan sheet
     plan_ws = wb.create_sheet(SHEET_PLAN)
@@ -164,14 +165,16 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     # Summary sheet
     build_summary_sheet(wb, layout, actuals_layout,
                         project_params=project_params,
-                        work_packages=work_packages)
+                        work_packages=work_packages,
+                        reporting_periods=reporting_periods)
 
     # Trends sheet (populate after Actuals and Summary so layouts are available)
     build_trends_sheet(trends_ws, wb, layout, actuals_layout,
                        capacity_layout, config_layout,
                        project_params=project_params,
                        work_packages=work_packages,
-                       team=team)
+                       team=team,
+                       reporting_periods=reporting_periods)
 
     # _META sheet (needs layout for row references)
     build_meta_sheet(meta_ws, layout,
@@ -245,6 +248,7 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
     work_packages = config.WORK_PACKAGES
     team = config.TEAM
     external_commitments = config.EXTERNAL_COMMITMENTS
+    reporting_periods = config.REPORTING_PERIODS
 
     wb = Workbook()
     meta_ws = wb.active
@@ -252,7 +256,8 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
     meta_ws.title = SHEET_META
 
     _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
-                      assignments=assignments)
+                      assignments=assignments,
+                      reporting_periods=reporting_periods)
 
     # _apply_protection(wb)  # Temporarily disabled
     from datetime import date
@@ -287,7 +292,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     from openpyxl import load_workbook
     from budget_planner.reader import (
         read_config_sheet, read_team_from_config, read_capacity_sheet,
-        read_actuals_values,
+        read_actuals_values, read_reporting_periods,
     )
 
     if not os.path.exists(input_path):
@@ -313,6 +318,12 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     # Team roster from Config sheet
     team = read_team_from_config(existing_wb[SHEET_CONFIG])
+
+    # Reporting periods from Config sheet
+    reporting_periods = read_reporting_periods(
+        existing_wb[SHEET_CONFIG],
+        fallback_months=project_params["months"],
+    )
 
     # Capacity sheet → external commitments + FTE values
     if SHEET_CAPACITY not in existing_wb.sheetnames:
@@ -393,6 +404,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         assignments=assignments,
         preserved_actuals=preserved_actuals,
         rebuild_warnings=warnings if warnings else None,
+        reporting_periods=reporting_periods,
     )
 
     # _apply_protection(wb)  # Temporarily disabled

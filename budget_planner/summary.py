@@ -16,7 +16,8 @@ from budget_planner.styles import (
 )
 
 
-def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work_packages=None):
+def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work_packages=None,
+                        reporting_periods=None):
     """Create the Summary sheet with annual budget view and budget overview.
 
     Parameters

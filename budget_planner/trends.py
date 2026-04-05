@@ -26,7 +26,8 @@ from budget_planner.styles import CF_RED_FILL as _RED_CF_FILL
 
 
 def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_layout, *,
-                       project_params=None, work_packages=None, team=None):
+                       project_params=None, work_packages=None, team=None,
+                       reporting_periods=None):
     """Build the Trends sheet: WP burn rate, cumulative chart, person load.
 
     Args:

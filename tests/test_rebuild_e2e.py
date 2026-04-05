@@ -744,3 +744,77 @@ class TestRebuildRecalc:
                 "recalc auto-fit did not run on _changed file"
             )
         wb.close()
+
+
+# ── Test: Reporting period round-trip through rebuild ──
+
+
+def test_reporting_periods_survive_rebuild(tmp_path):
+    """Reporting periods in Config survive a rebuild cycle."""
+    from budget_planner.workbook import init_workbook, rebuild_workbook
+    from budget_planner.reader import read_reporting_periods
+    from budget_planner.config import REPORTING_PERIODS
+    from openpyxl import load_workbook
+
+    out = str(tmp_path / "rp_rebuild.xlsx")
+    init_workbook(out)
+
+    # Read original RPs
+    wb = load_workbook(out)
+    original_rps = read_reporting_periods(wb["Config"])
+    wb.close()
+    assert len(original_rps) == len(REPORTING_PERIODS)
+
+    # Rebuild
+    rebuild_workbook(out)
+
+    # Read rebuilt RPs
+    wb = load_workbook(out)
+    rebuilt_rps = read_reporting_periods(wb["Config"])
+    wb.close()
+
+    assert len(rebuilt_rps) == len(original_rps)
+    for orig, rebuilt in zip(original_rps, rebuilt_rps):
+        assert orig["id"] == rebuilt["id"]
+        assert orig["start"] == rebuilt["start"]
+        assert orig["end"] == rebuilt["end"]
+
+
+def test_modified_reporting_periods_survive_rebuild(tmp_path):
+    """User-modified reporting periods are preserved on rebuild."""
+    from budget_planner.workbook import init_workbook, rebuild_workbook
+    from budget_planner.reader import read_reporting_periods
+    from openpyxl import load_workbook
+
+    out = str(tmp_path / "rp_mod.xlsx")
+    init_workbook(out)
+
+    # Modify RP boundaries in the workbook
+    wb = load_workbook(out)
+    ws = wb["Config"]
+
+    # Find REPORTING PERIODS section
+    rp_section = None
+    for r in range(1, ws.max_row + 1):
+        val = ws.cell(r, 1).value
+        if val and "REPORTING PERIODS" in str(val).upper():
+            rp_section = r
+            break
+    assert rp_section is not None
+
+    # Change RP1 end from 18 to 12
+    data_row = rp_section + 2  # skip header + col headers
+    _set(ws, data_row, 3, 12)  # End Month = 12
+
+    wb.save(out)
+    wb.close()
+
+    # Rebuild
+    rebuild_workbook(out)
+
+    # Verify modification preserved
+    wb = load_workbook(out)
+    rps = read_reporting_periods(wb["Config"])
+    wb.close()
+
+    assert rps[0]["end"] == 12  # Modified value preserved

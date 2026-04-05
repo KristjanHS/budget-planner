@@ -367,7 +367,6 @@ class TestRebuildWithInsertedRows:
     def test_added_assignment_row_creates_wp_row_after_rebuild(self, assigned_init_path):
         """New assignment row added in Capacity config block -> person gets new WP row."""
         from budget_planner.reader import read_capacity_assignments
-        from budget_planner.config import TEAM, WORK_PACKAGES
 
         wb = openpyxl.load_workbook(assigned_init_path)
         cap_ws = wb["Capacity"]
@@ -384,10 +383,12 @@ class TestRebuildWithInsertedRows:
 
         assert last_asgn_row is not None
 
-        # Pick a person and WP that aren't already assigned together
-        target_person = TEAM[0]["name"]
+        # Pick a person and WP that aren't already assigned together — read
+        # from the workbook, not config.py, so tests survive seed data changes.
+        target_person = original[0]["person"]
+        _, all_wps = read_config_sheet(wb["Config"])
         assigned_wps = {a["wp"] for a in original if a["person"] == target_person}
-        new_wp = next((wp["id"] for wp in WORK_PACKAGES
+        new_wp = next((wp["id"] for wp in all_wps
                        if wp["id"] not in assigned_wps), None)
         if new_wp is None:
             pytest.skip("All WPs already assigned to first person")
@@ -417,8 +418,6 @@ class TestRebuildWithInsertedRows:
 
     def test_added_external_commitment_row_appears_after_rebuild(self, assigned_init_path):
         """New external commitment added in Capacity config block -> person gets external row."""
-        from budget_planner.config import TEAM
-
         wb = openpyxl.load_workbook(assigned_init_path)
         cap_ws = wb["Capacity"]
 
@@ -437,7 +436,9 @@ class TestRebuildWithInsertedRows:
             r += 1
         insert_row = r  # first empty row after existing data
 
-        new_person = TEAM[-1]["name"]  # last team member
+        # Read from workbook, not config.py, so tests survive seed data changes.
+        all_people = read_team_from_config(wb["Config"])
+        new_person = all_people[-1]["name"]
         new_project = "NewExtProject"
         _set(cap_ws, insert_row, 1, new_person)
         _set(cap_ws, insert_row, 2, new_project)

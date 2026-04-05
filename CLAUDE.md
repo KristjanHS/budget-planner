@@ -39,6 +39,7 @@ This file uses **progressive disclosure**. Keep it focused on what every convers
 |---------|----------|-------------|
 | Programme cost model, funding rates, 25% indirect | `docs/grant-domain.md` | Cost categories, PM->EUR chain, reallocation rules |
 | How sheets are built, builder interface | `docs/deep-dive/Sheet Builders.md` | Builder contract, stateless pattern |
+| Config/Capacity structure changes | `budget_planner/meta.py` | Critical Rule 6: _META must reflect current sheet structure |
 | Reader breaks, rebuild loses data | `docs/deep-dive/Reader and Rebuild.md` | Formula reference chains, fragile parsing |
 | Column offsets, month positioning, styles | `docs/deep-dive/Layout and Styling.md` | `layout.py` constants, `styles.py` patterns |
 | Project overview, tech stack | `docs/1. Project Overview.md` | Purpose, technology, actors |

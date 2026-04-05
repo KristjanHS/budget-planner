@@ -19,6 +19,7 @@ Before executing a plan, move completed/superseded plans to docs/plans/old_alrea
 When a plan claims a module is "unchanged", grep its imports to verify no coupling to changed modules.
 When inserting/removing a Config column, grep ALL formula references (`Config!{letter}`) across every builder AND test file. Column shifts cascade silently — a test asserting the old column letter will mask the bug.
 When inserting/removing a Config param row, grep ALL test files for hardcoded row numbers (e.g. `cell(4, 2)`, `wp_first_row = 8`, merge span tuples). Row shifts cascade into tests the plan doesn't list.
+When changing error message format in reader/builders, grep test files for the old message pattern (`pytest.raises(match=` strings). Semantic changes in validation produce silent test failures.
 
 ## Worktrees
 Before starting work in a worktree:

@@ -62,7 +62,7 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
 
 
 def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
-                     config_layout=None):
+                     config_layout):
     """Build the Plan sheet: compact header + planned FTE block.
 
     Args:
@@ -72,7 +72,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
             falls back to config.py values when None.
         work_packages: list of WP dicts; falls back to config.WORK_PACKAGES.
         config_layout: dict from build_config_sheet() with wp_first_row,
-            wp_last_row, etc. When None, uses default Config row 8.
+            wp_last_row, param_rows, etc.
 
     Returns:
         Layout dict with row numbers for all key positions.
@@ -84,14 +84,9 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
 
-    # Config sheet WP row positions
-    if config_layout is not None:
-        cfg_wp_first = config_layout["wp_first_row"]
-        cfg_wp_last = config_layout["wp_last_row"]
-    else:
-        # Fallback for backward compatibility (Config WPs start at row 8)
-        cfg_wp_first = 8
-        cfg_wp_last = 8 + len(work_packages) - 1
+    # Config sheet WP row positions (config_layout always provided)
+    cfg_wp_first = config_layout["wp_first_row"]
+    cfg_wp_last = config_layout["wp_last_row"]
 
     # Derived constants
     month_col_start = MONTH_COL_START
@@ -103,18 +98,19 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     val_col_diff = _vcols["diff"]
 
     # -- ROW 1: COMPACT HEADER --
-    # A1: "Title:", B1: =Config!B1
+    pr = config_layout["param_rows"]
+    # A1: "Title:", B1: =Config!B{title_row}
     style_cell(ws, 1, 1, "Title:", font=HEADER_FONT, border=False)
     style_cell(ws, 1, 2, font=Font(name="Arial", bold=True, size=14, color="008000"),
-               border=False).value = f"={SHEET_CONFIG}!B1"
-    # D1: "Start:", E1: =Config!B2
+               border=False).value = f"={SHEET_CONFIG}!B{pr['Project Title']}"
+    # D1: "Start:", E1: =Config!B{start_row}
     style_cell(ws, 1, 4, "Start:", font=HEADER_FONT, border=False)
     style_cell(ws, 1, 5, font=GREEN_XREF, border=False,
-               fmt="MMM YYYY").value = f"={SHEET_CONFIG}!B2"
-    # F1: "Rate:", G1: =Config!B4
+               fmt="MMM YYYY").value = f"={SHEET_CONFIG}!B{pr['Project Start']}"
+    # F1: "Rate:", G1: =Config!B{rate_row}
     style_cell(ws, 1, 6, "Rate:", font=HEADER_FONT, border=False)
     style_cell(ws, 1, 7, font=GREEN_XREF, border=False,
-               fmt="\u20ac#,##0").value = f"={SHEET_CONFIG}!B4"
+               fmt="\u20ac#,##0").value = f"={SHEET_CONFIG}!B{pr['FTE Rate (EUR)']}"
     # H1: "Ceiling:", then the ceiling formula
     style_cell(ws, 1, 8, "Ceiling:", font=HEADER_FONT, border=False)
     style_cell(ws, 1, 9, font=GREEN_XREF, border=False,

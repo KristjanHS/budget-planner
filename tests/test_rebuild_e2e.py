@@ -27,9 +27,23 @@ from budget_planner.config import MONTH_COL_START
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
-# Config sheet layout: WP data rows start at row 9
-# (rows 1-5 = params, 6 = gap, 7 = section header, 8 = column headers)
-CONFIG_FIRST_WP_ROW = 9
+
+def _get_config_first_wp_row():
+    """Derive Config WP data start row from a generated workbook."""
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+        path = f.name
+    try:
+        init_workbook(path)
+        wb = openpyxl.load_workbook(path)
+        from budget_planner.reader import _find_header_row
+        return _find_header_row(wb["Config"], "WORK PACKAGES") + 2
+    finally:
+        import os
+        os.unlink(path)
+
+
+CONFIG_FIRST_WP_ROW = _get_config_first_wp_row()
 
 
 # ── Helpers ──

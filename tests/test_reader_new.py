@@ -159,62 +159,69 @@ class TestConfigSheetValidation:
         return wb, ws
 
     def test_missing_title_label(self):
-        """Raises ValueError when row 1 col A is empty."""
+        """Raises ValueError when no row has Project Title."""
         wb, ws = self._make_empty_config_ws()
-        # Leave row 1 empty
-        with pytest.raises(ValueError, match="row 1 col A expected 'Project Title'"):
+        # Leave sheet empty
+        with pytest.raises(ValueError, match="missing param row matching 'Project Title'"):
             read_config_sheet(ws)
         wb.close()
 
     def test_wrong_title_label(self):
-        """Raises ValueError when row 1 col A has wrong text."""
+        """Raises ValueError when no row matches Project Title."""
         wb, ws = self._make_empty_config_ws()
         ws.cell(1, 1, "Name")
-        with pytest.raises(ValueError, match="row 1 col A expected 'Project Title'"):
+        with pytest.raises(ValueError, match="missing param row matching 'Project Title'"):
             read_config_sheet(ws)
         wb.close()
 
     def test_missing_start_label(self):
-        """Raises ValueError when row 2 col A is missing."""
+        """Raises ValueError when Project Start label is missing."""
         wb, ws = self._make_empty_config_ws()
         ws.cell(1, 1, "Project Title")
-        # Leave row 2 empty
-        with pytest.raises(ValueError, match="row 2 col A expected 'Project Start'"):
+        with pytest.raises(ValueError, match="missing param row matching 'Project Start'"):
             read_config_sheet(ws)
         wb.close()
 
     def test_missing_months_label(self):
-        """Raises ValueError when row 3 col A is missing."""
+        """Raises ValueError when Project Months label is missing."""
         wb, ws = self._make_empty_config_ws()
         ws.cell(1, 1, "Project Title")
         ws.cell(2, 1, "Project Start")
-        # Leave row 3 empty
-        with pytest.raises(ValueError, match="row 3 col A expected 'Project Months'"):
+        with pytest.raises(ValueError, match="missing param row matching 'Project Months'"):
             read_config_sheet(ws)
         wb.close()
 
     def test_missing_rate_label(self):
-        """Raises ValueError when row 4 col A is missing."""
+        """Raises ValueError when FTE Rate label is missing."""
         wb, ws = self._make_empty_config_ws()
         ws.cell(1, 1, "Project Title")
         ws.cell(2, 1, "Project Start")
         ws.cell(3, 1, "Project Months")
-        # Leave row 4 empty
-        with pytest.raises(ValueError, match="row 4 col A expected 'FTE Rate'"):
+        with pytest.raises(ValueError, match="missing param row matching 'FTE Rate'"):
             read_config_sheet(ws)
         wb.close()
 
-    def test_shifted_rows_detected(self):
-        """Inserting a row before params shifts labels — validation catches it."""
+    def test_shifted_rows_still_found(self):
+        """Label-scan finds params regardless of row position."""
         wb, ws = self._make_empty_config_ws()
-        # Simulate user inserting a row: params shifted down by 1
-        ws.cell(1, 1, "Project ID")  # inserted row
+        # Params shifted down by 1 — scanner still finds them
+        ws.cell(1, 1, "Project ID")  # inserted row (ignored)
         ws.cell(2, 1, "Project Title")
+        ws.cell(2, 2, "Test")
         ws.cell(3, 1, "Project Start")
+        ws.cell(3, 2, datetime(2026, 1, 1))
         ws.cell(4, 1, "Project Months")
+        ws.cell(4, 2, 60)
         ws.cell(5, 1, "FTE Rate (EUR)")
-        with pytest.raises(ValueError, match="row 1 col A expected 'Project Title'"):
-            read_config_sheet(ws)
+        ws.cell(5, 2, 7500)
+        ws.cell(6, 1, "EU Annual Ceiling (PM)")
+        ws.cell(6, 2, 12.0)
+        # Need a WORK PACKAGES section for full parse
+        ws.cell(8, 1, "WORK PACKAGES")
+        ws.cell(9, 1, "WP ID")
+        params, wps = read_config_sheet(ws)
+        assert params["title"] == "Test"
+        assert params["rate"] == 7500
         wb.close()
 
     def test_valid_config_passes_validation(self):

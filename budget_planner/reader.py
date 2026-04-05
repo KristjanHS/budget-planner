@@ -57,29 +57,28 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
         - work_packages: list of dicts with keys 'id', 'name', 'fte',
           'start', 'end'
     """
-    # Validate expected labels in column A (rows 1-5)
-    _expected_labels = [
-        (1, "title", "Project Title"),
-        (2, "start", "Project Start"),
-        (3, "months", "Project Months"),
-        (4, "rate", "FTE Rate"),
-        (5, "ceiling", "EU Annual Ceiling"),
-    ]
-    for row, keyword, full_label in _expected_labels:
-        label = ws.cell(row, 1).value
-        if label is None or keyword not in str(label).lower():
-            raise ValueError(
-                f"Config sheet row {row} col A expected '{full_label}', "
-                f"got {label!r}. Was the Config sheet manually edited?"
-            )
-
-    project_params = {
-        "title": ws.cell(1, 2).value,
-        "start": ws.cell(2, 2).value,
-        "months": int(ws.cell(3, 2).value or 60),
-        "rate": float(ws.cell(4, 2).value or 7500),
-        "eu_ceiling_pm": float(ws.cell(5, 2).value or 12.0),
+    # Scan column A for known param labels (position-independent)
+    _param_map = {
+        "Project Title": ("title", None),
+        "Project Start": ("start", None),
+        "Project Months": ("months", lambda v: int(v or 60)),
+        "FTE Rate": ("rate", lambda v: float(v or 7500)),
+        "EU Annual Ceiling": ("eu_ceiling_pm", lambda v: float(v or 12.0)),
     }
+    project_params: dict = {}
+    for r in range(1, ws.max_row + 1):
+        label = str(ws.cell(r, 1).value or "")
+        for prefix, (key, converter) in _param_map.items():
+            if prefix.lower() in label.lower():
+                raw = ws.cell(r, 2).value
+                project_params[key] = converter(raw) if converter else raw
+                break
+        if len(project_params) == len(_param_map):
+            break
+    # Validate all params found
+    for prefix, (key, _) in _param_map.items():
+        if key not in project_params:
+            raise ValueError(f"Config sheet missing param row matching '{prefix}'")
 
     # Work packages — find dynamically so adding param rows doesn't break
     wp_section = _find_header_row(ws, "WORK PACKAGES")

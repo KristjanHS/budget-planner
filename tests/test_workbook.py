@@ -35,10 +35,14 @@ def test_global_params(workbook):
     assert plan["E1"].value is not None, "Plan!E1 (start ref) is empty"
     assert plan["G1"].value is not None, "Plan!G1 (rate ref) is empty"
     assert plan["I1"].value is not None, "Plan!I1 (ceiling ref) is empty"
-    # Check Config directly for valid rate
+    # Check Config directly for valid rate (find by label, not hardcoded row)
     config = workbook["Config"]
-    val = config["B4"].value
-    assert val is not None and val > 0, f"Config!B4 (fte_rate) is invalid: {val}"
+    rate_val = None
+    for r in range(1, config.max_row + 1):
+        if "fte rate" in str(config.cell(r, 1).value or "").lower():
+            rate_val = config.cell(r, 2).value
+            break
+    assert rate_val is not None and rate_val > 0, f"Config FTE Rate is invalid: {rate_val}"
 
 
 # ── Check 4: Named ranges ──

@@ -21,6 +21,15 @@ def _sample_wps():
     ]
 
 
+def _find_param_value(ws, label_prefix):
+    """Find param value by scanning column A for label prefix."""
+    for r in range(1, ws.max_row + 1):
+        label = str(ws.cell(r, 1).value or "")
+        if label_prefix.lower() in label.lower():
+            return ws.cell(r, 2).value
+    return None
+
+
 def test_config_sheet_params():
     """Project parameters are written correctly."""
     wb = Workbook()
@@ -28,10 +37,10 @@ def test_config_sheet_params():
     assert ws is not None
     ws.title = "Config"
     build_config_sheet(ws, wb, _sample_params(), _sample_wps())
-    assert ws.cell(1, 2).value == "Test Project"
-    assert ws.cell(2, 2).value == datetime(2026, 7, 1)
-    assert ws.cell(3, 2).value == 60
-    assert ws.cell(4, 2).value == 7500
+    assert _find_param_value(ws, "Project Title") == "Test Project"
+    assert _find_param_value(ws, "Project Start") == datetime(2026, 7, 1)
+    assert _find_param_value(ws, "Project Months") == 60
+    assert _find_param_value(ws, "FTE Rate") == 7500
 
 
 def test_config_sheet_wp_table():
@@ -85,8 +94,9 @@ def test_config_sheet_blue_font():
     assert ws is not None
     ws.title = "Config"
     layout = build_config_sheet(ws, wb, _sample_params(), _sample_wps())
-    # Param values (col B rows 2-4) should be blue (row 1 uses TITLE_FONT)
-    assert ws.cell(2, 2).font.color.rgb == "000000FF" or ws.cell(2, 2).font.color.rgb == "0000FF"
+    # Param values should be blue (except row 1 which uses TITLE_FONT)
+    start_row = layout["param_rows"]["Project Start"]
+    assert ws.cell(start_row, 2).font.color.rgb in ("000000FF", "0000FF")
     # WP cells should be blue
     first = layout["wp_first_row"]
     font_rgb = ws.cell(first, 1).font.color.rgb

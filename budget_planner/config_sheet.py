@@ -166,10 +166,12 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
     roster_last_row = r - 1
 
     # ── Named Ranges ──
-    dn_start = DefinedName("project_start", attr_text=f"{SHEET_CONFIG}!$B$2")
+    start_row = param_rows["Project Start"]
+    dn_start = DefinedName("project_start", attr_text=f"{SHEET_CONFIG}!$B${start_row}")
     wb.defined_names.add(dn_start)
 
-    dn_rate = DefinedName("fte_rate", attr_text=f"{SHEET_CONFIG}!$B$4")
+    rate_row = param_rows["FTE Rate (EUR)"]
+    dn_rate = DefinedName("fte_rate", attr_text=f"{SHEET_CONFIG}!$B${rate_row}")
     wb.defined_names.add(dn_rate)
 
     ceiling_row = param_rows["EU Annual Ceiling (PM)"]

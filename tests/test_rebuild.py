@@ -38,16 +38,17 @@ class TestRebuildRoundTrip:
 
     def test_rebuild_preserves_config_params(self, init_wb):
         """Project params survive a rebuild."""
+        from budget_planner.reader import read_config_sheet
         wb = load_workbook(init_wb)
-        original_title = wb["Config"].cell(1, 2).value
-        original_months = wb["Config"].cell(3, 2).value
+        original_params, _ = read_config_sheet(wb["Config"])
         wb.close()
 
         rebuild_workbook(input_path=init_wb)
 
         wb = load_workbook(init_wb)
-        assert wb["Config"].cell(1, 2).value == original_title
-        assert wb["Config"].cell(3, 2).value == original_months
+        rebuilt_params, _ = read_config_sheet(wb["Config"])
+        assert rebuilt_params["title"] == original_params["title"]
+        assert rebuilt_params["months"] == original_params["months"]
         wb.close()
 
     def test_rebuild_preserves_wp_count(self, init_wb):

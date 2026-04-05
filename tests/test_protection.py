@@ -25,16 +25,21 @@ def test_sheets_are_protected(protection_wb):
 
 def test_blue_input_cells_unlocked(protection_wb):
     """Blue input cells should have locked=False."""
-    # Check Config sheet — param values (B2-B4) should be unlocked
-    # B1 uses TITLE_FONT (not blue input), so it stays locked
+    from budget_planner.reader import _find_header_row
+    # Check Config sheet — param values should be unlocked (except title row)
     config = protection_wb["Config"]
-    for r in [2, 3, 4]:
-        cell = config.cell(r, 2)
-        assert cell.protection.locked is False, \
-            f"Config!B{r} should be unlocked (blue input)"
+    # Find param rows dynamically: scan for known labels, skip first (title)
+    param_labels = ["Project Start", "Project Months", "FTE Rate"]
+    for label in param_labels:
+        for r in range(1, config.max_row + 1):
+            if label.lower() in str(config.cell(r, 1).value or "").lower():
+                cell = config.cell(r, 2)
+                assert cell.protection.locked is False, \
+                    f"Config!B{r} ({label}) should be unlocked (blue input)"
+                break
 
     # Check Config sheet — WP data cells should be unlocked
-    wp_first_row = 8  # After section header + column headers
+    wp_first_row = _find_header_row(config, "WORK PACKAGES") + 2
     cell = config.cell(wp_first_row, 1)
     if cell.value is not None:
         assert cell.protection.locked is False, \

@@ -10,6 +10,7 @@ def _sample_params():
         "start": datetime(2026, 7, 1),
         "months": 60,
         "rate": 7500,
+        "eu_ceiling_pm": 12.0,
     }
 
 
@@ -90,3 +91,30 @@ def test_config_sheet_blue_font():
     first = layout["wp_first_row"]
     font_rgb = ws.cell(first, 1).font.color.rgb
     assert "0000FF" in str(font_rgb)
+
+
+def test_config_eu_ceiling_param():
+    """EU Annual Ceiling (PM) parameter row exists with default value."""
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    build_config_sheet(ws, wb, _sample_params(), _sample_wps())
+    found = False
+    for r in range(1, 10):
+        if ws.cell(r, 1).value and "EU Annual Ceiling" in str(ws.cell(r, 1).value):
+            assert ws.cell(r, 2).value == 12.0
+            found = True
+            break
+    assert found, "EU Annual Ceiling param not found"
+
+
+def test_config_eu_ceiling_named_range():
+    """Named range eu_annual_ceiling_pm exists."""
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    build_config_sheet(ws, wb, _sample_params(), _sample_wps())
+    names = set(wb.defined_names.keys())
+    assert "eu_annual_ceiling_pm" in names

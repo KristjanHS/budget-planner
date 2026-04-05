@@ -51,6 +51,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
         ("Project Start", project_params["start"], "MMM YYYY", None),
         ("Project Months", project_params["months"], "0", None),
         ("FTE Rate (EUR)", project_params["rate"], "€#,##0", None),
+        ("EU Annual Ceiling (PM)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
     ]
     param_rows = {}
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
@@ -61,12 +62,12 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
         style_cell(ws, i, 2, value=value, font=font, fmt=fmt, border=False)
         param_rows[label] = i
 
-    # Row 5 is empty separator (no action needed)
+    # Empty separator row after last param (no action needed)
 
-    # ── Section B: Work Packages Table (rows 6+) ──
-    section_row = 6
-    header_row = 7
-    first_data_row = 8
+    # ── Section B: Work Packages Table ──
+    section_row = len(param_defs) + 2   # gap row after last param
+    header_row = section_row + 1
+    first_data_row = header_row + 1
 
     # Section header — merged A6:H6
     ws.merge_cells(start_row=section_row, start_column=1,
@@ -171,9 +172,14 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None):
     dn_rate = DefinedName("fte_rate", attr_text=f"{SHEET_CONFIG}!$B$4")
     wb.defined_names.add(dn_rate)
 
+    ceiling_row = param_rows["EU Annual Ceiling (PM)"]
+    dn_ceiling = DefinedName("eu_annual_ceiling_pm",
+                              attr_text=f"{SHEET_CONFIG}!$B${ceiling_row}")
+    wb.defined_names.add(dn_ceiling)
+
     # ── Sheet Appearance ──
     ws.sheet_properties.tabColor = "4472C4"
-    ws.freeze_panes = "A6"
+    ws.freeze_panes = f"A{section_row}"
     auto_fit_columns(ws)
 
     return {

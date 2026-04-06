@@ -110,7 +110,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     header_row = section_row + 1
     first_data_row = header_row + 1
 
-    # Section header — merged A6:H6
+    # Section header — merged A:H (columns 1-8)
     ws.merge_cells(start_row=section_row, start_column=1,
                    end_row=section_row, end_column=8)
     style_cell(ws, section_row, 1, value="WORK PACKAGES",
@@ -210,9 +210,9 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
         r += 1
     roster_last_row = r - 1
 
-    # Data validation dropdown for Grade cells
-    grade_list_str = ",".join(grade_rates.keys())
-    dv = DataValidation(type="list", formula1=f'"{grade_list_str}"',
+    # Data validation dropdown for Grade cells — references grade table directly
+    dv = DataValidation(type="list",
+                        formula1=f"=$A${grade_first_row}:$A${grade_last_row}",
                         allow_blank=False)
     dv.error = "Please select a valid grade"
     dv.errorTitle = "Invalid Grade"
@@ -286,7 +286,8 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
 
     # ── Set FTE Rate formula (weighted average of grade rates by FTE) ──
     fte_rate_formula = (
-        "=SUMPRODUCT(VLOOKUP(roster_grades,tbl_GradeRates,2,FALSE)*roster_ftes)"
+        "=SUMPRODUCT(IFERROR(VLOOKUP(roster_grades,tbl_GradeRates,2,FALSE),0)"
+        "*roster_ftes)"
         "/SUM(roster_ftes)"
     )
     ws.cell(rate_row, 2).value = fte_rate_formula

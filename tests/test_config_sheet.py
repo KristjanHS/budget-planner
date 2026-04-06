@@ -314,7 +314,7 @@ def test_grade_data_validation():
     # Find the list validation
     dv_found = False
     for dv in ws.data_validations.dataValidation:
-        if dv.type == "list" and "Senior" in str(dv.formula1):
+        if dv.type == "list" and str(dv.formula1).startswith("=$A$"):
             dv_found = True
             break
     assert dv_found, "Data validation dropdown for grades not found"

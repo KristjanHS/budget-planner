@@ -147,7 +147,7 @@ SHEET: CONFIG (single source of truth for all project parameters)
     Row 2: A2="Project Start",            B2=<date>            (blue input, MMM YYYY)
     Row 3: A3="Project Months",           B3=<integer>         (blue input)
     Row 4: A4="FTE Rate (EUR)",           B4=<formula>         (black formula, €#,##0)
-           Weighted average: =SUMPRODUCT(VLOOKUP(roster_grades,tbl_GradeRates,2,FALSE)*roster_ftes)/SUM(roster_ftes)
+           Weighted average: =SUMPRODUCT(IFERROR(VLOOKUP(roster_grades,tbl_GradeRates,2,FALSE),0)*roster_ftes)/SUM(roster_ftes)
            Derives rate from per-grade rates weighted by team FTE. Not directly editable.
     Row 5: A5="EU Annual Ceiling (PM)",   B5=<ceiling>         (blue input, 0.00; default 12.0 ≈ 215 days/year)
     Row 6: (blank separator)

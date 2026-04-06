@@ -49,6 +49,8 @@ LibreOffice `store()` strips chart series data (val/tx/cat XML) from openpyxl fi
 For charts, construct Series manually with `NumDataSource`/`NumRef`/`AxDataSource` instead of `chart.add_data()` — produces explicit OOXML elements.
 Charts referencing hidden rows must set `chart.visible_cells_only = False` — openpyxl defaults to `True` (`<c:plotVisOnly val="1"/>`), which makes Excel skip hidden-row data → blank chart.
 When debugging chart issues, inspect the zip XML directly (`zipfile` + `ElementTree`) — openpyxl's Python API can show data that wasn't serialized. Also create minimal isolated test files varying one factor at a time (bisect method) to pinpoint the breaking element.
+Formulas with named-range arrays (e.g. SUMPRODUCT+VLOOKUP over a named range): write as CSE array formula via `ArrayFormula(ref, "=formula...")` — Excel applies implicit intersection (`@`) to named ranges in regular formulas, reducing arrays to a single cell. Note: `ArrayFormula` strips first char of `text`, so include the leading `=`.
+When adding/renaming Config param labels, check `_find_header_row` substring collisions — it uses case-insensitive `in` matching, so "PM/person/year" matches a "Person" search.
 
 ## Testing
 Tests must not hardcode config.py seed values (WP names, person names, FTE amounts, start/end months).

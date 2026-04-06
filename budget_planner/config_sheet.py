@@ -66,7 +66,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
         ("Project Start", project_params["start"], "MMM YYYY", None),
         ("Project Months", project_params["months"], "0", None),
         ("FTE Rate (EUR)", None, "€#,##0", None),  # value set later as formula
-        ("EU Annual Ceiling (PM)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
+        ("EU Annual Ceiling (PM/FTE/year)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
     ]
     param_rows = {}
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
@@ -259,7 +259,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     dn_rate = DefinedName("fte_rate", attr_text=f"{SHEET_CONFIG}!$B${rate_row}")
     wb.defined_names.add(dn_rate)
 
-    ceiling_row = param_rows["EU Annual Ceiling (PM)"]
+    ceiling_row = param_rows["EU Annual Ceiling (PM/FTE/year)"]
     dn_ceiling = DefinedName("eu_annual_ceiling_pm",
                               attr_text=f"{SHEET_CONFIG}!$B${ceiling_row}")
     wb.defined_names.add(dn_ceiling)
@@ -285,12 +285,17 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     wb.defined_names.add(dn_roster_grades)
 
     # ── Set FTE Rate formula (weighted average of grade rates by FTE) ──
+    # Written as CSE array formula so Excel doesn't apply implicit intersection
+    # (@) to the named-range arrays — without this, Excel in non-dynamic-array
+    # mode reduces roster_grades to a single cell via row intersection → #VALUE!
+    rate_cell = f"B{rate_row}"
     fte_rate_formula = (
         "=SUMPRODUCT(IFERROR(VLOOKUP(roster_grades,tbl_GradeRates,2,FALSE),0)"
         "*roster_ftes)"
         "/SUM(roster_ftes)"
     )
-    ws.cell(rate_row, 2).value = fte_rate_formula
+    from openpyxl.worksheet.formula import ArrayFormula
+    ws.cell(rate_row, 2).value = ArrayFormula(rate_cell, fte_rate_formula)
 
     # ── Sheet Appearance ──
     ws.sheet_properties.tabColor = "4472C4"

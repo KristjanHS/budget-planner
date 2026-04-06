@@ -39,8 +39,9 @@ def test_read_config_sheet_roundtrip():
     assert params["title"] == "Test"
     assert params["start"] == datetime(2026, 7, 1)
     assert params["months"] == 24
-    # FTE Rate is now a formula (grade-based weighted average)
-    assert isinstance(params["rate"], str) and params["rate"].startswith("=")
+    # FTE Rate is now a CSE array formula (grade-based weighted average)
+    from openpyxl.worksheet.formula import ArrayFormula
+    assert isinstance(params["rate"], (str, ArrayFormula))
     assert len(wps) == 2
     assert wps[0]["id"] == "WP1"
     assert wps[0]["name"] == "Mgmt"

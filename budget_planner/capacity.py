@@ -488,7 +488,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
         ))
 
         # Conditional formatting for EU TOTAL — per calendar year
-        ceiling_row = team_layout["param_rows"]["EU Annual Ceiling (PM)"]
+        ceiling_row = team_layout["param_rows"]["EU Annual Ceiling (PM/FTE/year)"]
         for group_start, span in _calendar_year_groups(
             project_params["start"], project_params["months"]
         ):

@@ -41,8 +41,9 @@ def test_config_sheet_params():
     assert _find_param_value(ws, "Project Start") == datetime(2026, 7, 1)
     assert _find_param_value(ws, "Project Months") == 60
     # FTE Rate is now a formula (weighted average of grade rates)
+    from openpyxl.worksheet.formula import ArrayFormula
     fte_rate_val = _find_param_value(ws, "FTE Rate")
-    assert isinstance(fte_rate_val, str) and fte_rate_val.startswith("=")
+    assert isinstance(fte_rate_val, (str, ArrayFormula))
 
 
 def test_config_sheet_wp_table():
@@ -258,13 +259,15 @@ def test_fte_rate_is_formula():
     _wb, ws, layout = _build_with_grades()
     rate_row = layout["param_rows"]["FTE Rate (EUR)"]
     val = ws.cell(rate_row, 2).value
-    assert isinstance(val, str) and val.startswith("="), (
+    from openpyxl.worksheet.formula import ArrayFormula
+    assert isinstance(val, (str, ArrayFormula)), (
         f"Expected formula, got: {val}"
     )
-    assert "SUMPRODUCT" in val
-    assert "VLOOKUP" in val
-    assert "roster_grades" in val
-    assert "tbl_GradeRates" in val
+    formula_text = val.text if isinstance(val, ArrayFormula) else val
+    assert "SUMPRODUCT" in formula_text
+    assert "VLOOKUP" in formula_text
+    assert "roster_grades" in formula_text
+    assert "tbl_GradeRates" in formula_text
 
 
 def test_fte_rate_font_is_black():

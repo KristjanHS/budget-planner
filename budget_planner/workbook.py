@@ -65,8 +65,8 @@ def _validate_config(project_params, work_packages, team, external_commitments):
     if project_params["months"] <= 0 or project_params["months"] > 120:
         errors.append(f"PROJECT_MONTHS must be 1-120, got {project_params['months']}")
     rate = project_params["rate"]
-    # Rate may be a formula string (grade-based weighted average) — skip numeric check
-    if not isinstance(rate, str) and rate <= 0:
+    # Rate may be a formula string or ArrayFormula (grade-based weighted average) — skip numeric check
+    if isinstance(rate, (int, float)) and rate <= 0:
         errors.append(f"FTE rate must be > 0, got {rate}")
     if not work_packages:
         errors.append("Work packages table is empty")

@@ -44,7 +44,8 @@ def test_global_params(workbook):
             rate_val = config.cell(r, 2).value
             break
     assert rate_val is not None, "Config FTE Rate cell is empty"
-    assert isinstance(rate_val, str) and rate_val.startswith("="), (
+    from openpyxl.worksheet.formula import ArrayFormula
+    assert isinstance(rate_val, (str, ArrayFormula)), (
         f"Config FTE Rate should be a formula, got: {rate_val}"
     )
 

@@ -45,9 +45,9 @@ WORK_PACKAGES = [
 # ── TEAM ──
 # Seed data only — Config sheet roster is primary after first generation
 TEAM = [
-    {"name": "Alice", "max_fte": 1.0, "grade": "Mid"},
+    {"name": "Alice", "max_fte": 1.0, "grade": "Senior"},
     {"name": "Bob",   "max_fte": 1.0, "grade": "Mid"},
-    {"name": "Carol", "max_fte": 1.0, "grade": "Mid"},
+    {"name": "Carol", "max_fte": 1.0, "grade": "Junior"},
     {"name": "Dave",  "max_fte": 1.0, "grade": "Mid"},
 ]
 

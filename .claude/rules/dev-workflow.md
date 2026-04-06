@@ -5,9 +5,6 @@ paths: "**/*.py"
 
 ## Build + Test
 LibreOffice is a required dependency — install it, don't skip recalc tests.
-Use uv for venv and dependency management.
-Run pytest once per step. Never re-run to "confirm".
-Always verify via pytest, not ad-hoc `python3 -c` scripts.
 For Excel-specific bugs (implicit intersection, formula eval): generate file → user verifies in Excel → then run pytest. openpyxl/LibreOffice mask Excel-specific issues.
 
 ## Linting
@@ -15,7 +12,6 @@ Run `pyright` (full project, not just changed files) before committing. Fix all 
 Subagents create dead code — verify after each task.
 
 ## Code Review
-Suggest review before committing.
 Before executing a plan, move completed/superseded plans to docs/plans/old_already_implemented/.
 When a plan claims a module is "unchanged", grep its imports to verify no coupling to changed modules.
 When inserting/removing a Config column, grep ALL formula references (`Config!{letter}`) across every builder AND test file. Column shifts cascade silently — a test asserting the old column letter will mask the bug.
@@ -38,11 +34,6 @@ Before starting work in a worktree:
 
 ## Formatting
 Preserve all existing cell formatting (fonts, fills, table styles, column widths) unless the user explicitly asks for a change.
-
-## Architecture
-Don't propose subpackages or abstractions for codebases under ~2K LOC.
-Before splitting a module, verify each resulting file has >50 lines of logic.
-Prefer flat packages over nested. Don't build generic iteration for N=2.
 
 ## openpyxl Patterns
 `wb.active` can return None — always `assert ws is not None` before use.

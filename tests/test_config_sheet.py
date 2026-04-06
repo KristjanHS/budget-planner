@@ -266,8 +266,6 @@ def test_fte_rate_is_formula():
     formula_text = val.text if isinstance(val, ArrayFormula) else val
     assert "SUMPRODUCT" in formula_text
     assert "VLOOKUP" in formula_text
-    assert "roster_grades" in formula_text
-    assert "tbl_GradeRates" in formula_text
 
 
 def test_fte_rate_font_is_black():

@@ -22,6 +22,12 @@ When inserting/removing a Config param row, grep ALL test files for hardcoded ro
 When changing error message format in reader/builders, grep test files for the old message pattern (`pytest.raises(match=` strings). Semantic changes in validation produce silent test failures.
 When changing a Config cell from input (blue) to formula (black), grep all consumers of the corresponding reader field (e.g. `params["rate"]`) — validators, builders, demo seeder, and tests may assume a numeric type.
 
+## Planning & Implementation (/impag)
+Run brainstorm → write-plan → worktree isolation for each P-item. Don't skip planning even if the spec looks detailed.
+Run `superpowers:code-reviewer` after every /impag stage — not just at the end. Each stage boundary is a review checkpoint.
+Fix pre-existing test failures when encountered during implementation — don't defer them.
+Commit or resolve dirty files at session start before executing any tasks.
+
 ## Worktrees
 Before starting work in a worktree:
 1. `git fetch origin main`
@@ -49,7 +55,7 @@ LibreOffice `store()` strips chart series data (val/tx/cat XML) from openpyxl fi
 For charts, construct Series manually with `NumDataSource`/`NumRef`/`AxDataSource` instead of `chart.add_data()` — produces explicit OOXML elements.
 Charts referencing hidden rows must set `chart.visible_cells_only = False` — openpyxl defaults to `True` (`<c:plotVisOnly val="1"/>`), which makes Excel skip hidden-row data → blank chart.
 When debugging chart issues, inspect the zip XML directly (`zipfile` + `ElementTree`) — openpyxl's Python API can show data that wasn't serialized. Also create minimal isolated test files varying one factor at a time (bisect method) to pinpoint the breaking element.
-Formulas with named-range arrays (e.g. SUMPRODUCT+VLOOKUP over a named range): write as CSE array formula via `ArrayFormula(ref, "=formula...")` — Excel applies implicit intersection (`@`) to named ranges in regular formulas, reducing arrays to a single cell. Note: `ArrayFormula` strips first char of `text`, so include the leading `=`.
+Formulas with named-range arrays (e.g. SUMPRODUCT+VLOOKUP over a named range): use direct cell references (`$C$28:$C$31`) instead of named ranges inside SUMPRODUCT — Excel silently drops CSE array flags from openpyxl files on open, reducing named ranges to a single cell via implicit intersection. SUMPRODUCT evaluates direct cell ranges as arrays natively without CSE. LibreOffice recalc masks this bug (it honors CSE correctly), so always test formula behavior in Excel too.
 When adding/renaming Config param labels, check `_find_header_row` substring collisions — it uses case-insensitive `in` matching, so "PM/person/year" matches a "Person" search.
 
 ## Testing

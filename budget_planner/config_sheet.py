@@ -285,17 +285,19 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     wb.defined_names.add(dn_roster_grades)
 
     # ── Set FTE Rate formula (weighted average of grade rates by FTE) ──
-    # Written as CSE array formula so Excel doesn't apply implicit intersection
-    # (@) to the named-range arrays — without this, Excel in non-dynamic-array
-    # mode reduces roster_grades to a single cell via row intersection → #VALUE!
-    rate_cell = f"B{rate_row}"
-    fte_rate_formula = (
-        "=SUMPRODUCT(IFERROR(VLOOKUP(roster_grades,tbl_GradeRates,2,FALSE),0)"
-        "*roster_ftes)"
-        "/SUM(roster_ftes)"
+    # Uses direct cell references (not named ranges) inside SUMPRODUCT so that
+    # Excel evaluates them as arrays without needing CSE (Ctrl+Shift+Enter).
+    # Named ranges inside SUMPRODUCT suffer from implicit intersection (@) in
+    # non-dynamic-array Excel — the file's CSE flag is silently dropped on open,
+    # reducing the formula to the first roster row only.
+    grades_ref = f"$C${roster_first_row}:$C${roster_last_row}"
+    ftes_ref = f"$B${roster_first_row}:$B${roster_last_row}"
+    grade_tbl_ref = f"$A${grade_first_row}:$B${grade_last_row}"
+    ws.cell(rate_row, 2).value = (
+        f"=SUMPRODUCT(IFERROR(VLOOKUP({grades_ref},{grade_tbl_ref},2,FALSE),0)"
+        f"*{ftes_ref})"
+        f"/SUM({ftes_ref})"
     )
-    from openpyxl.worksheet.formula import ArrayFormula
-    ws.cell(rate_row, 2).value = ArrayFormula(rate_cell, fte_rate_formula)
 
     # ── Sheet Appearance ──
     ws.sheet_properties.tabColor = "4472C4"

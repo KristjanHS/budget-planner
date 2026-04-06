@@ -69,6 +69,26 @@ flowchart TD
   BUILD --> SAVE[Backup old file,<br/>save new workbook]
 ```
 
+## What Rebuild Preserves (per tab)
+
+All sheets are regenerated from scratch. Only these user-entered values survive:
+
+| Tab | Preserved table / section | Source location in old workbook |
+|-----|--------------------------|--------------------------------|
+| **Config** | Project params (title, start, months, ceiling) | Config rows 1-5 |
+| **Config** | Work packages (ID, name, FTE budget, start/end, type) | Config `tbl_WorkPackages` |
+| **Config** | Team roster (person, max FTE, grade) | Config TEAM ROSTER section |
+| **Config** | Grade rates | Config RATE BY GRADE section |
+| **Config** | Reporting periods | Config REPORTING PERIODS section |
+| **Capacity** | Person-WP assignments (person, WP, total FTE, start/end) | Capacity PERSON-WP ASSIGNMENTS config block |
+| **Capacity** | External commitments (person, project, FTE, start/end, EU flag) | Capacity EXTERNAL COMMITMENTS config block |
+| **Actuals** | Monthly EUR values per WP | Actuals data cells |
+
+**Everything else is overwritten**, including:
+- Capacity monthly FTE cells (recalculated from assignments via distribution curves)
+- All formulas, styling, conditional formatting, charts
+- _META, Plan, Summary, Trends tabs (entirely regenerated)
+
 ## Preserved Data Format
 
 **Capacity FTE:**

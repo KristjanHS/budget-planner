@@ -14,7 +14,9 @@ from datetime import datetime
 PROJECT_TITLE = "Programme Project Budget Plan"
 PROJECT_START = datetime(2026, 11, 1)  # First month of the project
 PROJECT_MONTHS = 14                    # Total project duration in months
-DEFAULT_RATE = 7500                    # EUR per person-month (internal rate)
+DEFAULT_RATE = 7500                    # EUR per person-month (weighted average — computed by formula)
+GRADE_RATES = {"Senior": 12500, "Mid": 10000, "Junior": 7500}  # EUR/PM by job grade
+DEFAULT_GRADE = "Mid"                  # Grade assigned to new team members
 EU_ANNUAL_CEILING_PM = 12.0              # Max PM per calendar year across all EU grants (≈215 days)
 CFS_THRESHOLD = 430_000                  # EUR — CFS audit certificate required above this
 DEFAULT_RP_LENGTH = 6                   # Months per reporting period (programme typical: 12-18)
@@ -40,10 +42,10 @@ WORK_PACKAGES = [
 # ── TEAM ──
 # Seed data only — Config sheet roster is primary after first generation
 TEAM = [
-    {"name": "Alice", "max_fte": 1.0},
-    {"name": "Bob",   "max_fte": 1.0},
-    {"name": "Carol", "max_fte": 1.0},
-    {"name": "Dave",  "max_fte": 1.0},
+    {"name": "Alice", "max_fte": 1.0, "grade": "Mid"},
+    {"name": "Bob",   "max_fte": 1.0, "grade": "Mid"},
+    {"name": "Carol", "max_fte": 1.0, "grade": "Mid"},
+    {"name": "Dave",  "max_fte": 1.0, "grade": "Mid"},
 ]
 
 # ── EXTERNAL COMMITMENTS ──

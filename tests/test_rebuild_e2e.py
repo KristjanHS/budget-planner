@@ -681,13 +681,24 @@ class TestRebuildRecalc:
         if result.returncode != 0:
             pytest.skip("LibreOffice not available")
 
-        # Recompute expected ceiling with changed FTE
-        expected_ceiling = new_fte * params["rate"]
+        # Read recalculated rate (fte_rate is now a formula — need data_only)
+        wb = openpyxl.load_workbook(init_path, data_only=True)
+        config = wb["Config"]
+        rate = None
+        for r in range(1, config.max_row + 1):
+            if "fte rate" in str(config.cell(r, 1).value or "").lower():
+                rate = config.cell(r, 2).value
+                break
+        assert isinstance(rate, (int, float)) and rate > 0, (
+            f"fte_rate should be numeric after recalc, got {rate}"
+        )
+
+        # Recompute expected ceiling with changed FTE and recalculated rate
+        expected_ceiling = new_fte * rate
         for i, wp in enumerate(wps):
             if i != 0:
-                expected_ceiling += wp["fte"] * params["rate"]
+                expected_ceiling += wp["fte"] * rate
 
-        wb = openpyxl.load_workbook(init_path, data_only=True)
         plan = wb["Plan"]
         # partner_ceiling is Plan!I1 (compact header)
         ceiling_val = plan.cell(1, 9).value

@@ -36,13 +36,17 @@ def test_global_params(workbook):
     assert plan["G1"].value is not None, "Plan!G1 (rate ref) is empty"
     assert plan["I1"].value is not None, "Plan!I1 (ceiling ref) is empty"
     # Check Config directly for valid rate (find by label, not hardcoded row)
+    # FTE Rate is now a formula (weighted average of grade rates), not a static value
     config = workbook["Config"]
     rate_val = None
     for r in range(1, config.max_row + 1):
         if "fte rate" in str(config.cell(r, 1).value or "").lower():
             rate_val = config.cell(r, 2).value
             break
-    assert rate_val is not None and rate_val > 0, f"Config FTE Rate is invalid: {rate_val}"
+    assert rate_val is not None, "Config FTE Rate cell is empty"
+    assert isinstance(rate_val, str) and rate_val.startswith("="), (
+        f"Config FTE Rate should be a formula, got: {rate_val}"
+    )
 
 
 # ── Check 4: Named ranges ──

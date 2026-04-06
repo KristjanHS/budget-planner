@@ -62,7 +62,7 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
         "Project Title": ("title", None),
         "Project Start": ("start", None),
         "Project Months": ("months", lambda v: int(v or 60)),
-        "FTE Rate": ("rate", lambda v: float(v or 7500)),
+        "FTE Rate": ("rate", lambda v: float(v or 7500) if not isinstance(v, str) or not v.startswith("=") else v),
         "EU Annual Ceiling": ("eu_ceiling_pm", lambda v: float(v or 12.0)),
     }
     project_params: dict = {}

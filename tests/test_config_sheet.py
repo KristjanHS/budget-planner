@@ -40,7 +40,9 @@ def test_config_sheet_params():
     assert _find_param_value(ws, "Project Title") == "Test Project"
     assert _find_param_value(ws, "Project Start") == datetime(2026, 7, 1)
     assert _find_param_value(ws, "Project Months") == 60
-    assert _find_param_value(ws, "FTE Rate") == 7500
+    # FTE Rate is now a formula (weighted average of grade rates)
+    fte_rate_val = _find_param_value(ws, "FTE Rate")
+    assert isinstance(fte_rate_val, str) and fte_rate_val.startswith("=")
 
 
 def test_config_sheet_wp_table():
@@ -187,3 +189,141 @@ def test_config_round_trip_eu_ceiling():
     read_params, read_wps = read_config_sheet(ws)
     assert read_params["eu_ceiling_pm"] == 10.0
     assert len(read_wps) == 2  # WPs still read correctly after row shift
+
+
+# ── Grade-based rates tests ──
+
+def _sample_team():
+    return [
+        {"name": "Alice", "max_fte": 1.0, "grade": "Senior"},
+        {"name": "Bob",   "max_fte": 1.0, "grade": "Mid"},
+        {"name": "Carol", "max_fte": 0.5, "grade": "Junior"},
+    ]
+
+
+def _sample_grade_rates():
+    return {"Senior": 12500, "Mid": 10000, "Junior": 7500}
+
+
+def _build_with_grades():
+    """Build a Config sheet with grade rates and team grades."""
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    layout = build_config_sheet(
+        ws, wb, _sample_params(), _sample_wps(),
+        team=_sample_team(),
+        grade_rates=_sample_grade_rates(),
+    )
+    return wb, ws, layout
+
+
+def test_grade_rate_table_values():
+    """RATE BY GRADE section has correct grade names and rates."""
+    wb, ws, layout = _build_with_grades()
+    grade_rates = _sample_grade_rates()
+    first = layout["grade_first_row"]
+    for i, (grade, rate) in enumerate(grade_rates.items()):
+        assert ws.cell(first + i, 1).value == grade
+        assert ws.cell(first + i, 2).value == rate
+
+
+def test_grade_rate_table_section_header():
+    """RATE BY GRADE section header exists."""
+    _wb, ws, _layout = _build_with_grades()
+    found = False
+    for r in range(1, ws.max_row + 1):
+        val = ws.cell(r, 1).value
+        if val and "RATE BY GRADE" in str(val).upper():
+            found = True
+            break
+    assert found, "RATE BY GRADE section header not found"
+
+
+def test_roster_grade_column():
+    """Roster has Grade column with correct values."""
+    _wb, ws, layout = _build_with_grades()
+    team = _sample_team()
+    # Header
+    assert ws.cell(layout["roster_header_row"], 3).value == "Grade"
+    # Data
+    for i, member in enumerate(team):
+        row = layout["roster_first_row"] + i
+        assert ws.cell(row, 3).value == member["grade"]
+
+
+def test_fte_rate_is_formula():
+    """FTE Rate cell contains a SUMPRODUCT/VLOOKUP formula, not a static value."""
+    _wb, ws, layout = _build_with_grades()
+    rate_row = layout["param_rows"]["FTE Rate (EUR)"]
+    val = ws.cell(rate_row, 2).value
+    assert isinstance(val, str) and val.startswith("="), (
+        f"Expected formula, got: {val}"
+    )
+    assert "SUMPRODUCT" in val
+    assert "VLOOKUP" in val
+    assert "roster_grades" in val
+    assert "tbl_GradeRates" in val
+
+
+def test_fte_rate_font_is_black():
+    """FTE Rate cell uses BLACK_FORMULA font, not BLUE_INPUT."""
+    _wb, ws, layout = _build_with_grades()
+    rate_row = layout["param_rows"]["FTE Rate (EUR)"]
+    font = ws.cell(rate_row, 2).font
+    rgb = str(font.color.rgb).upper()
+    assert rgb.endswith("000000"), f"Expected black font, got rgb={rgb}"
+
+
+def test_tbl_grade_rates_named_range():
+    """tbl_GradeRates named range exists and covers grade data rows."""
+    wb, _ws, layout = _build_with_grades()
+    names = {dn.name: dn.attr_text for name in wb.defined_names
+             for dn in [wb.defined_names[name]]}
+    assert "tbl_GradeRates" in names
+    expected = f"Config!$A${layout['grade_first_row']}:$B${layout['grade_last_row']}"
+    assert names["tbl_GradeRates"] == expected
+
+
+def test_roster_ftes_named_range():
+    """roster_ftes named range exists and covers FTE data column."""
+    wb, _ws, layout = _build_with_grades()
+    names = {dn.name: dn.attr_text for name in wb.defined_names
+             for dn in [wb.defined_names[name]]}
+    assert "roster_ftes" in names
+    expected = f"Config!$B${layout['roster_first_row']}:$B${layout['roster_last_row']}"
+    assert names["roster_ftes"] == expected
+
+
+def test_roster_grades_named_range():
+    """roster_grades named range exists and covers Grade data column."""
+    wb, _ws, layout = _build_with_grades()
+    names = {dn.name: dn.attr_text for name in wb.defined_names
+             for dn in [wb.defined_names[name]]}
+    assert "roster_grades" in names
+    expected = f"Config!$C${layout['roster_first_row']}:$C${layout['roster_last_row']}"
+    assert names["roster_grades"] == expected
+
+
+def test_grade_data_validation():
+    """Grade cells have data validation dropdown with grade names."""
+    _wb, ws, layout = _build_with_grades()
+    # Check that data validation exists on the worksheet
+    assert len(ws.data_validations.dataValidation) > 0
+    # Find the list validation
+    dv_found = False
+    for dv in ws.data_validations.dataValidation:
+        if dv.type == "list" and "Senior" in str(dv.formula1):
+            dv_found = True
+            break
+    assert dv_found, "Data validation dropdown for grades not found"
+
+
+def test_layout_includes_grade_rows():
+    """config_layout dict includes grade_first_row and grade_last_row."""
+    _wb, _ws, layout = _build_with_grades()
+    assert "grade_first_row" in layout
+    assert "grade_last_row" in layout
+    grade_rates = _sample_grade_rates()
+    assert layout["grade_last_row"] - layout["grade_first_row"] + 1 == len(grade_rates)

@@ -2,7 +2,9 @@
 
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.formatting.rule import FormulaRule
+from openpyxl.utils import get_column_letter
 
 from budget_planner.layout import SHEET_CONFIG
 from budget_planner.styles import (
@@ -21,7 +23,7 @@ from budget_planner.styles import (
 
 
 def build_config_sheet(ws, wb, project_params, work_packages, team=None,
-                       reporting_periods=None):
+                       reporting_periods=None, grade_rates=None):
     """Build the Config sheet with project parameters, work packages table, and team roster.
 
     Args:
@@ -29,13 +31,18 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
         wb: Parent Workbook (for named ranges).
         project_params: dict with keys 'title', 'start', 'months', 'rate'.
         work_packages: list of dicts with keys 'id', 'name', 'fte', 'start', 'end'.
-        team: list of dicts with keys 'name', 'max_fte'. When None, lazy-imports from config.
+        team: list of dicts with keys 'name', 'max_fte', 'grade'.
+            When None, lazy-imports from config.
         reporting_periods: list of dicts with keys 'id', 'start', 'end'.
+            When None, lazy-imports from config.
+        grade_rates: dict mapping grade name to EUR/PM rate.
             When None, lazy-imports from config.
 
     Returns:
         config_layout dict with keys:
             'param_rows': dict mapping param name to row number,
+            'grade_first_row': int,
+            'grade_last_row': int,
             'wp_header_row': int,
             'wp_first_row': int,
             'wp_last_row': int,
@@ -50,27 +57,57 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     if team is None:
         from budget_planner import config
         team = config.TEAM
-    # ── Section A: Project Parameters (rows 1-4) ──
+    if grade_rates is None:
+        from budget_planner import config as _cfg
+        grade_rates = _cfg.GRADE_RATES
+    # ── Section A: Project Parameters (rows 1-5) ──
     param_defs = [
         ("Project Title", project_params["title"], None, None),
         ("Project Start", project_params["start"], "MMM YYYY", None),
         ("Project Months", project_params["months"], "0", None),
-        ("FTE Rate (EUR)", project_params["rate"], "€#,##0", None),
+        ("FTE Rate (EUR)", None, "€#,##0", None),  # value set later as formula
         ("EU Annual Ceiling (PM)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
     ]
     param_rows = {}
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
         # Label in column A — HEADER_FONT, no border
         style_cell(ws, i, 1, value=label, font=HEADER_FONT, border=False)
-        # Value in column B — BLUE_INPUT, no border
-        font = TITLE_FONT if i == 1 else BLUE_INPUT
-        style_cell(ws, i, 2, value=value, font=font, fmt=fmt, border=False)
+        # Value in column B — BLUE_INPUT, no border (except FTE Rate: set later)
+        if label == "FTE Rate (EUR)":
+            # FTE Rate is a formula — styled as BLACK_FORMULA, set after roster
+            style_cell(ws, i, 2, font=BLACK_FORMULA, fmt=fmt, border=False)
+        else:
+            font = TITLE_FONT if i == 1 else BLUE_INPUT
+            style_cell(ws, i, 2, value=value, font=font, fmt=fmt, border=False)
         param_rows[label] = i
 
     # Empty separator row after last param (no action needed)
 
+    # ── Section A2: Rate by Grade Table ──
+    grade_section_row = len(param_defs) + 2  # gap row after last param
+    ws.merge_cells(start_row=grade_section_row, start_column=1,
+                   end_row=grade_section_row, end_column=2)
+    style_cell(ws, grade_section_row, 1, value="RATE BY GRADE",
+               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
+    style_cell(ws, grade_section_row, 2, fill=SECTION_FILL)
+
+    grade_header_row = grade_section_row + 1
+    style_cell(ws, grade_header_row, 1, "Grade", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    style_cell(ws, grade_header_row, 2, "Rate (EUR/PM)", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+
+    grade_first_row = grade_header_row + 1
+    grade_names = list(grade_rates.keys())
+    for gi, grade_name in enumerate(grade_names):
+        r = grade_first_row + gi
+        style_cell(ws, r, 1, grade_name, font=BLUE_INPUT, border=False)
+        style_cell(ws, r, 2, grade_rates[grade_name], font=BLUE_INPUT,
+                   fmt="€#,##0", border=False)
+    grade_last_row = grade_first_row + len(grade_names) - 1
+
     # ── Section B: Work Packages Table ──
-    section_row = len(param_defs) + 2   # gap row after last param
+    section_row = grade_last_row + 2  # gap row after grade table
     header_row = section_row + 1
     first_data_row = header_row + 1
 
@@ -145,11 +182,12 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     # ── Section C: Team Roster (below WP table + TOTAL row) ──
     r = wp_total_row + 2  # blank separator row after TOTAL row
 
-    # Section header — merged A:B
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
+    # Section header — merged A:C (3 columns: Person, Max FTE, Grade)
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
     style_cell(ws, r, 1, value="TEAM ROSTER",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
     style_cell(ws, r, 2, fill=SECTION_FILL)
+    style_cell(ws, r, 3, fill=SECTION_FILL)
     r += 1
 
     # Column headers
@@ -158,17 +196,32 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
                alignment=CENTER)
     style_cell(ws, r, 2, "Max FTE", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
                alignment=CENTER)
+    style_cell(ws, r, 3, "Grade", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
+               alignment=CENTER)
     r += 1
 
     # Team member data rows
     roster_first_row = r
     person_rows: dict[str, int] = {}
+    from budget_planner.config import DEFAULT_GRADE as _default_grade
     for member in team:
         style_cell(ws, r, 1, member["name"], font=BLUE_INPUT)
         style_cell(ws, r, 2, member["max_fte"], font=BLUE_INPUT, fmt="0.00")
+        style_cell(ws, r, 3, member.get("grade", _default_grade),
+                   font=BLUE_INPUT)
         person_rows[member["name"]] = r
         r += 1
     roster_last_row = r - 1
+
+    # Data validation dropdown for Grade cells
+    grade_list_str = ",".join(grade_rates.keys())
+    dv = DataValidation(type="list", formula1=f'"{grade_list_str}"',
+                        allow_blank=False)
+    dv.error = "Please select a valid grade"
+    dv.errorTitle = "Invalid Grade"
+    grade_col_letter = get_column_letter(3)
+    dv.sqref = f"{grade_col_letter}{roster_first_row}:{grade_col_letter}{roster_last_row}"
+    ws.add_data_validation(dv)
 
     # ── Section D: Reporting Periods ──
     if reporting_periods is None:
@@ -214,6 +267,33 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
                               attr_text=f"{SHEET_CONFIG}!$B${ceiling_row}")
     wb.defined_names.add(dn_ceiling)
 
+    # Grade table named range (2-column: grade name + rate)
+    dn_grades = DefinedName(
+        "tbl_GradeRates",
+        attr_text=f"{SHEET_CONFIG}!$A${grade_first_row}:$B${grade_last_row}",
+    )
+    wb.defined_names.add(dn_grades)
+
+    # Roster column named ranges
+    dn_roster_ftes = DefinedName(
+        "roster_ftes",
+        attr_text=f"{SHEET_CONFIG}!$B${roster_first_row}:$B${roster_last_row}",
+    )
+    wb.defined_names.add(dn_roster_ftes)
+
+    dn_roster_grades = DefinedName(
+        "roster_grades",
+        attr_text=f"{SHEET_CONFIG}!$C${roster_first_row}:$C${roster_last_row}",
+    )
+    wb.defined_names.add(dn_roster_grades)
+
+    # ── Set FTE Rate formula (weighted average of grade rates by FTE) ──
+    fte_rate_formula = (
+        "=SUMPRODUCT(VLOOKUP(roster_grades,tbl_GradeRates,2,FALSE)*roster_ftes)"
+        "/SUM(roster_ftes)"
+    )
+    ws.cell(rate_row, 2).value = fte_rate_formula
+
     # ── Sheet Appearance ──
     ws.sheet_properties.tabColor = "4472C4"
     ws.freeze_panes = f"A{section_row}"
@@ -221,6 +301,8 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
 
     return {
         "param_rows": param_rows,
+        "grade_first_row": grade_first_row,
+        "grade_last_row": grade_last_row,
         "wp_header_row": header_row,
         "wp_first_row": first_data_row,
         "wp_last_row": last_data_row,

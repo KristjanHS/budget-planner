@@ -115,8 +115,8 @@ Ordered by value-to-effort ratio. Each item is scoped for a single implementatio
 
 | Item | Status | Date | Notes |
 |------|--------|------|-------|
-| P1: 215-Day Ceiling | Not started | | |
-| P2: Variance Classification | Not started | | |
-| P3: Reporting Period Aggregation | Not started | | |
+| P1: 215-Day Ceiling | Done | 2026-04-05 | P1a + P1b implemented, plans in old_already_implemented/ |
+| P2: Variance Classification | Won't implement | 2026-04-05 | Low value vs effort; PM can eyeball variance from existing Plan/Actuals columns |
+| P3: Reporting Period Aggregation | Plan created | 2026-04-05 | `2026-04-05-p3-reporting-period-aggregation.md` — 9 tasks |
 | P4: WP Eligibility View | Not started | | |
 | P5: Prior Period Adjustments | Not started | | |

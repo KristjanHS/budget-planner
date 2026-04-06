@@ -137,6 +137,39 @@ def read_plan_config(ws, layout) -> list[dict]:
     return wps
 
 
+def read_grade_rates(ws) -> dict[str, int | float]:
+    """Read grade-to-rate mapping from the Config sheet's RATE BY GRADE section.
+
+    Args:
+        ws: Config worksheet.
+
+    Returns:
+        Dict mapping grade name to EUR/PM rate
+        (e.g. {"Senior": 12500, "Mid": 10000, "Junior": 7500}).
+        Returns default rates from config.py if section not found
+        (backward compat with old workbooks).
+    """
+    section_row = _find_header_row(ws, "RATE BY GRADE", required=False)
+    if section_row is None:
+        from budget_planner.config import GRADE_RATES
+        return dict(GRADE_RATES)
+
+    # Skip section header + column headers
+    r = section_row + 2
+    rates: dict[str, int | float] = {}
+    while r <= ws.max_row:
+        grade_name = ws.cell(r, 1).value
+        if grade_name is None or str(grade_name).strip() == "":
+            break
+        rate_val = ws.cell(r, 2).value
+        if rate_val is None or not isinstance(rate_val, (int, float)):
+            break
+        rates[str(grade_name).strip()] = rate_val
+        r += 1
+
+    return rates
+
+
 def read_team_from_config(ws) -> list[dict]:
     """Read team roster from the Config sheet's TEAM ROSTER section.
 
@@ -144,8 +177,10 @@ def read_team_from_config(ws) -> list[dict]:
         ws: Config worksheet.
 
     Returns:
-        List of dicts with keys 'name' and 'max_fte'.
+        List of dicts with keys 'name', 'max_fte', and 'grade'.
     """
+    from budget_planner.config import DEFAULT_GRADE
+
     # Find "TEAM ROSTER" section header
     roster_section = _find_header_row(ws, "TEAM ROSTER", required=True)
 
@@ -153,6 +188,12 @@ def read_team_from_config(ws) -> list[dict]:
     person_header = _find_header_row(
         ws, "Person", col=1, max_row=roster_section + 5,
     )
+
+    # Detect whether Grade column exists (col C header)
+    has_grade_col = False
+    grade_hdr = ws.cell(person_header, 3).value
+    if grade_hdr and "grade" in str(grade_hdr).lower():
+        has_grade_col = True
 
     # Read roster rows until empty name or non-numeric max_fte (next section)
     roster: list[dict] = []
@@ -165,9 +206,15 @@ def read_team_from_config(ws) -> list[dict]:
         # Roster rows have numeric max_fte; a string means we hit a header row
         if max_fte is not None and not isinstance(max_fte, (int, float)):
             break
+        grade = DEFAULT_GRADE
+        if has_grade_col:
+            grade_val = ws.cell(r, 3).value
+            if grade_val is not None and str(grade_val).strip():
+                grade = str(grade_val).strip()
         roster.append({
             "name": str(name).strip(),
             "max_fte": float(max_fte or 0),
+            "grade": grade,
         })
         r += 1
 

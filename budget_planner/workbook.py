@@ -100,7 +100,8 @@ def _validate_config(project_params, work_packages, team, external_commitments):
 
 def _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
                       *, assignments=None, preserved_actuals=None,
-                      rebuild_warnings=None, reporting_periods=None):
+                      rebuild_warnings=None, reporting_periods=None,
+                      grade_rates=None):
     """Build all sheets into the workbook.
 
     Expects wb to already have a '_META' sheet as the active/first sheet.
@@ -113,7 +114,8 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     config_ws = wb.create_sheet(SHEET_CONFIG)
     config_layout = build_config_sheet(config_ws, wb, project_params, work_packages,
                                        team=team,
-                                       reporting_periods=reporting_periods)
+                                       reporting_periods=reporting_periods,
+                                       grade_rates=grade_rates)
 
     # Plan sheet
     plan_ws = wb.create_sheet(SHEET_PLAN)
@@ -257,9 +259,12 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
     assert meta_ws is not None
     meta_ws.title = SHEET_META
 
+    grade_rates = config.GRADE_RATES
+
     _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
                       assignments=assignments,
-                      reporting_periods=reporting_periods)
+                      reporting_periods=reporting_periods,
+                      grade_rates=grade_rates)
 
     # _apply_protection(wb)  # Temporarily disabled
     from datetime import date
@@ -294,7 +299,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     from openpyxl import load_workbook
     from budget_planner.reader import (
         read_config_sheet, read_team_from_config, read_capacity_sheet,
-        read_actuals_values, read_reporting_periods,
+        read_actuals_values, read_reporting_periods, read_grade_rates,
     )
 
     if not os.path.exists(input_path):
@@ -320,6 +325,9 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     # Team roster from Config sheet
     team = read_team_from_config(existing_wb[SHEET_CONFIG])
+
+    # Grade rates from Config sheet
+    grade_rates = read_grade_rates(existing_wb[SHEET_CONFIG])
 
     # Reporting periods from Config sheet
     reporting_periods = read_reporting_periods(
@@ -407,6 +415,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         preserved_actuals=preserved_actuals,
         rebuild_warnings=warnings if warnings else None,
         reporting_periods=reporting_periods,
+        grade_rates=grade_rates,
     )
 
     # _apply_protection(wb)  # Temporarily disabled

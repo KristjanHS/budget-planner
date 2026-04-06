@@ -242,3 +242,59 @@ class TestBackup:
         backup_files = [f for f in os.listdir(tmp_path)
                         if f != "test.xlsx" and f.endswith(".xlsx")]
         assert len(backup_files) >= 1, "No backup file created"
+
+
+class TestGradeRoundTrip:
+    """Grade rates and roster grades survive rebuild."""
+
+    def test_grade_rates_survive_rebuild(self, tmp_path):
+        """Grade rates from Config survive a rebuild round-trip."""
+        from budget_planner.reader import read_grade_rates
+        from budget_planner.config import GRADE_RATES
+
+        path = str(tmp_path / "grade_test.xlsx")
+        init_workbook(output_path=path)
+
+        # Read grade rates from initial workbook
+        wb = load_workbook(path)
+        original_rates = read_grade_rates(wb["Config"])
+        wb.close()
+        assert original_rates == dict(GRADE_RATES)
+
+        # Rebuild
+        rebuild_workbook(input_path=path)
+
+        # Read grade rates from rebuilt workbook
+        wb = load_workbook(path)
+        rebuilt_rates = read_grade_rates(wb["Config"])
+        wb.close()
+
+        assert rebuilt_rates == original_rates
+
+    def test_roster_grades_survive_rebuild(self, tmp_path):
+        """Roster grade assignments survive a rebuild round-trip."""
+        from budget_planner.reader import read_team_from_config
+        from budget_planner.config import TEAM
+
+        path = str(tmp_path / "roster_grade_test.xlsx")
+        init_workbook(output_path=path)
+
+        # Read roster from initial workbook
+        wb = load_workbook(path)
+        original_roster = read_team_from_config(wb["Config"])
+        wb.close()
+        assert len(original_roster) == len(TEAM)
+
+        # Rebuild
+        rebuild_workbook(input_path=path)
+
+        # Read roster from rebuilt workbook
+        wb = load_workbook(path)
+        rebuilt_roster = read_team_from_config(wb["Config"])
+        wb.close()
+
+        assert len(rebuilt_roster) == len(original_roster)
+        for got, expected in zip(rebuilt_roster, original_roster):
+            assert got["name"] == expected["name"]
+            assert got["max_fte"] == pytest.approx(expected["max_fte"])
+            assert got["grade"] == expected["grade"]

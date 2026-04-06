@@ -1,11 +1,14 @@
-"""Tests for new reader functions (Config sheet, Actuals values)."""
+"""Tests for new reader functions (Config sheet, Actuals values, grade rates)."""
 from datetime import datetime
 
 import pytest
 from openpyxl import Workbook
 
 from budget_planner.config_sheet import build_config_sheet
-from budget_planner.reader import read_config_sheet, read_actuals_values
+from budget_planner.reader import (
+    read_config_sheet, read_actuals_values, read_grade_rates,
+    read_team_from_config,
+)
 
 
 def _make_config_wb():
@@ -328,3 +331,88 @@ def test_read_reporting_periods_fallback():
     assert rps[0] == {"id": "RP1", "start": 1, "end": 6}
     assert rps[1] == {"id": "RP2", "start": 7, "end": 12}
     assert rps[2] == {"id": "RP3", "start": 13, "end": 14}
+
+
+# ── read_grade_rates ──
+
+
+def test_read_grade_rates_from_generated_wb(fresh_wb_path):
+    """read_grade_rates returns correct data from a generated workbook."""
+    from openpyxl import load_workbook
+    from budget_planner.config import GRADE_RATES
+
+    wb = load_workbook(fresh_wb_path)
+    ws = wb["Config"]
+    rates = read_grade_rates(ws)
+    wb.close()
+
+    assert len(rates) == len(GRADE_RATES)
+    for grade, expected_rate in GRADE_RATES.items():
+        assert grade in rates
+        assert rates[grade] == expected_rate
+
+
+def test_read_grade_rates_fallback_for_legacy_wb():
+    """read_grade_rates returns defaults when RATE BY GRADE section missing."""
+    from budget_planner.config import GRADE_RATES
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    # Empty sheet — no RATE BY GRADE section
+    ws.cell(1, 1, "Project Title")
+    ws.cell(1, 2, "Test")
+
+    rates = read_grade_rates(ws)
+    wb.close()
+
+    assert rates == dict(GRADE_RATES)
+
+
+# ── read_team_from_config with grade ──
+
+
+def test_read_team_returns_grade(fresh_wb_path):
+    """read_team_from_config returns grade field for each person."""
+    from openpyxl import load_workbook
+    from budget_planner.config import TEAM
+
+    wb = load_workbook(fresh_wb_path)
+    ws = wb["Config"]
+    roster = read_team_from_config(ws)
+    wb.close()
+
+    assert len(roster) == len(TEAM)
+    for actual, expected in zip(roster, TEAM):
+        assert "grade" in actual
+        assert actual["grade"] == expected.get("grade", "Mid")
+
+
+def test_read_team_defaults_grade_for_legacy_wb():
+    """read_team_from_config defaults to 'Mid' when Grade column missing."""
+    from budget_planner.config import DEFAULT_GRADE
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+
+    # Build a minimal roster section without Grade column
+    ws.cell(1, 1, "TEAM ROSTER")
+    ws.cell(2, 1, "Person")
+    ws.cell(2, 2, "Max FTE")
+    # No col C header — legacy format
+    ws.cell(3, 1, "Alice")
+    ws.cell(3, 2, 1.0)
+    ws.cell(4, 1, "Bob")
+    ws.cell(4, 2, 0.8)
+
+    roster = read_team_from_config(ws)
+    wb.close()
+
+    assert len(roster) == 2
+    assert roster[0]["name"] == "Alice"
+    assert roster[0]["grade"] == DEFAULT_GRADE
+    assert roster[1]["name"] == "Bob"
+    assert roster[1]["grade"] == DEFAULT_GRADE

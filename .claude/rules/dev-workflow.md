@@ -20,6 +20,7 @@ When a plan claims a module is "unchanged", grep its imports to verify no coupli
 When inserting/removing a Config column, grep ALL formula references (`Config!{letter}`) across every builder AND test file. Column shifts cascade silently — a test asserting the old column letter will mask the bug.
 When inserting/removing a Config param row, grep ALL test files for hardcoded row numbers (e.g. `cell(4, 2)`, `wp_first_row = 8`, merge span tuples). Row shifts cascade into tests the plan doesn't list.
 When changing error message format in reader/builders, grep test files for the old message pattern (`pytest.raises(match=` strings). Semantic changes in validation produce silent test failures.
+When changing a Config cell from input (blue) to formula (black), grep all consumers of the corresponding reader field (e.g. `params["rate"]`) — validators, builders, demo seeder, and tests may assume a numeric type.
 
 ## Worktrees
 Before starting work in a worktree:

@@ -15,11 +15,14 @@ PROJECT_TITLE = "Programme Project Budget Plan"
 PROJECT_START = datetime(2026, 11, 1)  # First month of the project
 PROJECT_MONTHS = 14                    # Total project duration in months
 DEFAULT_RATE = 7500                    # EUR per person-month (weighted average — computed by formula)
-GRADE_RATES = {"Senior": 12500, "Mid": 10000, "Junior": 7500}  # EUR/PM by job grade
-DEFAULT_GRADE = "Mid"                  # Grade assigned to new team members
 EU_ANNUAL_CEILING_PM = 12.0              # Max PM per calendar year across all EU grants (≈215 days)
 CFS_THRESHOLD = 430_000                  # EUR — CFS audit certificate required above this
 DEFAULT_RP_LENGTH = 6                   # Months per reporting period (programme typical: 12-18)
+
+# ── GRADE RATES ──
+# EUR per person-month by job grade (bookkeeping-provided bands)
+GRADE_RATES = {"Senior": 12500, "Mid": 10000, "Junior": 7500}
+DEFAULT_GRADE = "Mid"
 
 # ── WORK PACKAGES ──
 # Each WP dict must have: id, name, fte (total person-months), start (month number 1-based), end (month number 1-based),

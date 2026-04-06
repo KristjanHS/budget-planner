@@ -108,7 +108,7 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None,
             groups.append((m, span))
             m += span
 
-    first_group = True
+    # Determine calendar year for each group
     for group_start, span in groups:
         year_start_col = month_col_start + group_start
         year_end_col = year_start_col + span - 1
@@ -117,13 +117,20 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None,
         # adjacent year-groups don't merge into one big group in Excel.
         group_col_start = year_start_col + 1
 
-        # Determine if this year's group should be collapsed
-        if current_month is not None:
-            # Expand the group containing current_month (1-based)
+        # Determine calendar year for this group
+        if project_start is not None:
+            from dateutil.relativedelta import relativedelta
+            cal_year = (project_start + relativedelta(months=group_start)).year
+        else:
+            cal_year = None
+
+        # Expand 2025-2026, collapse all other years
+        if cal_year is not None:
+            expand = cal_year in (2025, 2026)
+        elif current_month is not None:
             expand = (group_start < current_month <= group_start + span)
         else:
-            # Default: expand first group
-            expand = first_group
+            expand = (group_start == 0)
 
         if group_col_start <= year_end_col:
             ws.column_dimensions.group(
@@ -132,8 +139,6 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None,
                 outline_level=1,
                 hidden=not expand,
             )
-
-        first_group = False
 
 
 def auto_fit_columns(ws, *, min_width=8, max_width=40):

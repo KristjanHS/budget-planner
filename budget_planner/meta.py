@@ -7,7 +7,8 @@ from budget_planner.styles import WRAP, col_letter
 
 
 def build_meta_sheet(ws, layout, *, project_params=None, work_packages=None,
-                     team=None, external_commitments=None, rebuild_warnings=None):
+                     team=None, external_commitments=None, rebuild_warnings=None,
+                     config_layout=None, grade_rates=None):
     """Populate the _META worksheet with structural documentation.
 
     Parameters
@@ -28,6 +29,12 @@ def build_meta_sheet(ws, layout, *, project_params=None, work_packages=None,
         List of external commitment dicts. Falls back to config.
     rebuild_warnings : list or None
         List of warning strings to append to meta text.
+    config_layout : dict or None
+        Layout dict from build_config_sheet(). Keys used:
+        grade_first_row, grade_last_row, roster_header_row, roster_first_row,
+        roster_last_row. Falls back to derivation from layout + grade_rates.
+    grade_rates : dict or None
+        Mapping of grade name to EUR/PM rate. Falls back to config.
     """
     if any(v is None for v in [project_params, work_packages, team, external_commitments]):
         from budget_planner import config
@@ -42,6 +49,9 @@ def build_meta_sheet(ws, layout, *, project_params=None, work_packages=None,
             team = config.TEAM
         if external_commitments is None:
             external_commitments = config.EXTERNAL_COMMITMENTS
+    if grade_rates is None:
+        from budget_planner import config as _cfg
+        grade_rates = _cfg.GRADE_RATES
 
     assert project_params is not None
     assert work_packages is not None
@@ -49,7 +59,6 @@ def build_meta_sheet(ws, layout, *, project_params=None, work_packages=None,
     assert external_commitments is not None
 
     month_col_start = MONTH_COL_START
-    num_wps = len(work_packages)
     month_col_end = _month_col_end(project_params["months"])
     _vcols = val_columns(project_params["months"])
     val_col_sum = _vcols["sum"]
@@ -67,22 +76,41 @@ def build_meta_sheet(ws, layout, *, project_params=None, work_packages=None,
     plan_last_wp = layout["planned_last_wp_row"]
     plan_total = layout["planned_total_row"]
 
+    # Team and WP counts (needed early for row derivations)
+    num_team = len(team)
+    num_ext = len(external_commitments)
+    num_wps = len(work_packages)
+
     # Config sheet row positions
     cfg_first_wp = layout["config_first_wp_row"]
     cfg_last_wp = layout["config_last_wp_row"]
     cfg_total_row = cfg_last_wp + 1
-    cfg_roster_section = cfg_total_row + 2
-    cfg_roster_header = cfg_roster_section + 1
-    cfg_roster_first = cfg_roster_header + 1
+
+    # Grade table rows (from config_layout or derived)
+    if config_layout is not None:
+        cfg_grade_first = config_layout["grade_first_row"]
+        cfg_grade_last = config_layout["grade_last_row"]
+        cfg_roster_header = config_layout["roster_header_row"]
+        cfg_roster_first = config_layout["roster_first_row"]
+    else:
+        # Derive: 5 param rows + gap + section header + column header = row 9
+        cfg_grade_first = 9  # row after grade column header
+        cfg_grade_last = cfg_grade_first + len(grade_rates) - 1
+        cfg_roster_header = cfg_total_row + 3  # +2 gap + section header, +1 header
+        cfg_roster_first = cfg_roster_header + 1
+    cfg_grade_section = cfg_grade_first - 2  # section header is 2 rows above first data
+    cfg_grade_header = cfg_grade_first - 1
+    cfg_wp_section = cfg_first_wp - 2  # WP section header row
+    cfg_wp_header = cfg_first_wp - 1   # WP column header row
+    cfg_roster_section = cfg_roster_header - 1
+    cfg_roster_last = cfg_roster_first + num_team - 1
+    num_grades = cfg_grade_last - cfg_grade_first + 1
+    grade_names_str = ", ".join(grade_rates.keys())
 
     # Summary sheet references (row 3=year headers, row 4=sub-headers, row 5+=WPs)
     sum_first_wp = 5
     sum_last_wp = sum_first_wp + num_wps - 1
     sum_total = sum_last_wp + 1
-
-    # Team roster references (in Config sheet)
-    num_team = len(team)
-    num_ext = len(external_commitments)
 
     # Column letters
     first_mcol = col_letter(month_col_start)
@@ -101,7 +129,7 @@ PURPOSE: Track planned FTE allocation and actual EUR spend per work package per 
 
 ═══ SHEET INDEX ═══
 1. _META        — This sheet. AI-agent-readable documentation of workbook structure, conventions, and modification instructions.
-2. Config       — Project parameters (rows 1-5) + WP table (rows 7+) + team roster (below WP TOTAL).
+2. Config       — Project parameters (rows 1-5) + grade rate table + WP table + team roster (below WP TOTAL).
 3. Plan         — Compact 1-row header + Planned FTE block (formulas from Capacity).
 4. Capacity     — Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects.
 5. Actuals      — EUR actuals per WP per month (input from accountant). Tab color: Blue.
@@ -112,32 +140,48 @@ PURPOSE: Track planned FTE allocation and actual EUR spend per work package per 
 
 SHEET: CONFIG (single source of truth for all project parameters)
   Tab color: Blue (4472C4)
-  Freeze panes: A7
+  Freeze panes: A{cfg_wp_section}
 
   SECTION A: PROJECT PARAMETERS (rows 1-5)
     Row 1: A1="Project Title",            B1=<title>           (blue input)
     Row 2: A2="Project Start",            B2=<date>            (blue input, MMM YYYY)
     Row 3: A3="Project Months",           B3=<integer>         (blue input)
-    Row 4: A4="FTE Rate (EUR)",           B4=<rate>            (blue input, €#,##0)
+    Row 4: A4="FTE Rate (EUR)",           B4=<formula>         (black formula, €#,##0)
+           Weighted average: =SUMPRODUCT(VLOOKUP(roster_grades,tbl_GradeRates,2,FALSE)*roster_ftes)/SUM(roster_ftes)
+           Derives rate from per-grade rates weighted by team FTE. Not directly editable.
     Row 5: A5="EU Annual Ceiling (PM)",   B5=<ceiling>         (blue input, 0.00; default 12.0 ≈ 215 days/year)
     Row 6: (blank separator)
 
-  SECTION B: WORK PACKAGES TABLE (rows 7+)
-    Row 7: Section header "WORK PACKAGES" (merged A7:H7, section fill)
-    Row 8: Column headers: WP ID | WP Name | FTE Budget | Start Month | End Month | Type | Active Months | Personnel Ceiling (€)
+  SECTION A2: RATE BY GRADE (rows {cfg_grade_section}-{cfg_grade_last})
+    Row {cfg_grade_section}: Section header "RATE BY GRADE" (merged A:B, section fill)
+    Row {cfg_grade_header}: Column headers: Grade | Rate (EUR/PM)
+    Rows {cfg_grade_first}-{cfg_grade_last}: Grade data rows ({num_grades} grades: {grade_names_str})
+      Col A: Grade name (blue input)
+      Col B: Rate EUR/PM (blue input, €#,##0)
+    Named range tbl_GradeRates covers A{cfg_grade_first}:B{cfg_grade_last}
+    Purpose: per-grade personnel rates used to compute weighted-average fte_rate formula.
+
+  SECTION B: WORK PACKAGES TABLE (rows {cfg_wp_section}-{cfg_total_row})
+    Row {cfg_wp_section}: Section header "WORK PACKAGES" (merged A:H, section fill)
+    Row {cfg_wp_header}: Column headers: WP ID | WP Name | FTE Budget | Start Month | End Month | Type | Active Months | Personnel Ceiling (€)
     Rows {cfg_first_wp}-{cfg_last_wp}: WP data rows
       Cols A-F: blue input (WP ID, Name, FTE Budget, Start Mo, End Mo, Type)
       Col F Type: distribution curve type (flat/front-loaded/bell/back-loaded)
       Col G: =E-D+1 (Active Months, black formula)
       Col H: =C*fte_rate (Personnel Ceiling EUR, black formula)
     Row {cfg_total_row}: TOTAL row (SUM on cols C and H, light blue fill)
-    Excel Table "tbl_WorkPackages" covers A7:H{cfg_last_wp} (header + data, excludes TOTAL)
+    Excel Table "tbl_WorkPackages" covers A{cfg_wp_header}:H{cfg_last_wp} (header + data, excludes TOTAL)
     Conditional formatting: yellow fill if Start > End
 
   SECTION C: TEAM ROSTER (below WP TOTAL)
-    Row {cfg_roster_section}: Section header "TEAM ROSTER" (merged A:B, section fill)
-    Row {cfg_roster_header}: Column headers: Person | Max FTE
+    Row {cfg_roster_section}: Section header "TEAM ROSTER" (merged A:C, section fill)
+    Row {cfg_roster_header}: Column headers: Person | Max FTE | Grade
     Rows {cfg_roster_first}+: Team member data rows (blue input, {num_team} people)
+      Col A: Person name (blue input)
+      Col B: Max FTE (blue input, 0.00)
+      Col C: Grade (blue input, data validation dropdown from grade names)
+    Named range roster_ftes covers B{cfg_roster_first}:B{cfg_roster_last}
+    Named range roster_grades covers C{cfg_roster_first}:C{cfg_roster_last}
 
   SECTION D: REPORTING PERIODS (below Team Roster)
     Col A: Period ID (e.g. RP1) — blue input
@@ -358,7 +402,8 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
 
   Config WP table (WP IDs, names, budgets, type) --> all sheets via cross-refs
   Config WP Type column --> Capacity distribution curves (flat/front-loaded/bell/back-loaded)
-  Config team roster (names, Max FTE) --> Capacity person headers + REMAINING formulas
+  Config grade rates (tbl_GradeRates) + roster grades/FTEs --> fte_rate weighted average formula
+  Config team roster (names, Max FTE, Grade) --> Capacity person headers + REMAINING formulas
   Config derived cols (Active Months, Personnel Ceiling) --> Actuals ceiling validation
   Capacity assignment config block (Person-WP mappings) --> per-person filtered WP rows
   Capacity monthly FTE (static values from distribution) --> Plan Planned FTE (SUM formulas across people)
@@ -392,8 +437,11 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
 
 ═══ NAMED RANGES ═══
   project_start        = Config!$B$2   (project start date)
-  fte_rate              = Config!$B$4   (monthly EUR rate per person-month)
+  fte_rate              = Config!$B$4   (weighted-average EUR/PM rate — formula, not static input)
   eu_annual_ceiling_pm = Config!$B$5   (max PM per calendar year across all EU grants; ≈215 days)
+  tbl_GradeRates       = Config!$A${cfg_grade_first}:$B${cfg_grade_last}  (grade name + rate lookup table)
+  roster_ftes          = Config!$B${cfg_roster_first}:$B${cfg_roster_last}  (team Max FTE column)
+  roster_grades        = Config!$C${cfg_roster_first}:$C${cfg_roster_last}  (team Grade column)
   partner_ceiling      = Plan!$I$1     (total personnel ceiling in EUR, =SUM of Config!H WP column)
   current_month        = Trends!$B$1   (last month with completed actuals, blue input)
 
@@ -414,7 +462,8 @@ TO ADD A PERSON-WP ASSIGNMENT:
   3. The person's grid will show the new WP with auto-filled monthly FTE values.
 
 TO ADD A TEAM MEMBER:
-  1. Add a row to the Config sheet TEAM ROSTER section (Name, Max FTE)
+  1. Add a row to the Config sheet TEAM ROSTER section (Name, Max FTE, Grade)
+     Grade must be one of the values in the RATE BY GRADE table.
   2. Add person-WP assignment rows in the Capacity PERSON-WP ASSIGNMENTS config block
   3. Run: python -m budget_planner rebuild
 
@@ -424,7 +473,10 @@ TO CHANGE PROJECT DURATION:
   3. Adds/removes month columns. Existing data for months within the new range is preserved.
 
 TO CHANGE FTE RATE:
-  Edit cell B4 on Config sheet. All EUR calculations update via the fte_rate named range.
+  The FTE rate is a weighted-average formula — not directly editable.
+  To change it, edit the per-grade rates in the RATE BY GRADE section or
+  change team member grades/FTEs in the TEAM ROSTER. The fte_rate formula
+  recalculates automatically.
 
 TO REPLACE EXAMPLE DATA:
   Edit Config sheet (WPs with Type, team roster), Capacity config blocks
@@ -471,9 +523,18 @@ TO CREATE A DEMO WORKBOOK:
         cfg_first_wp=cfg_first_wp,
         cfg_last_wp=cfg_last_wp,
         cfg_total_row=cfg_total_row,
+        cfg_grade_section=cfg_grade_section,
+        cfg_grade_header=cfg_grade_header,
+        cfg_grade_first=cfg_grade_first,
+        cfg_grade_last=cfg_grade_last,
+        num_grades=num_grades,
+        grade_names_str=grade_names_str,
+        cfg_wp_section=cfg_wp_section,
+        cfg_wp_header=cfg_wp_header,
         cfg_roster_section=cfg_roster_section,
         cfg_roster_header=cfg_roster_header,
         cfg_roster_first=cfg_roster_first,
+        cfg_roster_last=cfg_roster_last,
         act_last_wp=4 + num_wps - 1,
         act_total=4 + num_wps,
         actuals_amber_pct=int(0.85 * 100),

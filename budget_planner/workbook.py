@@ -186,7 +186,9 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
                      work_packages=work_packages,
                      team=team,
                      external_commitments=external_commitments,
-                     rebuild_warnings=rebuild_warnings)
+                     rebuild_warnings=rebuild_warnings,
+                     config_layout=config_layout,
+                     grade_rates=grade_rates)
 
     # Tab order: _META, Config, Plan, Capacity, Actuals, Trends, Summary
     wb.move_sheet(SHEET_META, offset=0)

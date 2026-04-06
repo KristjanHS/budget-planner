@@ -488,6 +488,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     # Column widths
     # ================================================================
     auto_fit_columns(ws)
+    ws.column_dimensions["A"].width = 16
     ws.column_dimensions["B"].width = 25
 
     # ================================================================

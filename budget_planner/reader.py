@@ -547,11 +547,20 @@ def discover_layout(ws) -> dict:
     # Derive Config sheet WP rows from the first WP formula reference
     # Formula pattern: =Config!A{row}
     first_val = ws.cell(planned_first_wp_row, 1).value
-    cfg_wp_first = 8  # default
+    cfg_wp_first = None
     if first_val and isinstance(first_val, str):
         m = re.match(rf"={SHEET_CONFIG}!A(\d+)", str(first_val))
         if m:
             cfg_wp_first = int(m.group(1))
+    if cfg_wp_first is None:
+        # Fallback: discover from Config sheet directly (legacy workbooks
+        # with literal WP IDs instead of =Config!A{n} formulas)
+        config_ws = ws.parent[SHEET_CONFIG] if SHEET_CONFIG in ws.parent.sheetnames else None
+        if config_ws:
+            wp_section = _find_header_row(config_ws, "WORK PACKAGES", required=False)
+            cfg_wp_first = (wp_section + 2) if wp_section else 8
+        else:
+            cfg_wp_first = 8
     cfg_wp_last = cfg_wp_first + num_wps - 1
 
     return {

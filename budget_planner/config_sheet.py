@@ -89,7 +89,6 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
                    end_row=grade_section_row, end_column=2)
     style_cell(ws, grade_section_row, 1, value="RATE BY GRADE",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
-    style_cell(ws, grade_section_row, 2, fill=SECTION_FILL)
 
     grade_header_row = grade_section_row + 1
     style_cell(ws, grade_header_row, 1, "Grade", font=HEADER_FONT,
@@ -203,12 +202,10 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     # Team member data rows
     roster_first_row = r
     person_rows: dict[str, int] = {}
-    from budget_planner.config import DEFAULT_GRADE as _default_grade
     for member in team:
         style_cell(ws, r, 1, member["name"], font=BLUE_INPUT)
         style_cell(ws, r, 2, member["max_fte"], font=BLUE_INPUT, fmt="0.00")
-        style_cell(ws, r, 3, member.get("grade", _default_grade),
-                   font=BLUE_INPUT)
+        style_cell(ws, r, 3, member.get("grade", "Mid"), font=BLUE_INPUT)
         person_rows[member["name"]] = r
         r += 1
     roster_last_row = r - 1

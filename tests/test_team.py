@@ -65,17 +65,14 @@ def test_config_roster_max_fte_values(config_wb):
 
 
 def test_config_roster_cells_are_blue_input(config_wb):
-    """Person name and max_fte cells have blue font color."""
+    """Person name, max_fte, and grade cells have blue font color."""
     _, ws, layout = config_wb
     for r in range(layout["roster_first_row"], layout["roster_last_row"] + 1):
-        name_font = ws.cell(row=r, column=1).font
-        fte_font = ws.cell(row=r, column=2).font
-        assert name_font.color and name_font.color.rgb in ("0000FF", "000000FF"), (
-            f"Row {r} col A font color: {name_font.color}"
-        )
-        assert fte_font.color and fte_font.color.rgb in ("0000FF", "000000FF"), (
-            f"Row {r} col B font color: {fte_font.color}"
-        )
+        for col in (1, 2, 3):  # Person, Max FTE, Grade
+            font = ws.cell(row=r, column=col).font
+            assert font.color and font.color.rgb in ("0000FF", "000000FF"), (
+                f"Row {r} col {col} font color: {font.color}"
+            )
 
 
 def test_config_roster_below_wp_table(config_wb):

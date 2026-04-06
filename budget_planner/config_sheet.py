@@ -163,7 +163,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     # Excel Table over header + data range (includes derived columns G-H)
     table_ref = f"A{header_row}:H{last_data_row}"
     table_style = TableStyleInfo(
-        name="TableStyleMedium9", showFirstColumn=False,
+        name="TableStyleLight1", showFirstColumn=False,
         showLastColumn=False, showRowStripes=False, showColumnStripes=False,
     )
     table = Table(displayName="tbl_WorkPackages", ref=table_ref)
@@ -285,24 +285,20 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     wb.defined_names.add(dn_roster_grades)
 
     # ── Set FTE Rate formula (weighted average of grade rates by FTE) ──
-    # Uses direct cell references (not named ranges) inside SUMPRODUCT so that
-    # Excel evaluates them as arrays without needing CSE (Ctrl+Shift+Enter).
-    # Named ranges inside SUMPRODUCT suffer from implicit intersection (@) in
-    # non-dynamic-array Excel — the file's CSE flag is silently dropped on open,
-    # reducing the formula to the first roster row only.
+    # SUMPRODUCT with equality tests per grade — Excel evaluates correctly
+    # on file open without CSE or range lookups.
     grades_ref = f"$C${roster_first_row}:$C${roster_last_row}"
     ftes_ref = f"$B${roster_first_row}:$B${roster_last_row}"
-    grade_tbl_ref = f"$A${grade_first_row}:$B${grade_last_row}"
-    ws.cell(rate_row, 2).value = (
-        f"=SUMPRODUCT(IFERROR(VLOOKUP({grades_ref},{grade_tbl_ref},2,FALSE),0)"
-        f"*{ftes_ref})"
-        f"/SUM({ftes_ref})"
+    terms = "+".join(
+        f"({grades_ref}=$A${row})*$B${row}"
+        for row in range(grade_first_row, grade_last_row + 1)
     )
+    ws.cell(rate_row, 2).value = f"=SUMPRODUCT({terms},{ftes_ref})/SUM({ftes_ref})"
 
     # ── Sheet Appearance ──
     ws.sheet_properties.tabColor = "4472C4"
     ws.freeze_panes = f"A{section_row}"
-    auto_fit_columns(ws)
+    auto_fit_columns(ws, max_width=25)
 
     return {
         "param_rows": param_rows,

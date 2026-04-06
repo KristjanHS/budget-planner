@@ -278,6 +278,8 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
                                 project_params["months"]))
     _apply_all_year_groups(wb, project_params, current_month=_current_month)
 
+    wb.active = wb.sheetnames.index(SHEET_CONFIG)
+
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     _backup_existing(output_path)
     wb.save(output_path)
@@ -422,6 +424,8 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     # _apply_protection(wb)  # Temporarily disabled
     _apply_all_year_groups(wb, project_params, current_month=current_month)
+
+    wb.active = wb.sheetnames.index(SHEET_CONFIG)
 
     # Back up then overwrite
     _backup_existing(input_path)

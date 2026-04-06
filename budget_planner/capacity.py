@@ -521,6 +521,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
 
     # Freeze panes
     ws.freeze_panes = f"C{first_person_header_row}"
+    ws.column_dimensions["B"].width = 25
 
     return {
         "assign_first_row": assign_first_row,

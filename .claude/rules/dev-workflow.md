@@ -8,6 +8,7 @@ LibreOffice is a required dependency — install it, don't skip recalc tests.
 Use uv for venv and dependency management.
 Run pytest once per step. Never re-run to "confirm".
 Always verify via pytest, not ad-hoc `python3 -c` scripts.
+For Excel-specific bugs (implicit intersection, formula eval): generate file → user verifies in Excel → then run pytest. openpyxl/LibreOffice mask Excel-specific issues.
 
 ## Linting
 Run `pyright` (full project, not just changed files) before committing. Fix all errors.
@@ -35,6 +36,9 @@ Before starting work in a worktree:
 3. If >0 commits behind, `git merge origin/main` before any edits
 4. If >5 commits behind, grep main for the planned change before implementing — another instance may have already done it
 
+## Formatting
+Preserve all existing cell formatting (fonts, fills, table styles, column widths) unless the user explicitly asks for a change.
+
 ## Architecture
 Don't propose subpackages or abstractions for codebases under ~2K LOC.
 Before splitting a module, verify each resulting file has >50 lines of logic.
@@ -55,7 +59,7 @@ LibreOffice `store()` strips chart series data (val/tx/cat XML) from openpyxl fi
 For charts, construct Series manually with `NumDataSource`/`NumRef`/`AxDataSource` instead of `chart.add_data()` — produces explicit OOXML elements.
 Charts referencing hidden rows must set `chart.visible_cells_only = False` — openpyxl defaults to `True` (`<c:plotVisOnly val="1"/>`), which makes Excel skip hidden-row data → blank chart.
 When debugging chart issues, inspect the zip XML directly (`zipfile` + `ElementTree`) — openpyxl's Python API can show data that wasn't serialized. Also create minimal isolated test files varying one factor at a time (bisect method) to pinpoint the breaking element.
-Formulas with named-range arrays (e.g. SUMPRODUCT+VLOOKUP over a named range): use direct cell references (`$C$28:$C$31`) instead of named ranges inside SUMPRODUCT — Excel silently drops CSE array flags from openpyxl files on open, reducing named ranges to a single cell via implicit intersection. SUMPRODUCT evaluates direct cell ranges as arrays natively without CSE. LibreOffice recalc masks this bug (it honors CSE correctly), so always test formula behavior in Excel too.
+SUMPRODUCT + range lookups (VLOOKUP, INDEX/MATCH, CHOOSE/MATCH with range args) fail in Excel from openpyxl files — CSE `t="array"` flag is recognized but doesn't force array evaluation on file open. Working patterns: SUMPRODUCT + equality tests per category `(range=$A$1)*$B$1`, per-cell lookups (single-cell VLOOKUP/INDEX), SUMIFS. LibreOffice handles all approaches correctly, so always verify in Excel.
 When adding/renaming Config param labels, check `_find_header_row` substring collisions — it uses case-insensitive `in` matching, so "PM/person/year" matches a "Person" search.
 
 ## Testing

@@ -264,7 +264,6 @@ def test_fte_rate_is_formula():
         f"Expected formula, got: {val}"
     )
     formula_text = val.text if isinstance(val, ArrayFormula) else val
-    assert "SUMPRODUCT" in formula_text
     assert "VLOOKUP" in formula_text
 
 

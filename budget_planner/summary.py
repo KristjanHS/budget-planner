@@ -521,3 +521,4 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
     ))
 
     summary.freeze_panes = f"C{SUMMARY_FIRST_WP_ROW}"
+    summary.column_dimensions["B"].width = 25

@@ -1,5 +1,6 @@
 """Plan sheet builder — compact header + planned FTE block."""
 
+from openpyxl.comments import Comment
 from openpyxl.styles import Font, Protection
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.formatting.rule import FormulaRule
@@ -122,6 +123,12 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     wb.defined_names.add(DefinedName(
         "partner_ceiling", attr_text=f"{SHEET_PLAN}!$I$1"
     ))
+    ws.cell(row=1, column=9).comment = Comment(
+        "Personnel costs only (direct). The 25% indirect flat rate "
+        "(the programme regulation) is added on top when computing "
+        "total eligible costs.",
+        "Budget Planner",
+    )
 
     # Row 2: blank separator (no action needed)
 
@@ -216,6 +223,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
 
     # Freeze panes: freeze WP ID/Name columns and header rows
     ws.freeze_panes = f"C{first_wp_row}"
+    ws.column_dimensions["B"].width = 25
 
     return {
         "config_first_wp_row": cfg_wp_first,

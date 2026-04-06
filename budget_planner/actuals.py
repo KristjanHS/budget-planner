@@ -212,6 +212,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
 
     # Freeze panes
     ws.freeze_panes = f"C{first_wp_row}"
+    ws.column_dimensions["B"].width = 25
 
     return {
         "header_row": 1,

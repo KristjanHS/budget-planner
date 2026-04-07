@@ -32,10 +32,9 @@ tests/
   test_config_sheet.py # Config sheet builder + round-trip
   test_integration.py  # Cross-sheet data flow + round-trip preservation
   test_rebuild.py      # Rebuild preservation, orphaned data, month count changes
-  test_protection.py   # Cell protection (temporarily disabled)
   test_grouping.py     # Column grouping: groups exist, correct collapse state
   test_parameterization.py  # Builder decoupling: no config.py imports in rebuild path
-  test_styles.py       # Style helpers, apply_year_groups()
+  test_styles.py       # style_cell() unlocked param (for when protection is re-enabled)
   test_trends.py       # Trends sheet: burn rate, chart, person load, CF
   test_e2e.py          # End-to-end generation + LibreOffice recalc
 scripts/

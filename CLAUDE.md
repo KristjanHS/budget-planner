@@ -46,6 +46,7 @@ This file uses **progressive disclosure**. Keep it focused on what every convers
 | C4 architecture, component diagram | `docs/2. Architecture Overview.md` | System context, component graph |
 | Init vs rebuild workflow | `docs/3. Workflow Overview.md` | CLI flow, data preservation |
 | Brittleness, hardening tasks | `docs/plans/hardening-plan.md` | Duplicated constants, silent corruption risks |
+| Cloud/container env, LO missing, data_only=None | `docs/cloud-env-setup.md` | Pre-flight checks, macro setup, diagnosis |
 
 ## Key Commands
 

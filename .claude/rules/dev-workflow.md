@@ -4,8 +4,9 @@ paths: "**/*.py"
 # Dev Workflow
 
 ## Build + Test
-LibreOffice is a required dependency — install it, don't skip recalc tests.
+LibreOffice is a required dependency — install it, don't skip recalc tests. See `docs/cloud-env-setup.md` for cloud/container environments.
 For Excel-specific bugs (implicit intersection, formula eval): generate file → user verifies in Excel → then run pytest. openpyxl/LibreOffice mask Excel-specific issues.
+When tests return None from `data_only=True`: verify recalc actually ran (`<v>` elements in XML), don't assume openpyxl/LO interop failure. No `<v>` = no calc engine ran.
 
 ## Linting
 Run `pyright` (full project, not just changed files) before committing. Fix all errors.

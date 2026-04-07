@@ -255,7 +255,7 @@ def test_roster_grade_column():
 
 
 def test_fte_rate_is_formula():
-    """FTE Rate cell contains a SUMPRODUCT/VLOOKUP formula, not a static value."""
+    """FTE Rate cell contains a SUMPRODUCT weighted-average formula, not a static value."""
     _wb, ws, layout = _build_with_grades()
     rate_row = layout["param_rows"]["FTE Rate (EUR)"]
     val = ws.cell(rate_row, 2).value
@@ -264,7 +264,7 @@ def test_fte_rate_is_formula():
         f"Expected formula, got: {val}"
     )
     formula_text = val.text if isinstance(val, ArrayFormula) else val
-    assert "VLOOKUP" in formula_text
+    assert "SUMPRODUCT" in formula_text
 
 
 def test_fte_rate_font_is_black():

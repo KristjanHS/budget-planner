@@ -2,6 +2,17 @@
 
 Excel workbook generator for tracking planned FTE allocation and actual EUR spend per work package across a multi-year EU-funded project. Includes per-person capacity planning with overcommitment detection.
 
+## Codebase Metrics
+
+| Metric | Value |
+|--------|-------|
+| Source lines (budget_planner/) | ~3,600 |
+| Test lines (tests/) | ~4,200 |
+| Script lines (scripts/) | ~2,900 |
+| Test count | 214 |
+| Python modules | 12 |
+| Excel sheets generated | 7 |
+
 ## Quick Start
 
 ```bash
@@ -13,6 +24,9 @@ python -m budget_planner init
 
 # Rebuild from existing workbook (preserves Capacity FTE + Actuals EUR)
 python -m budget_planner rebuild
+
+# Generate change workbook (rebuild e2e test with modified config)
+pytest tests/test_rebuild_e2e.py -q
 
 # Snapshot / restore for scenario comparison
 python -m budget_planner --snapshot output/budget_plan.xlsx

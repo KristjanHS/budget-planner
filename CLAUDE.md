@@ -24,8 +24,8 @@ This file uses **progressive disclosure**. Keep it focused on what every convers
 | Type | Example |
 |------|---------|
 | Domain reference | programme cost categories, funding rates |
-| Architecture deep-dives | Builder patterns, reader fragility |
-| Historical plans | Completed and draft plans |
+| Architecture & internals | Mermaid diagrams, builder patterns, reader fragility |
+| Plans | Active and draft plans |
 
 ### When asked to record information
 
@@ -35,18 +35,16 @@ This file uses **progressive disclosure**. Keep it focused on what every convers
 
 ## Reference Index (encounter a problem? check here)
 
-| Trigger | Document | Key content |
-|---------|----------|-------------|
-| Programme cost model, funding rates, 25% indirect | `docs/grant-domain.md` | Cost categories, PM->EUR chain, reallocation rules |
-| How sheets are built, builder interface | `docs/deep-dive/Sheet Builders.md` | Builder contract, stateless pattern |
+| Trigger | Read | Key content |
+|---------|------|-------------|
+| Programme cost model, funding rates, 25% indirect | `docs/grant-domain.md` | Cost categories, PM→EUR chain, reallocation rules |
+| Sheet builders, stateless pattern | `docs/internals.md` § Sheet Builders | Builder contract, dependency chain; don't add state |
+| Reader breaks, rebuild loses data | `docs/internals.md` § Reader & Rebuild | Formula chain resolution, fragile parsing |
+| Column offsets, month positioning, styles | `docs/internals.md` § Layout & Styling | `layout.py` is single source; don't duplicate constants |
 | Config/Capacity structure changes | `budget_planner/meta.py` | Critical Rule 6: _META must reflect current sheet structure |
-| Reader breaks, rebuild loses data | `docs/deep-dive/Reader and Rebuild.md` | Formula reference chains, fragile parsing |
-| Column offsets, month positioning, styles | `docs/deep-dive/Layout and Styling.md` | `layout.py` constants, `styles.py` patterns |
-| Project overview, tech stack | `docs/1. Project Overview.md` | Purpose, technology, actors |
-| C4 architecture, component diagram | `docs/2. Architecture Overview.md` | System context, component graph |
-| Init vs rebuild workflow | `docs/3. Workflow Overview.md` | CLI flow, data preservation |
-| Brittleness, hardening tasks | `docs/plans/hardening-plan.md` | Duplicated constants, silent corruption risks |
-| Cloud/container env, LO missing, data_only=None | `docs/cloud-env-setup.md` | Pre-flight checks, macro setup, diagnosis |
+| C4 architecture, workflows, formula graph | `docs/architecture.md` | Mermaid diagrams, build order, cross-sheet dependencies |
+| Cloud/container env, LO missing | `docs/cloud-env-setup.md` | Pre-flight checks, failure modes |
+| Config column layout | `.claude/rules/dev-workflow.md` | Grep `Config!{letter}` in ALL builders + tests when columns shift |
 
 ## Key Commands
 
@@ -83,17 +81,6 @@ pytest tests/ -v
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
 6. **_META sheet must be updated** whenever you change the workbook structure. It's the primary documentation for future AI agents.
 7. **Cell protection** *(temporarily disabled)*: When re-enabled, all sheets are protected (password "grant"). Only blue input cells are unlocked. See `_apply_protection()` in workbook.py.
-
-## Before Modifying Code
-
-| You want to change | Read first | Key trap |
-|--------------------|-----------|----------|
-| Sheet builder logic | `docs/deep-dive/Sheet Builders.md` | Builders are stateless; don't add state |
-| Reader / rebuild | `docs/deep-dive/Reader and Rebuild.md` | Most fragile module; formula chain resolution |
-| Column layout, month offsets | `docs/deep-dive/Layout and Styling.md` | `layout.py` is the single source; don't duplicate constants |
-| Cost model, funding rules | `docs/grant-domain.md` | 25% indirect is extra budget, not deducted from ceiling |
-| Hardening / refactoring | `docs/plans/hardening-plan.md` | Check if brittleness already identified there |
-| Config column layout | `.claude/rules/dev-workflow.md` | Grep `Config!{letter}` in ALL builders + tests when columns shift |
 
 ## Rules Index (path-gated — auto-loaded when touching `**/*.py`)
 

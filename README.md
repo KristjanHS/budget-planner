@@ -68,7 +68,6 @@ This tool tracks a single organisation's share of a multi-partner EU-funded (pro
 ```
 budget-planner/
 ├── README.md                 # This file
-├── CONVENTIONS.md            # Spreadsheet formatting, structural patterns, cross-sheet refs
 ├── CLAUDE.md                 # Claude Code project instructions
 ├── budget_planner/
 │   ├── __main__.py           # CLI: init, rebuild subcommands
@@ -147,15 +146,10 @@ python -m budget_planner --restore output/budget_plan.xlsx
 
 | Document | Description |
 |----------|-------------|
-| [Project Overview](docs/1.%20Project%20Overview.md) | Purpose, technology, actors |
-| [Architecture Overview](docs/2.%20Architecture%20Overview.md) | C4 system context, component diagram |
-| [Workflow Overview](docs/3.%20Workflow%20Overview.md) | Init vs rebuild flow, data preservation |
+| [Architecture](docs/architecture.md) | C4 diagrams, build order, workflow sequences, cross-sheet formula graph |
+| [Internals](docs/internals.md) | Sheet builders, reader/rebuild, layout/styling, CF rules, cross-sheet refs |
 | [Programme Domain Reference](docs/grant-domain.md) | Cost categories, funding rates, 25% indirect rule |
-| [Sheet Builders](docs/deep-dive/Sheet%20Builders.md) | Builder contract, stateless pattern |
-| [Layout and Styling](docs/deep-dive/Layout%20and%20Styling.md) | Column offsets, month positioning, style constants |
-| [Reader and Rebuild](docs/deep-dive/Reader%20and%20Rebuild.md) | Formula chain resolution, preserved data, rebuild fragility |
-| [Research: Programme Compliance Risks](docs/research/research-a-grant-compliance-risks.md) | EU audit risk analysis |
-| [Research: EU PM Tools & Workflows](docs/research/research-b-eu-pm-tools-workflows.md) | Tool landscape comparison |
+| [Cloud Environment Setup](docs/cloud-env-setup.md) | LibreOffice install, pre-flight checks, failure modes |
 
 ## Dependencies
 

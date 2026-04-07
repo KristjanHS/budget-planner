@@ -39,8 +39,8 @@ This file uses **progressive disclosure**. Keep it focused on what every convers
 |---------|------|-------------|
 | Programme cost model, funding rates, 25% indirect | `docs/grant-domain.md` | Cost categories, PM→EUR chain, reallocation rules |
 | Sheet builders, stateless pattern | `docs/internals.md` § Sheet Builders | Builder contract, dependency chain; don't add state |
-| Reader breaks, rebuild loses data | `docs/internals.md` § Reader & Rebuild | Formula chain resolution, fragile parsing |
-| Column offsets, month positioning, styles | `docs/internals.md` § Layout & Styling | `layout.py` is single source; don't duplicate constants |
+| Reader breaks, rebuild loses data | `docs/internals.md` § Reader and Rebuild | Formula chain resolution, fragile parsing |
+| Column offsets, month positioning, styles | `docs/internals.md` § Layout and Styling | `layout.py` is single source; don't duplicate constants |
 | Config/Capacity structure changes | `budget_planner/meta.py` | Critical Rule 6: _META must reflect current sheet structure |
 | C4 architecture, workflows, formula graph | `docs/architecture.md` | Mermaid diagrams, build order, cross-sheet dependencies |
 | Cloud/container env, LO missing | `docs/cloud-env-setup.md` | Pre-flight checks, failure modes |

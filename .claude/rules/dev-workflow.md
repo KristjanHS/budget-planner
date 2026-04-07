@@ -5,6 +5,7 @@ paths: "**/*.py"
 
 ## Build + Test
 LibreOffice is a required dependency — install it, don't skip recalc tests. See `docs/cloud-env-setup.md` for cloud/container environments.
+When generating output workbooks, check what already exists — only generate missing or explicitly requested files. Don't overwrite existing workbooks unnecessarily.
 For Excel-specific bugs (implicit intersection, formula eval): generate file → user verifies in Excel → then run pytest. openpyxl/LibreOffice mask Excel-specific issues.
 When tests return None from `data_only=True`: verify recalc actually ran (`<v>` elements in XML), don't assume openpyxl/LO interop failure. No `<v>` = no calc engine ran.
 
@@ -21,6 +22,7 @@ When changing error message format in reader/builders, grep test files for the o
 When changing a Config cell from input (blue) to formula (black), grep all consumers of the corresponding reader field (e.g. `params["rate"]`) — validators, builders, demo seeder, and tests may assume a numeric type.
 
 ## Planning & Implementation (/impag)
+Write plans to `docs/plans/` as dated .md files immediately — never keep plans only in conversation context (context gets compressed).
 Run brainstorm → write-plan → worktree isolation for each P-item. Don't skip planning even if the spec looks detailed.
 Run `superpowers:code-reviewer` after every /impag stage — not just at the end. Each stage boundary is a review checkpoint.
 Fix pre-existing test failures when encountered during implementation — don't defer them.

@@ -150,3 +150,9 @@ flowchart TD
   ACT --> TRENDS
   CAP --> TRENDS
 ```
+
+## Design Decisions
+
+- **Even FTE spread**: Default allocation divides total WP FTE evenly across active months; users override individual cells in Capacity
+- **Single FTE rate**: All EUR amounts are derived from `FTE × monthly rate` (named range `fte_rate`); no per-person salary data
+- **Separate Plan / Actuals sheets**: Plan tracks planned FTE (from Capacity SUM); Actuals tracks EUR from accountant. Different units, different sources, never mixed

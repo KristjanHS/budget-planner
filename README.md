@@ -2,17 +2,6 @@
 
 Excel workbook generator for tracking planned FTE allocation and actual EUR spend per work package across a multi-year EU-funded project. Includes per-person capacity planning with overcommitment detection.
 
-## Codebase Metrics
-
-| Metric | Value |
-|--------|-------|
-| Source lines (budget_planner/) | ~3,600 |
-| Test lines (tests/) | ~4,200 |
-| Script lines (scripts/) | ~2,900 |
-| Test count | 214 |
-| Python modules | 12 |
-| Excel sheets generated | 7 |
-
 ## Quick Start
 
 ```bash
@@ -41,16 +30,21 @@ pytest tests/ -v
 
 ## Features
 
-- **Config sheet**: Project parameters + WP definitions in an Excel Table (`tbl_WorkPackages`); the living source of truth for rebuilds
-- **Plan sheet**: WP config table, planned FTE grid (derived from Capacity via cross-sheet SUM)
-- **Team sheet**: Team roster (name, max FTE) and WP share seed matrix
-- **Capacity sheet**: Per-person monthly FTE allocation across WPs and external projects, with TOTAL/REMAINING rows and overcommitment alerts (amber >80%, red >100%)
-- **Actuals sheet**: EUR actuals per WP per month from accountant, with ceiling validation
-- **Trends sheet**: Burn rate analysis, cumulative spend chart, person load overview
-- **Summary sheet**: Annual aggregation with budget health indicators
-- **_META sheet**: Self-documenting AI-agent-readable workbook structure
-- **Round-trip rebuild**: `rebuild` reads Config/Team/Capacity/Actuals from the existing workbook and regenerates all sheets, preserving manual Capacity FTE and Actuals EUR entries
-- **Cell protection**: All sheets protected (password "grant"), only blue input cells are unlocked for editing
+### Sheets (data flow order)
+
+- **Config**: Project parameters + WP definitions in an Excel Table (`tbl_WorkPackages`); the living source of truth for rebuilds
+- **Team**: Team roster (name, grade, max FTE) and WP share seed matrix
+- **Capacity**: Per-person monthly FTE allocation across WPs and external projects, with TOTAL/REMAINING rows and overcommitment alerts (amber >80%, red >100%)
+- **Plan**: Planned FTE grid per WP (derived from Capacity via cross-sheet SUM)
+- **Actuals**: EUR actuals per WP per month from accountant, with ceiling validation
+- **Trends**: Burn rate analysis, cumulative spend chart, person load overview
+- **Summary**: Annual aggregation with budget health indicators
+- **_META**: Self-documenting AI-agent-readable workbook structure
+
+### How it works
+
+- **Round-trip rebuild**: `rebuild` reads the existing workbook and regenerates all sheets, preserving manual Capacity FTE and Actuals EUR entries
+- **Cell protection**: All sheets protected (password "grant"), only blue input cells unlocked for editing
 - **Column grouping**: Month columns grouped by year with auto-collapse; current year expanded on rebuild
 - **Scenario comparison**: `--snapshot` / `--restore` for before/after comparison
 
@@ -101,21 +95,6 @@ budget-planner/
 2. Run: `python -m budget_planner rebuild && python scripts/recalc.py output/budget_plan.xlsx`
 3. Capacity FTE allocations and Actuals EUR values are preserved across rebuilds
 4. Verify: `pytest tests/ -v`
-
-## Design Decisions
-
-- **Config sheet is the living source of truth** -- project params and WP definitions live in Excel, not Python; `config.py` is only used as seed data for `init`
-- **Round-trip preservation** -- `rebuild` reads the existing workbook and re-injects Capacity FTE and Actuals EUR values, matched by WP ID + person name + month index
-- **Cell protection** -- all sheets protected (password "grant"), only blue input cells unlocked; prevents accidental formula overwrites
-- **Column grouping** -- month columns grouped by year with auto-collapse for easier navigation of 60-column grids
-- Plan sheet has a single Planned FTE block; actuals are tracked in a separate Actuals sheet (EUR from accountant)
-- Plan Planned FTE is derived from Capacity via cross-sheet SUM formulas
-- Team + Capacity sheets for per-person FTE breakdown with overcommitment detection
-- Even FTE spread across active months as default, with manual override per cell
-- Single FTE rate -- all EUR derived from FTE x rate
-- Inactive months greyed out and empty to prevent audit issues
-- Demo mode seeds with calculated allocations (`init --demo`); plain `init` leaves Capacity cells empty
-- `_META` sheet inside the workbook documents structure for AI agents
 
 ## Windows Quick Start (no WSL)
 

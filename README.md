@@ -57,38 +57,6 @@ This tool tracks a single organisation's share of a multi-partner EU-funded (pro
 - **Primary unit**: FTE (person-months). Euros are derived internally (FTE x monthly rate), not reported to funder.
 - **Single org**: Only our partner's share is tracked. No multi-partner view needed.
 
-## Project Structure
-
-```
-budget-planner/
-├── README.md                 # This file
-├── CLAUDE.md                 # Claude Code project instructions
-├── budget_planner/
-│   ├── __main__.py           # CLI: init, rebuild subcommands
-│   ├── config.py             # WPs, team, external commitments, constants (seed for init)
-│   ├── config_sheet.py       # Config sheet builder + reader
-│   ├── styles.py             # Font/fill/border constants, column grouping
-│   ├── plan.py               # Plan sheet builder
-│   ├── team.py               # Team sheet builder
-│   ├── capacity.py           # Capacity sheet builder
-│   ├── actuals.py            # Actuals sheet builder
-│   ├── trends.py             # Trends sheet builder
-│   ├── summary.py            # Summary sheet builder
-│   ├── meta.py               # _META sheet builder
-│   ├── reader.py             # Round-trip reader (Config, Team, Capacity, Actuals)
-│   └── workbook.py           # Orchestrator: init_workbook() + rebuild_workbook()
-├── setup.bat                 # Windows: create venv + install deps
-├── init.bat                  # Windows: generate empty workbook
-├── demo.bat                  # Windows: generate demo workbook
-├── rebuild.bat               # Windows: rebuild from existing workbook
-├── tests/                    # pytest suite
-├── scripts/
-│   ├── recalc.py             # LibreOffice formula recalculator
-│   └── office/               # LibreOffice helpers
-└── output/
-    └── budget_plan.xlsx  # Generated workbook (gitignored)
-```
-
 ## Modifying
 
 1. Edit the **Config sheet** (project params, work packages) or **Team sheet** (roster, WP shares) in Excel
@@ -125,7 +93,7 @@ python -m budget_planner --restore output/budget_plan.xlsx
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](docs/architecture.md) | C4 diagrams, build order, workflow sequences, cross-sheet formula graph |
+| [Architecture](docs/architecture.md) | Project structure, C4 diagrams, build order, workflow sequences, cross-sheet formula graph |
 | [Internals](docs/internals.md) | Sheet builders, reader/rebuild, layout/styling, CF rules, cross-sheet refs |
 | [Programme Domain Reference](docs/grant-domain.md) | Cost categories, funding rates, 25% indirect rule |
 | [Cloud Environment Setup](docs/cloud-env-setup.md) | LibreOffice install, pre-flight checks, failure modes |

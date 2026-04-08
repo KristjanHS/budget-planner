@@ -4,7 +4,7 @@ echo.
 
 where python >nul 2>nul
 if errorlevel 1 (
-    echo ERROR: Python not found. Install Python 3.10+ from https://www.python.org/downloads/
+    echo ERROR: Python not found. Install Python 3.14+ from https://www.python.org/downloads/
     echo Make sure to check "Add to PATH" during installation.
     pause
     exit /b 1

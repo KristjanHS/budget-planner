@@ -5,7 +5,7 @@ Excel workbook generator for tracking planned FTE allocation and actual EUR spen
 ## Quick Start
 
 ```bash
-# Install (requires Python 3.10+)
+# Install (requires Python 3.14+)
 uv venv && uv pip install -e ".[dev]"
 
 # Create a fresh workbook from config.py seed data
@@ -68,7 +68,7 @@ This tool tracks a single organisation's share of a multi-partner EU-funded (pro
 
 Only Python is required. Excel or LibreOffice is needed to view and recalculate the workbook.
 
-1. Install **Python 3.10+** from [python.org](https://www.python.org/downloads/) — check **"Add to PATH"** during install
+1. Install **Python 3.14+** from [python.org](https://www.python.org/downloads/) — check **"Add to PATH"** during install
 2. Download and extract the repository ZIP
 3. Double-click the batch files:
 
@@ -100,7 +100,7 @@ python -m budget_planner --restore output/budget_plan.xlsx
 
 ## Dependencies
 
-- Python 3.10+
+- Python 3.14+
 - `openpyxl` >= 3.1.0
 - `python-dateutil`
 - LibreOffice (for formula recalculation via `scripts/recalc.py` — Linux/macOS only)

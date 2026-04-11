@@ -6,7 +6,13 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.utils import get_column_letter
 
-from budget_planner.layout import SHEET_CONFIG
+from budget_planner.layout import (
+    SHEET_CONFIG,
+    COL_WP_FTE, COL_WP_RATE, COL_WP_CEILING, WP_BUDGET_LAST_COL,
+    COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE, SCHED_LAST_COL,
+    COL_ROSTER_FTE, COL_ROSTER_GRADE, ROSTER_LAST_COL,
+    COL_GRADE_RATE, GRADE_LAST_COL,
+)
 from budget_planner.styles import (
     BLACK_FORMULA,
     BLUE_INPUT,
@@ -97,7 +103,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
 
     # Section header — merged A:E
     ws.merge_cells(start_row=budget_section_row, start_column=1,
-                   end_row=budget_section_row, end_column=5)
+                   end_row=budget_section_row, end_column=WP_BUDGET_LAST_COL)
     style_cell(ws, budget_section_row, 1, value="WP BUDGET",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
@@ -118,34 +124,38 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         # Col B: WP Name
         style_cell(ws, row_idx, 2, value=wp["name"], font=BLUE_INPUT, border=False)
         # Col C: FTE Budget
-        style_cell(ws, row_idx, 3, value=wp["fte"], font=BLUE_INPUT, fmt="0.00",
-                   border=False)
+        style_cell(ws, row_idx, COL_WP_FTE, value=wp["fte"], font=BLUE_INPUT,
+                   fmt="0.00", border=False)
         # Col D: Rate (€/PM) — blue input, per-WP or default
         wp_rate = wp.get("rate", default_rate)
         if not isinstance(wp_rate, (int, float)):
             wp_rate = default_rate
-        style_cell(ws, row_idx, 4, value=wp_rate, font=BLUE_INPUT, fmt="€#,##0",
-                   border=False)
+        style_cell(ws, row_idx, COL_WP_RATE, value=wp_rate, font=BLUE_INPUT,
+                   fmt="€#,##0", border=False)
         # Col E: Ceiling (€) — formula = FTE * Rate
-        style_cell(ws, row_idx, 5, font=BLACK_FORMULA, fmt="€#,##0",
-                   border=False).value = f"=C{row_idx}*D{row_idx}"
+        fte_cl = get_column_letter(COL_WP_FTE)
+        rate_cl = get_column_letter(COL_WP_RATE)
+        style_cell(ws, row_idx, COL_WP_CEILING, font=BLACK_FORMULA, fmt="€#,##0",
+                   border=False).value = f"={fte_cl}{row_idx}*{rate_cl}{row_idx}"
 
     # TOTAL row
     budget_total_row = budget_last_data_row + 1
     style_cell(ws, budget_total_row, 1, "", fill=LIGHT_BLUE_FILL)
     style_cell(ws, budget_total_row, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
-    style_cell(ws, budget_total_row, 3, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
-               fmt="0.00").value = (
-        f"=SUM(C{budget_first_data_row}:C{budget_last_data_row})"
+    fte_cl = get_column_letter(COL_WP_FTE)
+    style_cell(ws, budget_total_row, COL_WP_FTE, font=BLACK_FORMULA,
+               fill=LIGHT_BLUE_FILL, fmt="0.00").value = (
+        f"=SUM({fte_cl}{budget_first_data_row}:{fte_cl}{budget_last_data_row})"
     )
-    style_cell(ws, budget_total_row, 4, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, budget_total_row, 5, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
-               fmt="€#,##0").value = (
-        f"=SUM(E{budget_first_data_row}:E{budget_last_data_row})"
+    style_cell(ws, budget_total_row, COL_WP_RATE, "", fill=LIGHT_BLUE_FILL)
+    ceil_cl = get_column_letter(COL_WP_CEILING)
+    style_cell(ws, budget_total_row, COL_WP_CEILING, font=BLACK_FORMULA,
+               fill=LIGHT_BLUE_FILL, fmt="€#,##0").value = (
+        f"=SUM({ceil_cl}{budget_first_data_row}:{ceil_cl}{budget_last_data_row})"
     )
 
     # Excel Table over header + data range (NOT including total row)
-    table_ref = f"A{budget_header_row}:E{budget_last_data_row}"
+    table_ref = f"A{budget_header_row}:{get_column_letter(WP_BUDGET_LAST_COL)}{budget_last_data_row}"
     table_style = TableStyleInfo(
         name="TableStyleLight1", showFirstColumn=False,
         showLastColumn=False, showRowStripes=False, showColumnStripes=False,
@@ -161,7 +171,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
 
     # Section header — merged A:D
     ws.merge_cells(start_row=sched_section_row, start_column=1,
-                   end_row=sched_section_row, end_column=4)
+                   end_row=sched_section_row, end_column=SCHED_LAST_COL)
     style_cell(ws, sched_section_row, 1, value="WP SCHEDULE",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
@@ -175,11 +185,12 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     sched_last_data_row = sched_first_data_row + len(wp_schedule) - 1
     for row_idx, entry in enumerate(wp_schedule, start=sched_first_data_row):
         style_cell(ws, row_idx, 1, value=entry["id"], font=BLUE_INPUT, border=False)
-        style_cell(ws, row_idx, 2, value=entry["start"], font=BLUE_INPUT, fmt="0",
-                   border=False)
-        style_cell(ws, row_idx, 3, value=entry["end"], font=BLUE_INPUT, fmt="0",
-                   border=False)
-        style_cell(ws, row_idx, 4, value=entry["type"], font=BLUE_INPUT, border=False)
+        style_cell(ws, row_idx, COL_SCHED_START, value=entry["start"],
+                   font=BLUE_INPUT, fmt="0", border=False)
+        style_cell(ws, row_idx, COL_SCHED_END, value=entry["end"],
+                   font=BLUE_INPUT, fmt="0", border=False)
+        style_cell(ws, row_idx, COL_SCHED_TYPE, value=entry["type"],
+                   font=BLUE_INPUT, border=False)
 
     # Data validation dropdown on Type column
     dv_type = DataValidation(
@@ -189,7 +200,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     )
     dv_type.error = "Please select a valid distribution type"
     dv_type.errorTitle = "Invalid Type"
-    type_col = get_column_letter(4)
+    type_col = get_column_letter(COL_SCHED_TYPE)
     dv_type.sqref = f"{type_col}{sched_first_data_row}:{type_col}{sched_last_data_row}"
     ws.add_data_validation(dv_type)
 
@@ -205,21 +216,21 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     r = sched_last_data_row + 2  # gap row after schedule
 
     # Section header — merged A:C
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=ROSTER_LAST_COL)
     style_cell(ws, r, 1, value="TEAM ROSTER",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
     style_cell(ws, r, 2, fill=SECTION_FILL)
-    style_cell(ws, r, 3, fill=SECTION_FILL)
+    style_cell(ws, r, COL_ROSTER_GRADE, fill=SECTION_FILL)
     r += 1
 
     # Column headers
     roster_header_row = r
     style_cell(ws, r, 1, "Person", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
                alignment=CENTER)
-    style_cell(ws, r, 2, "Max FTE", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-               alignment=CENTER)
-    style_cell(ws, r, 3, "Grade", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-               alignment=CENTER)
+    style_cell(ws, r, COL_ROSTER_FTE, "Max FTE", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    style_cell(ws, r, COL_ROSTER_GRADE, "Grade", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, alignment=CENTER)
     r += 1
 
     # Team member data rows
@@ -227,8 +238,10 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     person_rows: dict[str, int] = {}
     for member in team:
         style_cell(ws, r, 1, member["name"], font=BLUE_INPUT)
-        style_cell(ws, r, 2, member["max_fte"], font=BLUE_INPUT, fmt="0.00")
-        style_cell(ws, r, 3, member.get("grade", "Mid"), font=BLUE_INPUT)
+        style_cell(ws, r, COL_ROSTER_FTE, member["max_fte"], font=BLUE_INPUT,
+                   fmt="0.00")
+        style_cell(ws, r, COL_ROSTER_GRADE, member.get("grade", "Mid"),
+                   font=BLUE_INPUT)
         person_rows[member["name"]] = r
         r += 1
     roster_last_row = r - 1
@@ -266,7 +279,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     # ── Section 6: Rate by Grade Table (moved to bottom) ──
     grade_section_row = rp_last_row + 2  # gap row after reporting periods
     ws.merge_cells(start_row=grade_section_row, start_column=1,
-                   end_row=grade_section_row, end_column=2)
+                   end_row=grade_section_row, end_column=GRADE_LAST_COL)
     style_cell(ws, grade_section_row, 1, value="RATE BY GRADE",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
@@ -281,8 +294,8 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     for gi, grade_name in enumerate(grade_names):
         gr = grade_first_row + gi
         style_cell(ws, gr, 1, grade_name, font=BLUE_INPUT, border=False)
-        style_cell(ws, gr, 2, grade_rates[grade_name], font=BLUE_INPUT,
-                   fmt="€#,##0", border=False)
+        style_cell(ws, gr, COL_GRADE_RATE, grade_rates[grade_name],
+                   font=BLUE_INPUT, fmt="€#,##0", border=False)
     grade_last_row = grade_first_row + len(grade_names) - 1
 
     # ── Data validation: Grade dropdown for roster (references grade table) ──
@@ -293,7 +306,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     )
     dv_grade.error = "Please select a valid grade"
     dv_grade.errorTitle = "Invalid Grade"
-    grade_col_letter = get_column_letter(3)
+    grade_col_letter = get_column_letter(COL_ROSTER_GRADE)
     dv_grade.sqref = f"{grade_col_letter}{roster_first_row}:{grade_col_letter}{roster_last_row}"
     ws.add_data_validation(dv_grade)
 

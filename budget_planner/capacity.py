@@ -8,6 +8,10 @@ from budget_planner.layout import (
     MONTH_COL_START, SHEET_CONFIG, CAPACITY_AMBER_LOAD,
     build_year_month_headers, month_col_end as _month_col_end, val_columns,
     _calendar_year_groups,
+    COL_ASSIGN_PERSON, COL_ASSIGN_WP, COL_ASSIGN_FTE,
+    COL_ASSIGN_START, COL_ASSIGN_END, ASSIGN_LAST_COL,
+    COL_EXT_PERSON, COL_EXT_PROJECT, COL_EXT_FTE,
+    COL_EXT_START, COL_EXT_END, COL_EXT_EU, EXT_LAST_COL,
 )
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
@@ -146,7 +150,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     person_rows = team_layout["person_rows"]
 
     # ── CONFIG BLOCK 1: PERSON-WP ASSIGNMENTS ──
-    write_section_header(ws, r, "PERSON-WP ASSIGNMENTS", merge_end=5)
+    write_section_header(ws, r, "PERSON-WP ASSIGNMENTS", merge_end=ASSIGN_LAST_COL)
     r += 1
 
     assign_col_headers = ["Person", "WP", "Total FTE", "Start Month", "End Month"]
@@ -158,11 +162,14 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     assign_first_row = r
     assign_config_rows: dict[tuple[str, str], int] = {}
     for entry in assignments:
-        style_cell(ws, r, 1, entry["person"], font=BLUE_INPUT)
-        style_cell(ws, r, 2, entry["wp"], font=BLUE_INPUT)
-        style_cell(ws, r, 3, entry["total_fte"], font=BLUE_INPUT, fmt="0.00")
-        style_cell(ws, r, 4, entry["start"], font=BLUE_INPUT, fmt="0")
-        style_cell(ws, r, 5, entry["end"], font=BLUE_INPUT, fmt="0")
+        style_cell(ws, r, COL_ASSIGN_PERSON, entry["person"], font=BLUE_INPUT)
+        style_cell(ws, r, COL_ASSIGN_WP, entry["wp"], font=BLUE_INPUT)
+        style_cell(ws, r, COL_ASSIGN_FTE, entry["total_fte"], font=BLUE_INPUT,
+                   fmt="0.00")
+        style_cell(ws, r, COL_ASSIGN_START, entry["start"], font=BLUE_INPUT,
+                   fmt="0")
+        style_cell(ws, r, COL_ASSIGN_END, entry["end"], font=BLUE_INPUT,
+                   fmt="0")
         assign_config_rows[(entry["person"], entry["wp"])] = r
         r += 1
     assign_last_row = r - 1 if assignments else r
@@ -175,7 +182,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     r += 1
 
     # ── CONFIG BLOCK 2: EXTERNAL COMMITMENTS ──
-    write_section_header(ws, r, "EXTERNAL COMMITMENTS", merge_end=6)
+    write_section_header(ws, r, "EXTERNAL COMMITMENTS", merge_end=EXT_LAST_COL)
     r += 1
 
     ext_col_headers = ["Person", "Project", "Total FTE", "Start Month", "End Month", "EU Grant"]
@@ -187,12 +194,13 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     ext_first_row = r
     external_config_rows: dict[tuple[str, str], int] = {}
     for entry in external_commitments:
-        style_cell(ws, r, 1, entry["person"], font=BLUE_INPUT)
-        style_cell(ws, r, 2, entry["project"], font=BLUE_INPUT)
-        style_cell(ws, r, 3, entry["fte"], font=BLUE_INPUT, fmt="0.00")
-        style_cell(ws, r, 4, entry["start"], font=BLUE_INPUT, fmt="0")
-        style_cell(ws, r, 5, entry["end"], font=BLUE_INPUT, fmt="0")
-        style_cell(ws, r, 6, "Yes" if entry.get("is_eu", False) else "No",
+        style_cell(ws, r, COL_EXT_PERSON, entry["person"], font=BLUE_INPUT)
+        style_cell(ws, r, COL_EXT_PROJECT, entry["project"], font=BLUE_INPUT)
+        style_cell(ws, r, COL_EXT_FTE, entry["fte"], font=BLUE_INPUT, fmt="0.00")
+        style_cell(ws, r, COL_EXT_START, entry["start"], font=BLUE_INPUT, fmt="0")
+        style_cell(ws, r, COL_EXT_END, entry["end"], font=BLUE_INPUT, fmt="0")
+        style_cell(ws, r, COL_EXT_EU,
+                   "Yes" if entry.get("is_eu", False) else "No",
                    font=BLUE_INPUT)
         external_config_rows[(entry["person"], entry["project"])] = r
         r += 1

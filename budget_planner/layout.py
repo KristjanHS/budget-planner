@@ -25,6 +25,52 @@ SHEET_TRENDS = "Trends"
 # Column structure: A=ID, B=Name, C onwards = months
 MONTH_COL_START = 3
 
+# ── Config sheet column constants ──
+# WP Budget section (Config sheet)
+COL_WP_ID = 1
+COL_WP_NAME = 2
+COL_WP_FTE = 3
+COL_WP_RATE = 4
+COL_WP_CEILING = 5
+WP_BUDGET_LAST_COL = 5  # for table ref / section header merge
+
+# WP Schedule section (Config sheet)
+COL_SCHED_START = 2
+COL_SCHED_END = 3
+COL_SCHED_TYPE = 4
+SCHED_LAST_COL = 4
+
+# Team Roster section (Config sheet)
+COL_ROSTER_FTE = 2
+COL_ROSTER_GRADE = 3
+ROSTER_LAST_COL = 3
+
+# Reporting Periods section (Config sheet)
+COL_RP_START = 2
+COL_RP_END = 3
+RP_LAST_COL = 3
+
+# Rate by Grade section (Config sheet)
+COL_GRADE_RATE = 2
+GRADE_LAST_COL = 2
+
+# Person-WP Assignments (currently on Capacity, moving to Config in Phase 1)
+COL_ASSIGN_PERSON = 1
+COL_ASSIGN_WP = 2
+COL_ASSIGN_FTE = 3
+COL_ASSIGN_START = 4
+COL_ASSIGN_END = 5
+ASSIGN_LAST_COL = 5
+
+# External Commitments (currently on Capacity, moving to Config in Phase 1)
+COL_EXT_PERSON = 1
+COL_EXT_PROJECT = 2
+COL_EXT_FTE = 3
+COL_EXT_START = 4
+COL_EXT_END = 5
+COL_EXT_EU = 6
+EXT_LAST_COL = 6
+
 # Validation column offsets (relative to month_col_end)
 VAL_OFFSET_SUM = 1
 VAL_OFFSET_BUDGET = 2

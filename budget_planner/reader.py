@@ -2,7 +2,18 @@
 import re
 from typing import Literal, overload
 
-from budget_planner.layout import MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG
+from budget_planner.layout import (
+    MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG,
+    COL_WP_FTE, COL_WP_RATE,
+    COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE,
+    COL_ROSTER_FTE, COL_ROSTER_GRADE,
+    COL_GRADE_RATE,
+    COL_RP_START, COL_RP_END,
+    COL_ASSIGN_PERSON, COL_ASSIGN_WP, COL_ASSIGN_FTE,
+    COL_ASSIGN_START, COL_ASSIGN_END,
+    COL_EXT_PERSON, COL_EXT_PROJECT, COL_EXT_FTE,
+    COL_EXT_START, COL_EXT_END, COL_EXT_EU,
+)
 
 
 def _safe_float(value, default: float) -> float:
@@ -105,8 +116,8 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
         work_packages.append({
             "id": str(wp_id),
             "name": str(col_b or ""),
-            "fte": float(ws.cell(r, 3).value or 0),
-            "rate": _safe_float(ws.cell(r, 4).value, 6500),
+            "fte": float(ws.cell(r, COL_WP_FTE).value or 0),
+            "rate": _safe_float(ws.cell(r, COL_WP_RATE).value, 6500),
         })
         r += 1
 
@@ -121,9 +132,9 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
                 break
             wp_schedule.append({
                 "id": str(sched_id),
-                "start": int(ws.cell(r, 2).value or 1),
-                "end": int(ws.cell(r, 3).value or 1),
-                "type": str(ws.cell(r, 4).value or "flat"),
+                "start": int(ws.cell(r, COL_SCHED_START).value or 1),
+                "end": int(ws.cell(r, COL_SCHED_END).value or 1),
+                "type": str(ws.cell(r, COL_SCHED_TYPE).value or "flat"),
             })
             r += 1
 
@@ -186,7 +197,7 @@ def read_grade_rates(ws) -> dict[str, int | float]:
         grade_name = ws.cell(r, 1).value
         if grade_name is None or str(grade_name).strip() == "":
             break
-        rate_val = ws.cell(r, 2).value
+        rate_val = ws.cell(r, COL_GRADE_RATE).value
         if rate_val is None or not isinstance(rate_val, (int, float)):
             break
         rates[str(grade_name).strip()] = rate_val
@@ -216,7 +227,7 @@ def read_team_from_config(ws) -> list[dict]:
 
     # Detect whether Grade column exists (col C header)
     has_grade_col = False
-    grade_hdr = ws.cell(person_header, 3).value
+    grade_hdr = ws.cell(person_header, COL_ROSTER_GRADE).value
     if grade_hdr and "grade" in str(grade_hdr).lower():
         has_grade_col = True
 
@@ -227,13 +238,13 @@ def read_team_from_config(ws) -> list[dict]:
         name = ws.cell(r, 1).value
         if name is None or str(name).strip() == "":
             break
-        max_fte = ws.cell(r, 2).value
+        max_fte = ws.cell(r, COL_ROSTER_FTE).value
         # Roster rows have numeric max_fte; a string means we hit a header row
         if max_fte is not None and not isinstance(max_fte, (int, float)):
             break
         grade = DEFAULT_GRADE
         if has_grade_col:
-            grade_val = ws.cell(r, 3).value
+            grade_val = ws.cell(r, COL_ROSTER_GRADE).value
             if grade_val is not None and str(grade_val).strip():
                 grade = str(grade_val).strip()
         roster.append({
@@ -271,8 +282,8 @@ def read_reporting_periods(ws, fallback_months=None):
         period_id = ws.cell(r, 1).value
         if period_id is None or str(period_id).strip() == "":
             break
-        start = ws.cell(r, 2).value
-        end = ws.cell(r, 3).value
+        start = ws.cell(r, COL_RP_START).value
+        end = ws.cell(r, COL_RP_END).value
         periods.append({
             "id": str(period_id),
             "start": int(start or 1),
@@ -300,13 +311,13 @@ def read_capacity_assignments(ws) -> list[dict]:
     r = assignments_header + 2
     assignments: list[dict] = []
     while r <= ws.max_row:
-        person = ws.cell(r, 1).value
+        person = ws.cell(r, COL_ASSIGN_PERSON).value
         if person is None or str(person).strip() == "":
             break
-        wp = ws.cell(r, 2).value
-        total_fte = ws.cell(r, 3).value
-        start = ws.cell(r, 4).value
-        end = ws.cell(r, 5).value
+        wp = ws.cell(r, COL_ASSIGN_WP).value
+        total_fte = ws.cell(r, COL_ASSIGN_FTE).value
+        start = ws.cell(r, COL_ASSIGN_START).value
+        end = ws.cell(r, COL_ASSIGN_END).value
         assignments.append({
             "person": str(person),
             "wp": str(wp or ""),
@@ -363,14 +374,14 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
         # Skip header row (Person, Project, Total FTE, Start Month, End Month)
         r = ext_config_header + 2  # skip section header + column headers
         while r <= ws.max_row:
-            person = ws.cell(r, 1).value
-            project = ws.cell(r, 2).value
+            person = ws.cell(r, COL_EXT_PERSON).value
+            project = ws.cell(r, COL_EXT_PROJECT).value
             if person is None or str(person).strip() == "":
                 break
-            fte = ws.cell(r, 3).value
-            start = ws.cell(r, 4).value
-            end = ws.cell(r, 5).value
-            is_eu_val = ws.cell(r, 6).value
+            fte = ws.cell(r, COL_EXT_FTE).value
+            start = ws.cell(r, COL_EXT_START).value
+            end = ws.cell(r, COL_EXT_END).value
+            is_eu_val = ws.cell(r, COL_EXT_EU).value
             external_commitments.append({
                 "person": str(person),
                 "project": str(project or ""),

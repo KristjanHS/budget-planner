@@ -7,9 +7,10 @@ from openpyxl.utils import get_column_letter
 from budget_planner.reader import discover_layout, read_capacity_sheet, read_plan_config
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    WORK_PACKAGES, MONTH_COL_START, PROJECT_MONTHS, PROJECT_START,
+    WORK_PACKAGES, WP_SCHEDULE, MONTH_COL_START, PROJECT_MONTHS, PROJECT_START,
     NUM_WPS, VAL_COL_SUM, DEMO_CAPACITY_ASSIGNMENTS,
 )
+from budget_planner.layout import wp_month_bounds
 
 
 # ���─ Data flow: Capacity → Plan formula linkage (needs assigned workbook) ──
@@ -28,7 +29,8 @@ def test_capacity_to_plan_formula_linkage(assigned_wb_path):
     for i, wp in enumerate(WORK_PACKAGES):
         row = layout["planned_first_wp_row"] + i
         # Pick first active month for this WP
-        first_active_mi = wp["start"] - 1
+        wp_start, _ = wp_month_bounds(wp["id"], WP_SCHEDULE)
+        first_active_mi = wp_start - 1
         c = MONTH_COL_START + first_active_mi
 
         cell_value = plan.cell(row, c).value
@@ -43,7 +45,7 @@ def test_capacity_to_plan_formula_linkage(assigned_wb_path):
             # No one assigned — cell should be empty or zero
             continue
 
-        assert cell_value is not None, f"Planned cell for {wp['id']} M{wp['start']} is empty"
+        assert cell_value is not None, f"Planned cell for {wp['id']} M{wp_start} is empty"
         assert isinstance(cell_value, str) and cell_value.startswith("="), (
             f"Planned cell for {wp['id']} should be a formula, got: {cell_value}"
         )
@@ -182,19 +184,22 @@ def test_summary_actual_eur_formulas_reference_actuals_rows(fresh_wb_path):
 
 
 def test_summary_plan_eur_equals_fte_times_rate(fresh_wb_path):
-    """Summary Plan EUR = Plan FTE * fte_rate for each WP and year."""
+    """Summary Plan EUR = Plan FTE * per-WP rate for each WP and year."""
     wb = openpyxl.load_workbook(fresh_wb_path)
     summary = wb["Summary"]
+    plan = wb["Plan"]
+    layout = discover_layout(plan)
     first_wp = _find_summary_first_wp_row(summary)
 
     for i in range(NUM_WPS):
         row = first_wp + i
+        config_row = layout["config_first_wp_row"] + i
         for y in range(_NUM_YEARS):
             sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
             fte_col_l = get_column_letter(sc)
             # Plan EUR is at sc + 1
             cell_val = summary.cell(row, sc + 1).value
-            expected = f"={fte_col_l}{row}*fte_rate"
+            expected = f"={fte_col_l}{row}*Config!$D${config_row}"
             assert cell_val == expected, (
                 f"WP row {row} Y{y+1}: expected {expected}, got {cell_val}"
             )

@@ -38,7 +38,7 @@ def _get_config_first_wp_row():
         wb = openpyxl.load_workbook(path)
         try:
             from budget_planner.reader import _find_header_row
-            return _find_header_row(wb["Config"], "WORK PACKAGES") + 2
+            return _find_header_row(wb["Config"], "WP BUDGET") + 2
         finally:
             wb.close()
     finally:
@@ -47,6 +47,24 @@ def _get_config_first_wp_row():
 
 
 CONFIG_FIRST_WP_ROW = _get_config_first_wp_row()
+
+
+def _find_sched_rows(config_ws):
+    """Find (first_data_row, entries) for the WP SCHEDULE table in Config."""
+    from budget_planner.reader import _find_header_row
+    sched_header = _find_header_row(config_ws, "WP SCHEDULE")
+    first_row = sched_header + 2  # skip section header + column headers
+    entries = []
+    r = first_row
+    while r <= config_ws.max_row:
+        wp_id = config_ws.cell(r, 1).value
+        if wp_id is None or str(wp_id).strip() == "":
+            break
+        entries.append({"row": r, "id": str(wp_id),
+                        "start": config_ws.cell(r, 2).value,
+                        "end": config_ws.cell(r, 3).value})
+        r += 1
+    return entries
 
 
 # ── Helpers ──
@@ -111,7 +129,7 @@ class TestRebuildWithChangedFTE:
     def test_changed_fte_round_trips(self, init_path):
         """Modified WP FTE values survive rebuild and appear in Plan config."""
         wb = openpyxl.load_workbook(init_path)
-        _, original_wps = read_config_sheet(wb["Config"])
+        _, original_wps, _ = read_config_sheet(wb["Config"])
         # Double the FTE of the first WP
         new_fte = original_wps[0]["fte"] * 2
         _set(wb["Config"], CONFIG_FIRST_WP_ROW, 3, new_fte)
@@ -121,14 +139,14 @@ class TestRebuildWithChangedFTE:
         rebuild_workbook(input_path=init_path)
 
         wb = openpyxl.load_workbook(init_path)
-        _, rebuilt_wps = read_config_sheet(wb["Config"])
+        _, rebuilt_wps, _ = read_config_sheet(wb["Config"])
         assert rebuilt_wps[0]["fte"] == pytest.approx(new_fte)
         wb.close()
 
     def test_changed_fte_updates_plan_ceiling(self, init_path):
         """Plan config table reflects new FTE after rebuild."""
         wb = openpyxl.load_workbook(init_path)
-        _, original_wps = read_config_sheet(wb["Config"])
+        _, original_wps, _ = read_config_sheet(wb["Config"])
         new_fte = original_wps[0]["fte"] * 3
         _set(wb["Config"], CONFIG_FIRST_WP_ROW, 3, new_fte)
         wb.save(init_path)
@@ -153,17 +171,23 @@ class TestRebuildWithChangedPeriods:
     def test_changed_start_month_greys_out_new_inactive(self, init_path):
         """Changing a WP start to a later month makes earlier months inactive."""
         wb = openpyxl.load_workbook(init_path)
-        _, wps = read_config_sheet(wb["Config"])
+        _, wps, _ = read_config_sheet(wb["Config"])
+        sched_entries = _find_sched_rows(wb["Config"])
 
-        # Find a WP that starts at M1 and push its start to M7
-        target_idx = next(
-            (i for i, wp in enumerate(wps) if wp["start"] == 1), None
+        # Find a schedule entry that starts at M1 and push its start to M7
+        target_entry = next(
+            (e for e in sched_entries if e["start"] == 1), None
         )
-        if target_idx is None:
-            pytest.skip("No WP starts at M1 to modify")
+        if target_entry is None:
+            pytest.skip("No schedule entry starts at M1 to modify")
+
+        # Map schedule WP ID to budget WP index
+        target_idx = next(
+            i for i, wp in enumerate(wps) if wp["id"] == target_entry["id"]
+        )
 
         new_start = 7
-        _set(wb["Config"], CONFIG_FIRST_WP_ROW + target_idx, 4, new_start)
+        _set(wb["Config"], target_entry["row"], 2, new_start)
         wb.save(init_path)
         wb.close()
 
@@ -184,18 +208,24 @@ class TestRebuildWithChangedPeriods:
     def test_changed_end_month_greys_out_new_inactive(self, init_path):
         """Shortening a WP end month makes later months inactive."""
         wb = openpyxl.load_workbook(init_path)
-        params, wps = read_config_sheet(wb["Config"])
+        params, wps, _ = read_config_sheet(wb["Config"])
+        sched_entries = _find_sched_rows(wb["Config"])
 
-        # Find a WP that ends at the project end and shorten it
-        target_idx = next(
-            (i for i, wp in enumerate(wps) if wp["end"] == params["months"]),
+        # Find a schedule entry that ends at the project end and shorten it
+        target_entry = next(
+            (e for e in sched_entries if e["end"] == params["months"]),
             None,
         )
-        if target_idx is None:
-            pytest.skip("No WP ends at project end to modify")
+        if target_entry is None:
+            pytest.skip("No schedule entry ends at project end to modify")
+
+        # Map schedule WP ID to budget WP index
+        target_idx = next(
+            i for i, wp in enumerate(wps) if wp["id"] == target_entry["id"]
+        )
 
         new_end = 36
-        _set(wb["Config"], CONFIG_FIRST_WP_ROW + target_idx, 5, new_end)
+        _set(wb["Config"], target_entry["row"], 3, new_end)
         wb.save(init_path)
         wb.close()
 
@@ -386,7 +416,7 @@ class TestRebuildWithInsertedRows:
         # Pick a person and WP that aren't already assigned together — read
         # from the workbook, not config.py, so tests survive seed data changes.
         target_person = original[0]["person"]
-        _, all_wps = read_config_sheet(wb["Config"])
+        _, all_wps, _ = read_config_sheet(wb["Config"])
         assigned_wps = {a["wp"] for a in original if a["person"] == target_person}
         new_wp = next((wp["id"] for wp in all_wps
                        if wp["id"] not in assigned_wps), None)
@@ -408,7 +438,7 @@ class TestRebuildWithInsertedRows:
         rebuild_workbook(input_path=assigned_init_path)
 
         wb = openpyxl.load_workbook(assigned_init_path)
-        _, wps = read_config_sheet(wb["Config"])
+        _, wps, _ = read_config_sheet(wb["Config"])
         cap_data = read_capacity_sheet(wb["Capacity"], wps)
         person_wps = cap_data["person_groups"][target_person]["wp_values"]
         assert new_wp in person_wps, (
@@ -451,7 +481,7 @@ class TestRebuildWithInsertedRows:
         rebuild_workbook(input_path=assigned_init_path)
 
         wb = openpyxl.load_workbook(assigned_init_path)
-        _, wps = read_config_sheet(wb["Config"])
+        _, wps, _ = read_config_sheet(wb["Config"])
         cap_data = read_capacity_sheet(wb["Capacity"], wps)
         person_ext = cap_data["person_groups"][new_person]["external_values"]
         assert new_project in person_ext, (
@@ -486,7 +516,7 @@ class TestRebuildWithInsertedRows:
         rebuild_workbook(input_path=init_path)
 
         wb = openpyxl.load_workbook(init_path)
-        _, wps = read_config_sheet(wb["Config"])
+        _, wps, _ = read_config_sheet(wb["Config"])
         cap_data = read_capacity_sheet(wb["Capacity"], wps)
         assert "Eve" in cap_data["person_groups"], (
             "'Eve' should have a Capacity person group after rebuild"
@@ -513,10 +543,13 @@ class TestRebuildFormulaIntegrity:
         layout = discover_layout(plan)
         config_wps = read_plan_config(plan, layout)
         cap_data = read_capacity_sheet(wb["Capacity"], config_wps)
+        _, _, wp_sched = read_config_sheet(wb["Config"])
+        from budget_planner.layout import wp_month_bounds
 
         for i, wp in enumerate(config_wps):
             row = layout["planned_first_wp_row"] + i
-            first_active_col = MONTH_COL_START + wp["start"] - 1
+            wp_start, _ = wp_month_bounds(wp["id"], wp_sched)
+            first_active_col = MONTH_COL_START + wp_start - 1
             cell_val = plan.cell(row, first_active_col).value
 
             # WPs without any person assigned have no Capacity refs
@@ -545,7 +578,7 @@ class TestRebuildFormulaIntegrity:
         rebuild_workbook(input_path=init_path)
 
         wb = openpyxl.load_workbook(init_path)
-        _, wps = read_config_sheet(wb["Config"])
+        _, wps, _ = read_config_sheet(wb["Config"])
         first_wp = _find_first_wp_row_actuals(wb["Actuals"])
         total_row = _find_total_row(wb["Actuals"])
         assert first_wp is not None and total_row is not None
@@ -558,7 +591,7 @@ class TestRebuildFormulaIntegrity:
         rebuild_workbook(input_path=init_path)
 
         wb = openpyxl.load_workbook(init_path)
-        _, wps = read_config_sheet(wb["Config"])
+        _, wps, _ = read_config_sheet(wb["Config"])
         summary = wb["Summary"]
         wp_formula_rows = 0
         for r in range(1, summary.max_row + 1):
@@ -579,15 +612,17 @@ class TestRebuildFullScenario:
     def test_multiple_changes_rebuild_produces_valid_workbook(self, init_path):
         """Apply multiple data changes, rebuild, verify structural integrity."""
         wb = openpyxl.load_workbook(init_path)
-        params, wps = read_config_sheet(wb["Config"])
+        params, wps, _ = read_config_sheet(wb["Config"])
+        sched_entries = _find_sched_rows(wb["Config"])
 
         # 1. Change first WP FTE
         _set(wb["Config"], CONFIG_FIRST_WP_ROW, 3, 99.0)
 
-        # 2. Shorten second WP end month
-        original_end = wps[1]["end"]
-        shortened_end = max(wps[1]["start"], original_end - 6)
-        _set(wb["Config"], CONFIG_FIRST_WP_ROW + 1, 5, shortened_end)
+        # 2. Shorten second WP end month via schedule table
+        wp2_sched = next(e for e in sched_entries if e["id"] == wps[1]["id"])
+        original_end = wp2_sched["end"]
+        shortened_end = max(wp2_sched["start"], original_end - 6)
+        _set(wb["Config"], wp2_sched["row"], 3, shortened_end)
 
         # 3. Rename a team member without external commitments
         roster = TestRebuildWithChangedTeam._read_roster_with_rows(wb["Config"])
@@ -606,9 +641,10 @@ class TestRebuildFullScenario:
         wb = openpyxl.load_workbook(init_path)
 
         # Config round-trip
-        _, rebuilt_wps = read_config_sheet(wb["Config"])
+        _, rebuilt_wps, rebuilt_sched = read_config_sheet(wb["Config"])
         assert rebuilt_wps[0]["fte"] == pytest.approx(99.0)
-        assert rebuilt_wps[1]["end"] == shortened_end
+        wp2_rebuilt = next(s for s in rebuilt_sched if s["id"] == wps[1]["id"])
+        assert wp2_rebuilt["end"] == shortened_end
 
         # Team name round-trip
         rebuilt_roster = read_team_from_config(wb["Config"])
@@ -666,7 +702,7 @@ class TestRebuildRecalc:
     def test_recalc_ceiling_reflects_changed_fte(self, init_path):
         """After FTE change + rebuild + recalc, partner_ceiling uses new value."""
         wb = openpyxl.load_workbook(init_path)
-        params, wps = read_config_sheet(wb["Config"])
+        params, wps, _ = read_config_sheet(wb["Config"])
         new_fte = 50.0
         _set(wb["Config"], CONFIG_FIRST_WP_ROW, 3, new_fte)
         wb.save(init_path)
@@ -681,27 +717,27 @@ class TestRebuildRecalc:
         if result.returncode != 0:
             pytest.skip("LibreOffice not available")
 
-        # Read recalculated rate (fte_rate is now a formula — need data_only)
+        # Read recalculated per-WP rates from Config col D
         wb = openpyxl.load_workbook(init_path, data_only=True)
         config = wb["Config"]
-        rate = None
-        for r in range(1, config.max_row + 1):
-            if "fte rate" in str(config.cell(r, 1).value or "").lower():
-                rate = config.cell(r, 2).value
-                break
-        assert isinstance(rate, (int, float)) and rate > 0, (
-            f"fte_rate should be numeric after recalc, got {rate}"
-        )
 
-        # Recompute expected ceiling with changed FTE and recalculated rate
-        expected_ceiling = new_fte * rate
-        for i, wp in enumerate(wps):
-            if i != 0:
-                expected_ceiling += wp["fte"] * rate
+        # Find WP Budget data rows and read per-WP rates
+        from budget_planner.reader import _find_header_row
+        wp_section = _find_header_row(config, "WP BUDGET")
+        first_wp = wp_section + 2
+        expected_ceiling = 0.0
+        for i in range(len(wps)):
+            r = first_wp + i
+            fte = config.cell(r, 3).value
+            wp_rate = config.cell(r, 4).value
+            assert isinstance(fte, (int, float)) and isinstance(wp_rate, (int, float)), (
+                f"WP row {r}: fte={fte}, rate={wp_rate} — expected numeric after recalc"
+            )
+            expected_ceiling += fte * wp_rate
 
         plan = wb["Plan"]
-        # partner_ceiling is Plan!I1 (compact header)
-        ceiling_val = plan.cell(1, 9).value
+        # partner_ceiling is Plan!G1 (compact header)
+        ceiling_val = plan.cell(1, 7).value
         assert isinstance(ceiling_val, (int, float)), (
             f"partner_ceiling should be numeric after recalc, got {ceiling_val}"
         )
@@ -714,11 +750,13 @@ class TestRebuildRecalc:
         """Full scenario + rebuild + recalc => _changed file has non-default widths."""
         # Apply multiple changes (mirrors TestRebuildFullScenario)
         wb = openpyxl.load_workbook(init_path)
-        params, wps = read_config_sheet(wb["Config"])
+        params, wps, _ = read_config_sheet(wb["Config"])
+        sched_entries = _find_sched_rows(wb["Config"])
         _set(wb["Config"], CONFIG_FIRST_WP_ROW, 3, 99.0)
-        original_end = wps[1]["end"]
-        shortened_end = max(wps[1]["start"], original_end - 6)
-        _set(wb["Config"], CONFIG_FIRST_WP_ROW + 1, 5, shortened_end)
+        wp2_sched = next(e for e in sched_entries if e["id"] == wps[1]["id"])
+        original_end = wp2_sched["end"]
+        shortened_end = max(wp2_sched["start"], original_end - 6)
+        _set(wb["Config"], wp2_sched["row"], 3, shortened_end)
         roster = TestRebuildWithChangedTeam._read_roster_with_rows(wb["Config"])
         person = TestRebuildWithChangedTeam._find_person_without_externals(
             roster, wb["Capacity"]

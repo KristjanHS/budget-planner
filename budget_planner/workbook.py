@@ -140,6 +140,7 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     layout = build_plan_sheet(plan_ws, wb,
                               project_params=project_params,
                               work_packages=work_packages,
+                              wp_schedule=wp_schedule,
                               config_layout=config_layout)
 
     # Capacity sheet (uses config_layout for roster person_rows)
@@ -147,6 +148,7 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     capacity_layout = build_capacity_sheet(
         capacity_ws, wb, config_layout,
         project_params=project_params, work_packages=work_packages,
+        wp_schedule=wp_schedule,
         team=team, external_commitments=external_commitments,
         assignments=assignments,
         config_first_wp_row=layout["config_first_wp_row"],
@@ -155,7 +157,8 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     # Overwrite planned FTE with cross-sheet formulas from Capacity
     _apply_planned_formulas(plan_ws, layout, capacity_layout,
                             work_packages=work_packages,
-                            project_params=project_params)
+                            project_params=project_params,
+                            wp_schedule=wp_schedule)
 
     # Trends sheet stub + current_month named range
     trends_ws = wb.create_sheet(SHEET_TRENDS)
@@ -181,6 +184,7 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
         wb, layout,
         project_params=project_params,
         work_packages=work_packages,
+        wp_schedule=wp_schedule,
         preserved=preserved_actuals,
     )
 
@@ -188,13 +192,16 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     build_summary_sheet(wb, layout, actuals_layout,
                         project_params=project_params,
                         work_packages=work_packages,
-                        reporting_periods=reporting_periods)
+                        wp_schedule=wp_schedule,
+                        reporting_periods=reporting_periods,
+                        config_layout=config_layout)
 
     # Trends sheet (populate after Actuals and Summary so layouts are available)
     build_trends_sheet(trends_ws, wb, layout, actuals_layout,
                        capacity_layout, config_layout,
                        project_params=project_params,
                        work_packages=work_packages,
+                       wp_schedule=wp_schedule,
                        team=team,
                        reporting_periods=reporting_periods)
 

@@ -8,6 +8,7 @@ from openpyxl.formatting.rule import FormulaRule
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_PLAN, SHEET_CAPACITY, SHEET_CONFIG,
     build_year_month_headers, month_col_end as _month_col_end, val_columns,
+    wp_active_months,
 )
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
@@ -17,7 +18,8 @@ from budget_planner.styles import (
 
 
 def _apply_planned_formulas(ws, layout, capacity_layout, *,
-                            work_packages=None, project_params=None):
+                            work_packages=None, project_params=None,
+                            wp_schedule=None):
     """Fill planned FTE cells with cross-sheet SUM formulas from Capacity.
 
     Called after build_capacity_sheet() so that capacity row positions are known.
@@ -31,12 +33,14 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
         work_packages: WP list; falls back to config.WORK_PACKAGES.
         project_params: Project params dict; falls back to config values.
     """
-    if project_params is None or work_packages is None:
+    if project_params is None or work_packages is None or wp_schedule is None:
         from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
+        if wp_schedule is None:
+            wp_schedule = config.WP_SCHEDULE
 
     # Derived constants
     month_col_start = MONTH_COL_START
@@ -52,18 +56,19 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
                 cap_rows.append(group["wp_rows"][wp_id])
         cap_rows.sort()  # deterministic order
 
+        active = wp_active_months(wp_id, wp_schedule)
         for m in range(project_params["months"]):
             c = month_col_start + m
             month_num = m + 1
 
-            if wp["start"] <= month_num <= wp["end"] and cap_rows:
+            if month_num in active and cap_rows:
                 cl = col_letter(c)
                 refs = ",".join(f"{SHEET_CAPACITY}!{cl}{cr}" for cr in cap_rows)
                 ws.cell(row=row, column=c).value = f"=SUM({refs})"
 
 
 def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
-                     config_layout):
+                     wp_schedule=None, config_layout):
     """Build the Plan sheet: compact header + planned FTE block.
 
     Args:
@@ -78,12 +83,14 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     Returns:
         Layout dict with row numbers for all key positions.
     """
-    if project_params is None or work_packages is None:
+    if project_params is None or work_packages is None or wp_schedule is None:
         from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
+        if wp_schedule is None:
+            wp_schedule = config.WP_SCHEDULE
 
     # Config sheet WP row positions (config_layout always provided)
     cfg_wp_first = config_layout["wp_first_row"]
@@ -108,22 +115,18 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     style_cell(ws, 1, 4, "Start:", font=HEADER_FONT, border=False)
     style_cell(ws, 1, 5, font=GREEN_XREF, border=False,
                fmt="MMM YYYY").value = f"={SHEET_CONFIG}!B{pr['Project Start']}"
-    # F1: "Rate:", G1: =Config!B{rate_row}
-    style_cell(ws, 1, 6, "Rate:", font=HEADER_FONT, border=False)
+    # F1: "Ceiling:", G1: ceiling formula
+    style_cell(ws, 1, 6, "Ceiling:", font=HEADER_FONT, border=False)
     style_cell(ws, 1, 7, font=GREEN_XREF, border=False,
-               fmt="\u20ac#,##0").value = f"={SHEET_CONFIG}!B{pr['FTE Rate (EUR)']}"
-    # H1: "Ceiling:", then the ceiling formula
-    style_cell(ws, 1, 8, "Ceiling:", font=HEADER_FONT, border=False)
-    style_cell(ws, 1, 9, font=GREEN_XREF, border=False,
                fmt="\u20ac#,##0").value = (
-        f"=SUM({SHEET_CONFIG}!H{cfg_wp_first}:H{cfg_wp_last})"
+        f"=SUM({SHEET_CONFIG}!E{cfg_wp_first}:E{cfg_wp_last})"
     )
 
-    # partner_ceiling named range -> Plan!$I$1
+    # partner_ceiling named range -> Plan!$G$1
     wb.defined_names.add(DefinedName(
-        "partner_ceiling", attr_text=f"{SHEET_PLAN}!$I$1"
+        "partner_ceiling", attr_text=f"{SHEET_PLAN}!$G$1"
     ))
-    ws.cell(row=1, column=9).comment = Comment(
+    ws.cell(row=1, column=7).comment = Comment(
         "Personnel costs only (direct). The 25% indirect flat rate "
         "(the programme regulation) is added on top when computing "
         "total eligible costs.",
@@ -162,11 +165,12 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
             f"={SHEET_CONFIG}!B{config_row}"
         )
 
+        active = wp_active_months(wp["id"], wp_schedule)
         for m in range(project_months):
             c = month_col_start + m
             month_num = m + 1
 
-            if wp["start"] <= month_num <= wp["end"]:
+            if month_num in active:
                 cell = style_cell(ws, row, c, font=BLACK_FORMULA, fmt="0.00")
                 cell.protection = Protection(locked=True)
             else:

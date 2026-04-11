@@ -13,7 +13,7 @@ from budget_planner.workbook import init_workbook, seed_demo_data
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
     MONTH_COL_START, NUM_WPS, PROJECT_MONTHS, PROJECT_START,
-    WORK_PACKAGES, VAL_COL_SUM, VAL_COL_BUDGET,
+    WORK_PACKAGES, VAL_COL_SUM, VAL_COL_BUDGET, DEFAULT_RATE,
     TEAM, GRADE_RATES, DEFAULT_GRADE,
 )
 
@@ -224,9 +224,8 @@ def test_summary_budget_overview_after_recalc(demo_wb_path, demo_recalc):
     assert isinstance(personnel_ceiling, (int, float)) and personnel_ceiling > 0, \
         f"Personnel Ceiling should be > 0, got {personnel_ceiling}"
 
-    # Cross-check: ceiling should equal sum(wp.fte) * weighted_avg_rate
-    expected_rate = _weighted_avg_rate()
-    expected_ceiling = sum(wp["fte"] for wp in WORK_PACKAGES) * expected_rate
+    # Cross-check: ceiling = sum(FTE * per-WP rate), all WPs default to DEFAULT_RATE
+    expected_ceiling = sum(wp["fte"] for wp in WORK_PACKAGES) * DEFAULT_RATE
     assert abs(personnel_ceiling - expected_ceiling) < 0.01, \
         f"Personnel Ceiling {personnel_ceiling} != expected {expected_ceiling}"
     wb.close()
@@ -261,7 +260,7 @@ def test_actuals_total_ceiling_equals_partner_ceiling(demo_wb_path, demo_recalc)
     actuals = wb["Actuals"]
     total_row = _find_actuals_total_row(actuals)
     val = actuals.cell(total_row, VAL_COL_BUDGET).value
-    expected = sum(wp["fte"] for wp in WORK_PACKAGES) * _weighted_avg_rate()
+    expected = sum(wp["fte"] for wp in WORK_PACKAGES) * DEFAULT_RATE
     assert isinstance(val, (int, float)), \
         f"Actuals TOTAL Ceiling should be numeric, got {val}"
     assert abs(val - expected) < 0.01, \

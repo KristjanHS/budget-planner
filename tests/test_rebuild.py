@@ -40,13 +40,13 @@ class TestRebuildRoundTrip:
         """Project params survive a rebuild."""
         from budget_planner.reader import read_config_sheet
         wb = load_workbook(init_wb)
-        original_params, _ = read_config_sheet(wb["Config"])
+        original_params, _, _ = read_config_sheet(wb["Config"])
         wb.close()
 
         rebuild_workbook(input_path=init_wb)
 
         wb = load_workbook(init_wb)
-        rebuilt_params, _ = read_config_sheet(wb["Config"])
+        rebuilt_params, _, _ = read_config_sheet(wb["Config"])
         assert rebuilt_params["title"] == original_params["title"]
         assert rebuilt_params["months"] == original_params["months"]
         wb.close()
@@ -55,14 +55,14 @@ class TestRebuildRoundTrip:
         """Same number of WPs after rebuild."""
         from budget_planner.reader import read_config_sheet
         wb = load_workbook(init_wb)
-        _, original_wps = read_config_sheet(wb["Config"])
+        _, original_wps, _ = read_config_sheet(wb["Config"])
         wp_count = len(original_wps)
         wb.close()
 
         rebuild_workbook(input_path=init_wb)
 
         wb = load_workbook(init_wb)
-        _, rebuilt_wps = read_config_sheet(wb["Config"])
+        _, rebuilt_wps, _ = read_config_sheet(wb["Config"])
         assert len(rebuilt_wps) == wp_count
         wb.close()
 
@@ -154,8 +154,7 @@ class TestValidation:
         return p
 
     def _wps(self):
-        return [{"id": "WP1", "name": "Mgmt", "fte": 12.0,
-                 "start": 1, "end": 60}]
+        return [{"id": "WP1", "name": "Mgmt", "fte": 12.0}]
 
     def _team(self):
         return [{"name": "Alice", "max_fte": 1.0}]
@@ -192,8 +191,8 @@ class TestValidation:
 
     def test_duplicate_wp_id(self):
         wps = [
-            {"id": "WP1", "name": "A", "fte": 1, "start": 1, "end": 12},
-            {"id": "WP1", "name": "B", "fte": 1, "start": 1, "end": 12},
+            {"id": "WP1", "name": "A", "fte": 1},
+            {"id": "WP1", "name": "B", "fte": 1},
         ]
         errors, _ = _validate_config(
             self._params(), wps, self._team(), [])
@@ -207,10 +206,11 @@ class TestValidation:
         assert any("Unknown" in e for e in errors)
 
     def test_wp_start_gt_end_warning(self):
-        wps = [{"id": "WP1", "name": "Bad", "fte": 1,
-                "start": 10, "end": 5}]
+        wps = [{"id": "WP1", "name": "Bad", "fte": 1}]
+        sched = [{"id": "WP1", "start": 10, "end": 5, "type": "flat"}]
         _, warnings = _validate_config(
-            self._params(), wps, self._team(), [])
+            self._params(), wps, self._team(), [],
+            wp_schedule=sched)
         assert any("start" in w.lower() for w in warnings)
 
 

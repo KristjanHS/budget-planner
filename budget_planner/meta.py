@@ -129,7 +129,7 @@ PURPOSE: Track planned FTE allocation and actual EUR spend per work package per 
 
 ═══ SHEET INDEX ═══
 1. _META        — This sheet. AI-agent-readable documentation of workbook structure, conventions, and modification instructions.
-2. Config       — Project parameters (rows 1-5) + grade rate table + WP table + team roster (below WP TOTAL).
+2. Config       — Project parameters (rows 1-5) + WP budget table + WP schedule table + team roster + reporting periods + grade rate table (bottom).
 3. Plan         — Compact 1-row header + Planned FTE block (formulas from Capacity).
 4. Capacity     — Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects.
 5. Actuals      — EUR actuals per WP per month (input from accountant). Tab color: Blue.
@@ -152,28 +152,29 @@ SHEET: CONFIG (single source of truth for all project parameters)
     Row 5: A5="EU Annual Ceiling (PM/FTE/year)", B5=<ceiling> (blue input, 0.00; default 12.0 ≈ 215 days/year)
     Row 6: (blank separator)
 
-  SECTION A2: RATE BY GRADE (rows {cfg_grade_section}-{cfg_grade_last})
-    Row {cfg_grade_section}: Section header "RATE BY GRADE" (merged A:B, section fill)
-    Row {cfg_grade_header}: Column headers: Grade | Rate (EUR/PM)
-    Rows {cfg_grade_first}-{cfg_grade_last}: Grade data rows ({num_grades} grades: {grade_names_str})
-      Col A: Grade name (blue input)
-      Col B: Rate EUR/PM (blue input, €#,##0)
-    Named range tbl_GradeRates covers A{cfg_grade_first}:B{cfg_grade_last}
-    Purpose: per-grade personnel rates used to compute weighted-average fte_rate formula.
-
-  SECTION B: WORK PACKAGES TABLE (rows {cfg_wp_section}-{cfg_total_row})
-    Row {cfg_wp_section}: Section header "WORK PACKAGES" (merged A:H, section fill)
-    Row {cfg_wp_header}: Column headers: WP ID | WP Name | FTE Budget | Start Month | End Month | Type | Active Months | Personnel Ceiling (€)
+  SECTION B: WP BUDGET TABLE (rows {cfg_wp_section}-{cfg_total_row})
+    Row {cfg_wp_section}: Section header "WP BUDGET" (merged A:E, section fill)
+    Row {cfg_wp_header}: Column headers: WP ID | WP Name | FTE Budget | Rate (€/PM) | Ceiling (€)
     Rows {cfg_first_wp}-{cfg_last_wp}: WP data rows
-      Cols A-F: blue input (WP ID, Name, FTE Budget, Start Mo, End Mo, Type)
-      Col F Type: distribution curve type (flat/front-loaded/bell/back-loaded)
-      Col G: =E-D+1 (Active Months, black formula)
-      Col H: =C*fte_rate (Personnel Ceiling EUR, black formula)
-    Row {cfg_total_row}: TOTAL row (SUM on cols C and H, light blue fill)
-    Excel Table "tbl_WorkPackages" covers A{cfg_wp_header}:H{cfg_last_wp} (header + data, excludes TOTAL)
+      Cols A-C: blue input (WP ID, Name, FTE Budget)
+      Col D: Rate (€/PM) — blue input, per-WP rate (default 6500)
+      Col E: Ceiling (€) — black formula =C*D (FTE × Rate)
+    Row {cfg_total_row}: TOTAL row (SUM on cols C and E, light blue fill)
+    Excel Table "tbl_WorkPackages" covers A{cfg_wp_header}:E{cfg_last_wp} (header + data, excludes TOTAL)
+
+  SECTION B2: WP SCHEDULE TABLE (below WP BUDGET)
+    Section header "WP SCHEDULE" (merged A:D, section fill)
+    Column headers: WP ID | Start | End | Type
+    Multiple rows per WP allowed (for multi-range active periods).
+    A month is active if it falls within ANY schedule range for that WP.
+      Col A: WP ID (blue input, can repeat for multiple ranges)
+      Col B: Start month (blue input, format 0)
+      Col C: End month (blue input, format 0)
+      Col D: Type — distribution curve (blue input, dropdown: flat/front-loaded/bell/back-loaded)
+    Named ranges: sched_wp_ids, sched_starts, sched_ends (for MINIFS/MAXIFS in Trends formulas)
     Conditional formatting: yellow fill if Start > End
 
-  SECTION C: TEAM ROSTER (below WP TOTAL)
+  SECTION C: TEAM ROSTER (below WP SCHEDULE)
     Row {cfg_roster_section}: Section header "TEAM ROSTER" (merged A:C, section fill)
     Row {cfg_roster_header}: Column headers: Person | Max FTE | Grade
     Rows {cfg_roster_first}+: Team member data rows (blue input, {num_team} people)
@@ -188,6 +189,15 @@ SHEET: CONFIG (single source of truth for all project parameters)
     Col B: Start Month — blue input
     Col C: End Month — blue input
     User-editable: add/remove/modify periods for Form C reporting boundaries.
+
+  SECTION E: RATE BY GRADE (bottom of sheet, rows {cfg_grade_section}-{cfg_grade_last})
+    Row {cfg_grade_section}: Section header "RATE BY GRADE" (merged A:B, section fill)
+    Row {cfg_grade_header}: Column headers: Grade | Rate (EUR/PM)
+    Rows {cfg_grade_first}-{cfg_grade_last}: Grade data rows ({num_grades} grades: {grade_names_str})
+      Col A: Grade name (blue input)
+      Col B: Rate EUR/PM (blue input, €#,##0)
+    Named range tbl_GradeRates covers A{cfg_grade_first}:B{cfg_grade_last}
+    Purpose: per-grade personnel rates used to compute weighted-average fte_rate formula.
 
 ═══ CAPACITY SHEET STRUCTURE ═══
 
@@ -235,9 +245,8 @@ SHEET: CAPACITY (primary planning surface)
 ROW 1: COMPACT HEADER
   A1 = "Title:", B1 = Project title (green cross-ref to Config!B1, bold 14pt)
   D1 = "Start:", E1 = Project start date (green cross-ref to Config!B2, MMM YYYY)
-  F1 = "Rate:",  G1 = FTE Rate (green cross-ref to Config!B4, €#,##0)
-  H1 = "Ceiling:", I1 = Personnel Ceiling (formula: =SUM(Config!H{cfg_first_wp}:H{cfg_last_wp}), €#,##0)
-       I1 also serves as the partner_ceiling named range target.
+  F1 = "Ceiling:", G1 = Personnel Ceiling (formula: =SUM(Config!E{cfg_first_wp}:E{cfg_last_wp}), €#,##0)
+       G1 also serves as the partner_ceiling named range target.
 
 ROW 2: (blank separator)
 
@@ -275,7 +284,7 @@ SHEET: ACTUALS (EUR actuals from accountant)
       - Active months initialized to 0 (or preserved from rebuild)
       - Inactive months greyed out and empty (same WP active period as Config)
     Col {val_sum_col} = Sum of monthly EUR (formula: SUM)
-    Col {val_budget_col} = Ceiling EUR from Config col H (green cross-ref: =Config!H<config_row>)
+    Col {val_budget_col} = Ceiling EUR from Config col E (green cross-ref: =Config!E<config_row>)
     Col {val_diff_col} = Variance: Ceiling - Sum (formula). Negative = OVERRUN.
     Col {val_cum_col} = Cum. EUR: SUMPRODUCT cumulative up to current_month (formula)
     Col {val_pct_col} = % Ceiling: Cum. EUR / Ceiling (formula, 0.0% format)
@@ -303,7 +312,7 @@ SHEET: SUMMARY (calendar-year budget aggregation)
   Rows {sum_first_wp}-{sum_last_wp} = One row per WP (all formulas referencing Plan and Actuals sheets)
     Each calendar year group sums the months belonging to that year (partial years for first/last)
     Plan FTE = SUM of Plan sheet month range for that year
-    Plan EUR = Plan FTE * fte_rate
+    Plan EUR = Plan FTE * per-WP rate (Config col D)
     Actual EUR = SUM of Actuals sheet month range for that year
     Variance EUR = Plan EUR - Actual EUR
   Row {sum_total} = Totals
@@ -349,7 +358,7 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
     Header row = Column headers: WP ID, WP Name, % Time Elapsed, % Budget EUR, Burn Delta, Status, Exhaustion Mo.
     WP rows ({num_wps} rows) = formulas referencing Config WP table + Actuals cumulative columns
       - All cells show "—" for WPs not yet started (current_month < wp_start from Config)
-      - % Time Elapsed = MIN(1, (current_month - Config!D<row> + 1) / (Config!E<row> - Config!D<row> + 1))
+      - % Time Elapsed = MIN(1, (current_month - MINIFS(sched_starts,...) + 1) / (MAXIFS(sched_ends,...) - MINIFS(...) + 1))
       - % Budget EUR = Actuals cumulative / Actuals ceiling
       - Burn Delta = % Budget EUR - % Time Elapsed (positive = overspending)
       - Status = text RAG: OK (|delta|<=0.05), WATCH (delta>0.05), OVER (delta>0.15), SLOW (delta<-0.10)
@@ -374,7 +383,7 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
     Data from hidden helper rows below person load section
 
   HIDDEN HELPER ROWS (below person load):
-    Cumulative planned EUR per month (running sum of Plan FTE * fte_rate)
+    Cumulative planned EUR per month (running sum of SUMPRODUCT(Plan FTE, per-WP rates))
     Cumulative actual EUR per month (running sum of Actuals TOTAL row)
     Ceiling line (partner_ceiling repeated per month)
     Month-year labels (e.g. "Nov 25") for chart X-axis
@@ -400,11 +409,11 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
   Config → Capacity → Plan ← Actuals → Summary (no circular refs)
                                   ↘ Trends ↙
 
-  Config WP table (WP IDs, names, budgets, type) --> all sheets via cross-refs
-  Config WP Type column --> Capacity distribution curves (flat/front-loaded/bell/back-loaded)
+  Config WP Budget table (IDs, names, FTE budgets, per-WP rates, ceilings) --> all sheets via cross-refs
+  Config WP Schedule table (IDs, start/end months, type) --> active month determination + Capacity distribution curves
   Config grade rates (tbl_GradeRates) + roster grades/FTEs --> fte_rate weighted average formula
   Config team roster (names, Max FTE, Grade) --> Capacity person headers + REMAINING formulas
-  Config derived cols (Active Months, Personnel Ceiling) --> Actuals ceiling validation
+  Config Budget col E (Ceiling = FTE × per-WP Rate) --> Actuals ceiling validation
   Capacity assignment config block (Person-WP mappings) --> per-person filtered WP rows
   Capacity monthly FTE (static values from distribution) --> Plan Planned FTE (SUM formulas across people)
   Actuals monthly EUR (input) --> Summary actual EUR aggregation
@@ -442,7 +451,10 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
   tbl_GradeRates       = Config!$A${cfg_grade_first}:$B${cfg_grade_last}  (grade name + rate lookup table)
   roster_ftes          = Config!$B${cfg_roster_first}:$B${cfg_roster_last}  (team Max FTE column)
   roster_grades        = Config!$C${cfg_roster_first}:$C${cfg_roster_last}  (team Grade column)
-  partner_ceiling      = Plan!$I$1     (total personnel ceiling in EUR, =SUM of Config!H WP column)
+  sched_wp_ids         = Config!$A$<sched_first>:$A$<sched_last>  (WP IDs in schedule table)
+  sched_starts         = Config!$B$<sched_first>:$B$<sched_last>  (start months in schedule table)
+  sched_ends           = Config!$C$<sched_first>:$C$<sched_last>  (end months in schedule table)
+  partner_ceiling      = Plan!$G$1     (total personnel ceiling in EUR, =SUM of Config!E WP column)
   current_month        = Trends!$B$1   (last month with completed actuals, blue input)
 
 FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for month iterations.
@@ -450,10 +462,11 @@ FORMULAS USE ABSOLUTE REFERENCES for config lookups and mixed references for mon
 ═══ MODIFICATION GUIDE (for AI agents and PMs) ═══
 
 TO ADD A WORK PACKAGE:
-  1. Add a row to tbl_WorkPackages on the Config sheet (WP ID, Name, FTE, Start, End, Type)
-  2. Add person-WP assignment rows in the Capacity PERSON-WP ASSIGNMENTS config block
-  3. Run: python -m budget_planner rebuild
-  4. Rebuild regenerates all sheets. Existing config block data and Actuals EUR are preserved.
+  1. Add a row to the WP BUDGET table on Config (WP ID, Name, FTE Budget, Rate)
+  2. Add one or more schedule rows to the WP SCHEDULE table on Config (WP ID, Start, End, Type)
+  3. Add person-WP assignment rows in the Capacity PERSON-WP ASSIGNMENTS config block
+  4. Run: python -m budget_planner rebuild
+  5. Rebuild regenerates all sheets. Existing config block data and Actuals EUR are preserved.
 
 TO ADD A PERSON-WP ASSIGNMENT:
   1. Add a row to the PERSON-WP ASSIGNMENTS config block on the Capacity sheet
@@ -479,7 +492,7 @@ TO CHANGE FTE RATE:
   recalculates automatically.
 
 TO REPLACE EXAMPLE DATA:
-  Edit Config sheet (WPs with Type, team roster), Capacity config blocks
+  Edit Config sheet (WP Budget + WP Schedule tables, team roster), Capacity config blocks
   (person-WP assignments + external commitments). Then run: python -m budget_planner rebuild
 
 SCENARIO PLANNING:

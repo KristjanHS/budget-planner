@@ -16,8 +16,9 @@ from budget_planner.styles import (
 )
 
 
-def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work_packages=None,
-                        reporting_periods=None):
+def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None,
+                        work_packages=None, wp_schedule=None,
+                        reporting_periods=None, config_layout=None):
     """Create the Summary sheet with annual budget view and budget overview.
 
     Parameters
@@ -31,6 +32,10 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
         Keys: title, start, months, rate. Lazy-imports from config if None.
     work_packages : list[dict], optional
         List of WP dicts. Lazy-imports from config if None.
+    wp_schedule : list[dict], optional
+        WP schedule entries. Lazy-imports from config if None.
+    config_layout : dict, optional
+        Config sheet layout with wp_first_row, sched_first_row, etc.
     """
     if project_params is None or work_packages is None or reporting_periods is None:
         from budget_planner import config
@@ -40,6 +45,9 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
             work_packages = config.WORK_PACKAGES
         if reporting_periods is None:
             reporting_periods = config.REPORTING_PERIODS
+    if wp_schedule is None:
+        from budget_planner.config import WP_SCHEDULE
+        wp_schedule = WP_SCHEDULE
 
     month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
@@ -124,9 +132,9 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
             style_cell(summary, row, sc, font=GREEN_XREF, fmt="0.00").value = (
                 f"=SUM({SHEET_PLAN}!{first_col_l}{plan_wp_row}:{last_col_l}{plan_wp_row})"
             )
-            # Plan EUR = Plan FTE * fte_rate
+            # Plan EUR = Plan FTE * per-WP rate from Config col D
             style_cell(summary, row, sc + 1, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"={col_letter(sc)}{row}*fte_rate"
+                f"={col_letter(sc)}{row}*{SHEET_CONFIG}!$D${config_row}"
             )
             # Actual EUR (cross-sheet ref to Actuals sheet)
             style_cell(summary, row, sc + 2, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
@@ -324,10 +332,10 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None, work
                 f"=SUM({SHEET_PLAN}!{first_col_l}{plan_wp_row}:"
                 f"{last_col_l}{plan_wp_row})"
             )
-            # Plan EUR = Plan FTE * fte_rate
+            # Plan EUR = Plan FTE * per-WP rate from Config col D
             style_cell(summary, row, sc + 1, font=BLACK_FORMULA,
                        fmt="\u20ac#,##0").value = (
-                f"={col_letter(sc)}{row}*fte_rate"
+                f"={col_letter(sc)}{row}*{SHEET_CONFIG}!$D${config_row}"
             )
             # Actual EUR
             style_cell(summary, row, sc + 2, font=GREEN_XREF,

@@ -6,6 +6,7 @@ from budget_planner.layout import (
     MONTH_COL_START, SHEET_ACTUALS, SHEET_CONFIG,
     ACTUALS_AMBER_PCT_CEIL, ACTUALS_AMBER_BREACH_MONTHS, ACTUALS_RED_BREACH_MONTHS,
     build_year_month_headers, month_col_end as _month_col_end, val_columns,
+    wp_active_months,
 )
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
@@ -14,7 +15,8 @@ from budget_planner.styles import (
 )
 
 
-def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, preserved=None):
+def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
+                        wp_schedule=None, preserved=None):
     """Build the Actuals sheet for EUR actuals per WP per month.
 
     Monthly EUR cells are always left empty (blue input) for manual entry
@@ -29,12 +31,14 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
         Layout dict with keys: header_row, year_row, month_row,
         first_wp_row, last_wp_row, total_row.
     """
-    if project_params is None or work_packages is None:
+    if project_params is None or work_packages is None or wp_schedule is None:
         from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
+        if wp_schedule is None:
+            wp_schedule = config.WP_SCHEDULE
 
     month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
@@ -84,10 +88,11 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
         if preserved and wp["id"] in preserved:
             preserved_values = preserved[wp["id"]]
 
+        active = wp_active_months(wp["id"], wp_schedule)
         for m_idx in range(project_params["months"]):
             c = month_col_start + m_idx
             month_num = m_idx + 1
-            if wp["start"] <= month_num <= wp["end"]:
+            if month_num in active:
                 if preserved_values is not None and m_idx < len(preserved_values) and preserved_values[m_idx] is not None:
                     eur_value: int | float = preserved_values[m_idx]
                     style_cell(ws, row, c, eur_value, font=BLUE_INPUT, fmt="\u20ac#,##0")
@@ -102,9 +107,9 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None, 
                      f"{col_letter(month_col_end)}{row}")
         style_cell(ws, row, val_col_sum, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = f"=SUM({sum_range})"
-        # Validation: Ceiling (from Config Personnel Ceiling column H)
+        # Validation: Ceiling (from Config Personnel Ceiling column E)
         style_cell(ws, row, val_col_budget, font=GREEN_XREF,
-                   fmt="\u20ac#,##0").value = f"={SHEET_CONFIG}!H{config_row}"
+                   fmt="\u20ac#,##0").value = f"={SHEET_CONFIG}!E{config_row}"
         # Validation: Variance = Ceiling - Sum
         style_cell(ws, row, val_col_diff, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = (

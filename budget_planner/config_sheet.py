@@ -109,6 +109,8 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
 
     # WP Budget data rows
     default_rate = project_params.get("rate", 10000)
+    if not isinstance(default_rate, (int, float)):
+        default_rate = 10000  # fall back when rate is a formula
     budget_last_data_row = budget_first_data_row + len(work_packages) - 1
     for row_idx, wp in enumerate(work_packages, start=budget_first_data_row):
         # Col A: WP ID
@@ -118,8 +120,11 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         # Col C: FTE Budget
         style_cell(ws, row_idx, 3, value=wp["fte"], font=BLUE_INPUT, fmt="0.00",
                    border=False)
-        # Col D: Rate (€/PM) — blue input, default from project_params
-        style_cell(ws, row_idx, 4, value=default_rate, font=BLUE_INPUT, fmt="€#,##0",
+        # Col D: Rate (€/PM) — blue input, per-WP or default
+        wp_rate = wp.get("rate", default_rate)
+        if not isinstance(wp_rate, (int, float)):
+            wp_rate = default_rate
+        style_cell(ws, row_idx, 4, value=wp_rate, font=BLUE_INPUT, fmt="€#,##0",
                    border=False)
         # Col E: Ceiling (€) — formula = FTE * Rate
         style_cell(ws, row_idx, 5, font=BLACK_FORMULA, fmt="€#,##0",

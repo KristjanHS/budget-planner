@@ -7,8 +7,9 @@ import pytest
 from budget_planner.workbook import init_workbook
 from budget_planner.reader import discover_layout
 from budget_planner.config import (
-    WORK_PACKAGES, MONTH_COL_START, PROJECT_MONTHS,
+    WORK_PACKAGES, WP_SCHEDULE, MONTH_COL_START, PROJECT_MONTHS,
 )
+from budget_planner.layout import wp_month_bounds
 
 
 @pytest.fixture(scope="module")
@@ -36,12 +37,13 @@ def test_planned_fte_formula_refs_match_capacity_layout(
     capacity = v2_workbook["Capacity"]
     row = v2_layout["planned_first_wp_row"] + wp_idx
     wp = WORK_PACKAGES[wp_idx]
+    wp_start, wp_end = wp_month_bounds(wp["id"], WP_SCHEDULE)
 
     # Find an active month to inspect
     active_month = None
     for m in range(PROJECT_MONTHS):
         month_num = m + 1
-        if wp["start"] <= month_num <= wp["end"]:
+        if wp_start <= month_num <= wp_end:
             active_month = m
             break
     assert active_month is not None
@@ -83,10 +85,11 @@ def test_planned_fte_cells_have_black_font(v2_workbook, v2_layout, wp_idx):
     plan = v2_workbook["Plan"]
     row = v2_layout["planned_first_wp_row"] + wp_idx
     wp = WORK_PACKAGES[wp_idx]
+    wp_start, wp_end = wp_month_bounds(wp["id"], WP_SCHEDULE)
 
     for m in range(PROJECT_MONTHS):
         month_num = m + 1
-        if wp["start"] <= month_num <= wp["end"]:
+        if wp_start <= month_num <= wp_end:
             cell = plan.cell(row, MONTH_COL_START + m)
             color = cell.font.color
             # Black font: color value is "000000" or theme 1

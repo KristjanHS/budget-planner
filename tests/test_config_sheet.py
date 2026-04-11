@@ -187,7 +187,7 @@ def test_config_round_trip_eu_ceiling():
     ws.title = "Config"
     params = {**_sample_params(), "eu_ceiling_pm": 10.0}
     build_config_sheet(ws, wb, params, _sample_wps())
-    read_params, read_wps = read_config_sheet(ws)
+    read_params, read_wps, _ = read_config_sheet(ws)
     assert read_params["eu_ceiling_pm"] == 10.0
     assert len(read_wps) == 2  # WPs still read correctly after row shift
 
@@ -263,7 +263,7 @@ def test_fte_rate_is_formula():
     assert isinstance(val, (str, ArrayFormula)), (
         f"Expected formula, got: {val}"
     )
-    formula_text = val.text if isinstance(val, ArrayFormula) else val
+    formula_text = str(val.text if isinstance(val, ArrayFormula) else val)
     assert "SUMPRODUCT" in formula_text
 
 

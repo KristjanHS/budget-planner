@@ -11,6 +11,13 @@ from budget_planner.reader import (
 )
 
 
+def _sample_schedule():
+    return [
+        {"id": "WP1", "start": 1, "end": 24, "type": "flat"},
+        {"id": "WP2", "start": 1, "end": 6, "type": "flat"},
+    ]
+
+
 def _make_config_wb():
     """Create a workbook with a Config sheet for testing."""
     wb = Workbook()
@@ -24,10 +31,10 @@ def _make_config_wb():
         "rate": 7500,
     }
     wps = [
-        {"id": "WP1", "name": "Mgmt", "fte": 12.0, "start": 1, "end": 24},
-        {"id": "WP2", "name": "Dev", "fte": 8.0, "start": 1, "end": 18},
+        {"id": "WP1", "name": "Mgmt", "fte": 12.0},
+        {"id": "WP2", "name": "Dev", "fte": 8.0},
     ]
-    build_config_sheet(ws, wb, params, wps)
+    build_config_sheet(ws, wb, params, wps, wp_schedule=_sample_schedule())
     return wb
 
 
@@ -35,7 +42,7 @@ def test_read_config_sheet_roundtrip():
     """Write Config sheet, read it back, values match."""
     wb = _make_config_wb()
     ws = wb["Config"]
-    params, wps = read_config_sheet(ws)
+    params, wps, wp_sched = read_config_sheet(ws)
     assert params["title"] == "Test"
     assert params["start"] == datetime(2026, 7, 1)
     assert params["months"] == 24
@@ -48,8 +55,11 @@ def test_read_config_sheet_roundtrip():
     assert wps[0]["fte"] == 12.0
     assert wps[1]["id"] == "WP2"
     assert wps[1]["name"] == "Dev"
-    assert wps[1]["start"] == 1
-    assert wps[1]["end"] == 18
+    # Start/end now come from wp_schedule
+    wp2_sched = [s for s in wp_sched if s["id"] == "WP2"]
+    assert len(wp2_sched) >= 1
+    assert wp2_sched[0]["start"] == 1
+    assert wp2_sched[0]["end"] == 18
     wb.close()
 
 
@@ -221,10 +231,10 @@ class TestConfigSheetValidation:
         ws.cell(5, 2, 7500)
         ws.cell(6, 1, "EU Annual Ceiling (PM)")
         ws.cell(6, 2, 12.0)
-        # Need a WORK PACKAGES section for full parse
-        ws.cell(8, 1, "WORK PACKAGES")
+        # Need a WP BUDGET section for full parse
+        ws.cell(8, 1, "WP BUDGET")
         ws.cell(9, 1, "WP ID")
-        params, wps = read_config_sheet(ws)
+        params, wps, _ = read_config_sheet(ws)
         assert params["title"] == "Test"
         assert params["rate"] == 7500
         wb.close()
@@ -233,7 +243,7 @@ class TestConfigSheetValidation:
         """A properly built Config sheet passes validation."""
         wb = _make_config_wb()
         ws = wb["Config"]
-        params, wps = read_config_sheet(ws)
+        params, wps, _ = read_config_sheet(ws)
         assert params["title"] == "Test"
         assert len(wps) == 2
         wb.close()

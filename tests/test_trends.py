@@ -125,7 +125,8 @@ def test_burn_rate_time_elapsed_formula(trends_ws):
     cell = trends_ws.cell(first_wp_row, 3)
     formula = str(cell.value)
     assert "current_month" in formula
-    assert "Config!D" in formula
+    assert "_xlfn.MINIFS" in formula
+    assert "sched_starts" in formula
 
 
 def test_burn_rate_budget_eur_formula(trends_ws):

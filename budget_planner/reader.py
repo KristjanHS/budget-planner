@@ -5,6 +5,16 @@ from typing import Literal, overload
 from budget_planner.layout import MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG
 
 
+def _safe_float(value, default: float) -> float:
+    """Convert value to float, returning default if it's a formula or None."""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 @overload
 def _find_header_row(
     ws, pattern: str, col: int = ..., max_row: int | None = ...,
@@ -96,25 +106,26 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
             "id": str(wp_id),
             "name": str(col_b or ""),
             "fte": float(ws.cell(r, 3).value or 0),
-            "rate": float(ws.cell(r, 4).value or 6500),
+            "rate": _safe_float(ws.cell(r, 4).value, 6500),
         })
         r += 1
 
-    # WP Schedule table — find "WP SCHEDULE" section header
-    sched_section = _find_header_row(ws, "WP SCHEDULE")
+    # WP Schedule table — find "WP SCHEDULE" section header (optional)
+    sched_section = _find_header_row(ws, "WP SCHEDULE", required=False)
     wp_schedule: list[dict] = []
-    r = sched_section + 2  # skip section header + column headers
-    while r <= ws.max_row:
-        sched_id = ws.cell(r, 1).value
-        if sched_id is None or str(sched_id).strip() == "":
-            break
-        wp_schedule.append({
-            "id": str(sched_id),
-            "start": int(ws.cell(r, 2).value or 1),
-            "end": int(ws.cell(r, 3).value or 1),
-            "type": str(ws.cell(r, 4).value or "flat"),
-        })
-        r += 1
+    if sched_section is not None:
+        r = sched_section + 2  # skip section header + column headers
+        while r <= ws.max_row:
+            sched_id = ws.cell(r, 1).value
+            if sched_id is None or str(sched_id).strip() == "":
+                break
+            wp_schedule.append({
+                "id": str(sched_id),
+                "start": int(ws.cell(r, 2).value or 1),
+                "end": int(ws.cell(r, 3).value or 1),
+                "type": str(ws.cell(r, 4).value or "flat"),
+            })
+            r += 1
 
     return project_params, work_packages, wp_schedule
 

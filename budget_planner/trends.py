@@ -12,6 +12,7 @@ from budget_planner.layout import (
     MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS, SHEET_CAPACITY,
     TREND_OK_BAND, TREND_OVER_THRESHOLD, TREND_WATCH_THRESHOLD, TREND_SLOW_THRESHOLD,
     CAPACITY_AMBER_LOAD, month_col_end as _month_col_end, val_columns,
+    wp_month_bounds,
 )
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
@@ -27,8 +28,8 @@ from budget_planner.styles import CF_RED_FILL as _RED_CF_FILL
 
 
 def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_layout, *,
-                       project_params=None, work_packages=None, team=None,
-                       reporting_periods=None):
+                       project_params=None, work_packages=None, wp_schedule=None,
+                       team=None, reporting_periods=None, config_layout=None):
     """Build the Trends sheet: WP burn rate, cumulative chart, person load.
 
     Args:
@@ -40,7 +41,9 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         team_layout: Team layout dict (person_rows mapping name->row).
         project_params: Dict with keys title, start, months, rate. Falls back to config.
         work_packages: List of WP dicts. Falls back to config.
+        wp_schedule: WP schedule entries. Falls back to config.
         team: List of team member dicts. Falls back to config.
+        config_layout: Config sheet layout with wp_first_row, sched_first_row, etc.
     """
     if any(v is None for v in [project_params, work_packages, team]):
         from budget_planner import config
@@ -50,6 +53,10 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
             work_packages = config.WORK_PACKAGES
         if team is None:
             team = config.TEAM
+
+    if wp_schedule is None:
+        from budget_planner.config import WP_SCHEDULE
+        wp_schedule = WP_SCHEDULE
 
     if reporting_periods is None:
         from budget_planner.config import REPORTING_PERIODS
@@ -108,13 +115,18 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         # Col B: WP Name (green cross-sheet ref)
         style_cell(ws, row, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
+        # WP start/end via MINIFS/MAXIFS on schedule named ranges
+        # Use _xlfn prefix for LibreOffice compatibility
+        wp_start = f"_xlfn.MINIFS(sched_starts,sched_wp_ids,{SHEET_CONFIG}!A{config_row})"
+        wp_end = f"_xlfn.MAXIFS(sched_ends,sched_wp_ids,{SHEET_CONFIG}!A{config_row})"
+
         # Col C: % Time Elapsed
         time_formula = (
-            f"MIN(1,(current_month-{SHEET_CONFIG}!D{config_row}+1)"
-            f"/({SHEET_CONFIG}!E{config_row}-{SHEET_CONFIG}!D{config_row}+1))"
+            f"MIN(1,(current_month-{wp_start}+1)"
+            f"/({wp_end}-{wp_start}+1))"
         )
         style_cell(ws, row, 3, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",{time_formula})'
+            f'=IF(current_month<{wp_start},"\u2014",{time_formula})'
         )
 
         # Col D: % Budget EUR
@@ -123,12 +135,12 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
             f"/{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
         )
         style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",{budget_formula})'
+            f'=IF(current_month<{wp_start},"\u2014",{budget_formula})'
         )
 
         # Col E: Burn Delta
         style_cell(ws, row, 5, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",D{row}-C{row})'
+            f'=IF(current_month<{wp_start},"\u2014",D{row}-C{row})'
         )
 
         # Col F: Status
@@ -139,20 +151,20 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
             f'IF(E{row}<{TREND_SLOW_THRESHOLD},"SLOW","OK"))))'
         )
         style_cell(ws, row, 6, font=BLACK_FORMULA).value = (
-            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",{status_formula})'
+            f'=IF(current_month<{wp_start},"\u2014",{status_formula})'
         )
 
         # Col G: Exhaustion Mo.
         exhaustion_formula = (
             f"IF(D{row}=0,\"\u2014\","
             f"IF(COUNTIF({actuals_month_range},\">0\")=0,\"No data\","
-            f"{SHEET_CONFIG}!D{config_row}+ROUND("
+            f"{wp_start}+ROUND("
             f"{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
             f"/({SHEET_ACTUALS}!{cum_col_letter}{actuals_row}"
             f"/COUNTIF({actuals_month_range},\">0\")),0)-1))"
         )
         style_cell(ws, row, 7, font=BLACK_FORMULA, fmt="0").value = (
-            f'=IF(current_month<{SHEET_CONFIG}!D{config_row},"\u2014",{exhaustion_formula})'
+            f'=IF(current_month<{wp_start},"\u2014",{exhaustion_formula})'
         )
 
     # -- Conditional formatting: Burn Delta (col E, rows 5-12) --
@@ -194,23 +206,25 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     ))
 
     # -- Conditional formatting: Exhaustion Month (col G) — per WP row --
-    # Each WP has a different end month, so CF must reference the correct config row
+    # Each WP has a different end month; use literal value from wp_month_bounds()
+    # since CF formulas can't easily use MINIFS/MAXIFS.
     for i in range(num_wps):
         row = first_wp_data_row + i
-        config_row = layout["config_first_wp_row"] + i
+        wp_id = work_packages[i]["id"]
+        _, wp_end_val = wp_month_bounds(wp_id, wp_schedule)
         g_cell = f"G{row}:G{row}"
         g_ref = f"G{row}"
         # Green first: exhaustion >= wp_end
         ws.conditional_formatting.add(g_cell, FormulaRule(
-            formula=[f'AND(ISNUMBER({g_ref}),{g_ref}>={SHEET_CONFIG}!E{config_row})'],
+            formula=[f'AND(ISNUMBER({g_ref}),{g_ref}>={wp_end_val})'],
             fill=_GREEN_CF_FILL,
         ))
         # Amber: exhaustion within 3 months of wp_end
         ws.conditional_formatting.add(g_cell, FormulaRule(
             formula=[
                 f'AND(ISNUMBER({g_ref}),'
-                f'{g_ref}<{SHEET_CONFIG}!E{config_row},'
-                f'{g_ref}>={SHEET_CONFIG}!E{config_row}-3)'
+                f'{g_ref}<{wp_end_val},'
+                f'{g_ref}>={wp_end_val}-3)'
             ],
             fill=_AMBER_CF_FILL,
         ))
@@ -218,7 +232,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         ws.conditional_formatting.add(g_cell, FormulaRule(
             formula=[
                 f'AND(ISNUMBER({g_ref}),'
-                f'{g_ref}<{SHEET_CONFIG}!E{config_row}-3)'
+                f'{g_ref}<{wp_end_val}-3)'
             ],
             fill=_RED_CF_FILL,
         ))
@@ -353,23 +367,27 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     plan_last_wp = layout["planned_last_wp_row"]
     act_total = actuals_layout["total_row"]
 
+    # Per-WP rate range from Config column D (for SUMPRODUCT)
+    cfg_wp_first = layout["config_first_wp_row"]
+    rate_range = f"{SHEET_CONFIG}!$D${cfg_wp_first}:$D${cfg_wp_first + num_wps - 1}"
+
     for m_idx in range(project_params["months"]):
         c = month_col_start + m_idx
         cl = col_letter(c)
 
-        # Helper Row 1: Cumulative planned EUR
+        # Helper Row 1: Cumulative planned EUR (SUMPRODUCT with per-WP rates)
+        plan_range = f"{SHEET_PLAN}!{cl}{plan_first_wp}:{cl}{plan_last_wp}"
         if m_idx == 0:
-            # First month: just the monthly total * fte_rate
             style_cell(ws, helper_row_planned, c,
                        font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"=SUM({SHEET_PLAN}!{cl}{plan_first_wp}:{cl}{plan_last_wp})*fte_rate"
+                f"=SUMPRODUCT({plan_range},{rate_range})"
             )
         else:
             prev_cl = col_letter(c - 1)
             style_cell(ws, helper_row_planned, c,
                        font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
                 f"={prev_cl}{helper_row_planned}"
-                f"+SUM({SHEET_PLAN}!{cl}{plan_first_wp}:{cl}{plan_last_wp})*fte_rate"
+                f"+SUMPRODUCT({plan_range},{rate_range})"
             )
 
         # Helper Row 2: Cumulative actual EUR

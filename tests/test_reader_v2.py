@@ -31,8 +31,6 @@ def test_read_plan_config_extracts_wp_definitions(fresh_wb_path):
         assert got["id"] == expected["id"]
         assert got["name"] == expected["name"]
         assert got["fte"] == pytest.approx(expected["fte"])
-        assert got["start"] == expected["start"]
-        assert got["end"] == expected["end"]
     wb.close()
 
 

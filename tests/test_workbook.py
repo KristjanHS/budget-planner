@@ -5,7 +5,8 @@ import pytest
 import openpyxl
 
 from budget_planner.reader import discover_layout
-from budget_planner.config import WORK_PACKAGES, NUM_WPS, MONTH_COL_START, PROJECT_MONTHS
+from budget_planner.config import WORK_PACKAGES, WP_SCHEDULE, NUM_WPS, MONTH_COL_START, PROJECT_MONTHS
+from budget_planner.layout import wp_month_bounds
 
 
 # ── Fixtures that don't need LibreOffice ──
@@ -30,11 +31,10 @@ def test_sheets_exist(workbook):
 def test_global_params(workbook):
     # Plan compact header references Config sheet via formulas
     plan = workbook["Plan"]
-    # B1 = title ref, E1 = start ref, G1 = rate ref, I1 = ceiling ref
+    # B1 = title ref, E1 = start ref, G1 = ceiling ref
     assert plan["B1"].value is not None, "Plan!B1 (title ref) is empty"
     assert plan["E1"].value is not None, "Plan!E1 (start ref) is empty"
-    assert plan["G1"].value is not None, "Plan!G1 (rate ref) is empty"
-    assert plan["I1"].value is not None, "Plan!I1 (ceiling ref) is empty"
+    assert plan["G1"].value is not None, "Plan!G1 (ceiling ref) is empty"
     # Check Config directly for valid rate (find by label, not hardcoded row)
     # FTE Rate is now a formula (weighted average of grade rates), not a static value
     config = workbook["Config"]
@@ -59,7 +59,7 @@ def test_named_ranges(workbook):
         defined[dn.name] = dn.attr_text
     assert defined.get("project_start") == "Config!$B$2"
     assert defined.get("fte_rate") == "Config!$B$4"
-    assert defined.get("partner_ceiling") == "Plan!$I$1"
+    assert defined.get("partner_ceiling") == "Plan!$G$1"
 
 
 # ── Check 5: Config table ──
@@ -70,33 +70,36 @@ def test_wp_config_valid(workbook, layout, wp_idx):
     row = layout["config_first_wp_row"] + wp_idx
     wp_id = config.cell(row, 1).value
     fte = config.cell(row, 3).value
-    start = config.cell(row, 4).value
-    end = config.cell(row, 5).value
+    rate = config.cell(row, 4).value
     assert wp_id is not None, f"WP ID is empty at row {row}"
     assert fte is not None and fte > 0, f"{wp_id}: FTE invalid ({fte})"
-    assert start is not None and end is not None, f"{wp_id}: Start/End empty"
-    assert start <= end, f"{wp_id}: Start ({start}) > End ({end})"
+    assert rate is not None and rate > 0, f"{wp_id}: Rate invalid ({rate})"
 
 
 # ── Check 11: Inactive months empty ──
 
 def _wp_indices_with_inactive_months():
     """Find WP indices that have inactive months (start > 1 or end < PROJECT_MONTHS)."""
-    return [
-        i for i, wp in enumerate(WORK_PACKAGES)
-        if wp["start"] > 1 or wp["end"] < PROJECT_MONTHS
-    ][:3]
+    result = []
+    for i, wp in enumerate(WORK_PACKAGES):
+        start, end = wp_month_bounds(wp["id"], WP_SCHEDULE)
+        if start > 1 or end < PROJECT_MONTHS:
+            result.append(i)
+        if len(result) >= 3:
+            break
+    return result
 
 
 @pytest.mark.parametrize("wp_idx", _wp_indices_with_inactive_months())
 def test_inactive_months_empty(workbook, layout, wp_idx):
     plan = workbook["Plan"]
     wp = WORK_PACKAGES[wp_idx]
+    start, end = wp_month_bounds(wp["id"], WP_SCHEDULE)
     row = layout["planned_first_wp_row"] + wp_idx
     for m in range(PROJECT_MONTHS):
         month_num = m + 1
         col = MONTH_COL_START + m
-        if month_num < wp["start"] or month_num > wp["end"]:
+        if month_num < start or month_num > end:
             val = plan.cell(row, col).value
             assert val is None or val == "" or val == 0, \
                 f"WP{wp_idx+1} M{month_num} row {row}: '{val}' in inactive month"

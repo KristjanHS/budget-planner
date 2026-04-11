@@ -75,6 +75,7 @@ def distribute(total_fte: float, num_months: int, curve: str) -> list[float]:
 
 def build_capacity_sheet(ws, wb, team_layout, *,
                          project_params=None, work_packages=None,
+                         wp_schedule=None,
                          team=None, external_commitments=None,
                          assignments=None,
                          preserved=None, config_first_wp_row=None):
@@ -113,6 +114,9 @@ def build_capacity_sheet(ws, wb, team_layout, *,
             team = config.TEAM
         if external_commitments is None:
             external_commitments = config.EXTERNAL_COMMITMENTS
+    if wp_schedule is None:
+        from budget_planner.config import WP_SCHEDULE
+        wp_schedule = WP_SCHEDULE
 
     if assignments is None:
         assignments = []
@@ -130,8 +134,11 @@ def build_capacity_sheet(ws, wb, team_layout, *,
     val_col_budget = _vcols["budget"]
     val_col_diff = _vcols["diff"]
 
-    # Build WP type lookup
-    wp_type_map = {wp["id"]: wp.get("type", "flat") for wp in work_packages}
+    # Build WP type lookup from schedule (first matching entry per WP)
+    wp_type_map: dict[str, str] = {}
+    for entry in wp_schedule:
+        if entry["id"] not in wp_type_map:
+            wp_type_map[entry["id"]] = entry.get("type", "flat")
 
     ws.sheet_properties.tabColor = "7030A0"
     r = 1

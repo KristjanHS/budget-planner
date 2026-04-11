@@ -45,6 +45,7 @@ This file uses **progressive disclosure**. Keep it focused on what every convers
 | C4 architecture, workflows, formula graph | `docs/architecture.md` | Mermaid diagrams, build order, cross-sheet dependencies |
 | Cloud/container env, LO missing | `docs/cloud-env-setup.md` | Pre-flight checks, failure modes |
 | Config column layout | `.claude/rules/dev-workflow.md` | Grep `Config!{letter}` in ALL builders + tests when columns shift |
+| Workbook inspection, MCP tools | `.claude/rules/dev-workflow.md` § MCP Tools | `openpyxl-read` for spot-checks, `mcp-excel` for prototyping |
 
 ## Key Commands
 

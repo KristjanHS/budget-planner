@@ -8,6 +8,7 @@ LibreOffice is a required dependency — install it, don't skip recalc tests. Se
 When generating output workbooks, check what already exists — only generate missing or explicitly requested files. Don't overwrite existing workbooks unnecessarily.
 For Excel-specific bugs (implicit intersection, formula eval): generate file → user verifies in Excel → then run pytest. openpyxl/LibreOffice mask Excel-specific issues.
 When tests return None from `data_only=True`: verify recalc actually ran (`<v>` elements in XML), don't assume openpyxl/LO interop failure. No `<v>` = no calc engine ran.
+**MCP-assisted verification**: After generating a workbook, use `openpyxl-read` MCP to spot-check structure (sheets, named ranges, cell values) before running pytest. Use `mcp-excel` for interactive prototyping or bulk cell inspection. MCP reads are faster than pytest for quick sanity checks but do NOT replace the full test suite.
 
 ## Linting
 Run `pyright` (full project, not just changed files) before committing. Fix all errors.
@@ -56,6 +57,13 @@ When debugging chart issues, inspect the zip XML directly (`zipfile` + `ElementT
 SUMPRODUCT + range lookups (VLOOKUP, INDEX/MATCH, CHOOSE/MATCH with range args) fail in Excel from openpyxl files — CSE `t="array"` flag is recognized but doesn't force array evaluation on file open. Working patterns: SUMPRODUCT + equality tests per category `(range=$A$1)*$B$1`, per-cell lookups (single-cell VLOOKUP/INDEX), SUMIFS. LibreOffice handles all approaches correctly, so always verify in Excel.
 When adding/renaming Config param labels, check `_find_header_row` substring collisions — it uses case-insensitive `in` matching, so "PM/person/year" matches a "Person" search.
 LibreOffice 7.3 requires `_xlfn.` prefix for newer Excel functions (MINIFS, MAXIFS, IFS, SWITCH, TEXTJOIN, CONCAT). Without it: `#NAME?` in LO recalc. openpyxl doesn't add this automatically.
+
+## MCP Tools (openpyxl-read + mcp-excel)
+Two MCP servers are configured in `.claude/settings.json`, both pointing at `output/`:
+- **openpyxl-read** (read-only): `get_sheet_names`, `get_cell_range`, `get_cell_details` — lightweight inspection without loading the workbook in Python. Use for: verifying sheet existence, checking named ranges, spot-checking formula text or computed values, confirming font colors match the blue/black/green convention.
+- **mcp-excel** (read/write, `EXCEL_MCP_*` tools): create/modify workbooks, apply formatting, manage sheets. Use for: prototyping new sheet layouts interactively, bulk inspection of cell ranges, writing test fixtures. `EXCEL_MCP_FOLDER` = `output/`.
+
+**When to use MCP vs pytest**: MCP for ad-hoc inspection during development (does cell B4 have the right formula?). Pytest for regression gates (all 259+ tests must pass before presenting to user). MCP never replaces pytest.
 
 ## Testing
 Tests must not hardcode config.py seed values (WP names, person names, FTE amounts, start/end months).

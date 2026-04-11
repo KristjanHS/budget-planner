@@ -4,34 +4,7 @@
 
 An openpyxl-based Excel workbook generator for EU project FTE budget planning. The user will iterate on this with you.
 
-## Information Recording Principles
-
-This file uses **progressive disclosure**. Keep it focused on what every conversation needs.
-
-### Level 1 (this file) — always loaded
-
-| Type | Example |
-|------|---------|
-| Core commands | `python -m budget_planner init` |
-| Iron rules / prohibitions | Never hardcode calculated values |
-| Error diagnostics | Symptom -> cause -> fix |
-| Code patterns | Copy-paste ready snippets |
-| Directory map | Function -> file |
-| Trigger indexes | Pointers to Level 2 docs |
-
-### Level 2 (`docs/`) — load on demand
-
-| Type | Example |
-|------|---------|
-| Domain reference | programme cost categories, funding rates |
-| Architecture & internals | Mermaid diagrams, builder patterns, reader fragility |
-| Plans | Active and draft plans |
-
-### When asked to record information
-
-1. High-frequency or iron-rule? -> Add to this file (Level 1)
-2. Detailed SOP, edge case, or reference? -> Add to `docs/` (Level 2)
-3. Every Level 2 reference in this file must include a **trigger condition** (when to read it)
+<!-- L1=this file (always), L2=docs/ (on demand via trigger table), L3=.claude/rules/ (path-gated) -->
 
 ## Reference Index (encounter a problem? check here)
 
@@ -47,6 +20,7 @@ This file uses **progressive disclosure**. Keep it focused on what every convers
 | Cloud/container env, LO missing | `docs/cloud-env-setup.md` | Pre-flight checks, failure modes |
 | Config column layout | `.claude/rules/dev-workflow.md` | Grep `Config!{letter}` in ALL builders + tests when columns shift |
 | Workbook inspection, MCP tools | `.claude/rules/dev-workflow.md` § MCP Tools | `openpyxl-read` for formula/style spot-checks, `mcp-excel` for numeric sanity checks |
+| "record this", "remember this", organizing docs | `~/.claude/references/recording-principles.md` | L1/L2/L3 criteria, what belongs where |
 
 ## Key Commands
 

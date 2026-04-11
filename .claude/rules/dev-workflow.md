@@ -59,11 +59,12 @@ When adding/renaming Config param labels, check `_find_header_row` substring col
 LibreOffice 7.3 requires `_xlfn.` prefix for newer Excel functions (MINIFS, MAXIFS, IFS, SWITCH, TEXTJOIN, CONCAT). Without it: `#NAME?` in LO recalc. openpyxl doesn't add this automatically.
 
 ## MCP Tools (openpyxl-read + mcp-excel)
-Two MCP servers are configured in `.claude/settings.json`, both pointing at `output/`:
+Two MCP servers registered via `claude mcp add` (stored in `~/.claude.json`, local scope — NOT in `.claude/settings.json` which ignores `mcpServers`):
 - **openpyxl-read** (read-only): `get_sheet_names`, `get_cell_range`, `get_cell_details` — lightweight inspection without loading the workbook in Python. Use for: verifying sheet existence, checking named ranges, spot-checking formula text or computed values, confirming font colors match the blue/black/green convention.
 - **mcp-excel** (read/write, `EXCEL_MCP_*` tools): create/modify workbooks, apply formatting, manage sheets. Use for: prototyping new sheet layouts interactively, bulk inspection of cell ranges, writing test fixtures. `EXCEL_MCP_FOLDER` = `output/`.
 
 **When to use MCP vs pytest**: MCP for ad-hoc inspection during development (does cell B4 have the right formula?). Pytest for regression gates (all 259+ tests must pass before presenting to user). MCP never replaces pytest.
+**MCP registration**: Use `claude mcp add` or `claude mcp add-json` (for servers with env vars). For servers needing env vars, `add-json` is more reliable than `-e` flag. Verify with `claude mcp list`. Worktree registrations are scoped to the worktree path — re-register in main repo if needed.
 
 ## Testing
 Tests must not hardcode config.py seed values (WP names, person names, FTE amounts, start/end months).

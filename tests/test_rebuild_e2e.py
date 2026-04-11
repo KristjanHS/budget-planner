@@ -284,7 +284,8 @@ class TestRebuildWithChangedTeam:
         # Find the roster rows by scanning for TEAM ROSTER header
         from budget_planner.reader import _find_header_row
         section_row = _find_header_row(config_ws, "TEAM ROSTER")
-        person_header = _find_header_row(config_ws, "Person", max_row=section_row + 5)
+        # Column header is always the next row after section header
+        person_header = section_row + 1
         first_row = person_header + 1
         for i, member in enumerate(roster):
             member["row"] = first_row + i

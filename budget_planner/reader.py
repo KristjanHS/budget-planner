@@ -220,10 +220,8 @@ def read_team_from_config(ws) -> list[dict]:
     # Find "TEAM ROSTER" section header
     roster_section = _find_header_row(ws, "TEAM ROSTER", required=True)
 
-    # Person header is the next row after the section header
-    person_header = _find_header_row(
-        ws, "Person", col=1, max_row=roster_section + 5,
-    )
+    # Person header is always the next row after the section header
+    person_header = roster_section + 1
 
     # Detect whether Grade column exists (col C header)
     has_grade_col = False

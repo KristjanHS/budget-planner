@@ -327,3 +327,200 @@ def test_layout_includes_grade_rows():
     assert "grade_last_row" in layout
     grade_rates = _sample_grade_rates()
     assert layout["grade_last_row"] - layout["grade_first_row"] + 1 == len(grade_rates)
+
+
+# ── Assignment and External section tests ──
+
+def _sample_assignments():
+    return [
+        {"person": "Alice", "wp": "WP1", "total_fte": 4.5, "start": 1, "end": 14},
+        {"person": "Bob", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 18},
+    ]
+
+
+def _sample_externals():
+    return [
+        {"person": "Alice", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 11, "is_eu": False},
+    ]
+
+
+def _build_with_assignments():
+    """Build a Config sheet with assignments and external commitments."""
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    layout = build_config_sheet(
+        ws, wb, _sample_params(), _sample_wps(),
+        team=_sample_team(),
+        grade_rates=_sample_grade_rates(),
+        assignments=_sample_assignments(),
+        external_commitments=_sample_externals(),
+    )
+    return wb, ws, layout
+
+
+def test_config_assignments_section_exists():
+    """PERSON-WP ASSIGNMENTS section header and column headers are present."""
+    _wb, ws, layout = _build_with_assignments()
+    # Section header is one row above the column header row
+    section_row = layout["assign_header_row"] - 1
+    assert ws.cell(section_row, 1).value == "PERSON-WP ASSIGNMENTS"
+    # Column headers
+    header_row = layout["assign_header_row"]
+    assert ws.cell(header_row, 1).value == "Person"
+    assert ws.cell(header_row, 2).value == "WP"
+    assert ws.cell(header_row, 3).value == "Total FTE"
+    assert ws.cell(header_row, 8).value == "Balance"
+
+
+def test_config_assignments_data_rows():
+    """Assignment data rows have blue input cells with correct values."""
+    _wb, ws, layout = _build_with_assignments()
+    assignments = _sample_assignments()
+    first = layout["assign_first_row"]
+    for i, entry in enumerate(assignments):
+        row = first + i
+        assert ws.cell(row, 1).value == entry["person"]
+        assert ws.cell(row, 2).value == entry["wp"]
+        assert ws.cell(row, 3).value == entry["total_fte"]
+        assert ws.cell(row, 4).value == entry["start"]
+        assert ws.cell(row, 5).value == entry["end"]
+        # Blue input font on cols A-E
+        assert "0000FF" in str(ws.cell(row, 1).font.color.rgb)
+
+
+def test_config_assignments_formula_columns():
+    """Assignment cols F-H have formulas with correct patterns."""
+    _wb, ws, layout = _build_with_assignments()
+    first = layout["assign_first_row"]
+    # Col F: Sig Assigned — SUMIFS
+    val_f = str(ws.cell(first, 6).value)
+    assert "SUMIFS" in val_f
+    assert "assign_ftes" in val_f
+    assert "assign_persons" in val_f
+    # Col G: Sig External — SUMIFS
+    val_g = str(ws.cell(first, 7).value)
+    assert "SUMIFS" in val_g
+    assert "ext_ftes" in val_g
+    assert "ext_persons" in val_g
+    # Col H: Balance — VLOOKUP
+    val_h = str(ws.cell(first, 8).value)
+    assert "VLOOKUP" in val_h
+    assert "roster_lookup" in val_h
+    assert "project_months" in val_h
+    # Black formula font on cols F-H
+    rgb_f = str(ws.cell(first, 6).font.color.rgb).upper()
+    assert rgb_f.endswith("000000")
+
+
+def test_config_externals_section_exists():
+    """EXTERNAL COMMITMENTS section header and column headers are present."""
+    _wb, ws, layout = _build_with_assignments()
+    section_row = layout["ext_header_row"] - 1
+    assert ws.cell(section_row, 1).value == "EXTERNAL COMMITMENTS"
+    header_row = layout["ext_header_row"]
+    assert ws.cell(header_row, 1).value == "Person"
+    assert ws.cell(header_row, 2).value == "Project"
+    assert ws.cell(header_row, 6).value == "EU Grant"
+
+
+def test_config_externals_data_rows():
+    """External commitment data rows match input."""
+    _wb, ws, layout = _build_with_assignments()
+    externals = _sample_externals()
+    first = layout["ext_first_row"]
+    for i, entry in enumerate(externals):
+        row = first + i
+        assert ws.cell(row, 1).value == entry["person"]
+        assert ws.cell(row, 2).value == entry["project"]
+        assert ws.cell(row, 3).value == entry["fte"]
+        assert ws.cell(row, 4).value == entry["start"]
+        assert ws.cell(row, 5).value == entry["end"]
+        assert ws.cell(row, 6).value == "No"  # is_eu=False
+        # Blue input font
+        assert "0000FF" in str(ws.cell(row, 1).font.color.rgb)
+
+
+def test_config_wp_budget_expanded_to_7_cols():
+    """WP Budget now has 7 columns; table ref covers A:G."""
+    _wb, ws, layout = _build_with_assignments()
+    # Check header row has 7 column labels
+    header_row = layout["wp_header_row"]
+    assert ws.cell(header_row, 6).value == "Assigned PM"
+    assert ws.cell(header_row, 7).value == "Variance"
+    # Table ref covers A:G
+    tables = list(ws.tables.values())
+    assert len(tables) == 1
+    table_ref = tables[0].ref
+    assert table_ref.endswith(f"G{layout['wp_last_row']}")
+
+
+def test_config_wp_budget_assigned_pm_formula():
+    """WP Budget col F has SUMIFS formula referencing assign named ranges."""
+    _wb, ws, layout = _build_with_assignments()
+    first = layout["wp_first_row"]
+    val = str(ws.cell(first, 6).value)
+    assert "SUMIFS" in val
+    assert "assign_ftes" in val
+    assert "assign_wps" in val
+
+
+def test_config_wp_budget_variance_formula():
+    """WP Budget col G = C - F (FTE Budget minus Assigned PM)."""
+    _wb, ws, layout = _build_with_assignments()
+    first = layout["wp_first_row"]
+    val = str(ws.cell(first, 7).value)
+    # Should reference col C (FTE) and col F (Assigned PM) in same row
+    assert f"C{first}" in val
+    assert f"F{first}" in val
+
+
+def test_config_new_named_ranges():
+    """New named ranges for assignments and externals exist."""
+    wb, _ws, _layout = _build_with_assignments()
+    names = set(wb.defined_names.keys())
+    expected = {
+        "assign_persons", "assign_wps", "assign_ftes",
+        "ext_persons", "ext_ftes",
+        "roster_lookup", "project_months",
+    }
+    for name in expected:
+        assert name in names, f"Named range '{name}' not found"
+
+
+def test_config_assignments_empty_list():
+    """No data rows when assignments=[] (headers only)."""
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    layout = build_config_sheet(
+        ws, wb, _sample_params(), _sample_wps(),
+        team=_sample_team(),
+        grade_rates=_sample_grade_rates(),
+        assignments=[],
+        external_commitments=[],
+    )
+    # assign_first_row == assign_last_row when empty (single placeholder row)
+    assert layout["assign_first_row"] == layout["assign_last_row"]
+    # No data in the first row of assignment section
+    first = layout["assign_first_row"]
+    assert ws.cell(first, 1).value is None
+
+
+def test_config_layout_includes_new_keys():
+    """Layout dict has assign_* and ext_* keys."""
+    _wb, _ws, layout = _build_with_assignments()
+    for key in [
+        "assign_header_row", "assign_first_row", "assign_last_row",
+        "assign_config_rows",
+        "ext_header_row", "ext_first_row", "ext_last_row",
+        "external_config_rows",
+    ]:
+        assert key in layout, f"Layout key '{key}' not found"
+    # Verify assign_config_rows has expected entries
+    assert ("Alice", "WP1") in layout["assign_config_rows"]
+    assert ("Bob", "WP2") in layout["assign_config_rows"]
+    # Verify external_config_rows has expected entries
+    assert ("Alice", "ProjectX") in layout["external_config_rows"]

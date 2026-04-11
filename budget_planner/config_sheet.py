@@ -8,11 +8,18 @@ from openpyxl.utils import get_column_letter
 
 from budget_planner.layout import (
     SHEET_CONFIG,
-    COL_WP_FTE, COL_WP_RATE, COL_WP_CEILING, WP_BUDGET_LAST_COL,
+    COL_WP_FTE, COL_WP_RATE, COL_WP_CEILING,
+    COL_WP_ASSIGNED_PM, COL_WP_VARIANCE, WP_BUDGET_LAST_COL,
     COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE, SCHED_LAST_COL,
     COL_ROSTER_FTE, COL_ROSTER_GRADE, ROSTER_LAST_COL,
     COL_GRADE_RATE, GRADE_LAST_COL,
     COL_RP_START, COL_RP_END, RP_LAST_COL,
+    COL_ASSIGN_PERSON, COL_ASSIGN_WP, COL_ASSIGN_FTE,
+    COL_ASSIGN_START, COL_ASSIGN_END,
+    COL_ASSIGN_SIG_ASSIGNED, COL_ASSIGN_SIG_EXTERNAL, COL_ASSIGN_BALANCE,
+    ASSIGN_LAST_COL,
+    COL_EXT_PERSON, COL_EXT_PROJECT, COL_EXT_FTE,
+    COL_EXT_START, COL_EXT_END, COL_EXT_EU, EXT_LAST_COL,
 )
 from budget_planner.styles import (
     BLACK_FORMULA,
@@ -24,6 +31,7 @@ from budget_planner.styles import (
     LIGHT_BLUE_FILL,
     auto_fit_columns,
     CF_YELLOW_FILL,
+    CF_RED_FILL,
     CENTER,
     style_cell,
 )
@@ -47,7 +55,10 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
     # Column headers
-    budget_headers = ["WP ID", "WP Name", "FTE Budget", "Rate (€/PM)", "Ceiling (€)"]
+    budget_headers = [
+        "WP ID", "WP Name", "FTE Budget", "Rate (€/PM)", "Ceiling (€)",
+        "Assigned PM", "Variance",
+    ]
     for col, hdr in enumerate(budget_headers, start=1):
         style_cell(ws, budget_header_row, col, value=hdr,
                    font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
@@ -76,6 +87,23 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
         rate_cl = get_column_letter(COL_WP_RATE)
         style_cell(ws, row_idx, COL_WP_CEILING, font=BLACK_FORMULA, fmt="€#,##0",
                    border=False).value = f"={fte_cl}{row_idx}*{rate_cl}{row_idx}"
+        # Col F: Assigned PM — SUMIFS over assignment section
+        style_cell(ws, row_idx, COL_WP_ASSIGNED_PM, font=BLACK_FORMULA, fmt="0.00",
+                   border=False).value = f"=SUMIFS(assign_ftes,assign_wps,A{row_idx})"
+        # Col G: Variance — FTE Budget minus Assigned PM
+        fte_cl_g = get_column_letter(COL_WP_FTE)
+        apm_cl = get_column_letter(COL_WP_ASSIGNED_PM)
+        style_cell(ws, row_idx, COL_WP_VARIANCE, font=BLACK_FORMULA, fmt="0.00",
+                   border=False).value = f"={fte_cl_g}{row_idx}-{apm_cl}{row_idx}"
+
+    # CF: yellow fill on Variance column when ABS(value) > 0.01
+    var_cl = get_column_letter(COL_WP_VARIANCE)
+    for row_idx in range(budget_first_data_row, budget_last_data_row + 1):
+        rule = FormulaRule(
+            formula=[f"ABS({var_cl}{row_idx})>0.01"],
+            fill=CF_YELLOW_FILL,
+        )
+        ws.conditional_formatting.add(f"{var_cl}{row_idx}", rule)
 
     # TOTAL row
     budget_total_row = budget_last_data_row + 1
@@ -91,6 +119,16 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
     style_cell(ws, budget_total_row, COL_WP_CEILING, font=BLACK_FORMULA,
                fill=LIGHT_BLUE_FILL, fmt="€#,##0").value = (
         f"=SUM({ceil_cl}{budget_first_data_row}:{ceil_cl}{budget_last_data_row})"
+    )
+    apm_cl = get_column_letter(COL_WP_ASSIGNED_PM)
+    style_cell(ws, budget_total_row, COL_WP_ASSIGNED_PM, font=BLACK_FORMULA,
+               fill=LIGHT_BLUE_FILL, fmt="0.00").value = (
+        f"=SUM({apm_cl}{budget_first_data_row}:{apm_cl}{budget_last_data_row})"
+    )
+    var_cl = get_column_letter(COL_WP_VARIANCE)
+    style_cell(ws, budget_total_row, COL_WP_VARIANCE, font=BLACK_FORMULA,
+               fill=LIGHT_BLUE_FILL, fmt="0.00").value = (
+        f"=SUM({var_cl}{budget_first_data_row}:{var_cl}{budget_last_data_row})"
     )
 
     # Excel Table over header + data range (NOT including total row)
@@ -306,8 +344,144 @@ def _write_rate_by_grade_section(ws, start_row, grade_rates):
     return next_row, layout
 
 
+def _write_assignments_section(ws, start_row, assignments):
+    """Write the PERSON-WP ASSIGNMENTS section (section header, column headers, data rows, formulas).
+
+    Returns:
+        (next_row, layout_dict) where next_row is the first row after the last data row,
+        and layout_dict has keys: assign_header_row, assign_first_row, assign_last_row,
+        assign_config_rows.
+    """
+    r = start_row
+
+    # Section header — merged A:H
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=ASSIGN_LAST_COL)
+    style_cell(ws, r, 1, value="PERSON-WP ASSIGNMENTS",
+               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
+    for c in range(2, ASSIGN_LAST_COL + 1):
+        style_cell(ws, r, c, fill=SECTION_FILL)
+    r += 1
+
+    # Column headers
+    assign_header_row = r
+    assign_headers = [
+        "Person", "WP", "Total FTE", "Start Month", "End Month",
+        "Sig Assigned", "Sig External", "Balance",
+    ]
+    for col, hdr in enumerate(assign_headers, start=1):
+        style_cell(ws, r, col, value=hdr,
+                   font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    r += 1
+
+    # Data rows
+    assign_first_row = r
+    assign_config_rows: dict[tuple[str, str], int] = {}
+    for entry in assignments:
+        # Cols A-E: blue input
+        style_cell(ws, r, COL_ASSIGN_PERSON, entry["person"], font=BLUE_INPUT, border=False)
+        style_cell(ws, r, COL_ASSIGN_WP, entry["wp"], font=BLUE_INPUT, border=False)
+        style_cell(ws, r, COL_ASSIGN_FTE, entry["total_fte"], font=BLUE_INPUT,
+                   fmt="0.00", border=False)
+        style_cell(ws, r, COL_ASSIGN_START, entry["start"], font=BLUE_INPUT,
+                   fmt="0", border=False)
+        style_cell(ws, r, COL_ASSIGN_END, entry["end"], font=BLUE_INPUT,
+                   fmt="0", border=False)
+        # Col F: Sig Assigned — SUMIFS over assign_ftes by person
+        style_cell(ws, r, COL_ASSIGN_SIG_ASSIGNED, font=BLACK_FORMULA, fmt="0.00",
+                   border=False).value = f"=SUMIFS(assign_ftes,assign_persons,A{r})"
+        # Col G: Sig External — SUMIFS over ext_ftes by person
+        style_cell(ws, r, COL_ASSIGN_SIG_EXTERNAL, font=BLACK_FORMULA, fmt="0.00",
+                   border=False).value = f"=SUMIFS(ext_ftes,ext_persons,A{r})"
+        # Col H: Balance — available PM minus assigned minus external
+        bal_cl = get_column_letter(COL_ASSIGN_BALANCE)
+        style_cell(ws, r, COL_ASSIGN_BALANCE, font=BLACK_FORMULA, fmt="0.00",
+                   border=False).value = (
+            f"=VLOOKUP(A{r},roster_lookup,2,FALSE)*project_months"
+            f"-{get_column_letter(COL_ASSIGN_SIG_ASSIGNED)}{r}"
+            f"-{get_column_letter(COL_ASSIGN_SIG_EXTERNAL)}{r}"
+        )
+        assign_config_rows[(entry["person"], entry["wp"])] = r
+        r += 1
+    assign_last_row = r - 1 if assignments else assign_first_row
+
+    # CF: red fill on Balance column when value < 0
+    if assignments:
+        bal_cl = get_column_letter(COL_ASSIGN_BALANCE)
+        for row_idx in range(assign_first_row, assign_last_row + 1):
+            rule = FormulaRule(
+                formula=[f"{bal_cl}{row_idx}<0"],
+                fill=CF_RED_FILL,
+            )
+            ws.conditional_formatting.add(f"{bal_cl}{row_idx}", rule)
+
+    next_row = r
+    layout = {
+        "assign_header_row": assign_header_row,
+        "assign_first_row": assign_first_row,
+        "assign_last_row": assign_last_row,
+        "assign_config_rows": assign_config_rows,
+    }
+    return next_row, layout
+
+
+def _write_external_section(ws, start_row, external_commitments):
+    """Write the EXTERNAL COMMITMENTS section (section header, column headers, data rows).
+
+    Returns:
+        (next_row, layout_dict) where next_row is the first row after the last data row,
+        and layout_dict has keys: ext_header_row, ext_first_row, ext_last_row,
+        external_config_rows.
+    """
+    r = start_row
+
+    # Section header — merged A:F
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=EXT_LAST_COL)
+    style_cell(ws, r, 1, value="EXTERNAL COMMITMENTS",
+               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
+    for c in range(2, EXT_LAST_COL + 1):
+        style_cell(ws, r, c, fill=SECTION_FILL)
+    r += 1
+
+    # Column headers
+    ext_header_row = r
+    ext_headers = ["Person", "Project", "Total FTE", "Start Month", "End Month", "EU Grant"]
+    for col, hdr in enumerate(ext_headers, start=1):
+        style_cell(ws, r, col, value=hdr,
+                   font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    r += 1
+
+    # Data rows (all blue input)
+    ext_first_row = r
+    external_config_rows: dict[tuple[str, str], int] = {}
+    for entry in external_commitments:
+        style_cell(ws, r, COL_EXT_PERSON, entry["person"], font=BLUE_INPUT, border=False)
+        style_cell(ws, r, COL_EXT_PROJECT, entry["project"], font=BLUE_INPUT, border=False)
+        style_cell(ws, r, COL_EXT_FTE, entry["fte"], font=BLUE_INPUT, fmt="0.00",
+                   border=False)
+        style_cell(ws, r, COL_EXT_START, entry["start"], font=BLUE_INPUT, fmt="0",
+                   border=False)
+        style_cell(ws, r, COL_EXT_END, entry["end"], font=BLUE_INPUT, fmt="0",
+                   border=False)
+        style_cell(ws, r, COL_EXT_EU,
+                   "Yes" if entry.get("is_eu", False) else "No",
+                   font=BLUE_INPUT, border=False)
+        external_config_rows[(entry["person"], entry["project"])] = r
+        r += 1
+    ext_last_row = r - 1 if external_commitments else ext_first_row
+
+    next_row = r
+    layout = {
+        "ext_header_row": ext_header_row,
+        "ext_first_row": ext_first_row,
+        "ext_last_row": ext_last_row,
+        "external_config_rows": external_config_rows,
+    }
+    return next_row, layout
+
+
 def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
-                       team=None, reporting_periods=None, grade_rates=None):
+                       team=None, reporting_periods=None, grade_rates=None,
+                       assignments=None, external_commitments=None):
     """Build the Config sheet with project parameters, WP budget/schedule, team roster, and grade rates.
 
     Args:
@@ -323,25 +497,14 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
             When None, lazy-imports from config.
         grade_rates: dict mapping grade name to EUR/PM rate.
             When None, lazy-imports from config.
+        assignments: list of dicts with keys 'person', 'wp', 'total_fte', 'start', 'end'.
+            When None, defaults to empty list.
+        external_commitments: list of dicts with keys 'person', 'project', 'fte',
+            'start', 'end', 'is_eu'. When None, defaults to empty list.
 
     Returns:
-        config_layout dict with keys:
-            'param_rows': dict mapping param name to row number,
-            'grade_first_row': int,
-            'grade_last_row': int,
-            'wp_header_row': int,
-            'wp_first_row': int,
-            'wp_last_row': int,
-            'wp_total_row': int,
-            'sched_header_row': int,
-            'sched_first_row': int,
-            'sched_last_row': int,
-            'roster_header_row': int,
-            'roster_first_row': int,
-            'roster_last_row': int,
-            'person_rows': dict mapping person name to row number,
-            'rp_first_row': int,
-            'rp_last_row': int,
+        config_layout dict with keys including param_rows, wp_*, sched_*, roster_*,
+        rp_*, grade_*, assign_*, ext_*.
     """
     if wp_schedule is None:
         from budget_planner import config
@@ -352,6 +515,10 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     if grade_rates is None:
         from budget_planner import config as _cfg
         grade_rates = _cfg.GRADE_RATES
+    if assignments is None:
+        assignments = []
+    if external_commitments is None:
+        external_commitments = []
 
     # ── Section 1: Project Parameters (rows 1-5) ──
     param_defs = [
@@ -378,6 +545,12 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     budget_section_row = len(param_defs) + 2  # gap row after last param
     next_row, budget_layout = _write_budget_section(ws, budget_section_row,
                                                     work_packages, project_params)
+
+    # ── Section 2b: Person-WP Assignments ──
+    next_row, assign_layout = _write_assignments_section(ws, next_row + 1, assignments)
+
+    # ── Section 2c: External Commitments ──
+    next_row, ext_layout = _write_external_section(ws, next_row + 1, external_commitments)
 
     # ── Section 3: WP Schedule ──
     next_row, sched_layout = _write_schedule_section(ws, next_row + 1, wp_schedule)
@@ -459,6 +632,47 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     )
     wb.defined_names.add(dn_sched_ends)
 
+    # Assignment column named ranges
+    a_first = assign_layout["assign_first_row"]
+    a_last = assign_layout["assign_last_row"]
+    wb.defined_names.add(DefinedName(
+        "assign_persons",
+        attr_text=f"{SHEET_CONFIG}!$A${a_first}:$A${a_last}",
+    ))
+    wb.defined_names.add(DefinedName(
+        "assign_wps",
+        attr_text=f"{SHEET_CONFIG}!$B${a_first}:$B${a_last}",
+    ))
+    wb.defined_names.add(DefinedName(
+        "assign_ftes",
+        attr_text=f"{SHEET_CONFIG}!$C${a_first}:$C${a_last}",
+    ))
+
+    # External commitments column named ranges
+    e_first = ext_layout["ext_first_row"]
+    e_last = ext_layout["ext_last_row"]
+    wb.defined_names.add(DefinedName(
+        "ext_persons",
+        attr_text=f"{SHEET_CONFIG}!$A${e_first}:$A${e_last}",
+    ))
+    wb.defined_names.add(DefinedName(
+        "ext_ftes",
+        attr_text=f"{SHEET_CONFIG}!$C${e_first}:$C${e_last}",
+    ))
+
+    # Roster lookup (2-column: person name + max FTE) for VLOOKUP in Balance formula
+    wb.defined_names.add(DefinedName(
+        "roster_lookup",
+        attr_text=f"{SHEET_CONFIG}!$A${roster_layout['roster_first_row']}:$B${roster_layout['roster_last_row']}",
+    ))
+
+    # Project months named range (single cell) for Balance formula
+    months_row = param_rows["Project Months"]
+    wb.defined_names.add(DefinedName(
+        "project_months",
+        attr_text=f"{SHEET_CONFIG}!$B${months_row}",
+    ))
+
     # ── Set FTE Rate formula (weighted average of grade rates by FTE) ──
     roster_first_row = roster_layout["roster_first_row"]
     roster_last_row = roster_layout["roster_last_row"]
@@ -486,6 +700,14 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         "wp_first_row": budget_layout["wp_first_row"],
         "wp_last_row": budget_layout["wp_last_row"],
         "wp_total_row": budget_layout["wp_total_row"],
+        "assign_header_row": assign_layout["assign_header_row"],
+        "assign_first_row": assign_layout["assign_first_row"],
+        "assign_last_row": assign_layout["assign_last_row"],
+        "assign_config_rows": assign_layout["assign_config_rows"],
+        "ext_header_row": ext_layout["ext_header_row"],
+        "ext_first_row": ext_layout["ext_first_row"],
+        "ext_last_row": ext_layout["ext_last_row"],
+        "external_config_rows": ext_layout["external_config_rows"],
         "sched_header_row": sched_layout["sched_header_row"],
         "sched_first_row": sched_layout["sched_first_row"],
         "sched_last_row": sched_layout["sched_last_row"],

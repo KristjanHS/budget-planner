@@ -32,7 +32,9 @@ COL_WP_NAME = 2    # used by Phase 1 readers
 COL_WP_FTE = 3
 COL_WP_RATE = 4
 COL_WP_CEILING = 5
-WP_BUDGET_LAST_COL = 5  # for table ref / section header merge
+COL_WP_ASSIGNED_PM = 6  # SUMIFS formula: total assigned PM per WP
+COL_WP_VARIANCE = 7     # FTE Budget - Assigned PM
+WP_BUDGET_LAST_COL = 7  # for table ref / section header merge
 
 # WP Schedule section (Config sheet)
 COL_SCHED_START = 2
@@ -60,7 +62,10 @@ COL_ASSIGN_WP = 2
 COL_ASSIGN_FTE = 3
 COL_ASSIGN_START = 4
 COL_ASSIGN_END = 5
-ASSIGN_LAST_COL = 5
+COL_ASSIGN_SIG_ASSIGNED = 6  # SUMIFS: total assigned FTE for this person
+COL_ASSIGN_SIG_EXTERNAL = 7  # SUMIFS: total external FTE for this person
+COL_ASSIGN_BALANCE = 8       # Available PM - Assigned - External
+ASSIGN_LAST_COL = 8
 
 # External Commitments (currently on Capacity, moving to Config in Phase 1)
 COL_EXT_PERSON = 1

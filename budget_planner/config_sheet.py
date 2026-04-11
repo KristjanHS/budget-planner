@@ -22,15 +22,17 @@ from budget_planner.styles import (
 )
 
 
-def build_config_sheet(ws, wb, project_params, work_packages, team=None,
-                       reporting_periods=None, grade_rates=None):
-    """Build the Config sheet with project parameters, work packages table, and team roster.
+def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
+                       team=None, reporting_periods=None, grade_rates=None):
+    """Build the Config sheet with project parameters, WP budget/schedule, team roster, and grade rates.
 
     Args:
         ws: Config worksheet to populate.
         wb: Parent Workbook (for named ranges).
         project_params: dict with keys 'title', 'start', 'months', 'rate'.
-        work_packages: list of dicts with keys 'id', 'name', 'fte', 'start', 'end'.
+        work_packages: list of dicts with keys 'id', 'name', 'fte'.
+        wp_schedule: list of dicts with keys 'id', 'start', 'end', 'type'.
+            When None, lazy-imports from config.
         team: list of dicts with keys 'name', 'max_fte', 'grade'.
             When None, lazy-imports from config.
         reporting_periods: list of dicts with keys 'id', 'start', 'end'.
@@ -47,6 +49,9 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
             'wp_first_row': int,
             'wp_last_row': int,
             'wp_total_row': int,
+            'sched_header_row': int,
+            'sched_first_row': int,
+            'sched_last_row': int,
             'roster_header_row': int,
             'roster_first_row': int,
             'roster_last_row': int,
@@ -54,13 +59,17 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
             'rp_first_row': int,
             'rp_last_row': int,
     """
+    if wp_schedule is None:
+        from budget_planner import config
+        wp_schedule = config.WP_SCHEDULE
     if team is None:
         from budget_planner import config
         team = config.TEAM
     if grade_rates is None:
         from budget_planner import config as _cfg
         grade_rates = _cfg.GRADE_RATES
-    # ── Section A: Project Parameters (rows 1-5) ──
+
+    # ── Section 1: Project Parameters (rows 1-5) ──
     param_defs = [
         ("Project Title", project_params["title"], None, None),
         ("Project Start", project_params["start"], "MMM YYYY", None),
@@ -68,100 +77,70 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
         ("FTE Rate (EUR)", None, "€#,##0", None),  # value set later as formula
         ("EU Annual Ceiling (PM/FTE/year)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
     ]
-    param_rows = {}
+    param_rows: dict[str, int] = {}
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
         # Label in column A — HEADER_FONT, no border
         style_cell(ws, i, 1, value=label, font=HEADER_FONT, border=False)
         # Value in column B — BLUE_INPUT, no border (except FTE Rate: set later)
         if label == "FTE Rate (EUR)":
-            # FTE Rate is a formula — styled as BLACK_FORMULA, set after roster
+            # FTE Rate is a formula — styled as BLACK_FORMULA, set after grade table
             style_cell(ws, i, 2, font=BLACK_FORMULA, fmt=fmt, border=False)
         else:
             font = TITLE_FONT if i == 1 else BLUE_INPUT
             style_cell(ws, i, 2, value=value, font=font, fmt=fmt, border=False)
         param_rows[label] = i
 
-    # Empty separator row after last param (no action needed)
+    # ── Section 2: WP BUDGET table ──
+    budget_section_row = len(param_defs) + 2  # gap row after last param
+    budget_header_row = budget_section_row + 1
+    budget_first_data_row = budget_header_row + 1
 
-    # ── Section A2: Rate by Grade Table ──
-    grade_section_row = len(param_defs) + 2  # gap row after last param
-    ws.merge_cells(start_row=grade_section_row, start_column=1,
-                   end_row=grade_section_row, end_column=2)
-    style_cell(ws, grade_section_row, 1, value="RATE BY GRADE",
-               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
-
-    grade_header_row = grade_section_row + 1
-    style_cell(ws, grade_header_row, 1, "Grade", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, grade_header_row, 2, "Rate (EUR/PM)", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
-
-    grade_first_row = grade_header_row + 1
-    grade_names = list(grade_rates.keys())
-    for gi, grade_name in enumerate(grade_names):
-        r = grade_first_row + gi
-        style_cell(ws, r, 1, grade_name, font=BLUE_INPUT, border=False)
-        style_cell(ws, r, 2, grade_rates[grade_name], font=BLUE_INPUT,
-                   fmt="€#,##0", border=False)
-    grade_last_row = grade_first_row + len(grade_names) - 1
-
-    # ── Section B: Work Packages Table ──
-    section_row = grade_last_row + 2  # gap row after grade table
-    header_row = section_row + 1
-    first_data_row = header_row + 1
-
-    # Section header — merged A:H (columns 1-8)
-    ws.merge_cells(start_row=section_row, start_column=1,
-                   end_row=section_row, end_column=8)
-    style_cell(ws, section_row, 1, value="WORK PACKAGES",
+    # Section header — merged A:E
+    ws.merge_cells(start_row=budget_section_row, start_column=1,
+                   end_row=budget_section_row, end_column=5)
+    style_cell(ws, budget_section_row, 1, value="WP BUDGET",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
     # Column headers
-    headers = [
-        "WP ID", "WP Name", "FTE Budget", "Start Month", "End Month",
-        "Type", "Active Months", "Personnel Ceiling (\u20ac)",
-    ]
-    for col, hdr in enumerate(headers, start=1):
-        style_cell(ws, header_row, col, value=hdr,
+    budget_headers = ["WP ID", "WP Name", "FTE Budget", "Rate (€/PM)", "Ceiling (€)"]
+    for col, hdr in enumerate(budget_headers, start=1):
+        style_cell(ws, budget_header_row, col, value=hdr,
                    font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
-    # WP data rows
-    wp_formats = [None, None, "0.00", "0", "0"]
-    last_data_row = first_data_row + len(work_packages) - 1
-    for row_idx, wp in enumerate(work_packages, start=first_data_row):
-        values = [wp["id"], wp["name"], wp["fte"], wp["start"], wp["end"]]
-        for col, (val, fmt) in enumerate(zip(values, wp_formats), start=1):
-            style_cell(ws, row_idx, col, value=val, font=BLUE_INPUT, fmt=fmt,
-                       border=False)
-        # Col F: Type (blue input)
-        wp_type = wp.get("type", "flat")
-        style_cell(ws, row_idx, 6, value=wp_type, font=BLUE_INPUT, border=False)
-        # Col G: Active Months = End - Start + 1 (black formula)
-        style_cell(ws, row_idx, 7, font=BLACK_FORMULA, fmt="0",
-                   border=False).value = f"=E{row_idx}-D{row_idx}+1"
-        # Col H: Personnel Ceiling = FTE Budget * fte_rate (black formula)
-        style_cell(ws, row_idx, 8, font=BLACK_FORMULA, fmt="\u20ac#,##0",
-                   border=False).value = f"=C{row_idx}*fte_rate"
+    # WP Budget data rows
+    default_rate = project_params.get("rate", 10000)
+    budget_last_data_row = budget_first_data_row + len(work_packages) - 1
+    for row_idx, wp in enumerate(work_packages, start=budget_first_data_row):
+        # Col A: WP ID
+        style_cell(ws, row_idx, 1, value=wp["id"], font=BLUE_INPUT, border=False)
+        # Col B: WP Name
+        style_cell(ws, row_idx, 2, value=wp["name"], font=BLUE_INPUT, border=False)
+        # Col C: FTE Budget
+        style_cell(ws, row_idx, 3, value=wp["fte"], font=BLUE_INPUT, fmt="0.00",
+                   border=False)
+        # Col D: Rate (€/PM) — blue input, default from project_params
+        style_cell(ws, row_idx, 4, value=default_rate, font=BLUE_INPUT, fmt="€#,##0",
+                   border=False)
+        # Col E: Ceiling (€) — formula = FTE * Rate
+        style_cell(ws, row_idx, 5, font=BLACK_FORMULA, fmt="€#,##0",
+                   border=False).value = f"=C{row_idx}*D{row_idx}"
 
     # TOTAL row
-    wp_total_row = last_data_row + 1
-    style_cell(ws, wp_total_row, 1, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, wp_total_row, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
-    style_cell(ws, wp_total_row, 3, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
+    budget_total_row = budget_last_data_row + 1
+    style_cell(ws, budget_total_row, 1, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, budget_total_row, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
+    style_cell(ws, budget_total_row, 3, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
                fmt="0.00").value = (
-        f"=SUM(C{first_data_row}:C{last_data_row})"
+        f"=SUM(C{budget_first_data_row}:C{budget_last_data_row})"
     )
-    style_cell(ws, wp_total_row, 4, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, wp_total_row, 5, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, wp_total_row, 6, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, wp_total_row, 7, "", fill=LIGHT_BLUE_FILL)
-    style_cell(ws, wp_total_row, 8, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
-               fmt="\u20ac#,##0").value = (
-        f"=SUM(H{first_data_row}:H{last_data_row})"
+    style_cell(ws, budget_total_row, 4, "", fill=LIGHT_BLUE_FILL)
+    style_cell(ws, budget_total_row, 5, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
+               fmt="€#,##0").value = (
+        f"=SUM(E{budget_first_data_row}:E{budget_last_data_row})"
     )
 
-    # Excel Table over header + data range (includes derived columns G-H)
-    table_ref = f"A{header_row}:H{last_data_row}"
+    # Excel Table over header + data range (NOT including total row)
+    table_ref = f"A{budget_header_row}:E{budget_last_data_row}"
     table_style = TableStyleInfo(
         name="TableStyleLight1", showFirstColumn=False,
         showLastColumn=False, showRowStripes=False, showColumnStripes=False,
@@ -170,18 +149,57 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     table.tableStyleInfo = table_style
     ws.add_table(table)
 
-    # Conditional formatting: yellow fill if Start > End
-    for row_idx in range(first_data_row, last_data_row + 1):
+    # ── Section 3: WP SCHEDULE table ──
+    sched_section_row = budget_total_row + 2  # gap row after budget total
+    sched_header_row = sched_section_row + 1
+    sched_first_data_row = sched_header_row + 1
+
+    # Section header — merged A:D
+    ws.merge_cells(start_row=sched_section_row, start_column=1,
+                   end_row=sched_section_row, end_column=4)
+    style_cell(ws, sched_section_row, 1, value="WP SCHEDULE",
+               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
+
+    # Column headers
+    sched_headers = ["WP ID", "Start", "End", "Type"]
+    for col, hdr in enumerate(sched_headers, start=1):
+        style_cell(ws, sched_header_row, col, value=hdr,
+                   font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
+
+    # Schedule data rows
+    sched_last_data_row = sched_first_data_row + len(wp_schedule) - 1
+    for row_idx, entry in enumerate(wp_schedule, start=sched_first_data_row):
+        style_cell(ws, row_idx, 1, value=entry["id"], font=BLUE_INPUT, border=False)
+        style_cell(ws, row_idx, 2, value=entry["start"], font=BLUE_INPUT, fmt="0",
+                   border=False)
+        style_cell(ws, row_idx, 3, value=entry["end"], font=BLUE_INPUT, fmt="0",
+                   border=False)
+        style_cell(ws, row_idx, 4, value=entry["type"], font=BLUE_INPUT, border=False)
+
+    # Data validation dropdown on Type column
+    dv_type = DataValidation(
+        type="list",
+        formula1='"flat,front-loaded,bell,back-loaded"',
+        allow_blank=False,
+    )
+    dv_type.error = "Please select a valid distribution type"
+    dv_type.errorTitle = "Invalid Type"
+    type_col = get_column_letter(4)
+    dv_type.sqref = f"{type_col}{sched_first_data_row}:{type_col}{sched_last_data_row}"
+    ws.add_data_validation(dv_type)
+
+    # Conditional formatting: yellow fill if Start > End (per row)
+    for row_idx in range(sched_first_data_row, sched_last_data_row + 1):
         rule = FormulaRule(
-            formula=[f"$D{row_idx}>$E{row_idx}"],
+            formula=[f"$B{row_idx}>$C{row_idx}"],
             fill=CF_YELLOW_FILL,
         )
-        ws.conditional_formatting.add(f"A{row_idx}:H{row_idx}", rule)
+        ws.conditional_formatting.add(f"A{row_idx}:D{row_idx}", rule)
 
-    # ── Section C: Team Roster (below WP table + TOTAL row) ──
-    r = wp_total_row + 2  # blank separator row after TOTAL row
+    # ── Section 4: Team Roster ──
+    r = sched_last_data_row + 2  # gap row after schedule
 
-    # Section header — merged A:C (3 columns: Person, Max FTE, Grade)
+    # Section header — merged A:C
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
     style_cell(ws, r, 1, value="TEAM ROSTER",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
@@ -210,17 +228,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
         r += 1
     roster_last_row = r - 1
 
-    # Data validation dropdown for Grade cells — references grade table directly
-    dv = DataValidation(type="list",
-                        formula1=f"=$A${grade_first_row}:$A${grade_last_row}",
-                        allow_blank=False)
-    dv.error = "Please select a valid grade"
-    dv.errorTitle = "Invalid Grade"
-    grade_col_letter = get_column_letter(3)
-    dv.sqref = f"{grade_col_letter}{roster_first_row}:{grade_col_letter}{roster_last_row}"
-    ws.add_data_validation(dv)
-
-    # ── Section D: Reporting Periods ──
+    # ── Section 5: Reporting Periods ──
     if reporting_periods is None:
         from budget_planner.config import REPORTING_PERIODS
         reporting_periods = REPORTING_PERIODS
@@ -249,6 +257,40 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
         style_cell(ws, r, 3, rp["end"], font=BLUE_INPUT, fmt="0", border=False)
         r += 1
     rp_last_row = r - 1 if reporting_periods else rp_first_row
+
+    # ── Section 6: Rate by Grade Table (moved to bottom) ──
+    grade_section_row = rp_last_row + 2  # gap row after reporting periods
+    ws.merge_cells(start_row=grade_section_row, start_column=1,
+                   end_row=grade_section_row, end_column=2)
+    style_cell(ws, grade_section_row, 1, value="RATE BY GRADE",
+               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
+
+    grade_header_row = grade_section_row + 1
+    style_cell(ws, grade_header_row, 1, "Grade", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    style_cell(ws, grade_header_row, 2, "Rate (EUR/PM)", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+
+    grade_first_row = grade_header_row + 1
+    grade_names = list(grade_rates.keys())
+    for gi, grade_name in enumerate(grade_names):
+        gr = grade_first_row + gi
+        style_cell(ws, gr, 1, grade_name, font=BLUE_INPUT, border=False)
+        style_cell(ws, gr, 2, grade_rates[grade_name], font=BLUE_INPUT,
+                   fmt="€#,##0", border=False)
+    grade_last_row = grade_first_row + len(grade_names) - 1
+
+    # ── Data validation: Grade dropdown for roster (references grade table) ──
+    dv_grade = DataValidation(
+        type="list",
+        formula1=f"=$A${grade_first_row}:$A${grade_last_row}",
+        allow_blank=False,
+    )
+    dv_grade.error = "Please select a valid grade"
+    dv_grade.errorTitle = "Invalid Grade"
+    grade_col_letter = get_column_letter(3)
+    dv_grade.sqref = f"{grade_col_letter}{roster_first_row}:{grade_col_letter}{roster_last_row}"
+    ws.add_data_validation(dv_grade)
 
     # ── Named Ranges ──
     start_row = param_rows["Project Start"]
@@ -284,9 +326,26 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
     )
     wb.defined_names.add(dn_roster_grades)
 
+    # Schedule table column named ranges
+    dn_sched_ids = DefinedName(
+        "sched_wp_ids",
+        attr_text=f"{SHEET_CONFIG}!$A${sched_first_data_row}:$A${sched_last_data_row}",
+    )
+    wb.defined_names.add(dn_sched_ids)
+
+    dn_sched_starts = DefinedName(
+        "sched_starts",
+        attr_text=f"{SHEET_CONFIG}!$B${sched_first_data_row}:$B${sched_last_data_row}",
+    )
+    wb.defined_names.add(dn_sched_starts)
+
+    dn_sched_ends = DefinedName(
+        "sched_ends",
+        attr_text=f"{SHEET_CONFIG}!$C${sched_first_data_row}:$C${sched_last_data_row}",
+    )
+    wb.defined_names.add(dn_sched_ends)
+
     # ── Set FTE Rate formula (weighted average of grade rates by FTE) ──
-    # SUMPRODUCT with equality tests per grade — Excel evaluates correctly
-    # on file open without CSE or range lookups.
     grades_ref = f"$C${roster_first_row}:$C${roster_last_row}"
     ftes_ref = f"$B${roster_first_row}:$B${roster_last_row}"
     terms = "+".join(
@@ -297,17 +356,20 @@ def build_config_sheet(ws, wb, project_params, work_packages, team=None,
 
     # ── Sheet Appearance ──
     ws.sheet_properties.tabColor = "4472C4"
-    ws.freeze_panes = f"A{section_row}"
+    ws.freeze_panes = f"A{budget_section_row}"
     auto_fit_columns(ws, max_width=25)
 
     return {
         "param_rows": param_rows,
         "grade_first_row": grade_first_row,
         "grade_last_row": grade_last_row,
-        "wp_header_row": header_row,
-        "wp_first_row": first_data_row,
-        "wp_last_row": last_data_row,
-        "wp_total_row": wp_total_row,
+        "wp_header_row": budget_header_row,
+        "wp_first_row": budget_first_data_row,
+        "wp_last_row": budget_last_data_row,
+        "wp_total_row": budget_total_row,
+        "sched_header_row": sched_header_row,
+        "sched_first_row": sched_first_data_row,
+        "sched_last_row": sched_last_data_row,
         "roster_header_row": roster_header_row,
         "roster_first_row": roster_first_row,
         "roster_last_row": roster_last_row,

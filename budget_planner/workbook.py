@@ -146,7 +146,7 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     # Capacity sheet (uses config_layout for roster person_rows)
     capacity_ws = wb.create_sheet(SHEET_CAPACITY)
     capacity_layout = build_capacity_sheet(
-        capacity_ws, wb, config_layout,
+        capacity_ws, config_layout,
         project_params=project_params, work_packages=work_packages,
         wp_schedule=wp_schedule,
         team=team, external_commitments=external_commitments,

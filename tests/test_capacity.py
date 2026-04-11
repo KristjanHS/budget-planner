@@ -49,7 +49,7 @@ def capacity_layout(tmp_path_factory):
     plan_layout = build_plan_sheet(plan_ws, wb, config_layout=config_layout)
     cap_ws = wb.create_sheet("Capacity")
     layout = build_capacity_sheet(
-        cap_ws, wb, config_layout,
+        cap_ws, config_layout,
         assignments=DEMO_CAPACITY_ASSIGNMENTS,
         config_first_wp_row=plan_layout["config_first_wp_row"],
     )

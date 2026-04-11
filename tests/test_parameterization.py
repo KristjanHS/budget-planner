@@ -75,12 +75,6 @@ def test_builders_accept_work_packages():
             f"{func.__name__} missing work_packages parameter"
 
 
-def test_capacity_accepts_preserved():
-    """Capacity builder should accept preserved kwarg."""
-    from budget_planner.capacity import build_capacity_sheet
-    sig = inspect.signature(build_capacity_sheet)
-    assert "preserved" in sig.parameters
-
 
 def test_actuals_accepts_preserved():
     """Actuals builder should accept preserved kwarg."""

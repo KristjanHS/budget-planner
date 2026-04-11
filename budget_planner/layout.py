@@ -64,6 +64,23 @@ def val_columns(project_months: int) -> dict[str, int]:
     }
 
 
+def wp_active_months(wp_id: str, schedule: list[dict]) -> frozenset[int]:
+    """Return frozenset of active month numbers for a WP from its schedule entries."""
+    return frozenset(
+        m
+        for entry in schedule if entry["id"] == wp_id
+        for m in range(entry["start"], entry["end"] + 1)
+    )
+
+
+def wp_month_bounds(wp_id: str, schedule: list[dict]) -> tuple[int, int]:
+    """Return (min_start, max_end) across all schedule entries for a WP."""
+    entries = [e for e in schedule if e["id"] == wp_id]
+    if not entries:
+        return (1, 1)
+    return (min(e["start"] for e in entries), max(e["end"] for e in entries))
+
+
 def _calendar_year_groups(project_start, project_months):
     """Yield (group_start_month_index, span) tuples for calendar-year boundaries.
 

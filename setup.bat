@@ -1,4 +1,9 @@
 @echo off
+git pull
+if errorlevel 1 (
+    echo WARNING: git pull failed. Continuing with local version.
+    pause
+)
 echo === Budget Planner - Setup ===
 echo.
 

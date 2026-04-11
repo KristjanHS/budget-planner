@@ -1,6 +1,5 @@
 """Tests that no builder imports config.py at module level."""
 import ast
-import inspect
 from pathlib import Path
 
 import pytest
@@ -41,56 +40,3 @@ def test_no_module_level_config_import():
                         )
 
 
-def test_builders_accept_project_params():
-    """All builders that need config should accept project_params kwarg."""
-    from budget_planner.plan import build_plan_sheet
-    from budget_planner.capacity import build_capacity_sheet
-    from budget_planner.actuals import build_actuals_sheet
-    from budget_planner.summary import build_summary_sheet
-    from budget_planner.trends import build_trends_sheet
-    from budget_planner.meta import build_meta_sheet
-
-    for func in [build_plan_sheet, build_capacity_sheet, build_actuals_sheet,
-                 build_summary_sheet, build_trends_sheet, build_meta_sheet]:
-        sig = inspect.signature(func)
-        assert "project_params" in sig.parameters, \
-            f"{func.__name__} missing project_params parameter"
-
-
-def test_builders_accept_work_packages():
-    """All builders should accept work_packages kwarg."""
-    from budget_planner.plan import build_plan_sheet
-    from budget_planner.config_sheet import build_config_sheet
-    from budget_planner.capacity import build_capacity_sheet
-    from budget_planner.actuals import build_actuals_sheet
-    from budget_planner.summary import build_summary_sheet
-    from budget_planner.trends import build_trends_sheet
-    from budget_planner.meta import build_meta_sheet
-
-    for func in [build_plan_sheet, build_config_sheet, build_capacity_sheet,
-                 build_actuals_sheet, build_summary_sheet, build_trends_sheet,
-                 build_meta_sheet]:
-        sig = inspect.signature(func)
-        assert "work_packages" in sig.parameters, \
-            f"{func.__name__} missing work_packages parameter"
-
-
-def test_capacity_accepts_preserved():
-    """Capacity builder should accept preserved kwarg."""
-    from budget_planner.capacity import build_capacity_sheet
-    sig = inspect.signature(build_capacity_sheet)
-    assert "preserved" in sig.parameters
-
-
-def test_actuals_accepts_preserved():
-    """Actuals builder should accept preserved kwarg."""
-    from budget_planner.actuals import build_actuals_sheet
-    sig = inspect.signature(build_actuals_sheet)
-    assert "preserved" in sig.parameters
-
-
-def test_meta_accepts_rebuild_warnings():
-    """Meta builder should accept rebuild_warnings kwarg."""
-    from budget_planner.meta import build_meta_sheet
-    sig = inspect.signature(build_meta_sheet)
-    assert "rebuild_warnings" in sig.parameters

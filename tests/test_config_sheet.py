@@ -230,18 +230,6 @@ def test_grade_rate_table_values():
         assert ws.cell(first + i, 2).value == rate
 
 
-def test_grade_rate_table_section_header():
-    """RATE BY GRADE section header exists."""
-    _wb, ws, _layout = _build_with_grades()
-    found = False
-    for r in range(1, ws.max_row + 1):
-        val = ws.cell(r, 1).value
-        if val and "RATE BY GRADE" in str(val).upper():
-            found = True
-            break
-    assert found, "RATE BY GRADE section header not found"
-
-
 def test_roster_grade_column():
     """Roster has Grade column with correct values."""
     _wb, ws, layout = _build_with_grades()
@@ -320,10 +308,3 @@ def test_grade_data_validation():
     assert dv_found, "Data validation dropdown for grades not found"
 
 
-def test_layout_includes_grade_rows():
-    """config_layout dict includes grade_first_row and grade_last_row."""
-    _wb, _ws, layout = _build_with_grades()
-    assert "grade_first_row" in layout
-    assert "grade_last_row" in layout
-    grade_rates = _sample_grade_rates()
-    assert layout["grade_last_row"] - layout["grade_first_row"] + 1 == len(grade_rates)

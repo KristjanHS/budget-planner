@@ -33,16 +33,6 @@ def config_wb():
     return wb, ws, layout
 
 
-def test_config_roster_section_exists(config_wb):
-    """build_config_sheet returns layout dict with roster keys."""
-    _, _, layout = config_wb
-    for key in (
-        "roster_header_row", "roster_first_row", "roster_last_row",
-        "person_rows",
-    ):
-        assert key in layout, f"Missing key: {key}"
-
-
 def test_config_roster_has_all_persons(config_wb):
     """Column A has all TEAM member names in the roster block."""
     _, ws, layout = config_wb

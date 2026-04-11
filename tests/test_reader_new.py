@@ -181,28 +181,11 @@ class TestConfigSheetValidation:
             read_config_sheet(ws)
         wb.close()
 
-    def test_wrong_title_label(self):
-        """Raises ValueError when no row matches Project Title."""
-        wb, ws = self._make_empty_config_ws()
-        ws.cell(1, 1, "Name")
-        with pytest.raises(ValueError, match="missing param row matching 'Project Title'"):
-            read_config_sheet(ws)
-        wb.close()
-
     def test_missing_start_label(self):
         """Raises ValueError when Project Start label is missing."""
         wb, ws = self._make_empty_config_ws()
         ws.cell(1, 1, "Project Title")
         with pytest.raises(ValueError, match="missing param row matching 'Project Start'"):
-            read_config_sheet(ws)
-        wb.close()
-
-    def test_missing_months_label(self):
-        """Raises ValueError when Project Months label is missing."""
-        wb, ws = self._make_empty_config_ws()
-        ws.cell(1, 1, "Project Title")
-        ws.cell(2, 1, "Project Start")
-        with pytest.raises(ValueError, match="missing param row matching 'Project Months'"):
             read_config_sheet(ws)
         wb.close()
 

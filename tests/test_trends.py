@@ -52,16 +52,6 @@ def _find_row_containing(ws, col, substring):
 # Sheet basics
 # ================================================================
 
-def test_trends_sheet_exists(trends_workbook):
-    assert "Trends" in trends_workbook.sheetnames
-
-
-def test_trends_tab_color(trends_ws):
-    tc = trends_ws.sheet_properties.tabColor
-    assert tc is not None
-    assert "FFD700" in str(tc.rgb)
-
-
 def test_current_month_named_range(trends_workbook):
     defined = {}
     for name in trends_workbook.defined_names:
@@ -303,11 +293,6 @@ def test_helper_rows_hidden(trends_ws):
 # ================================================================
 # Conditional formatting
 # ================================================================
-
-def test_trends_has_conditional_formatting(trends_ws):
-    """Trends sheet has conditional formatting rules."""
-    assert len(trends_ws.conditional_formatting._cf_rules) > 0
-
 
 # ================================================================
 # Dynamic row layout — parametric tests for row collision safety

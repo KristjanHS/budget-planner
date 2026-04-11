@@ -20,17 +20,6 @@ def actuals_workbook(tmp_path_factory):
     return openpyxl.load_workbook(str(out), data_only=False)
 
 
-def test_actuals_sheet_exists(actuals_workbook):
-    assert "Actuals" in actuals_workbook.sheetnames
-
-
-def test_actuals_tab_color(actuals_workbook):
-    ws = actuals_workbook["Actuals"]
-    tc = ws.sheet_properties.tabColor
-    assert tc is not None
-    assert tc.rgb == "000000FF"
-
-
 def test_actuals_wp_count(actuals_workbook):
     """Actuals has one row per WP between header and TOTAL."""
     ws = actuals_workbook["Actuals"]

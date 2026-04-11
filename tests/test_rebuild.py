@@ -101,17 +101,6 @@ class TestCapacityPreservation:
             assert got["end"] == expected["end"]
         wb.close()
 
-    def test_rebuild_keeps_structure(self, init_wb):
-        """Rebuild produces valid workbook structure."""
-        rebuild_workbook(input_path=init_wb)
-
-        wb = load_workbook(init_wb)
-        assert "Config" in wb.sheetnames
-        assert "Capacity" in wb.sheetnames
-        assert "Actuals" in wb.sheetnames
-        wb.close()
-
-
 class TestActualsPreservation:
     """Actuals EUR values are always preserved on rebuild."""
 

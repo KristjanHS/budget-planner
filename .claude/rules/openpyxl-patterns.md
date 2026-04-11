@@ -1,5 +1,14 @@
 ---
-paths: "**/*.py"
+# Add new sheet builders here when created
+paths:
+  - "budget_planner/plan.py"
+  - "budget_planner/summary.py"
+  - "budget_planner/capacity.py"
+  - "budget_planner/actuals.py"
+  - "budget_planner/trends.py"
+  - "budget_planner/config_sheet.py"
+  - "budget_planner/styles.py"
+  - "budget_planner/workbook.py"
 ---
 # openpyxl Patterns
 

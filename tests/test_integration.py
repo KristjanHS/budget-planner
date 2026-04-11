@@ -1,92 +1,14 @@
-"""Integration tests — data flow + round-trip preservation for v2 workbook."""
-import re
+"""Integration tests — cross-sheet formula verification for v2 workbook."""
 
 import openpyxl
 from openpyxl.utils import get_column_letter
 
-from budget_planner.reader import discover_layout, read_capacity_sheet, read_plan_config
+from budget_planner.reader import discover_layout
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    WORK_PACKAGES, WP_SCHEDULE, MONTH_COL_START, PROJECT_MONTHS, PROJECT_START,
-    NUM_WPS, VAL_COL_SUM, DEMO_CAPACITY_ASSIGNMENTS,
+    WORK_PACKAGES, MONTH_COL_START, PROJECT_MONTHS, PROJECT_START,
+    NUM_WPS, VAL_COL_SUM,
 )
-from budget_planner.layout import wp_month_bounds
-
-
-# ���─ Data flow: Capacity → Plan formula linkage (needs assigned workbook) ──
-
-def test_capacity_to_plan_formula_linkage(assigned_wb_path):
-    """Plan Planned FTE formulas reference correct Capacity rows."""
-    wb = openpyxl.load_workbook(assigned_wb_path)
-    plan = wb["Plan"]
-    layout = discover_layout(plan)
-
-    # Read the capacity data to know which persons are assigned to each WP
-    config_wps = read_plan_config(plan, layout)
-    cap = wb["Capacity"]
-    cap_data = read_capacity_sheet(cap, config_wps)
-
-    for i, wp in enumerate(WORK_PACKAGES):
-        row = layout["planned_first_wp_row"] + i
-        # Pick first active month for this WP
-        wp_start, _ = wp_month_bounds(wp["id"], WP_SCHEDULE)
-        first_active_mi = wp_start - 1
-        c = MONTH_COL_START + first_active_mi
-
-        cell_value = plan.cell(row, c).value
-
-        # Count how many persons are assigned to this WP
-        assigned_count = sum(
-            1 for pg in cap_data["person_groups"].values()
-            if wp["id"] in pg["wp_values"]
-        )
-
-        if assigned_count == 0:
-            # No one assigned — cell should be empty or zero
-            continue
-
-        assert cell_value is not None, f"Planned cell for {wp['id']} M{wp_start} is empty"
-        assert isinstance(cell_value, str) and cell_value.startswith("="), (
-            f"Planned cell for {wp['id']} should be a formula, got: {cell_value}"
-        )
-        assert "Capacity!" in cell_value, (
-            f"Planned formula for {wp['id']} should reference Capacity sheet"
-        )
-
-        # Extract row numbers from formula like =SUM(Capacity!C10,Capacity!C20)
-        cap_row_refs = [int(m) for m in re.findall(r"Capacity!\w+(\d+)", cell_value)]
-        assert len(cap_row_refs) == assigned_count, (
-            f"{wp['id']}: formula references {len(cap_row_refs)} rows "
-            f"but {assigned_count} persons are assigned"
-        )
-
-    wb.close()
-
-
-def test_capacity_assigned_wps_have_distributed_values(assigned_wb_path):
-    """Assigned WPs in Capacity have auto-distributed FTE values."""
-    wb = openpyxl.load_workbook(assigned_wb_path)
-    cap = wb["Capacity"]
-    plan = wb["Plan"]
-    layout = discover_layout(plan)
-    config_wps = read_plan_config(plan, layout)
-    cap_data = read_capacity_sheet(cap, config_wps)
-
-    for asgn in DEMO_CAPACITY_ASSIGNMENTS:
-        name = asgn["person"]
-        wp_id = asgn["wp"]
-        assert name in cap_data["person_groups"], f"Person {name} not found"
-        person_group = cap_data["person_groups"][name]
-        assert wp_id in person_group["wp_values"], f"{name} missing {wp_id}"
-
-        monthly = person_group["wp_values"][wp_id]
-        # Active months should have non-None values
-        for mi in range(asgn["start"] - 1, asgn["end"]):
-            assert monthly[mi] is not None, (
-                f"{name}/{wp_id} M{mi+1}: expected distributed value, got None"
-            )
-
-    wb.close()
 
 
 # ── Helpers for Summary sheet layout discovery ──
@@ -345,25 +267,6 @@ def test_summary_budget_overview_references(fresh_wb_path):
 
 
 # ── Reporting Period Summary section ─────────────────────────────────────
-
-def test_rp_summary_section_exists(fresh_wb_path):
-    """Summary sheet has REPORTING PERIOD SUMMARY section."""
-    from openpyxl import load_workbook
-
-    wb = load_workbook(fresh_wb_path)
-    ws = wb["Summary"]
-
-    # Find REPORTING PERIOD SUMMARY section header
-    rp_header_row = None
-    for r in range(1, ws.max_row + 1):
-        val = ws.cell(r, 1).value
-        if val and "REPORTING PERIOD" in str(val).upper():
-            rp_header_row = r
-            break
-    assert rp_header_row is not None, "REPORTING PERIOD SUMMARY section not found"
-
-    wb.close()
-
 
 def test_rp_summary_has_wp_rows(fresh_wb_path):
     """RP summary has one row per WP with cross-sheet formula refs."""

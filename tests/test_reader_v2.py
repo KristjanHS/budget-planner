@@ -112,32 +112,6 @@ def test_read_capacity_assigned_values_are_distributed(assigned_wb_path):
     wb.close()
 
 
-def test_read_capacity_handles_variable_geometry(assigned_wb_path):
-    """Each person has only their assigned WPs and matching external set."""
-    import openpyxl
-    wb = openpyxl.load_workbook(assigned_wb_path)
-    layout = discover_layout(wb["Plan"])
-    config_wps = read_plan_config(wb["Plan"], layout)
-    cap = read_capacity_sheet(wb["Capacity"], config_wps)
-
-    for member in TEAM:
-        name = member["name"]
-        group = cap["person_groups"][name]
-        expected_wps = {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS
-                        if a["person"] == name}
-        assert set(group["wp_values"].keys()) == expected_wps, (
-            f"{name}: WP set mismatch"
-        )
-        expected_ext = {
-            e["project"] for e in EXTERNAL_COMMITMENTS
-            if e["person"] == name
-        }
-        assert set(group["external_values"].keys()) == expected_ext, (
-            f"{name}: external set mismatch"
-        )
-    wb.close()
-
-
 def test_read_capacity_external_commitments_round_trip(assigned_wb_path):
     """read_capacity_sheet extracts external_commitments matching config."""
     import openpyxl

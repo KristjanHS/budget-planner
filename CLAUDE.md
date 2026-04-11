@@ -64,4 +64,4 @@ pytest tests/ -v
 | Rule file | Key content |
 |-----------|-------------|
 | `.claude/rules/dev-workflow.md` | Build/test, linting, worktree protocol, MCP tools |
-| `.claude/rules/openpyxl-patterns.md` | Hard-won openpyxl/LibreOffice gotchas (CF, charts, formulas) |
+| `.claude/rules/openpyxl-patterns.md` | openpyxl/LO gotchas (builders, styles, workbook only) |

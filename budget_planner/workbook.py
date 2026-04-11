@@ -495,13 +495,17 @@ def seed_demo_data(workbook_path: str) -> str:
             break
 
     if first_wp_row is not None:
-        from budget_planner.config import DEFAULT_RATE
+        # Read per-WP rates from Config col D
+        from budget_planner.reader import _find_header_row
+        config_ws = wb[SHEET_CONFIG]
+        wp_budget_row = _find_header_row(config_ws, "WP BUDGET") + 2
         for i, wp in enumerate(WORK_PACKAGES):
             row = first_wp_row + i
+            wp_rate = config_ws.cell(wp_budget_row + i, 4).value or 6500
             multiplier = DEMO_ACTUALS_MULTIPLIERS[i % len(DEMO_ACTUALS_MULTIPLIERS)]
             wp_start, wp_end = wp_month_bounds(wp["id"], WP_SCHEDULE)
             active_months = wp_end - wp_start + 1
-            monthly_planned = (wp["fte"] / active_months) * DEFAULT_RATE
+            monthly_planned = (wp["fte"] / active_months) * wp_rate
             for m_idx in range(wp_start - 1, min(wp_end, DEMO_CURRENT_MONTH)):
                 col = MONTH_COL_START + m_idx
                 eur_value = round(monthly_planned * multiplier)

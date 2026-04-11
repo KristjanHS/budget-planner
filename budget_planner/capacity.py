@@ -90,7 +90,7 @@ def build_capacity_sheet(ws, wb, team_layout, *,
         wb: The parent Workbook.
         team_layout: dict from build_config_sheet with person_rows, etc.
         project_params: dict with keys title, start, months, rate.
-        work_packages: list of WP dicts (now includes 'type').
+        work_packages: list of WP dicts with keys 'id', 'name', 'fte', 'rate'.
         team: list of team member dicts.
         external_commitments: list of external commitment dicts.
         assignments: list of person-WP assignment dicts with keys

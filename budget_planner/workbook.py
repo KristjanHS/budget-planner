@@ -52,7 +52,8 @@ def restore_workbook(filepath: str) -> str:
     return filepath
 
 
-def _validate_config(project_params, work_packages, team, external_commitments):
+def _validate_config(project_params, work_packages, team, external_commitments,
+                     *, wp_schedule=None):
     """Validate extracted config data.
 
     Returns:
@@ -88,18 +89,34 @@ def _validate_config(project_params, work_packages, team, external_commitments):
                 f"External commitment person '{ext['person']}' not in team roster"
             )
 
-    # Warnings
+    # WP-level warnings
     for wp in work_packages:
-        if wp["start"] > wp["end"]:
-            warnings.append(f"WP {wp['id']}: start ({wp['start']}) > end ({wp['end']})")
         if wp["fte"] <= 0:
             warnings.append(f"WP {wp['id']}: FTE budget is {wp['fte']} (expected > 0)")
+
+    # Schedule validation
+    if wp_schedule is not None:
+        sched_wp_ids = {entry["id"] for entry in wp_schedule}
+        for entry in wp_schedule:
+            if entry["id"] not in seen_ids:
+                errors.append(
+                    f"Schedule entry for '{entry['id']}' has no matching WP in budget table"
+                )
+            if entry["start"] > entry["end"]:
+                warnings.append(
+                    f"Schedule {entry['id']}: start ({entry['start']}) > end ({entry['end']})"
+                )
+        for wp in work_packages:
+            if wp["id"] not in sched_wp_ids:
+                warnings.append(
+                    f"WP {wp['id']} has no schedule entry"
+                )
 
     return errors, warnings
 
 
 def _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
-                      *, assignments=None, preserved_actuals=None,
+                      *, wp_schedule=None, assignments=None, preserved_actuals=None,
                       rebuild_warnings=None, reporting_periods=None,
                       grade_rates=None):
     """Build all sheets into the workbook.
@@ -110,9 +127,10 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     """
     meta_ws = wb[SHEET_META]
 
-    # Config sheet (holds project params + WP table + team roster)
+    # Config sheet (holds project params + WP budget/schedule + team roster)
     config_ws = wb.create_sheet(SHEET_CONFIG)
     config_layout = build_config_sheet(config_ws, wb, project_params, work_packages,
+                                       wp_schedule=wp_schedule,
                                        team=team,
                                        reporting_periods=reporting_periods,
                                        grade_rates=grade_rates)
@@ -252,6 +270,7 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
         "eu_ceiling_pm": config.EU_ANNUAL_CEILING_PM,
     }
     work_packages = config.WORK_PACKAGES
+    wp_schedule = config.WP_SCHEDULE
     team = config.TEAM
     external_commitments = config.EXTERNAL_COMMITMENTS
     reporting_periods = config.REPORTING_PERIODS
@@ -264,6 +283,7 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
     grade_rates = config.GRADE_RATES
 
     _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
+                      wp_schedule=wp_schedule,
                       assignments=assignments,
                       reporting_periods=reporting_periods,
                       grade_rates=grade_rates)
@@ -325,7 +345,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             "Workbook has no Config sheet. "
             "Run 'python -m budget_planner init' to create a fresh workbook first."
         )
-    project_params, work_packages = read_config_sheet(existing_wb[SHEET_CONFIG])
+    project_params, work_packages, wp_schedule = read_config_sheet(existing_wb[SHEET_CONFIG])
 
     # Team roster from Config sheet
     team = read_team_from_config(existing_wb[SHEET_CONFIG])
@@ -370,7 +390,8 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     # ── Validate ──
     errors, warnings = _validate_config(
-        project_params, work_packages, team, external_commitments
+        project_params, work_packages, team, external_commitments,
+        wp_schedule=wp_schedule,
     )
 
     # Check for orphaned data
@@ -415,6 +436,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     _build_all_sheets(
         wb, project_params, work_packages, team, external_commitments,
+        wp_schedule=wp_schedule,
         assignments=assignments,
         preserved_actuals=preserved_actuals,
         rebuild_warnings=warnings if warnings else None,
@@ -449,9 +471,9 @@ def seed_demo_data(workbook_path: str) -> str:
     """
     from openpyxl import load_workbook as _load_wb
     from budget_planner.config import (
-        DEMO_CURRENT_MONTH, DEMO_ACTUALS_MULTIPLIERS, WORK_PACKAGES,
+        DEMO_CURRENT_MONTH, DEMO_ACTUALS_MULTIPLIERS, WORK_PACKAGES, WP_SCHEDULE,
     )
-    from budget_planner.layout import MONTH_COL_START
+    from budget_planner.layout import MONTH_COL_START, wp_month_bounds
 
     wb = _load_wb(workbook_path)
 
@@ -470,9 +492,10 @@ def seed_demo_data(workbook_path: str) -> str:
         for i, wp in enumerate(WORK_PACKAGES):
             row = first_wp_row + i
             multiplier = DEMO_ACTUALS_MULTIPLIERS[i % len(DEMO_ACTUALS_MULTIPLIERS)]
-            active_months = wp["end"] - wp["start"] + 1
+            wp_start, wp_end = wp_month_bounds(wp["id"], WP_SCHEDULE)
+            active_months = wp_end - wp_start + 1
             monthly_planned = (wp["fte"] / active_months) * DEFAULT_RATE
-            for m_idx in range(wp["start"] - 1, min(wp["end"], DEMO_CURRENT_MONTH)):
+            for m_idx in range(wp_start - 1, min(wp_end, DEMO_CURRENT_MONTH)):
                 col = MONTH_COL_START + m_idx
                 eur_value = round(monthly_planned * multiplier)
                 act_ws.cell(row, col).value = eur_value

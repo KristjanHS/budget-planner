@@ -47,15 +47,15 @@ def _find_header_row(ws, pattern, col=1, max_row=None, required=True):
     return None
 
 
-def read_config_sheet(ws) -> tuple[dict, list[dict]]:
-    """Read Config sheet -> (project_params, work_packages).
+def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
+    """Read Config sheet -> (project_params, work_packages, wp_schedule).
 
     Returns:
-        Tuple of (project_params, work_packages) where:
+        Tuple of (project_params, work_packages, wp_schedule) where:
         - project_params: dict with keys 'title', 'start', 'months', 'rate',
           'eu_ceiling_pm'
-        - work_packages: list of dicts with keys 'id', 'name', 'fte',
-          'start', 'end'
+        - work_packages: list of dicts with keys 'id', 'name', 'fte', 'rate'
+        - wp_schedule: list of dicts with keys 'id', 'start', 'end', 'type'
     """
     # Scan column A for known param labels (position-independent)
     _param_map = {
@@ -80,25 +80,43 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
         if key not in project_params:
             raise ValueError(f"Config sheet missing param row matching '{prefix}'")
 
-    # Work packages — find dynamically so adding param rows doesn't break
-    wp_section = _find_header_row(ws, "WORK PACKAGES")
+    # WP Budget table — find "WP BUDGET" section header
+    wp_section = _find_header_row(ws, "WP BUDGET")
     work_packages: list[dict] = []
     r = wp_section + 2  # skip section header + column headers
     while r <= ws.max_row:
         wp_id = ws.cell(r, 1).value
+        col_b = ws.cell(r, 2).value
         if wp_id is None or str(wp_id).strip() == "":
+            break
+        # Stop at TOTAL row
+        if col_b and str(col_b).upper() == "TOTAL":
             break
         work_packages.append({
             "id": str(wp_id),
-            "name": str(ws.cell(r, 2).value or ""),
+            "name": str(col_b or ""),
             "fte": float(ws.cell(r, 3).value or 0),
-            "start": int(ws.cell(r, 4).value or 1),
-            "end": int(ws.cell(r, 5).value or 1),
-            "type": str(ws.cell(r, 6).value or "flat"),
+            "rate": float(ws.cell(r, 4).value or 6500),
         })
         r += 1
 
-    return project_params, work_packages
+    # WP Schedule table — find "WP SCHEDULE" section header
+    sched_section = _find_header_row(ws, "WP SCHEDULE")
+    wp_schedule: list[dict] = []
+    r = sched_section + 2  # skip section header + column headers
+    while r <= ws.max_row:
+        sched_id = ws.cell(r, 1).value
+        if sched_id is None or str(sched_id).strip() == "":
+            break
+        wp_schedule.append({
+            "id": str(sched_id),
+            "start": int(ws.cell(r, 2).value or 1),
+            "end": int(ws.cell(r, 3).value or 1),
+            "type": str(ws.cell(r, 4).value or "flat"),
+        })
+        r += 1
+
+    return project_params, work_packages, wp_schedule
 
 
 def read_plan_config(ws, layout) -> list[dict]:
@@ -118,16 +136,12 @@ def read_plan_config(ws, layout) -> list[dict]:
         wp_id = config_ws.cell(row, 1).value
         wp_name = config_ws.cell(row, 2).value
         fte = config_ws.cell(row, 3).value
-        start = config_ws.cell(row, 4).value
-        end = config_ws.cell(row, 5).value
         if wp_id is None:
             continue
         wps.append({
             "id": str(wp_id),
             "name": str(wp_name or ""),
             "fte": float(fte or 0),
-            "start": int(start or 1),
-            "end": int(end or 1),
         })
     if not wps:
         raise ValueError(
@@ -557,7 +571,7 @@ def discover_layout(ws) -> dict:
         # with literal WP IDs instead of =Config!A{n} formulas)
         config_ws = ws.parent[SHEET_CONFIG] if SHEET_CONFIG in ws.parent.sheetnames else None
         if config_ws:
-            wp_section = _find_header_row(config_ws, "WORK PACKAGES", required=False)
+            wp_section = _find_header_row(config_ws, "WP BUDGET", required=False)
             cfg_wp_first = (wp_section + 2) if wp_section else 8
         else:
             cfg_wp_first = 8

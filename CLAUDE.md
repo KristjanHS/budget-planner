@@ -20,6 +20,7 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 | Cloud/container env, LO missing | `docs/cloud-env-setup.md` | Pre-flight checks, failure modes |
 | Config column layout | `.claude/rules/dev-workflow.md` | Grep `Config!{letter}` in ALL builders + tests when columns shift |
 | Workbook inspection, MCP tools | `.claude/rules/dev-workflow.md` § MCP Tools | `openpyxl-read` for formula/style spot-checks, `mcp-excel` for numeric sanity checks |
+| Add WP, add team member, add actuals, compare scenarios | `docs/common-tasks.md` | Step-by-step SOPs for common data tasks |
 | "record this", "remember this", organizing docs | `~/.claude/references/recording-principles.md` | L1/L2/L3 criteria, what belongs where |
 
 ## Key Commands
@@ -64,4 +65,3 @@ pytest tests/ -v
 |-----------|-------------|
 | `.claude/rules/dev-workflow.md` | Build/test, linting, worktree protocol, MCP tools |
 | `.claude/rules/openpyxl-patterns.md` | Hard-won openpyxl/LibreOffice gotchas (CF, charts, formulas) |
-| `.claude/rules/common-tasks.md` | Step-by-step for "add WP", "add team member", etc. |

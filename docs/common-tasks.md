@@ -1,6 +1,3 @@
----
-paths: "**/*.py"
----
 # Common Tasks
 
 ## "Replace example WPs with real data"

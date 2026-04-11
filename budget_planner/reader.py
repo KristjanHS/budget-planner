@@ -330,75 +330,66 @@ def read_capacity_assignments(ws) -> list[dict]:
     return assignments
 
 
-def read_capacity_sheet(ws, config_wps, project_months=None,
-                        month_col_start=MONTH_COL_START) -> dict:
-    """Read Capacity sheet person groups.
-
-    Args:
-        ws: Capacity worksheet
-        config_wps: list of WP dicts from read_plan_config (used to classify rows)
-        project_months: Number of project months. If None, falls back to
-            config.PROJECT_MONTHS for backward compatibility.
-        month_col_start: First month column (default 3 = col C).
+def _read_externals_from_capacity(ws) -> list[dict]:
+    """Read the EXTERNAL COMMITMENTS config block from the Capacity sheet.
 
     Returns:
-        {
-            "external_commitments": [{"person": ..., "project": ..., "fte": ...,
-                                      "start": ..., "end": ...}],
-            "person_groups": {
-                "Alice": {
-                    "wp_values": {"WP1": [60 monthly values], ...},
-                    "external_values": {"ProjectX": [60 values], ...},
-                },
-                ...
-            }
-        }
+        List of dicts with keys: person, project, fte, start, end, is_eu.
+        Empty list if the section is not found.
     """
-    if project_months is None:
-        from budget_planner.config import PROJECT_MONTHS
-        project_months = PROJECT_MONTHS
-
-    # Build WP ID lookup from config_wps
-    wp_ids = {wp["id"] for wp in config_wps}
-
-    # ── Read person-WP assignments config block ──
-    assignments = read_capacity_assignments(ws)
-
-    # ── Read external commitments config block ──
-    external_commitments = []
     ext_config_header = _find_header_row(
         ws, "EXTERNAL COMMITMENTS", required=False
     )
+    if ext_config_header is None:
+        return []
 
-    if ext_config_header is not None:
-        # Skip header row (Person, Project, Total FTE, Start Month, End Month)
-        r = ext_config_header + 2  # skip section header + column headers
-        while r <= ws.max_row:
-            person = ws.cell(r, COL_EXT_PERSON).value
-            project = ws.cell(r, COL_EXT_PROJECT).value
-            if person is None or str(person).strip() == "":
-                break
-            fte = ws.cell(r, COL_EXT_FTE).value
-            start = ws.cell(r, COL_EXT_START).value
-            end = ws.cell(r, COL_EXT_END).value
-            is_eu_val = ws.cell(r, COL_EXT_EU).value
-            external_commitments.append({
-                "person": str(person),
-                "project": str(project or ""),
-                "fte": float(fte or 0),
-                "start": int(start or 1),
-                "end": int(end or 1),
-                "is_eu": str(is_eu_val).strip().upper() in ("YES", "TRUE", "1"),
-            })
-            r += 1
+    external_commitments: list[dict] = []
+    # Skip section header + column headers
+    r = ext_config_header + 2
+    while r <= ws.max_row:
+        person = ws.cell(r, COL_EXT_PERSON).value
+        project = ws.cell(r, COL_EXT_PROJECT).value
+        if person is None or str(person).strip() == "":
+            break
+        fte = ws.cell(r, COL_EXT_FTE).value
+        start = ws.cell(r, COL_EXT_START).value
+        end = ws.cell(r, COL_EXT_END).value
+        is_eu_val = ws.cell(r, COL_EXT_EU).value
+        external_commitments.append({
+            "person": str(person),
+            "project": str(project or ""),
+            "fte": float(fte or 0),
+            "start": int(start or 1),
+            "end": int(end or 1),
+            "is_eu": str(is_eu_val).strip().upper() in ("YES", "TRUE", "1"),
+        })
+        r += 1
 
+    return external_commitments
+
+
+def _read_person_grids(ws, wp_ids: set[str], project_months: int,
+                       month_col_start: int = MONTH_COL_START,
+                       ) -> dict[str, dict]:
+    """Find person header rows and parse per-person WP/external grids.
+
+    Args:
+        ws: Capacity worksheet.
+        wp_ids: Set of known WP IDs (from config_wps).
+        project_months: Number of project months.
+        month_col_start: First month column (default from layout).
+
+    Returns:
+        Dict mapping person name to
+        ``{"wp_values": {wp_id: [monthly]}, "external_values": {proj: [monthly]}}``.
+    """
     # ── Find month header row: "WP ID" in col A ──
     month_header_row = _find_header_row(ws, "WP ID")
 
     # ── Find person header rows ──
     # Person headers have bold font + SECTION_FILL (fgColor "2F5496")
     # and formula like =Config!A{n}
-    person_headers = []
+    person_headers: list[int] = []
     for r in range(month_header_row + 1, ws.max_row + 1):
         cell = ws.cell(r, 1)
         font = cell.font
@@ -426,14 +417,9 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
                         break
         person_headers.sort()
 
-    # ── Parse each person group ──
-    person_groups: dict[str, dict] = {}
-
-    # Resolve person names from =Config!A{n} formulas via the Config sheet.
+    # ── Resolve helpers (closures over ws.parent sheets) ──
     wb = ws.parent
     config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
-
-    # Get Plan sheet for WP ID resolution (Capacity WP rows reference Plan)
     plan_ws = wb[SHEET_PLAN]
 
     def _resolve_person_name(cell_value):
@@ -456,6 +442,9 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
         if resolved is not None and resolved in wp_ids:
             return resolved
         return None
+
+    # ── Parse each person group ──
+    person_groups: dict[str, dict] = {}
 
     for hi, header_row in enumerate(person_headers):
         name = _resolve_person_name(ws.cell(header_row, 1).value)
@@ -501,6 +490,44 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
             "wp_values": wp_values,
             "external_values": external_values,
         }
+
+    return person_groups
+
+
+def read_capacity_sheet(ws, config_wps, project_months=None,
+                        month_col_start=MONTH_COL_START) -> dict:
+    """Read Capacity sheet person groups.
+
+    Args:
+        ws: Capacity worksheet
+        config_wps: list of WP dicts from read_plan_config (used to classify rows)
+        project_months: Number of project months. If None, falls back to
+            config.PROJECT_MONTHS for backward compatibility.
+        month_col_start: First month column (default 3 = col C).
+
+    Returns:
+        {
+            "assignments": [{"person": ..., "wp": ..., ...}],
+            "external_commitments": [{"person": ..., "project": ..., "fte": ...,
+                                      "start": ..., "end": ..., "is_eu": ...}],
+            "person_groups": {
+                "Alice": {
+                    "wp_values": {"WP1": [60 monthly values], ...},
+                    "external_values": {"ProjectX": [60 values], ...},
+                },
+                ...
+            }
+        }
+    """
+    if project_months is None:
+        from budget_planner.config import PROJECT_MONTHS
+        project_months = PROJECT_MONTHS
+
+    wp_ids = {wp["id"] for wp in config_wps}
+    assignments = read_capacity_assignments(ws)
+    external_commitments = _read_externals_from_capacity(ws)
+    person_groups = _read_person_grids(ws, wp_ids, project_months,
+                                       month_col_start)
 
     return {
         "assignments": assignments,

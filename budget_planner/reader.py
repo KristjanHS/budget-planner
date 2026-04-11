@@ -292,6 +292,86 @@ def read_reporting_periods(ws, fallback_months=None):
     return periods
 
 
+def read_assignments_from_config(ws) -> list[dict]:
+    """Read Person-WP Assignments from Config sheet.
+
+    Args:
+        ws: Config worksheet.
+
+    Returns:
+        List of dicts with keys: person, wp, total_fte, start, end.
+        Empty list if the section is not found.
+    """
+    assignments_header = _find_header_row(
+        ws, "PERSON-WP ASSIGNMENTS", required=False
+    )
+    if assignments_header is None:
+        return []
+
+    # Skip section header + column headers
+    r = assignments_header + 2
+    assignments: list[dict] = []
+    while r <= ws.max_row:
+        person = ws.cell(r, COL_ASSIGN_PERSON).value
+        if person is None or str(person).strip() == "":
+            break
+        wp = ws.cell(r, COL_ASSIGN_WP).value
+        total_fte = ws.cell(r, COL_ASSIGN_FTE).value
+        start = ws.cell(r, COL_ASSIGN_START).value
+        end = ws.cell(r, COL_ASSIGN_END).value
+        assignments.append({
+            "person": str(person),
+            "wp": str(wp or ""),
+            "total_fte": float(total_fte or 0),
+            "start": int(start or 1),
+            "end": int(end or 1),
+        })
+        r += 1
+
+    return assignments
+
+
+def read_externals_from_config(ws) -> list[dict]:
+    """Read External Commitments from Config sheet.
+
+    Args:
+        ws: Config worksheet.
+
+    Returns:
+        List of dicts with keys: person, project, fte, start, end, is_eu.
+        Empty list if the section is not found.
+    """
+    ext_config_header = _find_header_row(
+        ws, "EXTERNAL COMMITMENTS", required=False
+    )
+    if ext_config_header is None:
+        return []
+
+    external_commitments: list[dict] = []
+    # Skip section header + column headers
+    r = ext_config_header + 2
+    while r <= ws.max_row:
+        person = ws.cell(r, COL_EXT_PERSON).value
+        project = ws.cell(r, COL_EXT_PROJECT).value
+        if person is None or str(person).strip() == "":
+            break
+        fte = ws.cell(r, COL_EXT_FTE).value
+        start = ws.cell(r, COL_EXT_START).value
+        end = ws.cell(r, COL_EXT_END).value
+        is_eu_val = ws.cell(r, COL_EXT_EU).value
+        external_commitments.append({
+            "person": str(person),
+            "project": str(project or ""),
+            "fte": float(fte or 0),
+            "start": int(start or 1),
+            "end": int(end or 1),
+            "is_eu": str(is_eu_val).strip().upper() in ("YES", "TRUE", "1"),
+        })
+        r += 1
+
+    return external_commitments
+
+
 def read_capacity_assignments(ws) -> list[dict]:
     """Read Person-WP Assignments config block from Capacity sheet.
 
@@ -522,8 +602,21 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
         project_months = PROJECT_MONTHS
 
     wp_ids = {wp["id"] for wp in config_wps}
-    assignments = read_capacity_assignments(ws)
-    external_commitments = _read_externals_from_capacity(ws)
+
+    # Try Config-based readers first (new sections from Phase 1)
+    wb = ws.parent
+    config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
+    assignments: list[dict] = []
+    external_commitments: list[dict] = []
+    if config_ws is not None:
+        assignments = read_assignments_from_config(config_ws)
+        external_commitments = read_externals_from_config(config_ws)
+
+    # Fall back to Capacity-based readers if Config sections not found
+    if not assignments:
+        assignments = read_capacity_assignments(ws)
+    if not external_commitments:
+        external_commitments = _read_externals_from_capacity(ws)
     person_groups = _read_person_grids(ws, wp_ids, project_months,
                                        month_col_start)
 

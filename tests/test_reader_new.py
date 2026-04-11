@@ -8,6 +8,8 @@ from budget_planner.config_sheet import build_config_sheet
 from budget_planner.reader import (
     read_config_sheet, read_actuals_values, read_grade_rates,
     read_team_from_config,
+    read_assignments_from_config, read_externals_from_config,
+    read_capacity_sheet,
 )
 
 
@@ -427,3 +429,153 @@ def test_read_team_defaults_grade_for_legacy_wb():
     assert roster[0]["grade"] == DEFAULT_GRADE
     assert roster[1]["name"] == "Bob"
     assert roster[1]["grade"] == DEFAULT_GRADE
+
+
+# ── read_assignments_from_config / read_externals_from_config ──
+
+
+def _sample_assignments():
+    return [
+        {"person": "Alice", "wp": "WP1", "total_fte": 4.5, "start": 1, "end": 14},
+        {"person": "Bob", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 18},
+    ]
+
+
+def _sample_externals():
+    return [
+        {"person": "Alice", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 11, "is_eu": False},
+        {"person": "Bob", "project": "HorizonEU", "fte": 2.0, "start": 1, "end": 24, "is_eu": True},
+    ]
+
+
+def _sample_team():
+    return [
+        {"name": "Alice", "max_fte": 1.0, "grade": "Senior"},
+        {"name": "Bob",   "max_fte": 1.0, "grade": "Mid"},
+    ]
+
+
+def _sample_grade_rates():
+    return {"Senior": 12500, "Mid": 10000}
+
+
+def _make_config_wb_with_assignments(assignments=None, externals=None):
+    """Create a workbook with a Config sheet that has assignments/externals."""
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    params = {
+        "title": "Test",
+        "start": datetime(2026, 7, 1),
+        "months": 60,
+        "rate": 7500,
+        "eu_ceiling_pm": 12.0,
+    }
+    wps = [
+        {"id": "WP1", "name": "Mgmt", "fte": 12.0},
+        {"id": "WP2", "name": "Dev", "fte": 8.0},
+    ]
+    build_config_sheet(
+        ws, wb, params, wps,
+        team=_sample_team(),
+        grade_rates=_sample_grade_rates(),
+        assignments=assignments or [],
+        external_commitments=externals or [],
+    )
+    return wb
+
+
+def test_read_assignments_from_config_roundtrip():
+    """Build Config sheet with assignments, read back, values match."""
+    assignments = _sample_assignments()
+    wb = _make_config_wb_with_assignments(assignments=assignments)
+    ws = wb["Config"]
+    result = read_assignments_from_config(ws)
+    wb.close()
+
+    assert len(result) == len(assignments)
+    for actual, expected in zip(result, assignments):
+        assert actual["person"] == expected["person"]
+        assert actual["wp"] == expected["wp"]
+        assert actual["total_fte"] == expected["total_fte"]
+        assert actual["start"] == expected["start"]
+        assert actual["end"] == expected["end"]
+
+
+def test_read_assignments_from_config_empty():
+    """Config sheet without assignments section returns empty list."""
+    wb = _make_config_wb_with_assignments()  # no assignments
+    ws = wb["Config"]
+    result = read_assignments_from_config(ws)
+    wb.close()
+
+    assert result == []
+
+
+def test_read_externals_from_config_roundtrip():
+    """Build Config sheet with externals, read back, values match."""
+    externals = _sample_externals()
+    wb = _make_config_wb_with_assignments(externals=externals)
+    ws = wb["Config"]
+    result = read_externals_from_config(ws)
+    wb.close()
+
+    assert len(result) == len(externals)
+    for actual, expected in zip(result, externals):
+        assert actual["person"] == expected["person"]
+        assert actual["project"] == expected["project"]
+        assert actual["fte"] == expected["fte"]
+        assert actual["start"] == expected["start"]
+        assert actual["end"] == expected["end"]
+        assert actual["is_eu"] == expected["is_eu"]
+
+
+def test_read_externals_from_config_empty():
+    """Config sheet without externals section returns empty list."""
+    wb = _make_config_wb_with_assignments()  # no externals
+    ws = wb["Config"]
+    result = read_externals_from_config(ws)
+    wb.close()
+
+    assert result == []
+
+
+def test_read_capacity_prefers_config_assignments():
+    """When Config has assignments, read_capacity_sheet uses them over Capacity."""
+    assignments = _sample_assignments()
+    externals = _sample_externals()
+
+    # Build a workbook with Config sheet that has assignments + externals
+    wb = _make_config_wb_with_assignments(
+        assignments=assignments, externals=externals
+    )
+
+    # Build minimal Plan + Capacity sheets so _read_person_grids doesn't error
+    plan_ws = wb.create_sheet("Plan")
+    plan_ws.cell(1, 1, "Plan stub")
+
+    cap_ws = wb.create_sheet("Capacity")
+    # Write a bare "WP ID" header so _read_person_grids can find it
+    cap_ws.cell(1, 1, "WP ID")
+
+    config_wps = [
+        {"id": "WP1", "name": "Mgmt", "fte": 12.0},
+        {"id": "WP2", "name": "Dev", "fte": 8.0},
+    ]
+    result = read_capacity_sheet(cap_ws, config_wps, project_months=60)
+    wb.close()
+
+    # Assignments should come from Config, not Capacity (which has none)
+    assert len(result["assignments"]) == len(assignments)
+    for actual, expected in zip(result["assignments"], assignments):
+        assert actual["person"] == expected["person"]
+        assert actual["wp"] == expected["wp"]
+        assert actual["total_fte"] == expected["total_fte"]
+
+    # Externals should come from Config too
+    assert len(result["external_commitments"]) == len(externals)
+    for actual, expected in zip(result["external_commitments"], externals):
+        assert actual["person"] == expected["person"]
+        assert actual["project"] == expected["project"]
+        assert actual["is_eu"] == expected["is_eu"]

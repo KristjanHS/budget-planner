@@ -25,7 +25,7 @@ Not applicable — the Actuals sheet tracks EUR costs from the accountant, not F
 Enter EUR values in the Actuals sheet blue input cells (one row per WP, monthly columns).
 
 ## "Verify workbook after generation"
-Use `openpyxl-read` MCP to spot-check: `get_sheet_names` (all 6 sheets present), `get_cell_details` on named ranges (`project_start`, `fte_rate`), `get_cell_range` on a few formula cells to confirm structure. Then run pytest for full validation.
+Run pytest — it covers structural validation (sheets, named ranges, formulas, fonts). Use `openpyxl-read` MCP only for targeted follow-up questions (e.g., `get_cell_details` to check a specific formula or font color, `get_list_of_sheets` to confirm dimensions). Don't MCP-scan the whole workbook as a routine step.
 
 ## "Compare budget scenarios"
 Use `--snapshot` to save current state, make changes, compare. Use `--restore` to revert.

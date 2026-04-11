@@ -43,9 +43,10 @@ This file uses **progressive disclosure**. Keep it focused on what every convers
 | Column offsets, month positioning, styles | `docs/internals.md` § Layout and Styling | `layout.py` is single source; don't duplicate constants |
 | Config/Capacity structure changes | `budget_planner/meta.py` | Critical Rule 6: _META must reflect current sheet structure |
 | C4 architecture, workflows, formula graph | `docs/architecture.md` | Mermaid diagrams, build order, cross-sheet dependencies |
+| Directory map (function → file) | `docs/directory-map.md` | Quick orientation: which file does what |
 | Cloud/container env, LO missing | `docs/cloud-env-setup.md` | Pre-flight checks, failure modes |
 | Config column layout | `.claude/rules/dev-workflow.md` | Grep `Config!{letter}` in ALL builders + tests when columns shift |
-| Workbook inspection, MCP tools | `.claude/rules/dev-workflow.md` § MCP Tools | `openpyxl-read` for spot-checks, `mcp-excel` for prototyping |
+| Workbook inspection, MCP tools | `.claude/rules/dev-workflow.md` § MCP Tools | `openpyxl-read` for formula/style spot-checks, `mcp-excel` for numeric sanity checks |
 
 ## Key Commands
 
@@ -87,6 +88,6 @@ pytest tests/ -v
 
 | Rule file | Key content |
 |-----------|-------------|
-| `.claude/rules/dev-workflow.md` | Build/test, linting, openpyxl patterns, worktree protocol |
-| `.claude/rules/architecture.md` | Directory map (function → file) |
+| `.claude/rules/dev-workflow.md` | Build/test, linting, worktree protocol, MCP tools |
+| `.claude/rules/openpyxl-patterns.md` | Hard-won openpyxl/LibreOffice gotchas (CF, charts, formulas) |
 | `.claude/rules/common-tasks.md` | Step-by-step for "add WP", "add team member", etc. |

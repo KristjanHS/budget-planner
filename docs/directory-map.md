@@ -1,7 +1,4 @@
----
-paths: "**/*.py"
----
-# Architecture
+# Directory Map
 
 ```
 budget_planner/

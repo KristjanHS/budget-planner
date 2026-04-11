@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "openpyxl-read": {
+      "command": "~/tools/openpyxl-mcp-server/.venv/bin/python",
+      "args": ["~/tools/openpyxl-mcp-server/openpyxl_mcp_server.py"]
+    },
+    "mcp-excel": {
+      "command": "uvx",
+      "args": ["mcp-excel-server", "stdio"],
+      "env": {
+        "EXCEL_MCP_FOLDER": "~/projects/budget-planner/output"
+      }
+    }
+  }
+}

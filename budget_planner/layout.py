@@ -27,8 +27,8 @@ MONTH_COL_START = 3
 
 # ── Config sheet column constants ──
 # WP Budget section (Config sheet)
-COL_WP_ID = 1
-COL_WP_NAME = 2
+COL_WP_ID = 1      # used by Phase 1 readers
+COL_WP_NAME = 2    # used by Phase 1 readers
 COL_WP_FTE = 3
 COL_WP_RATE = 4
 COL_WP_CEILING = 5

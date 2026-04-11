@@ -12,6 +12,7 @@ from budget_planner.layout import (
     COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE, SCHED_LAST_COL,
     COL_ROSTER_FTE, COL_ROSTER_GRADE, ROSTER_LAST_COL,
     COL_GRADE_RATE, GRADE_LAST_COL,
+    COL_RP_START, COL_RP_END, RP_LAST_COL,
 )
 from budget_planner.styles import (
     BLACK_FORMULA,
@@ -239,10 +240,10 @@ def _write_reporting_section(ws, start_row, reporting_periods):
     r = start_row
 
     # Section header — merged A:C
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=RP_LAST_COL)
     style_cell(ws, r, 1, value="REPORTING PERIODS",
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
-    for c in range(2, 4):
+    for c in range(2, RP_LAST_COL + 1):
         style_cell(ws, r, c, fill=SECTION_FILL)
     r += 1
 
@@ -256,8 +257,8 @@ def _write_reporting_section(ws, start_row, reporting_periods):
     rp_first_row = r
     for rp in reporting_periods:
         style_cell(ws, r, 1, rp["id"], font=BLUE_INPUT, border=False)
-        style_cell(ws, r, 2, rp["start"], font=BLUE_INPUT, fmt="0", border=False)
-        style_cell(ws, r, 3, rp["end"], font=BLUE_INPUT, fmt="0", border=False)
+        style_cell(ws, r, COL_RP_START, rp["start"], font=BLUE_INPUT, fmt="0", border=False)
+        style_cell(ws, r, COL_RP_END, rp["end"], font=BLUE_INPUT, fmt="0", border=False)
         r += 1
     rp_last_row = r - 1 if reporting_periods else rp_first_row
 

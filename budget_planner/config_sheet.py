@@ -404,15 +404,28 @@ def _write_assignments_section(ws, start_row, assignments):
         r += 1
     assign_last_row = r - 1 if assignments else assign_first_row
 
-    # CF: red fill on Balance column when value < 0
+    # CF on Balance column:
+    #   red if < 0 (over-committed)
+    #   yellow if < 10% of available PM (low remaining capacity)
+    # Red is added first so it wins the overlap when Balance < 0.
     if assignments:
         bal_cl = get_column_letter(COL_ASSIGN_BALANCE)
+        person_cl = get_column_letter(COL_ASSIGN_PERSON)
         for row_idx in range(assign_first_row, assign_last_row + 1):
-            rule = FormulaRule(
+            red_rule = FormulaRule(
                 formula=[f"{bal_cl}{row_idx}<0"],
                 fill=CF_RED_FILL,
             )
-            ws.conditional_formatting.add(f"{bal_cl}{row_idx}", rule)
+            ws.conditional_formatting.add(f"{bal_cl}{row_idx}", red_rule)
+            yellow_rule = FormulaRule(
+                formula=[
+                    f"{bal_cl}{row_idx}<0.1*"
+                    f"VLOOKUP({person_cl}{row_idx},roster_lookup,2,FALSE)"
+                    f"*project_months"
+                ],
+                fill=CF_YELLOW_FILL,
+            )
+            ws.conditional_formatting.add(f"{bal_cl}{row_idx}", yellow_rule)
 
     next_row = r
     layout = {

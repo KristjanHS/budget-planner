@@ -334,6 +334,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         read_config_sheet, read_team_from_config, read_capacity_sheet,
         read_actuals_values, read_reporting_periods, read_grade_rates,
         read_assignments_from_config, read_externals_from_config,
+        _find_header_row,
     )
 
     if not os.path.exists(input_path):
@@ -369,11 +370,24 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         fallback_months=project_params["months"],
     )
 
-    # Assignments + external commitments — prefer Config, fall back to Capacity
-    assignments = read_assignments_from_config(existing_wb[SHEET_CONFIG])
-    external_commitments = read_externals_from_config(existing_wb[SHEET_CONFIG])
+    # Assignments + external commitments — prefer Config, fall back to Capacity.
+    # Fallback is triggered by the *section header* being absent (old workbook),
+    # not by the section being present-but-empty (user-cleared). This preserves
+    # intentional empty state after migration.
+    config_ws = existing_wb[SHEET_CONFIG]
+    has_assign_section = _find_header_row(
+        config_ws, "PERSON-WP ASSIGNMENTS", required=False
+    ) is not None
+    has_ext_section = _find_header_row(
+        config_ws, "EXTERNAL COMMITMENTS", required=False
+    ) is not None
 
-    if not assignments or not external_commitments:
+    assignments = read_assignments_from_config(config_ws) if has_assign_section else []
+    external_commitments = (
+        read_externals_from_config(config_ws) if has_ext_section else []
+    )
+
+    if not has_assign_section or not has_ext_section:
         if SHEET_CAPACITY not in existing_wb.sheetnames:
             existing_wb.close()
             raise ValueError("Workbook has no Capacity sheet.")
@@ -381,9 +395,9 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             existing_wb[SHEET_CAPACITY], work_packages,
             project_months=project_params["months"],
         )
-        if not assignments:
+        if not has_assign_section:
             assignments = capacity_data["assignments"]
-        if not external_commitments:
+        if not has_ext_section:
             external_commitments = capacity_data["external_commitments"]
 
     # Preserve Actuals EUR values (always)

@@ -56,7 +56,7 @@ RP_LAST_COL = 3
 COL_GRADE_RATE = 2
 GRADE_LAST_COL = 2
 
-# Person-WP Assignments (currently on Capacity, moving to Config in Phase 1)
+# Person-WP Assignments (Config sheet — also still referenced by Capacity until Stage 2)
 COL_ASSIGN_PERSON = 1
 COL_ASSIGN_WP = 2
 COL_ASSIGN_FTE = 3
@@ -67,7 +67,7 @@ COL_ASSIGN_SIG_EXTERNAL = 7  # SUMIFS: total external FTE for this person
 COL_ASSIGN_BALANCE = 8       # Available PM - Assigned - External
 ASSIGN_LAST_COL = 8
 
-# External Commitments (currently on Capacity, moving to Config in Phase 1)
+# External Commitments (Config sheet — also still referenced by Capacity until Stage 2)
 COL_EXT_PERSON = 1
 COL_EXT_PROJECT = 2
 COL_EXT_FTE = 3

@@ -17,6 +17,7 @@ from budget_planner.meta import build_meta_sheet
 from budget_planner.layout import (
     SHEET_META, SHEET_CONFIG, SHEET_PLAN, SHEET_CAPACITY,
     SHEET_ACTUALS, SHEET_TRENDS,
+    SECTION_HEADER_LABELS,
 )
 from budget_planner.styles import BLACK_FORMULA, HEADER_FONT, style_cell, apply_year_groups
 
@@ -376,10 +377,10 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     # intentional empty state after migration.
     config_ws = existing_wb[SHEET_CONFIG]
     has_assign_section = _find_header_row(
-        config_ws, "PERSON-WP ASSIGNMENTS", required=False
+        config_ws, SECTION_HEADER_LABELS["assignments"], required=False
     ) is not None
     has_ext_section = _find_header_row(
-        config_ws, "EXTERNAL COMMITMENTS", required=False
+        config_ws, SECTION_HEADER_LABELS["externals"], required=False
     ) is not None
 
     assignments = read_assignments_from_config(config_ws) if has_assign_section else []
@@ -519,9 +520,11 @@ def seed_demo_data(workbook_path: str) -> str:
 
     if first_wp_row is not None:
         # Read per-WP rates from Config col D
-        from budget_planner.reader import _find_header_row
+        from budget_planner.reader import _find_header_row, _data_row_after
         config_ws = wb[SHEET_CONFIG]
-        wp_budget_row = _find_header_row(config_ws, "WP BUDGET") + 2
+        wp_budget_row = _data_row_after(
+            _find_header_row(config_ws, SECTION_HEADER_LABELS["wp_budget"])
+        )
         for i, wp in enumerate(WORK_PACKAGES):
             row = first_wp_row + i
             wp_rate = config_ws.cell(wp_budget_row + i, 4).value or 6500

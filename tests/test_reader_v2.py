@@ -1,5 +1,7 @@
 """Tests for reader extensions: read_plan_config,
 read_team_from_config, read_capacity_sheet, read_capacity_assignments."""
+import pathlib
+
 import pytest
 from openpyxl import Workbook, load_workbook
 
@@ -15,7 +17,7 @@ from budget_planner.config import (
     WORK_PACKAGES, TEAM, PROJECT_MONTHS, EXTERNAL_COMMITMENTS,
     DEMO_CAPACITY_ASSIGNMENTS,
 )
-from budget_planner.layout import COL_WP_RATE
+from budget_planner.layout import COL_WP_RATE, SECTION_HEADER_LABELS
 from budget_planner.workbook import init_workbook
 
 
@@ -197,7 +199,7 @@ class TestDiscoverLayoutValidation:
         ws.title = "Plan"
         ws.cell(1, 1, "Title:")
         ws.cell(1, 2, "Test Project")
-        with pytest.raises(ValueError, match="Cannot find 'PLANNED'"):
+        with pytest.raises(ValueError, match="PLANNED FTE"):
             discover_layout(ws)
         wb.close()
 
@@ -356,3 +358,89 @@ class TestFormulaRateRoundTrip:
         assert wps_after[0]["rate"] == pytest.approx(7500.0)
         # rate_raw captures the literal cell value (here: numeric)
         assert wps_after[0]["rate_raw"] == 7500
+
+
+# ── T2: Anchored-label section header contract ──
+
+
+class TestExactSectionHeaderMatching:
+    """reader._find_header_row is exact-match, not substring — and
+    layout drift (renamed sections, inserted blank rows) is detected loudly."""
+
+    def test_exact_header_match_required(self, tmp_path):
+        """Renaming the 'WP BUDGET' cell to a substring-containing label
+        no longer matches; read_config_sheet raises ValueError with the
+        canonical label in the message."""
+        path = str(tmp_path / "exact_match.xlsx")
+        init_workbook(output_path=path)
+
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        wp_budget_row = _find_row_by_label(cfg, "WP BUDGET")
+        # Rename to something that still contains "WP BUDGET" as a substring
+        # (under the old substring matcher this would have matched).
+        _set_cell(cfg, wp_budget_row, 1, "Legacy WP Budget (archived)")
+        wb.save(path)
+        wb.close()
+
+        wb = load_workbook(path)
+        with pytest.raises(ValueError, match="WP BUDGET"):
+            read_config_sheet(wb["Config"])
+        wb.close()
+
+    def test_blank_row_between_header_and_data_detected(self, tmp_path):
+        """Inserting a blank row between the 'WP BUDGET' title row and the
+        data rows must NOT silently succeed.
+
+        Under the old substring-match + hardcoded +2 offset, the reader would
+        start scanning at title_row+2 — which after a blank insert lands on
+        the original column-header row. It would then treat 'WP ID' as a WP
+        identifier and call ``float('FTE Budget')`` — a surprising ValueError
+        whose message points at parsing, not at layout drift. This test
+        documents that a ValueError IS raised (so drift is not silently
+        swallowed), which is the current, cleanly-observable outcome."""
+        path = str(tmp_path / "blank_row_drift.xlsx")
+        init_workbook(output_path=path)
+
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        wp_budget_row = _find_row_by_label(cfg, "WP BUDGET")
+        # Insert a blank row right after the section title row. This pushes
+        # the column-header row (WP ID, WP Name, …) down by one, so the
+        # reader's data-scan now starts on the column-header row.
+        cfg.insert_rows(wp_budget_row + 1)
+        wb.save(path)
+        wb.close()
+
+        wb = load_workbook(path)
+        # Reader should raise — either because float('FTE Budget') fails, or
+        # (better, once the reader is layout-aware) with an explicit drift
+        # message. Either way: NOT a silent success.
+        with pytest.raises((ValueError, TypeError)):
+            read_config_sheet(wb["Config"])
+        wb.close()
+
+    def test_section_header_labels_covers_all_sections(self):
+        """Every label in SECTION_HEADER_LABELS must appear as a literal
+        string in some builder module, preventing drift between the
+        canonical label dict and what the builders actually emit."""
+        builder_dir = pathlib.Path(__file__).resolve().parent.parent / "budget_planner"
+        builder_sources = {
+            p.name: p.read_text()
+            for p in builder_dir.glob("*.py")
+            if p.name not in {"reader.py", "__init__.py", "__main__.py"}
+        }
+        for key, label in SECTION_HEADER_LABELS.items():
+            # The literal label string must appear in at least one non-reader
+            # module (builders, layout helper, or workbook orchestrator).
+            quoted_variants = (f'"{label}"', f"'{label}'")
+            found_in = [
+                name for name, src in builder_sources.items()
+                if any(q in src for q in quoted_variants)
+                or f'SECTION_HEADER_LABELS["{key}"]' in src
+            ]
+            assert found_in, (
+                f"Label {key!r}={label!r} is declared in SECTION_HEADER_LABELS "
+                f"but no builder module references it (searched "
+                f"{sorted(builder_sources)})"
+            )

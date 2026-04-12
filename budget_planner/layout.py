@@ -25,6 +25,21 @@ SHEET_TRENDS = "Trends"
 # Column structure: A=ID, B=Name, C onwards = months
 MONTH_COL_START = 3
 
+# ── Section header contract (see docs/plans/brittleness-refactor.md T2) ──
+SECTION_HEADER_ROWS = 2  # section title + column header, data starts at +2
+
+SECTION_HEADER_LABELS = {
+    "wp_budget": "WP BUDGET",
+    "wp_schedule": "WP SCHEDULE",
+    "team_roster": "TEAM ROSTER",
+    "rate_by_grade": "RATE BY GRADE",
+    "reporting_periods": "REPORTING PERIODS",
+    "assignments": "PERSON-WP ASSIGNMENTS",
+    "externals": "EXTERNAL COMMITMENTS",
+    "planned_fte": "PLANNED FTE (PERSON-MONTHS)",
+    "wp_id_column": "WP ID",  # column-header marker in Capacity/Actuals month header row
+}
+
 # ── Config sheet column constants ──
 # WP Budget section (Config sheet)
 COL_WP_ID = 1      # used by Phase 1 readers

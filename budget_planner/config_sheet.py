@@ -8,6 +8,7 @@ from openpyxl.utils import get_column_letter
 
 from budget_planner.layout import (
     SHEET_CONFIG,
+    SECTION_HEADER_LABELS,
     COL_WP_FTE, COL_WP_RATE, COL_WP_CEILING,
     COL_WP_ASSIGNED_PM, COL_WP_VARIANCE, WP_BUDGET_LAST_COL,
     COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE, SCHED_LAST_COL,
@@ -51,7 +52,7 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
     # Section header — merged A:E
     ws.merge_cells(start_row=budget_section_row, start_column=1,
                    end_row=budget_section_row, end_column=WP_BUDGET_LAST_COL)
-    style_cell(ws, budget_section_row, 1, value="WP BUDGET",
+    style_cell(ws, budget_section_row, 1, value=SECTION_HEADER_LABELS["wp_budget"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
     # Column headers
@@ -172,7 +173,7 @@ def _write_schedule_section(ws, start_row, wp_schedule):
     # Section header — merged A:D
     ws.merge_cells(start_row=sched_section_row, start_column=1,
                    end_row=sched_section_row, end_column=SCHED_LAST_COL)
-    style_cell(ws, sched_section_row, 1, value="WP SCHEDULE",
+    style_cell(ws, sched_section_row, 1, value=SECTION_HEADER_LABELS["wp_schedule"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
     # Column headers
@@ -232,7 +233,7 @@ def _write_roster_section(ws, start_row, team):
 
     # Section header — merged A:C
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=ROSTER_LAST_COL)
-    style_cell(ws, r, 1, value="TEAM ROSTER",
+    style_cell(ws, r, 1, value=SECTION_HEADER_LABELS["team_roster"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
     style_cell(ws, r, 2, fill=SECTION_FILL)
     style_cell(ws, r, COL_ROSTER_GRADE, fill=SECTION_FILL)
@@ -286,7 +287,7 @@ def _write_reporting_section(ws, start_row, reporting_periods):
 
     # Section header — merged A:C
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=RP_LAST_COL)
-    style_cell(ws, r, 1, value="REPORTING PERIODS",
+    style_cell(ws, r, 1, value=SECTION_HEADER_LABELS["reporting_periods"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
     for c in range(2, RP_LAST_COL + 1):
         style_cell(ws, r, c, fill=SECTION_FILL)
@@ -325,7 +326,7 @@ def _write_rate_by_grade_section(ws, start_row, grade_rates):
     grade_section_row = start_row
     ws.merge_cells(start_row=grade_section_row, start_column=1,
                    end_row=grade_section_row, end_column=GRADE_LAST_COL)
-    style_cell(ws, grade_section_row, 1, value="RATE BY GRADE",
+    style_cell(ws, grade_section_row, 1, value=SECTION_HEADER_LABELS["rate_by_grade"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
     grade_header_row = grade_section_row + 1
@@ -363,7 +364,7 @@ def _write_assignments_section(ws, start_row, assignments):
 
     # Section header — merged A:H
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=ASSIGN_LAST_COL)
-    style_cell(ws, r, 1, value="PERSON-WP ASSIGNMENTS",
+    style_cell(ws, r, 1, value=SECTION_HEADER_LABELS["assignments"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
     for c in range(2, ASSIGN_LAST_COL + 1):
         style_cell(ws, r, c, fill=SECTION_FILL)
@@ -456,7 +457,7 @@ def _write_external_section(ws, start_row, external_commitments):
 
     # Section header — merged A:F
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=EXT_LAST_COL)
-    style_cell(ws, r, 1, value="EXTERNAL COMMITMENTS",
+    style_cell(ws, r, 1, value=SECTION_HEADER_LABELS["externals"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
     for c in range(2, EXT_LAST_COL + 1):
         style_cell(ws, r, c, fill=SECTION_FILL)

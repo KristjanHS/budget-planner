@@ -7,6 +7,7 @@ from openpyxl.formatting.rule import FormulaRule
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_PLAN, SHEET_CAPACITY, SHEET_CONFIG,
+    SECTION_HEADER_LABELS,
     build_year_month_headers, month_col_end as _month_col_end, val_columns,
     wp_active_months,
 )
@@ -139,7 +140,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     r = 3
 
     # Section header
-    write_section_header(ws, r, "PLANNED FTE (PERSON-MONTHS)", merge_end=val_col_diff)
+    write_section_header(ws, r, SECTION_HEADER_LABELS["planned_fte"], merge_end=val_col_diff)
     r += 1
 
     year_row, month_row, r = build_year_month_headers(

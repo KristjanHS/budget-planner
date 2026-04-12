@@ -4,6 +4,7 @@ from typing import Literal, overload
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG,
+    SECTION_HEADER_LABELS, SECTION_HEADER_ROWS,
     COL_WP_FTE, COL_WP_RATE,
     COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE,
     COL_ROSTER_FTE, COL_ROSTER_GRADE,
@@ -59,11 +60,14 @@ def _find_header_row(
 
 
 def _find_header_row(ws, pattern, col=1, max_row=None, required=True):
-    """Find row where cell contains pattern (case-insensitive substring).
+    """Find row where cell exactly matches pattern (case-insensitive, stripped).
+
+    Uses exact match (not substring) to avoid layout-drift silent failures —
+    e.g. a renamed or nested section header won't accidentally satisfy the search.
 
     Args:
         ws: openpyxl worksheet.
-        pattern: String to search for (case-insensitive substring match).
+        pattern: String to search for (exact match after strip + upper-case).
         col: Column number to scan (default 1 = col A).
         max_row: Upper row limit. If None, scans the whole sheet.
         required: If True and pattern not found, raises ValueError.
@@ -75,15 +79,22 @@ def _find_header_row(ws, pattern, col=1, max_row=None, required=True):
         ValueError: If required=True and pattern is not found.
     """
     limit = max_row if max_row is not None else ws.max_row
+    target = pattern.strip().upper()
     for r in range(1, limit + 1):
         val = ws.cell(r, col).value
-        if val and pattern.upper() in str(val).upper():
+        if val is not None and str(val).strip().upper() == target:
             return r
     if required:
         raise ValueError(
-            f"Cannot find '{pattern}' in column {col}, rows 1-{limit}"
+            f"Section header {pattern!r} not found in column {col} "
+            f"(rows 1-{limit}). Was the workbook structure modified?"
         )
     return None
+
+
+def _data_row_after(header_row: int, header_rows: int = SECTION_HEADER_ROWS) -> int:
+    """First data row after a section header (title row + column header row)."""
+    return header_row + header_rows
 
 
 def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
@@ -120,9 +131,9 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
             raise ValueError(f"Config sheet missing param row matching '{prefix}'")
 
     # WP Budget table — find "WP BUDGET" section header
-    wp_section = _find_header_row(ws, "WP BUDGET")
+    wp_section = _find_header_row(ws, SECTION_HEADER_LABELS["wp_budget"])
     work_packages: list[dict] = []
-    r = wp_section + 2  # skip section header + column headers
+    r = _data_row_after(wp_section)
     while r <= ws.max_row:
         wp_id = ws.cell(r, 1).value
         col_b = ws.cell(r, 2).value
@@ -146,10 +157,12 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
         r += 1
 
     # WP Schedule table — find "WP SCHEDULE" section header (optional)
-    sched_section = _find_header_row(ws, "WP SCHEDULE", required=False)
+    sched_section = _find_header_row(
+        ws, SECTION_HEADER_LABELS["wp_schedule"], required=False
+    )
     wp_schedule: list[dict] = []
     if sched_section is not None:
-        r = sched_section + 2  # skip section header + column headers
+        r = _data_row_after(sched_section)
         while r <= ws.max_row:
             sched_id = ws.cell(r, 1).value
             if sched_id is None or str(sched_id).strip() == "":
@@ -209,13 +222,15 @@ def read_grade_rates(ws) -> dict[str, int | float]:
         Returns default rates from config.py if section not found
         (backward compat with old workbooks).
     """
-    section_row = _find_header_row(ws, "RATE BY GRADE", required=False)
+    section_row = _find_header_row(
+        ws, SECTION_HEADER_LABELS["rate_by_grade"], required=False
+    )
     if section_row is None:
         from budget_planner.config import GRADE_RATES
         return dict(GRADE_RATES)
 
     # Skip section header + column headers
-    r = section_row + 2
+    r = _data_row_after(section_row)
     rates: dict[str, int | float] = {}
     while r <= ws.max_row:
         grade_name = ws.cell(r, 1).value
@@ -242,9 +257,13 @@ def read_team_from_config(ws) -> list[dict]:
     from budget_planner.config import DEFAULT_GRADE
 
     # Find "TEAM ROSTER" section header
-    roster_section = _find_header_row(ws, "TEAM ROSTER", required=True)
+    roster_section = _find_header_row(
+        ws, SECTION_HEADER_LABELS["team_roster"], required=True
+    )
 
-    # Person header is always the next row after the section header
+    # TEAM ROSTER has a 1-row header (title + column-headers on the same row pair
+    # where the section label row IS the title and the next row is the column
+    # header). Data starts at person_header + 1 — do NOT use _data_row_after here.
     person_header = roster_section + 1
 
     # Detect whether Grade column exists (col C header)
@@ -290,7 +309,9 @@ def read_reporting_periods(ws, fallback_months=None):
     Returns:
         List of dicts with keys: id, start, end.
     """
-    rp_section = _find_header_row(ws, "REPORTING PERIODS", required=False)
+    rp_section = _find_header_row(
+        ws, SECTION_HEADER_LABELS["reporting_periods"], required=False
+    )
     if rp_section is None:
         if fallback_months is not None:
             from budget_planner.config import default_reporting_periods
@@ -298,7 +319,7 @@ def read_reporting_periods(ws, fallback_months=None):
         return []
 
     # Skip section header + column headers
-    r = rp_section + 2
+    r = _data_row_after(rp_section)
     periods: list[dict] = []
     while r <= ws.max_row:
         period_id = ws.cell(r, 1).value
@@ -327,13 +348,13 @@ def read_assignments_from_config(ws) -> list[dict]:
         Empty list if the section is not found.
     """
     assignments_header = _find_header_row(
-        ws, "PERSON-WP ASSIGNMENTS", required=False
+        ws, SECTION_HEADER_LABELS["assignments"], required=False
     )
     if assignments_header is None:
         return []
 
     # Skip section header + column headers
-    r = assignments_header + 2
+    r = _data_row_after(assignments_header)
     assignments: list[dict] = []
     while r <= ws.max_row:
         person = ws.cell(r, COL_ASSIGN_PERSON).value
@@ -369,14 +390,14 @@ def read_externals_from_config(ws) -> list[dict]:
         Empty list if the section is not found.
     """
     ext_config_header = _find_header_row(
-        ws, "EXTERNAL COMMITMENTS", required=False
+        ws, SECTION_HEADER_LABELS["externals"], required=False
     )
     if ext_config_header is None:
         return []
 
     external_commitments: list[dict] = []
     # Skip section header + column headers
-    r = ext_config_header + 2
+    r = _data_row_after(ext_config_header)
     while r <= ws.max_row:
         person = ws.cell(r, COL_EXT_PERSON).value
         if person is None or str(person).strip() == "":
@@ -410,13 +431,13 @@ def read_capacity_assignments(ws) -> list[dict]:
         Empty list if the block is not found.
     """
     assignments_header = _find_header_row(
-        ws, "PERSON-WP ASSIGNMENTS", required=False
+        ws, SECTION_HEADER_LABELS["assignments"], required=False
     )
     if assignments_header is None:
         return []
 
     # Skip section header + column headers
-    r = assignments_header + 2
+    r = _data_row_after(assignments_header)
     assignments: list[dict] = []
     while r <= ws.max_row:
         person = ws.cell(r, COL_ASSIGN_PERSON).value
@@ -446,14 +467,14 @@ def _read_externals_from_capacity(ws) -> list[dict]:
         Empty list if the section is not found.
     """
     ext_config_header = _find_header_row(
-        ws, "EXTERNAL COMMITMENTS", required=False
+        ws, SECTION_HEADER_LABELS["externals"], required=False
     )
     if ext_config_header is None:
         return []
 
     external_commitments: list[dict] = []
     # Skip section header + column headers
-    r = ext_config_header + 2
+    r = _data_row_after(ext_config_header)
     while r <= ws.max_row:
         person = ws.cell(r, COL_EXT_PERSON).value
         project = ws.cell(r, COL_EXT_PROJECT).value
@@ -492,7 +513,7 @@ def _read_person_grids(ws, wp_ids: set[str], project_months: int,
         ``{"wp_values": {wp_id: [monthly]}, "external_values": {proj: [monthly]}}``.
     """
     # ── Find month header row: "WP ID" in col A ──
-    month_header_row = _find_header_row(ws, "WP ID")
+    month_header_row = _find_header_row(ws, SECTION_HEADER_LABELS["wp_id_column"])
 
     # ── Find person header rows ──
     # Person headers have bold font + SECTION_FILL (fgColor "2F5496")
@@ -689,7 +710,9 @@ def discover_layout(ws) -> dict:
     WP table rows (row 8+ by default).
     """
     # Find PLANNED block header
-    planned_header_row = _find_header_row(ws, "PLANNED", required=True)
+    planned_header_row = _find_header_row(
+        ws, SECTION_HEADER_LABELS["planned_fte"], required=True
+    )
 
     # Find the first WP data row after the PLANNED header.
     # WP rows have a formula (e.g. =Config!A8) or literal WP ID in column A.
@@ -741,8 +764,10 @@ def discover_layout(ws) -> dict:
         # with literal WP IDs instead of =Config!A{n} formulas)
         config_ws = ws.parent[SHEET_CONFIG] if SHEET_CONFIG in ws.parent.sheetnames else None
         if config_ws:
-            wp_section = _find_header_row(config_ws, "WP BUDGET", required=False)
-            cfg_wp_first = (wp_section + 2) if wp_section else 8
+            wp_section = _find_header_row(
+                config_ws, SECTION_HEADER_LABELS["wp_budget"], required=False
+            )
+            cfg_wp_first = _data_row_after(wp_section) if wp_section else 8
         else:
             cfg_wp_first = 8
     cfg_wp_last = cfg_wp_first + num_wps - 1
@@ -776,7 +801,7 @@ def read_actuals_values(ws, project_months, month_col_start=MONTH_COL_START) -> 
 
     # Discover WP data start by scanning for "WP ID" header row
     try:
-        wp_header_row = _find_header_row(ws, "WP ID")
+        wp_header_row = _find_header_row(ws, SECTION_HEADER_LABELS["wp_id_column"])
     except ValueError:
         raise ValueError(
             "Cannot find 'WP ID' header row in Actuals sheet. "

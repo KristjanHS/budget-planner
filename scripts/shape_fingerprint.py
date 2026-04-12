@@ -103,22 +103,31 @@ def extract_fingerprint(path: str) -> dict:
     }
 
 
+DEFAULT_OUT_PATH = Path("tmp/fp.json")
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) < 2:
-        print("usage: shape_fingerprint.py <workbook.xlsx> [-o fingerprint.json]",
-              file=sys.stderr)
+    if len(argv) < 2 or argv[1] in {"-h", "--help"}:
+        print(
+            "usage: python -m scripts.shape_fingerprint <workbook.xlsx> [-o <path>] [--stdout]\n"
+            f"       default output: {DEFAULT_OUT_PATH} (overwritten each run)",
+            file=sys.stderr,
+        )
         return 2
     in_path = argv[1]
-    out_path = None
-    if len(argv) >= 4 and argv[2] == "-o":
-        out_path = argv[3]
+    out_path: Path | None = DEFAULT_OUT_PATH
+    if "-o" in argv:
+        out_path = Path(argv[argv.index("-o") + 1])
+    if "--stdout" in argv:
+        out_path = None
     fp = extract_fingerprint(in_path)
     js = json.dumps(fp, indent=2, sort_keys=True)
-    if out_path:
-        Path(out_path).write_text(js, encoding="utf-8")
-        print(f"Fingerprint written to {out_path}. Safe to share — value-free by construction.")
-    else:
+    if out_path is None:
         print(js)
+    else:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(js, encoding="utf-8")
+        print(f"Fingerprint written to {out_path}. Safe to share — value-free by construction.")
     return 0
 
 

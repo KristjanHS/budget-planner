@@ -12,3 +12,6 @@ __pycache__/
 # Claude Code local state
 .claude/settings.local.json
 .claude/worktrees/
+
+# Shape-only reproducer artifacts (see docs/debugging-your-real-file.md)
+tmp/

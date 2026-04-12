@@ -7,34 +7,32 @@ and fixing it, without sharing the real file.
 ## One-shot workflow
 
 ```bash
-python scripts/make_reproducer.py \
-    output/<your_confidential>.xlsx \
-    tmp/reproducer.xlsx
+python -m scripts.make_reproducer output/<your_confidential>.xlsx
+```
+
+Override the output directory with `--out-dir`:
+
+```bash
+python -m scripts.make_reproducer output/<your_confidential>.xlsx --out-dir some/dir
 ```
 
 From Windows:
 
 ```bat
-scripts\make_reproducer.bat output\<your_confidential>.xlsx tmp\reproducer.xlsx
+scripts\make_reproducer.bat output\<your_confidential>.xlsx
 ```
 
-This produces `tmp/reproducer.xlsx` — a synthetic workbook with the same table
-shapes (row counts per Config section, named-range spans, cross-sheet formula
-targets) as your real file, populated with deterministic fake data
-(`Person_01`, `WP_A`, fixed dates and rates). Safe to share.
+Outputs always land as `<out-dir>/synthetic.xlsx` and `<out-dir>/fp.json`
+(default `tmp/`). The synthetic workbook has the same table shapes (row counts
+per Config section, named-range spans, cross-sheet formula targets) as your
+real file, populated with deterministic fake data (`Person_01`, `WP_A`, fixed
+dates and rates). Safe to share.
 
 ## What to send Claude
 
 1. A description of the bug ("After rebuild, Alice is missing from Config").
-2. The path to the reproducer (`tmp/reproducer.xlsx`).
-3. Optionally, the fingerprint JSON for extra context:
-
-```bash
-python scripts/make_reproducer.py \
-    output/<your_confidential>.xlsx \
-    tmp/reproducer.xlsx \
-    --keep-fingerprint tmp/fp.json
-```
+2. The path to the synthetic workbook (`tmp/synthetic.xlsx`).
+3. Optionally, the fingerprint JSON (`tmp/fp.json`, always written alongside).
 
 Do NOT send the real workbook. Claude will not open it.
 

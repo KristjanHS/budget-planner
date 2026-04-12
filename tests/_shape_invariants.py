@@ -16,7 +16,11 @@ def assert_meta_matches_live(wb) -> None:
     meta_ws = wb["_META"]
     meta_text = meta_ws["A1"].value or ""
     live_team = len(read_team_from_config(wb["Config"]))
-    assert str(live_team) in meta_text, (
-        f"_META does not mention live team count ({live_team}). "
-        "Was _META rewritten on last build?"
+    # meta.py emits the team count as "{num_team} people" (lines 185, 219).
+    # Matching the phrase — not bare digits — makes the invariant specific
+    # enough to catch stale _META blobs where the count didn't update.
+    expected = f"{live_team} people"
+    assert expected in meta_text, (
+        f"_META does not mention {expected!r}. "
+        "Was _META rewritten on last build, or has meta.py's phrasing changed?"
     )

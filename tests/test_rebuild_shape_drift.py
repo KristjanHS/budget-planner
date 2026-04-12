@@ -30,9 +30,14 @@ def _simulate_excel_insert_in_named_range(wb, name: str, before_row: int, amount
     references. Excel, by contrast, auto-extends a named range when rows are
     inserted inside it. We emulate that here so the post-edit workbook matches
     what the user's Excel session produced.
+
+    Tolerates missing names so callers can iterate a fixed list of candidate
+    ranges without guarding each one.
     """
     import re
 
+    if name not in wb.defined_names:
+        return
     dn = wb.defined_names[name]
     dest = list(dn.destinations)[0]
     sheet, ref = dest

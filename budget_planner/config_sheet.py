@@ -18,7 +18,7 @@ from budget_planner.layout import (
     COL_ASSIGN_PERSON, COL_ASSIGN_WP, COL_ASSIGN_FTE,
     COL_ASSIGN_START, COL_ASSIGN_END,
     COL_ASSIGN_SIG_ASSIGNED, COL_ASSIGN_SIG_EXTERNAL, COL_ASSIGN_BALANCE,
-    ASSIGN_LAST_COL,
+    ASSIGN_LAST_COL, ASSIGN_MIN_ROWS,
     COL_EXT_PERSON, COL_EXT_PROJECT, COL_EXT_FTE,
     COL_EXT_START, COL_EXT_END, COL_EXT_EU, EXT_LAST_COL,
 )
@@ -350,9 +350,6 @@ def _write_rate_by_grade_section(ws, start_row, grade_rates):
         "grade_last_row": grade_last_row,
     }
     return next_row, layout
-
-
-ASSIGN_MIN_ROWS = 5
 
 
 def _write_assignments_section(ws, start_row, assignments):

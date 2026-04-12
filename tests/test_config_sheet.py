@@ -479,7 +479,7 @@ def test_config_new_named_ranges():
 
 def test_config_assignments_empty_list():
     """When assignments=[], section has ASSIGN_MIN_ROWS blank template rows with formulas."""
-    from budget_planner.config_sheet import ASSIGN_MIN_ROWS
+    from budget_planner.layout import ASSIGN_MIN_ROWS
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -494,12 +494,57 @@ def test_config_assignments_empty_list():
     first = layout["assign_first_row"]
     last = layout["assign_last_row"]
     assert last - first + 1 == ASSIGN_MIN_ROWS
-    # Person col is blank in template rows; F/G/H carry formulas
+    # Person col is blank in template rows; F/G/H carry formulas.
+    # Balance IF-guards blank Person so VLOOKUP doesn't return #N/A and CF
+    # rules evaluate "" < 0 as FALSE (no false-positive red fill).
     for r in range(first, last + 1):
         assert ws.cell(r, 1).value is None
         assert str(ws.cell(r, 6).value).startswith("=SUMIFS(assign_ftes")
         assert str(ws.cell(r, 7).value).startswith("=SUMIFS(ext_ftes")
-        assert str(ws.cell(r, 8).value).startswith('=IF(A')
+        bal = str(ws.cell(r, 8).value)
+        assert bal.startswith(f'=IF(A{r}="","",')
+        assert f"VLOOKUP(A{r}" in bal
+
+
+def test_config_assignments_cf_refs_row_local():
+    """CF rules on blank template rows reference row-local cells, so blank
+    Person yields ""<0 (FALSE) and never triggers the red/yellow fill."""
+    from budget_planner.layout import ASSIGN_MIN_ROWS
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    layout = build_config_sheet(
+        ws, wb, _sample_params(), _sample_wps(),
+        team=_sample_team(),
+        grade_rates=_sample_grade_rates(),
+        assignments=[],
+        external_commitments=[],
+    )
+    first = layout["assign_first_row"]
+    last = layout["assign_last_row"]
+    assert last - first + 1 == ASSIGN_MIN_ROWS
+
+    # Collect CF rule formulas keyed by the cell they apply to.
+    rules_by_cell: dict[str, list[str]] = {}
+    for cf in ws.conditional_formatting:
+        rng_str = str(cf.sqref)
+        for rule in ws.conditional_formatting[cf]:
+            if rule.formula:
+                rules_by_cell.setdefault(rng_str, []).extend(rule.formula)
+
+    # Every assignment row must have at least the red (<0) + yellow (<0.1*...) rule,
+    # and each rule must reference the SAME row it applies to (row-local).
+    for r in range(first, last + 1):
+        target = f"H{r}"
+        assert target in rules_by_cell, f"No CF on {target}"
+        formulas = rules_by_cell[target]
+        assert any(f"H{r}<0" in f for f in formulas), (
+            f"Row {r} missing red rule or ref is not row-local: {formulas}"
+        )
+        assert any(f"A{r}" in f and "VLOOKUP" in f for f in formulas), (
+            f"Row {r} yellow rule missing row-local Person ref: {formulas}"
+        )
 
 
 def test_config_layout_includes_new_keys():

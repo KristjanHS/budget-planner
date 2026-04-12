@@ -1,15 +1,22 @@
 """Tests for new reader functions (Config sheet, Actuals values, grade rates)."""
+
 from datetime import datetime
 
 import pytest
 from openpyxl import Workbook
 
 from budget_planner.config_sheet import build_config_sheet
+from budget_planner.layout import COL_ROSTER_FTE, SECTION_HEADER_LABELS
 from budget_planner.reader import (
-    read_config_sheet, read_actuals_values, read_grade_rates,
+    read_config_sheet,
+    read_actuals_values,
+    read_grade_rates,
     read_team_from_config,
-    read_assignments_from_config, read_externals_from_config,
+    read_assignments_from_config,
+    read_externals_from_config,
     read_capacity_sheet,
+    _find_header_row,
+    _data_row_after,
 )
 
 
@@ -50,6 +57,7 @@ def test_read_config_sheet_roundtrip():
     assert params["months"] == 24
     # FTE Rate is now a CSE array formula (grade-based weighted average)
     from openpyxl.worksheet.formula import ArrayFormula
+
     assert isinstance(params["rate"], (str, ArrayFormula))
     assert len(wps) == 2
     assert wps[0]["id"] == "WP1"
@@ -179,7 +187,9 @@ class TestConfigSheetValidation:
         """Raises ValueError when no row has Project Title."""
         wb, ws = self._make_empty_config_ws()
         # Leave sheet empty
-        with pytest.raises(ValueError, match="missing param row matching 'Project Title'"):
+        with pytest.raises(
+            ValueError, match="missing param row matching 'Project Title'"
+        ):
             read_config_sheet(ws)
         wb.close()
 
@@ -187,7 +197,9 @@ class TestConfigSheetValidation:
         """Raises ValueError when Project Start label is missing."""
         wb, ws = self._make_empty_config_ws()
         ws.cell(1, 1, "Project Title")
-        with pytest.raises(ValueError, match="missing param row matching 'Project Start'"):
+        with pytest.raises(
+            ValueError, match="missing param row matching 'Project Start'"
+        ):
             read_config_sheet(ws)
         wb.close()
 
@@ -414,6 +426,30 @@ def test_read_team_defaults_grade_for_legacy_wb():
     assert roster[1]["grade"] == DEFAULT_GRADE
 
 
+def test_read_team_accepts_european_text_max_fte_and_keeps_following_rows(
+    fresh_wb_path,
+):
+    """Text Max FTE like '0,35' must not truncate the roster (orphan assignments)."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(fresh_wb_path)
+    ws = wb["Config"]
+    n_before = len(read_team_from_config(ws))
+    assert n_before >= 3
+
+    section = _find_header_row(ws, SECTION_HEADER_LABELS["team_roster"], required=True)
+    person_header = section + 1
+    # Second roster data row: force European-style text (Excel "number stored as text")
+    ws.cell(person_header + 2, COL_ROSTER_FTE, value="0,35")
+
+    roster = read_team_from_config(ws)
+    wb.close()
+
+    assert len(roster) == n_before
+    assert roster[1]["name"] == "Bob"
+    assert roster[1]["max_fte"] == pytest.approx(0.35)
+
+
 # ── read_assignments_from_config / read_externals_from_config ──
 
 
@@ -426,15 +462,29 @@ def _sample_assignments():
 
 def _sample_externals():
     return [
-        {"person": "Alice", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 11, "is_eu": False},
-        {"person": "Bob", "project": "HorizonEU", "fte": 2.0, "start": 1, "end": 24, "is_eu": True},
+        {
+            "person": "Alice",
+            "project": "ProjectX",
+            "fte": 3.0,
+            "start": 1,
+            "end": 11,
+            "is_eu": False,
+        },
+        {
+            "person": "Bob",
+            "project": "HorizonEU",
+            "fte": 4.0,
+            "start": 1,
+            "end": 24,
+            "is_eu": True,
+        },
     ]
 
 
 def _sample_team():
     return [
         {"name": "Alice", "max_fte": 1.0, "grade": "Senior"},
-        {"name": "Bob",   "max_fte": 1.0, "grade": "Mid"},
+        {"name": "Bob", "max_fte": 1.0, "grade": "Mid"},
     ]
 
 
@@ -460,7 +510,10 @@ def _make_config_wb_with_assignments(assignments=None, externals=None):
         {"id": "WP2", "name": "Dev", "fte": 8.0},
     ]
     build_config_sheet(
-        ws, wb, params, wps,
+        ws,
+        wb,
+        params,
+        wps,
         team=_sample_team(),
         grade_rates=_sample_grade_rates(),
         assignments=assignments or [],
@@ -484,6 +537,23 @@ def test_read_assignments_from_config_roundtrip():
         assert actual["total_fte"] == expected["total_fte"]
         assert actual["start"] == expected["start"]
         assert actual["end"] == expected["end"]
+
+
+def test_read_assignments_strips_person_wp_whitespace():
+    """Person/WP strings are stripped so they match TEAM ROSTER (also stripped)."""
+    assignments = _sample_assignments()
+    wb = _make_config_wb_with_assignments(assignments=assignments)
+    ws = wb["Config"]
+    hdr = _find_header_row(ws, SECTION_HEADER_LABELS["assignments"], required=True)
+    r0 = _data_row_after(hdr)
+    ws.cell(r0, 1, value="Alice  ")
+    ws.cell(r0, 2, value="WP1 ")
+
+    result = read_assignments_from_config(ws)
+    wb.close()
+
+    assert result[0]["person"] == "Alice"
+    assert result[0]["wp"] == "WP1"
 
 
 def test_read_assignments_from_config_empty():
@@ -530,9 +600,7 @@ def test_read_capacity_prefers_config_assignments():
     externals = _sample_externals()
 
     # Build a workbook with Config sheet that has assignments + externals
-    wb = _make_config_wb_with_assignments(
-        assignments=assignments, externals=externals
-    )
+    wb = _make_config_wb_with_assignments(assignments=assignments, externals=externals)
 
     # Build minimal Plan + Capacity sheets so _read_person_grids doesn't error
     plan_ws = wb.create_sheet("Plan")

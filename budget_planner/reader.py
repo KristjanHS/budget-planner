@@ -1,19 +1,36 @@
 """Read existing workbooks for round-trip updates."""
+
 import re
+from decimal import Decimal
 from typing import Literal, overload
 
 from budget_planner.layout import (
-    MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG,
-    SECTION_HEADER_LABELS, SECTION_HEADER_ROWS,
-    COL_WP_FTE, COL_WP_RATE,
-    COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE,
-    COL_ROSTER_FTE, COL_ROSTER_GRADE,
+    MONTH_COL_START,
+    SHEET_PLAN,
+    SHEET_CONFIG,
+    SECTION_HEADER_LABELS,
+    SECTION_HEADER_ROWS,
+    COL_WP_FTE,
+    COL_WP_RATE,
+    COL_SCHED_START,
+    COL_SCHED_END,
+    COL_SCHED_TYPE,
+    COL_ROSTER_FTE,
+    COL_ROSTER_GRADE,
     COL_GRADE_RATE,
-    COL_RP_START, COL_RP_END,
-    COL_ASSIGN_PERSON, COL_ASSIGN_WP, COL_ASSIGN_FTE,
-    COL_ASSIGN_START, COL_ASSIGN_END,
-    COL_EXT_PERSON, COL_EXT_PROJECT, COL_EXT_FTE,
-    COL_EXT_START, COL_EXT_END, COL_EXT_EU,
+    COL_RP_START,
+    COL_RP_END,
+    COL_ASSIGN_PERSON,
+    COL_ASSIGN_WP,
+    COL_ASSIGN_FTE,
+    COL_ASSIGN_START,
+    COL_ASSIGN_END,
+    COL_EXT_PERSON,
+    COL_EXT_PROJECT,
+    COL_EXT_FTE,
+    COL_EXT_START,
+    COL_EXT_END,
+    COL_EXT_EU,
 )
 
 
@@ -25,6 +42,56 @@ def _safe_float(value, default: float) -> float:
         return float(value)
     except (ValueError, TypeError):
         return default
+
+
+def _parse_config_float(value) -> float | None:
+    """Parse Config numeric cells: real numbers and text (e.g. European ``0,35``).
+
+    Excel often stores locale-formatted values as *text* (green triangle). The
+    roster reader used to stop at the first such cell, so later names were
+    omitted from ``team`` and assignments looked "orphaned".
+
+    Returns:
+        ``0.0`` when *value* is ``None`` (empty cell on a row the caller has
+        already decided is valid). A float when *value* is numeric or a
+        parseable numeric string (US/EU locale, NBSP-tolerant). ``None`` when
+        *value* is a bool, a formula string (``=...``), or any other non-numeric
+        string — signalling the caller to stop scanning the section.
+    """
+    # bool is a subclass of int; reject it explicitly before the int/float branch
+    # so True/False don't silently coerce to 1.0/0.0 in a numeric context.
+    if isinstance(value, bool):
+        return None
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, Decimal):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    s = value.strip()
+    if not s:
+        # Empty/whitespace string: treat as "non-numeric sentinel" (matches pre-
+        # _parse_config_float break-on-type-guard behaviour). Returning 0.0 here
+        # would append a zero-capacity ghost row for a named person with a blank
+        # FTE cell.
+        return None
+    if s.startswith("="):
+        return None
+    s = s.replace("\u00a0", "").replace(" ", "")
+    norm = s
+    if "," in norm and "." not in norm:
+        norm = norm.replace(",", ".")
+    elif "," in norm and "." in norm:
+        if norm.rfind(",") > norm.rfind("."):
+            norm = norm.replace(".", "").replace(",", ".")
+        else:
+            norm = norm.replace(",", "")
+    try:
+        return float(norm)
+    except ValueError:
+        return None
 
 
 def _parse_fte_rate(value):
@@ -47,14 +114,20 @@ def _parse_fte_rate(value):
 
 @overload
 def _find_header_row(
-    ws, pattern: str, col: int = ..., max_row: int | None = ...,
+    ws,
+    pattern: str,
+    col: int = ...,
+    max_row: int | None = ...,
     required: Literal[True] = ...,
 ) -> int: ...
 
 
 @overload
 def _find_header_row(
-    ws, pattern: str, col: int = ..., max_row: int | None = ...,
+    ws,
+    pattern: str,
+    col: int = ...,
+    max_row: int | None = ...,
     required: Literal[False] = ...,
 ) -> int | None: ...
 
@@ -143,17 +216,19 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
         if col_b and str(col_b).upper() == "TOTAL":
             break
         rate_cell = ws.cell(r, COL_WP_RATE).value
-        work_packages.append({
-            "id": str(wp_id),
-            "name": str(col_b or ""),
-            "fte": float(ws.cell(r, COL_WP_FTE).value or 0),
-            # ``rate`` is the numeric coercion for downstream consumers (falls
-            # back to 6500 when the cell is a formula). ``rate_raw`` preserves
-            # the literal cell value — formula string or numeric — so that
-            # writers can restore the user's formula on round-trip.
-            "rate": _safe_float(rate_cell, 6500),
-            "rate_raw": rate_cell,
-        })
+        work_packages.append(
+            {
+                "id": str(wp_id),
+                "name": str(col_b or ""),
+                "fte": float(ws.cell(r, COL_WP_FTE).value or 0),
+                # ``rate`` is the numeric coercion for downstream consumers (falls
+                # back to 6500 when the cell is a formula). ``rate_raw`` preserves
+                # the literal cell value — formula string or numeric — so that
+                # writers can restore the user's formula on round-trip.
+                "rate": _safe_float(rate_cell, 6500),
+                "rate_raw": rate_cell,
+            }
+        )
         r += 1
 
     # WP Schedule table — find "WP SCHEDULE" section header (optional)
@@ -167,12 +242,14 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
             sched_id = ws.cell(r, 1).value
             if sched_id is None or str(sched_id).strip() == "":
                 break
-            wp_schedule.append({
-                "id": str(sched_id),
-                "start": int(ws.cell(r, COL_SCHED_START).value or 1),
-                "end": int(ws.cell(r, COL_SCHED_END).value or 1),
-                "type": str(ws.cell(r, COL_SCHED_TYPE).value or "flat"),
-            })
+            wp_schedule.append(
+                {
+                    "id": str(sched_id),
+                    "start": int(ws.cell(r, COL_SCHED_START).value or 1),
+                    "end": int(ws.cell(r, COL_SCHED_END).value or 1),
+                    "type": str(ws.cell(r, COL_SCHED_TYPE).value or "flat"),
+                }
+            )
             r += 1
 
     return project_params, work_packages, wp_schedule
@@ -190,18 +267,20 @@ def read_plan_config(ws, layout) -> list[dict]:
         raise ValueError("Workbook has no Config sheet")
 
     wps = []
-    for row in range(layout["config_first_wp_row"],
-                     layout["config_last_wp_row"] + 1):
+    for row in range(layout["config_first_wp_row"], layout["config_last_wp_row"] + 1):
         wp_id = config_ws.cell(row, 1).value
         wp_name = config_ws.cell(row, 2).value
         fte = config_ws.cell(row, 3).value
         if wp_id is None:
             continue
-        wps.append({
-            "id": str(wp_id),
-            "name": str(wp_name or ""),
-            "fte": float(fte or 0),
-        })
+        fte_parsed = _parse_config_float(fte)
+        wps.append(
+            {
+                "id": str(wp_id).strip(),
+                "name": str(wp_name or "").strip(),
+                "fte": fte_parsed if fte_parsed is not None else 0.0,
+            }
+        )
     if not wps:
         raise ValueError(
             "Config table has zero WP rows. "
@@ -227,6 +306,7 @@ def read_grade_rates(ws) -> dict[str, int | float]:
     )
     if section_row is None:
         from budget_planner.config import GRADE_RATES
+
         return dict(GRADE_RATES)
 
     # Skip section header + column headers
@@ -280,19 +360,21 @@ def read_team_from_config(ws) -> list[dict]:
         if name is None or str(name).strip() == "":
             break
         max_fte = ws.cell(r, COL_ROSTER_FTE).value
-        # Roster rows have numeric max_fte; a string means we hit a header row
-        if max_fte is not None and not isinstance(max_fte, (int, float)):
+        max_fte_parsed = _parse_config_float(max_fte)
+        if max_fte_parsed is None:
             break
         grade = DEFAULT_GRADE
         if has_grade_col:
             grade_val = ws.cell(r, COL_ROSTER_GRADE).value
             if grade_val is not None and str(grade_val).strip():
                 grade = str(grade_val).strip()
-        roster.append({
-            "name": str(name).strip(),
-            "max_fte": float(max_fte or 0),
-            "grade": grade,
-        })
+        roster.append(
+            {
+                "name": str(name).strip(),
+                "max_fte": max_fte_parsed,
+                "grade": grade,
+            }
+        )
         r += 1
 
     return roster
@@ -315,6 +397,7 @@ def read_reporting_periods(ws, fallback_months=None):
     if rp_section is None:
         if fallback_months is not None:
             from budget_planner.config import default_reporting_periods
+
             return default_reporting_periods(fallback_months)
         return []
 
@@ -327,11 +410,13 @@ def read_reporting_periods(ws, fallback_months=None):
             break
         start = ws.cell(r, COL_RP_START).value
         end = ws.cell(r, COL_RP_END).value
-        periods.append({
-            "id": str(period_id),
-            "start": int(start or 1),
-            "end": int(end or 1),
-        })
+        periods.append(
+            {
+                "id": str(period_id),
+                "start": int(start or 1),
+                "end": int(end or 1),
+            }
+        )
         r += 1
 
     return periods
@@ -361,19 +446,21 @@ def read_assignments_from_config(ws) -> list[dict]:
         if person is None or str(person).strip() == "":
             break
         total_fte = ws.cell(r, COL_ASSIGN_FTE).value
-        # Data rows have numeric total_fte; a string means we hit a header row
-        if total_fte is not None and not isinstance(total_fte, (int, float)):
+        total_fte_parsed = _parse_config_float(total_fte)
+        if total_fte_parsed is None:
             break
         wp = ws.cell(r, COL_ASSIGN_WP).value
         start = ws.cell(r, COL_ASSIGN_START).value
         end = ws.cell(r, COL_ASSIGN_END).value
-        assignments.append({
-            "person": str(person),
-            "wp": str(wp or ""),
-            "total_fte": float(total_fte or 0),
-            "start": int(start or 1),
-            "end": int(end or 1),
-        })
+        assignments.append(
+            {
+                "person": str(person).strip(),
+                "wp": str(wp or "").strip(),
+                "total_fte": total_fte_parsed,
+                "start": int(start or 1),
+                "end": int(end or 1),
+            }
+        )
         r += 1
 
     return assignments
@@ -403,21 +490,23 @@ def read_externals_from_config(ws) -> list[dict]:
         if person is None or str(person).strip() == "":
             break
         fte = ws.cell(r, COL_EXT_FTE).value
-        # Data rows have numeric fte; a string means we hit a header row
-        if fte is not None and not isinstance(fte, (int, float)):
+        fte_parsed = _parse_config_float(fte)
+        if fte_parsed is None:
             break
         project = ws.cell(r, COL_EXT_PROJECT).value
         start = ws.cell(r, COL_EXT_START).value
         end = ws.cell(r, COL_EXT_END).value
         is_eu_val = ws.cell(r, COL_EXT_EU).value
-        external_commitments.append({
-            "person": str(person),
-            "project": str(project or ""),
-            "fte": float(fte or 0),
-            "start": int(start or 1),
-            "end": int(end or 1),
-            "is_eu": str(is_eu_val).strip().upper() in ("YES", "TRUE", "1"),
-        })
+        external_commitments.append(
+            {
+                "person": str(person).strip(),
+                "project": str(project or "").strip(),
+                "fte": fte_parsed,
+                "start": int(start or 1),
+                "end": int(end or 1),
+                "is_eu": str(is_eu_val).strip().upper() in ("YES", "TRUE", "1"),
+            }
+        )
         r += 1
 
     return external_commitments
@@ -445,15 +534,20 @@ def read_capacity_assignments(ws) -> list[dict]:
             break
         wp = ws.cell(r, COL_ASSIGN_WP).value
         total_fte = ws.cell(r, COL_ASSIGN_FTE).value
+        total_fte_parsed = _parse_config_float(total_fte)
+        if total_fte_parsed is None:
+            break
         start = ws.cell(r, COL_ASSIGN_START).value
         end = ws.cell(r, COL_ASSIGN_END).value
-        assignments.append({
-            "person": str(person),
-            "wp": str(wp or ""),
-            "total_fte": float(total_fte or 0),
-            "start": int(start or 1),
-            "end": int(end or 1),
-        })
+        assignments.append(
+            {
+                "person": str(person).strip(),
+                "wp": str(wp or "").strip(),
+                "total_fte": total_fte_parsed,
+                "start": int(start or 1),
+                "end": int(end or 1),
+            }
+        )
         r += 1
 
     return assignments
@@ -481,25 +575,33 @@ def _read_externals_from_capacity(ws) -> list[dict]:
         if person is None or str(person).strip() == "":
             break
         fte = ws.cell(r, COL_EXT_FTE).value
+        fte_parsed = _parse_config_float(fte)
+        if fte_parsed is None:
+            break
         start = ws.cell(r, COL_EXT_START).value
         end = ws.cell(r, COL_EXT_END).value
         is_eu_val = ws.cell(r, COL_EXT_EU).value
-        external_commitments.append({
-            "person": str(person),
-            "project": str(project or ""),
-            "fte": float(fte or 0),
-            "start": int(start or 1),
-            "end": int(end or 1),
-            "is_eu": str(is_eu_val).strip().upper() in ("YES", "TRUE", "1"),
-        })
+        external_commitments.append(
+            {
+                "person": str(person).strip(),
+                "project": str(project or "").strip(),
+                "fte": fte_parsed,
+                "start": int(start or 1),
+                "end": int(end or 1),
+                "is_eu": str(is_eu_val).strip().upper() in ("YES", "TRUE", "1"),
+            }
+        )
         r += 1
 
     return external_commitments
 
 
-def _read_person_grids(ws, wp_ids: set[str], project_months: int,
-                       month_col_start: int = MONTH_COL_START,
-                       ) -> dict[str, dict]:
+def _read_person_grids(
+    ws,
+    wp_ids: set[str],
+    project_months: int,
+    month_col_start: int = MONTH_COL_START,
+) -> dict[str, dict]:
     """Find person header rows and parse per-person WP/external grids.
 
     Args:
@@ -533,8 +635,7 @@ def _read_person_grids(ws, wp_ids: set[str], project_months: int,
     # is above each group)
     if not person_headers:
         for r in range(month_header_row + 1, ws.max_row + 1):
-            if (ws.cell(r, 2).value
-                    and str(ws.cell(r, 2).value).upper() == "TOTAL"):
+            if ws.cell(r, 2).value and str(ws.cell(r, 2).value).upper() == "TOTAL":
                 # Scan backward to find group start
                 for rr in range(r - 1, month_header_row, -1):
                     cell_a = ws.cell(rr, 1).value
@@ -602,8 +703,7 @@ def _read_person_grids(ws, wp_ids: set[str], project_months: int,
             resolved_wp = _resolve_wp_id(col_a)
             if resolved_wp is not None:
                 # Programme WP row
-                monthly = _read_monthly_values(ws, dr, month_col_start,
-                                               project_months)
+                monthly = _read_monthly_values(ws, dr, month_col_start, project_months)
                 wp_values[resolved_wp] = monthly
             elif col_a is not None:
                 # Check if it's an external project (literal string, not formula
@@ -611,8 +711,9 @@ def _read_person_grids(ws, wp_ids: set[str], project_months: int,
                 col_a_str = str(col_a)
                 if not col_a_str.startswith("="):
                     # External project row
-                    monthly = _read_monthly_values(ws, dr, month_col_start,
-                                                   project_months)
+                    monthly = _read_monthly_values(
+                        ws, dr, month_col_start, project_months
+                    )
                     external_values[col_a_str] = monthly
 
         person_groups[name] = {
@@ -623,8 +724,9 @@ def _read_person_grids(ws, wp_ids: set[str], project_months: int,
     return person_groups
 
 
-def read_capacity_sheet(ws, config_wps, project_months=None,
-                        month_col_start=MONTH_COL_START) -> dict:
+def read_capacity_sheet(
+    ws, config_wps, project_months=None, month_col_start=MONTH_COL_START
+) -> dict:
     """Read Capacity sheet person groups.
 
     Args:
@@ -650,6 +752,7 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
     """
     if project_months is None:
         from budget_planner.config import PROJECT_MONTHS
+
         project_months = PROJECT_MONTHS
 
     wp_ids = {wp["id"] for wp in config_wps}
@@ -668,8 +771,7 @@ def read_capacity_sheet(ws, config_wps, project_months=None,
         assignments = read_capacity_assignments(ws)
     if not external_commitments:
         external_commitments = _read_externals_from_capacity(ws)
-    person_groups = _read_person_grids(ws, wp_ids, project_months,
-                                       month_col_start)
+    person_groups = _read_person_grids(ws, wp_ids, project_months, month_col_start)
 
     return {
         "assignments": assignments,
@@ -763,9 +865,7 @@ def discover_layout(ws) -> dict:
         # Fallback: discover from Config sheet directly (legacy workbooks
         # with literal WP IDs instead of =Config!A{n} formulas)
         config_ws = (
-            ws.parent[SHEET_CONFIG]
-            if SHEET_CONFIG in ws.parent.sheetnames
-            else None
+            ws.parent[SHEET_CONFIG] if SHEET_CONFIG in ws.parent.sheetnames else None
         )
         wp_section = (
             _find_header_row(
@@ -792,7 +892,9 @@ def discover_layout(ws) -> dict:
     }
 
 
-def read_actuals_values(ws, project_months, month_col_start=MONTH_COL_START) -> dict[str, list]:
+def read_actuals_values(
+    ws, project_months, month_col_start=MONTH_COL_START
+) -> dict[str, list]:
     """Read Actuals EUR values for round-trip preservation.
 
     Args:

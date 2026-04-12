@@ -13,6 +13,7 @@ When designing formulas, probe a generated workbook with `python3 -c` to verify 
 When tests return None from `data_only=True`: verify recalc actually ran (`<v>` elements in XML), don't assume openpyxl/LO interop failure. No `<v>` = no calc engine ran.
 **MCP-assisted verification**: Use `openpyxl-read` MCP only when you need to answer a specific question about the generated workbook (e.g., "what formula is in B4?", "is this cell blue?"). Don't routinely MCP-scan after every generation — pytest covers structural validation. See `docs/dev-workflow-review.md` § MCP Tools for tool details.
 If a single test fails unexpectedly on an otherwise-passing suite, re-run after `uv pip install -e .` before investigating — stale editable installs cause phantom failures. A surprise `Uninstalled 1 package / Installed 1 package` line in the next `uv run` output is the rebuild that "fixed" it.
+Pytest runs mutate `output/*.xlsx` (openpyxl/LO zip metadata). Before committing refactor work, `git status` — if only `output/*.xlsx` changed and the commit isn't meant to refresh the workbook, `git checkout -- output/` first.
 
 ## Linting
 Run `pyright` (full project, not just changed files) before committing. Fix all errors.
@@ -24,6 +25,7 @@ Preserve all existing cell formatting (fonts, fills, table styles, column widths
 ## Testing
 Tests must not hardcode config.py seed values (WP names, person names, FTE amounts, start/end months).
 Derive expected values from config imports or from the generated workbook. Tests must pass after user changes data to real values in Excel and runs rebuild.
+When a refactor touches both the reader and a builder, the test must exercise the full round-trip: init → user-edit via openpyxl → `rebuild_workbook` → reopen and assert. A reader-only "does it parse?" assertion is a false green — the builder may still clobber the preserved value.
 
 ## Docs
 Session-generated audits, analyses, and reports go in `docs/analysis/` (already in `.claudeignore` — keeps them out of auto-loaded context). The `docs/` root is for trigger-indexed reference docs listed in CLAUDE.md. Don't drop one-off session outputs into the reference tier.

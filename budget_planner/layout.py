@@ -82,6 +82,11 @@ COL_ASSIGN_SIG_ASSIGNED = 6  # SUMIFS: total assigned FTE for this person
 COL_ASSIGN_SIG_EXTERNAL = 7  # SUMIFS: total external FTE for this person
 COL_ASSIGN_BALANCE = 8       # Available PM - Assigned - External
 ASSIGN_LAST_COL = 8
+# Minimum number of rows in the assignments section (populated + blank template
+# rows). Ensures named ranges span a realistic area even when assignments=[],
+# and avoids the "partial merge" error when users insert rows adjacent to the
+# EXTERNAL COMMITMENTS section header.
+ASSIGN_MIN_ROWS = 5
 
 # External Commitments (Config sheet — also still referenced by Capacity until Stage 2)
 COL_EXT_PERSON = 1

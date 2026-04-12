@@ -2,8 +2,19 @@
 
 **Date:** 2026-04-12
 **Scope:** `budget_planner/` — risk-ranked hardening plan targeting parts most likely to break under realistic user edits.
-**Status:** Plan only. No code changes in this document.
+**Status:** **COMPLETE** (archived 2026-04-12). All 8 tasks landed across multiple commits; 328 tests pass, pyright clean.
 **Inputs:** Architecture audit (Python Backend Architecture Review skill + targeted verification of top findings against the current source).
+
+## Completion summary
+
+- **T1** (formula FTE Rate round-trip) — commit `e4b1281`.
+- **T2** (exact section-header match) — landed in earlier shape-drift work (`layout.py` SECTION_HEADER_LABELS + reader `_find_header_row`).
+- **T3** (remove `cfg_wp_first = 8` fallback) — landed earlier; reader raises `ValueError` on missing WP Budget section.
+- **T4** (layout-derived cross-sheet refs) — `cell_ref` helper in `layout.py:121`; call sites in `workbook.py:277`, `actuals.py:114`, `capacity.py:365`.
+- **T5** (build order + BuildContext + spy test) — `workbook.py` BuildContext dataclass; `tests/test_workbook.py::test_build_order_is_stable`.
+- **T6** (meta.py lazy-import fallback removed) — `meta.py` no longer imports `config`; all data params required.
+- **T7** (collapse hardcoded row predictions) — commit `a44e9f3` threaded live `summary_layout`; dropped config-None branches. **Deferred polish:** `param_rows` TypedDict in `layout.py` for pyright-time schema validation.
+- **T8** (preserve zero-spend Actuals rows) — commit `60246aa`; reader preserves every Actuals WP row regardless of blank monthlies.
 
 ---
 

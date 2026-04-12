@@ -1,4 +1,4 @@
-"""Tests for layout helpers (see docs/plans/brittleness-refactor.md T4)."""
+"""Tests for layout helpers (see docs/plans/archived/2026-04-12-brittleness-refactor.md T4)."""
 
 from budget_planner.layout import cell_ref, SHEET_CONFIG, COL_WP_CEILING, COL_ROSTER_FTE
 

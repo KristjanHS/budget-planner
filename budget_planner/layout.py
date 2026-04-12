@@ -26,7 +26,7 @@ SHEET_TRENDS = "Trends"
 # Column structure: A=ID, B=Name, C onwards = months
 MONTH_COL_START = 3
 
-# ── Section header contract (see docs/plans/brittleness-refactor.md T2) ──
+# ── Section header contract (see docs/plans/archived/2026-04-12-brittleness-refactor.md T2) ──
 SECTION_HEADER_ROWS = 2  # section title + column header, data starts at +2
 
 SECTION_HEADER_LABELS = {

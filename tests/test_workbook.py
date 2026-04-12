@@ -265,7 +265,7 @@ class TestConfigAssignments:
             assert match[0]["total_fte"] == pytest.approx(orig["total_fte"])
 
 
-# ── Build-order enforcement (see docs/plans/brittleness-refactor.md T5) ──
+# ── Build-order enforcement (see docs/plans/archived/2026-04-12-brittleness-refactor.md T5) ──
 
 def test_build_order_is_stable(tmp_path):
     """Change detector: asserts _build_all_sheets calls builders in the order
@@ -319,7 +319,7 @@ def test_build_order_is_stable(tmp_path):
 
     assert call_order == targets, (
         "Builder call order changed. See workbook.py module docstring + "
-        "docs/plans/brittleness-refactor.md T5 before adjusting."
+        "docs/plans/archived/2026-04-12-brittleness-refactor.md T5 before adjusting."
     )
 
 

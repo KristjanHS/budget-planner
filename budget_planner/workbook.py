@@ -1,7 +1,7 @@
 """Workbook orchestrator — init, rebuild, snapshot/restore modes.
 
 Build order (load-bearing — do not reorder without reading T5 in
-docs/plans/brittleness-refactor.md)::
+docs/plans/archived/2026-04-12-brittleness-refactor.md)::
 
     Config ──► Capacity ──► Plan ──► (rewrite Plan FTE)
                                │

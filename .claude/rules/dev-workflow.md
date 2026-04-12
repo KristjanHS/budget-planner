@@ -13,7 +13,8 @@ When designing formulas, probe a generated workbook with `python3 -c` to verify 
 When tests return None from `data_only=True`: verify recalc actually ran (`<v>` elements in XML), don't assume openpyxl/LO interop failure. No `<v>` = no calc engine ran.
 **MCP-assisted verification**: Use `openpyxl-read` MCP only when you need to answer a specific question about the generated workbook (e.g., "what formula is in B4?", "is this cell blue?"). Don't routinely MCP-scan after every generation — pytest covers structural validation. See `docs/dev-workflow-review.md` § MCP Tools for tool details.
 If a single test fails unexpectedly on an otherwise-passing suite, re-run after `uv pip install -e .` before investigating — stale editable installs cause phantom failures. A surprise `Uninstalled 1 package / Installed 1 package` line in the next `uv run` output is the rebuild that "fixed" it.
-Pytest runs mutate `output/*.xlsx` (openpyxl/LO zip metadata). Before committing refactor work, `git status` — if only `output/*.xlsx` changed and the commit isn't meant to refresh the workbook, `git checkout -- output/` first.
+Pytest runs mutate `output/*.xlsx` (openpyxl/LO zip metadata). Always include these in commits — user treats them as tracked artifacts, not transient build output.
+Always include editor-config dirs (`.codex/`, `.cursor/`, `.vscode/`) in commits when present — user wants these tracked.
 
 ## Linting
 Run `pyright` (full project, not just changed files) before committing. Fix all errors.

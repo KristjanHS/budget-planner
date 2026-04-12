@@ -8,16 +8,11 @@ from budget_planner.layout import (
     MONTH_COL_START, SHEET_CONFIG, CAPACITY_AMBER_LOAD,
     build_year_month_headers, month_col_end as _month_col_end, val_columns,
     _calendar_year_groups,
-    COL_ASSIGN_PERSON, COL_ASSIGN_WP, COL_ASSIGN_FTE,
-    COL_ASSIGN_START, COL_ASSIGN_END, ASSIGN_LAST_COL,
-    COL_EXT_PERSON, COL_EXT_PROJECT, COL_EXT_FTE,
-    COL_EXT_START, COL_EXT_END, COL_EXT_EU, EXT_LAST_COL,
 )
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    CF_AMBER_FILL, CF_RED_FILL, CENTER, style_cell, col_letter,
-    write_section_header,
+    CF_AMBER_FILL, CF_RED_FILL, style_cell, col_letter,
 )
 
 
@@ -75,96 +70,6 @@ def distribute(total_fte: float, num_months: int, curve: str) -> list[float]:
     # Unknown curve — fall back to flat
     per_month = total_fte / num_months
     return [per_month] * num_months
-
-
-def _write_assignment_config_block(
-    ws, start_row: int, assignments: list[dict],
-) -> tuple[int, dict]:
-    """Write PERSON-WP ASSIGNMENTS config block.
-
-    Returns:
-        (next_row, layout_dict) where layout_dict has keys
-        assign_first_row, assign_last_row, assign_config_rows.
-    """
-    r = start_row
-    write_section_header(ws, r, "PERSON-WP ASSIGNMENTS", merge_end=ASSIGN_LAST_COL)
-    r += 1
-
-    assign_col_headers = ["Person", "WP", "Total FTE", "Start Month", "End Month"]
-    for ci, h in enumerate(assign_col_headers, 1):
-        style_cell(ws, r, ci, h, font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-                   alignment=CENTER)
-    r += 1
-
-    assign_first_row = r
-    assign_config_rows: dict[tuple[str, str], int] = {}
-    for entry in assignments:
-        style_cell(ws, r, COL_ASSIGN_PERSON, entry["person"], font=BLUE_INPUT)
-        style_cell(ws, r, COL_ASSIGN_WP, entry["wp"], font=BLUE_INPUT)
-        style_cell(ws, r, COL_ASSIGN_FTE, entry["total_fte"], font=BLUE_INPUT,
-                   fmt="0.00")
-        style_cell(ws, r, COL_ASSIGN_START, entry["start"], font=BLUE_INPUT,
-                   fmt="0")
-        style_cell(ws, r, COL_ASSIGN_END, entry["end"], font=BLUE_INPUT,
-                   fmt="0")
-        assign_config_rows[(entry["person"], entry["wp"])] = r
-        r += 1
-    assign_last_row = r - 1 if assignments else r
-
-    # Collapse assignments block
-    if assignments:
-        ws.row_dimensions.group(assign_first_row - 1, assign_last_row, hidden=True)
-
-    return r, {
-        "assign_first_row": assign_first_row,
-        "assign_last_row": assign_last_row,
-        "assign_config_rows": assign_config_rows,
-    }
-
-
-def _write_external_config_block(
-    ws, start_row: int, external_commitments: list[dict],
-) -> tuple[int, dict]:
-    """Write EXTERNAL COMMITMENTS config block.
-
-    Returns:
-        (next_row, layout_dict) where layout_dict has keys
-        ext_first_row, ext_last_row, external_config_rows.
-    """
-    r = start_row
-    write_section_header(ws, r, "EXTERNAL COMMITMENTS", merge_end=EXT_LAST_COL)
-    r += 1
-
-    ext_col_headers = ["Person", "Project", "Total FTE", "Start Month", "End Month", "EU Grant"]
-    for ci, h in enumerate(ext_col_headers, 1):
-        style_cell(ws, r, ci, h, font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-                   alignment=CENTER)
-    r += 1
-
-    ext_first_row = r
-    external_config_rows: dict[tuple[str, str], int] = {}
-    for entry in external_commitments:
-        style_cell(ws, r, COL_EXT_PERSON, entry["person"], font=BLUE_INPUT)
-        style_cell(ws, r, COL_EXT_PROJECT, entry["project"], font=BLUE_INPUT)
-        style_cell(ws, r, COL_EXT_FTE, entry["fte"], font=BLUE_INPUT, fmt="0.00")
-        style_cell(ws, r, COL_EXT_START, entry["start"], font=BLUE_INPUT, fmt="0")
-        style_cell(ws, r, COL_EXT_END, entry["end"], font=BLUE_INPUT, fmt="0")
-        style_cell(ws, r, COL_EXT_EU,
-                   "Yes" if entry.get("is_eu", False) else "No",
-                   font=BLUE_INPUT)
-        external_config_rows[(entry["person"], entry["project"])] = r
-        r += 1
-    ext_last_row = r - 1 if external_commitments else r
-
-    # Collapse external commitments block
-    if external_commitments:
-        ws.row_dimensions.group(ext_first_row - 1, ext_last_row, hidden=True)
-
-    return r, {
-        "ext_first_row": ext_first_row,
-        "ext_last_row": ext_last_row,
-        "external_config_rows": external_config_rows,
-    }
 
 
 def _write_person_grid(
@@ -259,11 +164,11 @@ def _write_person_grid(
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                    fmt="0.00").value = f"=SUM({sum_range})"
 
-        # Budget: ref to assignment config block Total FTE
+        # Budget: ref to Config sheet assignment Total FTE
         asgn_row = assign_config_rows.get((name, wp_id))
         if asgn_row is not None:
             style_cell(ws, r, val_col_budget, font=GREEN_XREF,
-                       fmt="0.00").value = f"=C{asgn_row}"
+                       fmt="0.00").value = f"={SHEET_CONFIG}!C{asgn_row}"
         else:
             style_cell(ws, r, val_col_budget, font=GREEN_XREF,
                        fmt="0.00").value = f"={SHEET_CONFIG}!C{config_row}"
@@ -322,9 +227,9 @@ def _write_person_grid(
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                    fmt="0.00").value = f"=SUM({sum_range})"
 
-        # Budget: ref to config block Total FTE cell
+        # Budget: ref to Config sheet external commitment Total FTE cell
         style_cell(ws, r, val_col_budget, font=GREEN_XREF,
-                   fmt="0.00").value = f"=C{ext_config_row}"
+                   fmt="0.00").value = f"={SHEET_CONFIG}!C{ext_config_row}"
 
         # Variance: Budget - Sum
         style_cell(ws, r, val_col_diff, font=BLACK_FORMULA,
@@ -495,15 +400,20 @@ def build_capacity_sheet(ws, team_layout, *,
                          team=None, external_commitments=None,
                          assignments=None,
                          config_first_wp_row=None):
-    """Build the Capacity sheet: config blocks + per-person groups.
+    """Build the Capacity sheet: year/month headers + per-person groups.
 
     When ``assignments`` is provided, per-person grids show only assigned
     WPs with auto-distributed monthly values. When empty or None, persons
     have no programme WP rows (empty template for manual assignment).
 
+    Assignment and external-commitment tables live on the Config sheet;
+    the Capacity sheet only holds the planning grid and references
+    Config via =Config!C<row> for per-row FTE budgets.
+
     Args:
         ws: The Capacity worksheet to populate.
-        team_layout: dict from build_config_sheet with person_rows, etc.
+        team_layout: dict from build_config_sheet. Must include
+            person_rows, assign_config_rows, external_config_rows.
         project_params: dict with keys title, start, months, rate.
         work_packages: list of WP dicts with keys 'id', 'name', 'fte', 'rate'.
         team: list of team member dicts.
@@ -555,17 +465,11 @@ def build_capacity_sheet(ws, team_layout, *,
     ws.sheet_properties.tabColor = "7030A0"
 
     person_rows = team_layout["person_rows"]
-
-    # ── CONFIG BLOCK 1: PERSON-WP ASSIGNMENTS ──
-    r = 1
-    r, assign_layout = _write_assignment_config_block(ws, r, assignments)
-    r += 1  # gap row
-
-    # ── CONFIG BLOCK 2: EXTERNAL COMMITMENTS ──
-    r, ext_layout = _write_external_config_block(ws, r, external_commitments)
-    r += 1  # gap row
+    assign_config_rows = team_layout["assign_config_rows"]
+    external_config_rows = team_layout["external_config_rows"]
 
     # ── YEAR + MONTH HEADER ROWS (once, before first person group) ──
+    r = 1
     year_header_row, month_header_row, r = build_year_month_headers(
         ws, r, project_params, month_col_start,
         val_headers=[
@@ -596,8 +500,8 @@ def build_capacity_sheet(ws, team_layout, *,
             work_packages=work_packages,
             external_commitments=external_commitments,
             wp_type_map=wp_type_map,
-            assign_config_rows=assign_layout["assign_config_rows"],
-            external_config_rows=ext_layout["external_config_rows"],
+            assign_config_rows=assign_config_rows,
+            external_config_rows=external_config_rows,
             person_rows=person_rows,
             project_params=project_params,
             month_col_start=month_col_start,
@@ -615,13 +519,9 @@ def build_capacity_sheet(ws, team_layout, *,
     ws.column_dimensions["B"].width = 25
 
     return {
-        "assign_first_row": assign_layout["assign_first_row"],
-        "assign_last_row": assign_layout["assign_last_row"],
-        "config_first_row": ext_layout["ext_first_row"],
-        "config_last_row": ext_layout["ext_last_row"],
         "year_header_row": year_header_row,
         "month_header_row": month_header_row,
         "person_groups": person_groups,
-        "external_config_rows": ext_layout["external_config_rows"],
-        "assign_config_rows": assign_layout["assign_config_rows"],
+        "external_config_rows": external_config_rows,
+        "assign_config_rows": assign_config_rows,
     }

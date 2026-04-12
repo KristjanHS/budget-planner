@@ -252,22 +252,22 @@ class TestRebuildWithChangedTeam:
     """Modify team member names in Config roster, rebuild, verify."""
 
     @staticmethod
-    def _find_person_without_externals(roster, cap_ws):
+    def _find_person_without_externals(roster, config_ws):
         """Find a team member who has no external commitments.
 
         Args:
             roster: list of dicts with 'name', 'max_fte', 'row' keys.
-            cap_ws: Capacity worksheet.
+            config_ws: Config worksheet (externals live in the EXTERNAL
+                COMMITMENTS section on Config).
         """
-        # Read external commitments from Capacity config block
         ext_persons = set()
-        for r in range(1, min(cap_ws.max_row + 1, 30)):
-            val = cap_ws.cell(r, 1).value
+        for r in range(1, config_ws.max_row + 1):
+            val = config_ws.cell(r, 1).value
             if val and "EXTERNAL COMMITMENTS" in str(val).upper():
-                # Skip header rows, read data
+                # Skip section header + column header rows
                 dr = r + 2
-                while dr <= cap_ws.max_row:
-                    person = cap_ws.cell(dr, 1).value
+                while dr <= config_ws.max_row:
+                    person = config_ws.cell(dr, 1).value
                     if person is None or str(person).strip() == "":
                         break
                     ext_persons.add(str(person))
@@ -296,7 +296,7 @@ class TestRebuildWithChangedTeam:
         """Renaming a person in Config roster creates correct Capacity group."""
         wb = openpyxl.load_workbook(init_path)
         roster = self._read_roster_with_rows(wb["Config"])
-        person = self._find_person_without_externals(roster, wb["Capacity"])
+        person = self._find_person_without_externals(roster, wb["Config"])
         if person is None:
             wb.close()
             pytest.skip("All team members have external commitments")
@@ -325,7 +325,7 @@ class TestRebuildWithChangedTeam:
         """Renamed person has no WP rows (old-name assignments are orphaned)."""
         wb = openpyxl.load_workbook(init_path)
         roster = self._read_roster_with_rows(wb["Config"])
-        person = self._find_person_without_externals(roster, wb["Capacity"])
+        person = self._find_person_without_externals(roster, wb["Config"])
         if person is None:
             wb.close()
             pytest.skip("All team members have external commitments")
@@ -625,7 +625,7 @@ class TestRebuildFullScenario:
         # 3. Rename a team member without external commitments
         roster = TestRebuildWithChangedTeam._read_roster_with_rows(wb["Config"])
         person = TestRebuildWithChangedTeam._find_person_without_externals(
-            roster, wb["Capacity"]
+            roster, wb["Config"]
         )
         assert person is not None, "Need at least one person without externals"
         _set(wb["Config"], person["row"], 1, "Zara")
@@ -757,7 +757,7 @@ class TestRebuildRecalc:
         _set(wb["Config"], wp2_sched["row"], 3, shortened_end)
         roster = TestRebuildWithChangedTeam._read_roster_with_rows(wb["Config"])
         person = TestRebuildWithChangedTeam._find_person_without_externals(
-            roster, wb["Capacity"]
+            roster, wb["Config"]
         )
         assert person is not None, "Need at least one person without externals"
         _set(wb["Config"], person["row"], 1, "Zara")

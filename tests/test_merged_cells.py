@@ -162,7 +162,7 @@ class TestSectionHeaders:
 
     @pytest.mark.parametrize("sheet_name,header_text,expected_cols", [
         ("Plan", "PLANNED FTE", (1, VAL_COL_DIFF)),
-        ("Capacity", "EXTERNAL COMMITMENTS", (1, 6)),
+        ("Config", "EXTERNAL COMMITMENTS", (1, 6)),
         ("Actuals", "ACTUAL EUR", (1, VAL_COL_BREACH)),
     ])
     def test_section_header_span(self, workbook, sheet_name, header_text, expected_cols):

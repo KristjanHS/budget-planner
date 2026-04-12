@@ -8,7 +8,7 @@ from budget_planner.reader import (
     read_plan_config,
     read_team_from_config,
     read_capacity_sheet,
-    read_capacity_assignments,
+    read_assignments_from_config,
 )
 from budget_planner.config import (
     WORK_PACKAGES, TEAM, PROJECT_MONTHS, EXTERNAL_COMMITMENTS,
@@ -131,14 +131,14 @@ def test_read_capacity_external_commitments_round_trip(assigned_wb_path):
     wb.close()
 
 
-# ── read_capacity_assignments ──
+# ── read_assignments_from_config ──
 
 
-def test_read_capacity_assignments_round_trip(assigned_wb_path):
-    """Assignments config block round-trips correctly."""
+def test_read_assignments_from_config_round_trip(assigned_wb_path):
+    """Assignments section on Config round-trips correctly."""
     import openpyxl
     wb = openpyxl.load_workbook(assigned_wb_path)
-    assignments = read_capacity_assignments(wb["Capacity"])
+    assignments = read_assignments_from_config(wb["Config"])
 
     assert len(assignments) == len(DEMO_CAPACITY_ASSIGNMENTS)
     for got, expected in zip(assignments, DEMO_CAPACITY_ASSIGNMENTS):
@@ -150,11 +150,11 @@ def test_read_capacity_assignments_round_trip(assigned_wb_path):
     wb.close()
 
 
-def test_read_capacity_assignments_empty_for_plain_init(fresh_wb_path):
-    """Plain init workbook has no assignments."""
+def test_read_assignments_from_config_empty_for_plain_init(fresh_wb_path):
+    """Plain init workbook has no assignments in the Config section."""
     import openpyxl
     wb = openpyxl.load_workbook(fresh_wb_path)
-    assignments = read_capacity_assignments(wb["Capacity"])
+    assignments = read_assignments_from_config(wb["Config"])
     assert assignments == []
     wb.close()
 

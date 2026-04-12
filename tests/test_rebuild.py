@@ -79,19 +79,19 @@ class TestCapacityPreservation:
         return path
 
     def test_assignment_config_block_preserved(self, assigned_wb):
-        """Person-WP assignment config block values survive rebuild."""
-        from budget_planner.reader import read_capacity_assignments
+        """Person-WP assignment section on Config survives rebuild."""
+        from budget_planner.reader import read_assignments_from_config
         from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
 
         wb = load_workbook(assigned_wb)
-        original = read_capacity_assignments(wb["Capacity"])
+        original = read_assignments_from_config(wb["Config"])
         assert len(original) == len(DEMO_CAPACITY_ASSIGNMENTS)
         wb.close()
 
         rebuild_workbook(input_path=assigned_wb)
 
         wb = load_workbook(assigned_wb)
-        rebuilt = read_capacity_assignments(wb["Capacity"])
+        rebuilt = read_assignments_from_config(wb["Config"])
         assert len(rebuilt) == len(original)
         for got, expected in zip(rebuilt, original):
             assert got["person"] == expected["person"]

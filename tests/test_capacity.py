@@ -44,7 +44,9 @@ def capacity_layout(tmp_path_factory):
     config_layout = build_config_sheet(config_ws, wb,
                                         {"title": "Test", "start": __import__("datetime").datetime(2026, 11, 1),
                                          "months": 14, "rate": 7500},
-                                        WORK_PACKAGES)
+                                        WORK_PACKAGES,
+                                        assignments=DEMO_CAPACITY_ASSIGNMENTS,
+                                        external_commitments=EXTERNAL_COMMITMENTS)
     plan_ws = wb.create_sheet("Plan")
     plan_layout = build_plan_sheet(plan_ws, wb, config_layout=config_layout)
     cap_ws = wb.create_sheet("Capacity")
@@ -64,28 +66,6 @@ def _person_assigned_wps(person_name):
     """Return set of WP IDs assigned to a person in demo data."""
     return {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS
             if a["person"] == person_name}
-
-
-# ── Config block headers ──
-
-def test_capacity_assignments_config_block_exists(cap_ws):
-    """Assignments config block has correct section header."""
-    assert cap_ws.cell(row=1, column=1).value == "PERSON-WP ASSIGNMENTS"
-
-
-def test_capacity_external_config_block_exists(cap_ws):
-    """External commitments config block exists below assignments."""
-    # Find EXTERNAL COMMITMENTS section header
-    found = False
-    for r in range(1, cap_ws.max_row + 1):
-        val = cap_ws.cell(r, 1).value
-        if val and "EXTERNAL COMMITMENTS" in str(val):
-            found = True
-            # Check column headers on next row
-            assert cap_ws.cell(r + 1, 1).value == "Person"
-            assert cap_ws.cell(r + 1, 2).value == "Project"
-            break
-    assert found, "EXTERNAL COMMITMENTS section not found"
 
 
 # ── Person groups ──
@@ -244,7 +224,7 @@ def test_capacity_wp_row_sum_formula(cap_ws, capacity_layout):
 # ── Test: WP row Budget formula refs assignment config block ──
 
 def test_capacity_wp_row_budget_formula(cap_ws, capacity_layout):
-    """programme WP rows have Budget = C{assign_config_row} (assignment Total FTE)."""
+    """programme WP rows have Budget = Config!C{assign_config_row} (assignment Total FTE)."""
     assign_config_rows = capacity_layout["assign_config_rows"]
 
     for member in TEAM:
@@ -254,7 +234,7 @@ def test_capacity_wp_row_budget_formula(cap_ws, capacity_layout):
             asgn_row = assign_config_rows.get((name, wp_id))
             assert asgn_row is not None, f"{name}/{wp_id} not in assign_config_rows"
             val = cap_ws.cell(row=row, column=VAL_COL_BUDGET).value
-            expected = f"=C{asgn_row}"
+            expected = f"=Config!C{asgn_row}"
             assert val == expected, (
                 f"{name}/{wp_id} Budget: expected {expected}, got {val}"
             )
@@ -297,10 +277,10 @@ def test_capacity_external_row_validation_formulas(cap_ws, capacity_layout):
                 f"{member['name']}/{project} Sum: expected {expected_sum}, got {sum_val}"
             )
 
-            # Budget: =C{ext_config_row}
+            # Budget: =Config!C{ext_config_row}
             ext_config_row = ext_config_rows[(member["name"], project)]
             budget_val = cap_ws.cell(row=row, column=VAL_COL_BUDGET).value
-            expected_budget = f"=C{ext_config_row}"
+            expected_budget = f"=Config!C{ext_config_row}"
             assert budget_val == expected_budget, (
                 f"{member['name']}/{project} Budget: expected {expected_budget}, got {budget_val}"
             )
@@ -353,21 +333,6 @@ def test_distribute_single_month():
 def test_distribute_zero_months():
     result = distribute(5.0, 0, "flat")
     assert result == []
-
-
-# ── Test: External commitments EU Grant column ──
-
-def test_capacity_external_config_has_eu_column(cap_ws):
-    """External commitments config block has EU Grant column."""
-    for r in range(1, cap_ws.max_row + 1):
-        val = cap_ws.cell(r, 1).value
-        if val and "EXTERNAL COMMITMENTS" in str(val):
-            # Column headers on next row
-            header_row = r + 1
-            assert cap_ws.cell(header_row, 6).value == "EU Grant"
-            break
-    else:
-        pytest.fail("EXTERNAL COMMITMENTS section not found")
 
 
 # ── Test: EU TOTAL row ──

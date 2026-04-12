@@ -387,16 +387,32 @@ def read_team_from_config(ws) -> list[dict]:
     if grade_hdr and "grade" in str(grade_hdr).lower():
         has_grade_col = True
 
-    # Read roster rows until empty name or non-numeric max_fte (next section)
+    # Use roster_ftes named range as authoritative bounds when present; within
+    # the range, tolerate internal blanks (Excel-side mid-insert leaves gaps).
+    # Past the range, fall back to sentinel scan to support append-style edits
+    # the user may have made without manually extending the defined name.
+    wb = ws.parent
+    span = _iter_named_range_rows(wb, "roster_ftes") if wb is not None else None
+    if span is not None:
+        first_data, range_end = span
+    else:
+        first_data = person_header + 1
+        range_end = None
+
     roster: list[dict] = []
-    r = person_header + 1
+    r = first_data
     while r <= ws.max_row:
         name = ws.cell(r, 1).value
-        if name is None or str(name).strip() == "":
-            break
         max_fte = ws.cell(r, COL_ROSTER_FTE).value
         max_fte_parsed = _parse_config_float(max_fte)
-        if max_fte_parsed is None:
+        name_blank = name is None or str(name).strip() == ""
+        inside_range = range_end is not None and r <= range_end
+        if name_blank or max_fte_parsed is None:
+            if inside_range:
+                # Tolerate blanks inside the named range — Excel-side mid-insert.
+                r += 1
+                continue
+            # Outside the range (or no range at all): sentinel termination.
             break
         grade = DEFAULT_GRADE
         if has_grade_col:

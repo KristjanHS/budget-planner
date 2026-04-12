@@ -22,6 +22,30 @@ def _find_roster_first_data_row(ws):
     raise AssertionError("TEAM ROSTER section not found")
 
 
+def _simulate_excel_insert_in_named_range(wb, name: str, before_row: int, amount: int = 1):
+    """Simulate Excel's row-insert semantics: extend the named range's last row.
+
+    openpyxl's ``ws.insert_rows`` shifts cells but does not update defined-name
+    references. Excel, by contrast, auto-extends a named range when rows are
+    inserted inside it. We emulate that here so the post-edit workbook matches
+    what the user's Excel session produced.
+    """
+    import re
+
+    dn = wb.defined_names[name]
+    dest = list(dn.destinations)[0]
+    sheet, ref = dest
+    m = re.match(r"\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$", ref)
+    assert m, f"unexpected ref form: {ref}"
+    col1, row1, col2, row2 = m.group(1), int(m.group(2)), m.group(3), m.group(4)
+    last = int(row2) if row2 else row1
+    # Insert is inside the range → extend end by `amount`.
+    if row1 <= before_row <= last + 1:
+        new_last = last + amount
+        col2_part = f":${col2}${new_last}" if col2 else f":${col1}${new_last}"
+        dn.attr_text = f"{sheet}!${col1}${row1}{col2_part}"
+
+
 def test_blank_row_mid_roster_does_not_truncate_rebuild(tmp_path: Path):
     """User inserts an empty row mid-roster (common in Excel); rebuild must keep persons after the blank."""
     path = tmp_path / "wb.xlsx"
@@ -44,6 +68,9 @@ def test_blank_row_mid_roster_does_not_truncate_rebuild(tmp_path: Path):
     # Insert a truly blank row in the middle of the roster.
     insert_at = first_data + 1
     config_ws.insert_rows(insert_at, amount=1)
+    _simulate_excel_insert_in_named_range(wb, "roster_ftes", insert_at, 1)
+    _simulate_excel_insert_in_named_range(wb, "roster_grades", insert_at, 1)
+    _simulate_excel_insert_in_named_range(wb, "roster_lookup", insert_at, 1)
     wb.save(path)
     wb.close()
 
@@ -90,6 +117,9 @@ def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
     config_ws.cell(insert_at, 1, "Midway Mary")
     config_ws.cell(insert_at, 2, 0.8)
     config_ws.cell(insert_at, 3, next(iter(cfg.GRADE_RATES.keys())))
+    _simulate_excel_insert_in_named_range(wb, "roster_ftes", insert_at, 1)
+    _simulate_excel_insert_in_named_range(wb, "roster_grades", insert_at, 1)
+    _simulate_excel_insert_in_named_range(wb, "roster_lookup", insert_at, 1)
     wb.save(path)
     wb.close()
 

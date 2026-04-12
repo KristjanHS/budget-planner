@@ -677,3 +677,31 @@ def test_iter_named_range_rows_returns_none_for_unknown_name():
     wb = Workbook()
     from budget_planner.reader import _iter_named_range_rows
     assert _iter_named_range_rows(wb, "does_not_exist") is None
+
+
+def test_read_team_tolerates_blank_row_inside_named_range():
+    """A blank row inside roster_ftes span must not truncate the roster."""
+    from openpyxl.workbook.defined_name import DefinedName
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    ws.cell(10, 1, value="TEAM ROSTER")
+    ws.cell(11, 1, value="Person")
+    ws.cell(11, 2, value="Max FTE")
+    ws.cell(11, 3, value="Grade")
+    ws.cell(12, 1, value="Alice")
+    ws.cell(12, 2, value=1.0)
+    ws.cell(12, 3, value="Senior")
+    # Row 13 intentionally blank.
+    ws.cell(14, 1, value="Bob")
+    ws.cell(14, 2, value=0.5)
+    ws.cell(14, 3, value="Junior")
+    wb.defined_names["roster_ftes"] = DefinedName(
+        name="roster_ftes", attr_text="Config!$B$12:$B$14"
+    )
+
+    roster = read_team_from_config(ws)
+    names = [p["name"] for p in roster]
+    assert names == ["Alice", "Bob"], f"Got {names}"

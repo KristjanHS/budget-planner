@@ -100,11 +100,24 @@ preserved_actuals: dict[str, list[float | None]]
 
 All orphaned data is logged and included in `_META` sheet's LAST REBUILD LOG.
 
+### Row-Span Resolution (named-range-primary)
+
+Reader functions for Config tables (`read_team_from_config`,
+`read_assignments_from_config`, `read_externals_from_config`) are **named-range
+primary**: they resolve `roster_ftes` / `assign_persons` / `ext_persons` via
+`wb.defined_names` as the authoritative row span, then iterate within and
+tolerate internal blank rows. Excel auto-extends these named ranges when the
+user inserts rows inside them, so the reader's bounds stay in sync with live
+data after hand-edits. Only when a named range is missing (legacy workbooks)
+does the reader fall back to sentinel-based scanning that stops at the first
+blank. See `_iter_named_range_rows` in `reader.py` and shape-drift tests in
+`tests/test_rebuild_shape_drift.py` / `tests/test_rebuild_shapes.py`.
+
 ### Known Fragility
 
 1. **Person header detection** relies on specific font/fill styling. Manual restyling breaks detection.
 2. **Formula chain resolution** assumes patterns like `=Config!A8`. Custom formulas are not followed.
-3. **Row scanning** stops at first empty cell in column A. Blank rows mid-table truncate reads.
+3. **Sentinel-scan sections** (WP BUDGET, WP SCHEDULE, RATE BY GRADE, reporting periods) still stop at the first blank in column A. Use filled rows when hand-editing these, or add named ranges to extend the same treatment as roster/assignments/externals.
 
 ---
 

@@ -21,6 +21,8 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 | Column/row shift, code review, /impag, worktrees | `docs/dev-workflow-review.md` | Grep-cascade checks, planning protocol, worktree sync |
 | Workbook inspection, MCP tools | `docs/dev-workflow-review.md` § MCP Tools | `openpyxl-read` for formula/style spot-checks, `mcp-excel` for numeric sanity checks |
 | Add WP, add team member, add actuals, compare scenarios | `docs/common-tasks.md` | Step-by-step SOPs for common data tasks |
+| Rebuild drops rows, stale Config refs | `docs/plans/2026-04-12-rebuild-shape-drift-design.md` | Readers use named ranges; tolerate internal blanks |
+| Debugging against user's confidential workbook | `docs/debugging-your-real-file.md` | Run `make_reproducer.py`; never send the real file |
 | "record this", "remember this", organizing docs | `~/.claude/references/recording-principles.md` | L1/L2/L3 criteria, what belongs where |
 
 ## Key Commands

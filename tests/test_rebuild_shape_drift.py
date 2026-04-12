@@ -13,6 +13,7 @@ from budget_planner.reader import (
     read_team_from_config,
 )
 from budget_planner.workbook import init_workbook, rebuild_workbook
+from tests._shape_invariants import assert_meta_matches_live
 
 
 def _find_roster_first_data_row(ws):
@@ -94,7 +95,6 @@ def test_blank_row_mid_roster_does_not_truncate_rebuild(tmp_path: Path):
     wb = openpyxl.load_workbook(path)
     roster_after = read_team_from_config(wb["Config"])
     assignments_after = read_assignments_from_config(wb["Config"])
-    wb.close()
     names_after = [p["name"] for p in roster_after]
     for n in existing_names:
         assert n in names_after, (
@@ -105,6 +105,8 @@ def test_blank_row_mid_roster_does_not_truncate_rebuild(tmp_path: Path):
     assert not dropped_assignees, (
         f"Rebuild has assignments pointing at persons no longer in roster: {dropped_assignees}"
     )
+    assert_meta_matches_live(wb)
+    wb.close()
 
 
 def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
@@ -140,7 +142,6 @@ def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
     wb = openpyxl.load_workbook(path)
     roster_after = read_team_from_config(wb["Config"])
     assignments_after = read_assignments_from_config(wb["Config"])
-    wb.close()
     names_after = [p["name"] for p in roster_after]
     assert "Midway Mary" in names_after, (
         f"Rebuild dropped the mid-inserted person. Roster after rebuild: {names_after}"
@@ -149,3 +150,5 @@ def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
     assert not dropped_assignees, (
         f"Rebuild has assignments pointing at persons no longer in roster: {dropped_assignees}"
     )
+    assert_meta_matches_live(wb)
+    wb.close()

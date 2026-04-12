@@ -1,0 +1,150 @@
+"""Parameterized rebuild round-trip tests varying one Config-table shape at a time.
+
+Mirrors the user's Excel workflow: init a workbook, insert one row mid-section
+(via openpyxl, with named-range auto-extend emulated where Excel would do so),
+rebuild, and assert the inserted data survives.
+
+Variants (design §2a — lean matrix, one dimension per case):
+- default: no edit, just rebuild
+- extra_wp: new row in WP BUDGET
+- extra_person: new row in TEAM ROSTER
+- extra_external: new row in EXTERNAL COMMITMENTS
+- extra_grade: new row in RATE BY GRADE
+"""
+from pathlib import Path
+
+import openpyxl
+import pytest
+
+from budget_planner.reader import (
+    read_assignments_from_config,
+    read_config_sheet,
+    read_externals_from_config,
+    read_grade_rates,
+    read_team_from_config,
+)
+from budget_planner.workbook import init_workbook, rebuild_workbook
+from tests._shape_invariants import assert_meta_matches_live
+
+
+SECTION_LABELS = {
+    "wp_budget": "WP BUDGET",
+    "team_roster": "TEAM ROSTER",
+    "externals": "EXTERNAL COMMITMENTS",
+    "rate_by_grade": "RATE BY GRADE",
+}
+
+
+def _first_data_row_after(ws, section_label: str) -> int:
+    """Return the first data row for a section (header row + 2)."""
+    for r in range(1, ws.max_row + 1):
+        if str(ws.cell(r, 1).value or "").strip().upper() == section_label:
+            return r + 2
+    raise AssertionError(f"Section {section_label!r} not found")
+
+
+def _simulate_excel_insert_in_named_range(wb, name: str, before_row: int, amount: int = 1):
+    """Emulate Excel's auto-extend of a named range on mid-range row insertion.
+
+    See tests/test_rebuild_shape_drift.py for the canonical version; duplicated
+    here to keep this file self-contained for the shape-variant matrix.
+    """
+    import re
+
+    if name not in wb.defined_names:
+        return
+    dn = wb.defined_names[name]
+    sheet, ref = list(dn.destinations)[0]
+    m = re.match(r"\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$", ref)
+    assert m, f"unexpected ref form: {ref}"
+    col1, row1, col2, row2 = m.group(1), int(m.group(2)), m.group(3), m.group(4)
+    last = int(row2) if row2 else row1
+    if row1 <= before_row <= last:
+        new_last = last + amount
+        col2_part = f":${col2}${new_last}" if col2 else f":${col1}${new_last}"
+        dn.attr_text = f"{sheet}!${col1}${row1}{col2_part}"
+
+
+@pytest.mark.parametrize(
+    "variant",
+    ["default", "extra_wp", "extra_person", "extra_external", "extra_grade"],
+)
+def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
+    path = tmp_path / f"wb_{variant}.xlsx"
+    init_workbook(str(path))
+
+    wb = openpyxl.load_workbook(path)
+    config_ws = wb["Config"]
+
+    if variant == "extra_wp":
+        data_start = _first_data_row_after(config_ws, SECTION_LABELS["wp_budget"])
+        insert_at = data_start + 1
+        config_ws.insert_rows(insert_at, amount=1)
+        config_ws.cell(insert_at, 1, "WPX")
+        config_ws.cell(insert_at, 2, "Extra WP")
+        config_ws.cell(insert_at, 3, 1.0)
+        config_ws.cell(insert_at, 4, 6500)
+    elif variant == "extra_person":
+        data_start = _first_data_row_after(config_ws, SECTION_LABELS["team_roster"])
+        insert_at = data_start + 1
+        config_ws.insert_rows(insert_at, amount=1)
+        config_ws.cell(insert_at, 1, "Midway Mary")
+        config_ws.cell(insert_at, 2, 0.8)
+        config_ws.cell(insert_at, 3, "Senior")
+        for nr in ("roster_ftes", "roster_grades", "roster_lookup"):
+            _simulate_excel_insert_in_named_range(wb, nr, insert_at, 1)
+    elif variant == "extra_external":
+        data_start = _first_data_row_after(config_ws, SECTION_LABELS["externals"])
+        insert_at = data_start + 1
+        config_ws.insert_rows(insert_at, amount=1)
+        config_ws.cell(insert_at, 1, "Alice")
+        config_ws.cell(insert_at, 2, "Other Grant")
+        config_ws.cell(insert_at, 3, 0.2)
+        config_ws.cell(insert_at, 4, 1)
+        config_ws.cell(insert_at, 5, 24)
+        config_ws.cell(insert_at, 6, "Yes")
+        for nr in ("ext_persons", "ext_ftes"):
+            _simulate_excel_insert_in_named_range(wb, nr, insert_at, 1)
+    elif variant == "extra_grade":
+        data_start = _first_data_row_after(config_ws, SECTION_LABELS["rate_by_grade"])
+        insert_at = data_start + 1
+        config_ws.insert_rows(insert_at, amount=1)
+        config_ws.cell(insert_at, 1, "Principal")
+        config_ws.cell(insert_at, 2, 9500)
+        _simulate_excel_insert_in_named_range(wb, "tbl_GradeRates", insert_at, 1)
+
+    wb.save(path)
+    wb.close()
+
+    rebuild_workbook(str(path))
+
+    wb = openpyxl.load_workbook(path)
+    config_ws = wb["Config"]
+
+    if variant == "extra_wp":
+        _, wps, _ = read_config_sheet(config_ws)
+        ids = [w["id"] for w in wps]
+        assert "WPX" in ids, f"Rebuild dropped inserted WP. Got {ids}"
+    elif variant == "extra_person":
+        names = [p["name"] for p in read_team_from_config(config_ws)]
+        assert "Midway Mary" in names, f"Rebuild dropped inserted person. Got {names}"
+    elif variant == "extra_external":
+        projects = [e["project"] for e in read_externals_from_config(config_ws)]
+        assert "Other Grant" in projects, (
+            f"Rebuild dropped inserted external commitment. Got {projects}"
+        )
+    elif variant == "extra_grade":
+        grades = read_grade_rates(config_ws)
+        assert "Principal" in grades, (
+            f"Rebuild dropped inserted grade. Got {list(grades)}"
+        )
+
+    # Universal invariants: every assignment points at a live roster name, and
+    # _META text reflects the live team count.
+    roster_names = {p["name"] for p in read_team_from_config(config_ws)}
+    orphaned = {
+        a["person"] for a in read_assignments_from_config(config_ws)
+    } - roster_names
+    assert not orphaned, f"Orphaned assignments after rebuild: {orphaned}"
+    assert_meta_matches_live(wb)
+    wb.close()

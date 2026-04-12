@@ -713,6 +713,43 @@ def test_read_assignments_tolerates_blank_row_inside_named_range():
     assert persons == ["Alice", "Bob"], f"Got {persons}"
 
 
+def test_read_externals_tolerates_blank_row_inside_named_range():
+    """Blank inside ext_persons range must not drop later externals."""
+    from openpyxl.workbook.defined_name import DefinedName
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    ws.cell(30, 1, value="EXTERNAL COMMITMENTS")
+    ws.cell(31, 1, value="Person")
+    ws.cell(31, 2, value="Project")
+    ws.cell(31, 3, value="FTE")
+    ws.cell(31, 4, value="Start")
+    ws.cell(31, 5, value="End")
+    ws.cell(31, 6, value="EU?")
+    ws.cell(32, 1, value="Alice")
+    ws.cell(32, 2, value="ProjectX")
+    ws.cell(32, 3, value=0.1)
+    ws.cell(32, 4, value=1)
+    ws.cell(32, 5, value=12)
+    ws.cell(32, 6, value="No")
+    # Row 33 blank.
+    ws.cell(34, 1, value="Bob")
+    ws.cell(34, 2, value="HorizonY")
+    ws.cell(34, 3, value=0.2)
+    ws.cell(34, 4, value=6)
+    ws.cell(34, 5, value=18)
+    ws.cell(34, 6, value="Yes")
+    wb.defined_names["ext_persons"] = DefinedName(
+        name="ext_persons", attr_text="Config!$A$32:$A$34"
+    )
+
+    out = read_externals_from_config(ws)
+    persons = [e["person"] for e in out]
+    assert persons == ["Alice", "Bob"], f"Got {persons}"
+
+
 def test_read_team_tolerates_blank_row_inside_named_range():
     """A blank row inside roster_ftes span must not truncate the roster."""
     from openpyxl.workbook.defined_name import DefinedName

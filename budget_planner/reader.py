@@ -407,6 +407,10 @@ def read_team_from_config(ws) -> list[dict]:
         max_fte_parsed = _parse_config_float(max_fte)
         name_blank = name is None or str(name).strip() == ""
         inside_range = range_end is not None and r <= range_end
+        # Past range_end with no entries yet — the section is empty; break
+        # rather than sentinel-scan into the next section's header.
+        if range_end is not None and r > range_end and not roster:
+            break
         if name_blank or max_fte_parsed is None:
             if inside_range:
                 # Tolerate blanks inside the named range — Excel-side mid-insert.
@@ -508,6 +512,8 @@ def read_assignments_from_config(ws) -> list[dict]:
         total_fte_parsed = _parse_config_float(total_fte)
         person_blank = person is None or str(person).strip() == ""
         inside_range = range_end is not None and r <= range_end
+        if range_end is not None and r > range_end and not assignments:
+            break
         if person_blank or total_fte_parsed is None:
             if inside_range:
                 r += 1
@@ -546,16 +552,31 @@ def read_externals_from_config(ws) -> list[dict]:
     if ext_config_header is None:
         return []
 
+    # Use ext_persons named range as authoritative span when present; same
+    # hybrid semantics as roster/assignments (tolerate internal blanks, allow
+    # sentinel scan past range end for append-style edits).
+    wb = ws.parent
+    span = _iter_named_range_rows(wb, "ext_persons") if wb is not None else None
+    if span is not None:
+        first_data, range_end = span
+    else:
+        first_data = _data_row_after(ext_config_header)
+        range_end = None
+
     external_commitments: list[dict] = []
-    # Skip section header + column headers
-    r = _data_row_after(ext_config_header)
+    r = first_data
     while r <= ws.max_row:
         person = ws.cell(r, COL_EXT_PERSON).value
-        if person is None or str(person).strip() == "":
-            break
         fte = ws.cell(r, COL_EXT_FTE).value
         fte_parsed = _parse_config_float(fte)
-        if fte_parsed is None:
+        person_blank = person is None or str(person).strip() == ""
+        inside_range = range_end is not None and r <= range_end
+        if range_end is not None and r > range_end and not external_commitments:
+            break
+        if person_blank or fte_parsed is None:
+            if inside_range:
+                r += 1
+                continue
             break
         project = ws.cell(r, COL_EXT_PROJECT).value
         start = ws.cell(r, COL_EXT_START).value

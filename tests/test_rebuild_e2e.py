@@ -22,6 +22,8 @@ from budget_planner.reader import (
 from budget_planner.config import MONTH_COL_START
 
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
+
+
 def _get_config_first_wp_row():
     """Derive Config WP data start row from a generated workbook."""
     import tempfile

@@ -8,3 +8,7 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/worktrees/

@@ -289,8 +289,8 @@ def test_build_order_is_stable(tmp_path):
 
     targets = [
         "build_config_sheet",
-        "build_plan_sheet",
         "build_capacity_sheet",
+        "build_plan_sheet",
         "_apply_planned_formulas",
         "build_actuals_sheet",
         "build_summary_sheet",

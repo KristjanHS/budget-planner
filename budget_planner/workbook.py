@@ -3,16 +3,16 @@
 Build order (load-bearing — do not reorder without reading T5 in
 docs/plans/brittleness-refactor.md)::
 
-    Config ──► Plan ──► Capacity ──► (rewrite Plan FTE)
-                │          │
-                │          └──► Actuals ──► Summary ──► Trends(full) ──► _META
-                └──► Trends(stub = current_month named range) ──┘
+    Config ──► Capacity ──► Plan ──► (rewrite Plan FTE)
+                               │
+                               ├──► Trends(stub = current_month named range)
+                               └──► Actuals ──► Summary ──► Trends(full) ──► _META
 
 Coupling points:
+- Capacity consumes ``config_layout`` (param rows, first WP row).
 - Plan consumes ``config_layout`` (param rows, first WP row).
-- Capacity consumes ``config_layout`` + ``layout["config_first_wp_row"]``.
 - ``_apply_planned_formulas`` overwrites Plan FTE cells using
-  ``capacity_layout`` — must run after Capacity.
+  ``capacity_layout`` — must run after both Capacity and Plan.
 - Actuals formulas reference the ``current_month`` named range — the Trends
   stub that creates it must run before Actuals.
 - Summary, full Trends, and _META consume every prior layout dict and must
@@ -219,18 +219,7 @@ def _build_all_sheets(
         external_commitments=external_commitments,
     )
 
-    # Stage 2 — Plan (consumes config_layout)
-    plan_ws = wb.create_sheet(SHEET_PLAN)
-    ctx.plan_layout = build_plan_sheet(
-        plan_ws,
-        wb,
-        project_params=project_params,
-        work_packages=work_packages,
-        wp_schedule=wp_schedule,
-        config_layout=ctx.config_layout,
-    )
-
-    # Stage 3 — Capacity (consumes config_layout + plan_layout["config_first_wp_row"])
+    # Stage 2 — Capacity (consumes config_layout)
     capacity_ws = wb.create_sheet(SHEET_CAPACITY)
     ctx.capacity_layout = build_capacity_sheet(
         capacity_ws,
@@ -241,11 +230,22 @@ def _build_all_sheets(
         team=team,
         external_commitments=external_commitments,
         assignments=assignments,
-        config_first_wp_row=ctx.plan_layout["config_first_wp_row"],
+        config_first_wp_row=ctx.config_layout["wp_first_row"],
+    )
+
+    # Stage 3 — Plan (consumes config_layout)
+    plan_ws = wb.create_sheet(SHEET_PLAN)
+    ctx.plan_layout = build_plan_sheet(
+        plan_ws,
+        wb,
+        project_params=project_params,
+        work_packages=work_packages,
+        wp_schedule=wp_schedule,
+        config_layout=ctx.config_layout,
     )
 
     # Stage 4 — Rewrite Plan FTE as cross-sheet formulas from Capacity
-    # (must run after Capacity; Plan cells written in Stage 2 get overwritten.)
+    # (Plan cells written in Stage 3 get overwritten with SUM(Capacity!…).)
     _apply_planned_formulas(
         plan_ws,
         ctx.plan_layout,
@@ -328,7 +328,7 @@ def _build_all_sheets(
         grade_rates=grade_rates,
     )
 
-    # Tab order: _META, Config, Plan, Capacity, Actuals, Trends, Summary
+    # Tab order: _META, Config, Capacity, Plan, Actuals, Trends, Summary
     wb.move_sheet(SHEET_META, offset=0)
     wb.move_sheet(SHEET_TRENDS, offset=1)  # move after Actuals
 

@@ -440,10 +440,10 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
   python -m budget_planner --restore <path>        — Restore from snapshot
 
 ═══ BUILD ORDER ═══
-  Config → Plan → Capacity → patch Plan → Trends stub → Actuals → Summary → Trends → _META
+  Config → Capacity → Plan → patch Plan → Trends stub → Actuals → Summary → Trends → _META
   Config sheet created first so named ranges (project_start, fte_rate) are available.
-  Plan sheet built next, provides config_first_wp_row to downstream builders.
-  Capacity sheet built, then Plan cells overwritten with SUM formulas referencing Capacity.
+  Capacity sheet built next; reads config_first_wp_row from config_layout.
+  Plan sheet built, then its FTE cells overwritten with SUM formulas referencing Capacity.
   Trends stub (B1 + current_month named range) created before Actuals so current_month is available.
   Trends content populated after Actuals/Summary so their layouts are known.
 

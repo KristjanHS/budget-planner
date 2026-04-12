@@ -22,6 +22,7 @@ openpyxl retains previous protection state when overwriting a cell — if you mu
 CF fills must use `PatternFill(bgColor="FFFFC7CE")` (8-char AARRGGBB hex, not 6-char — 6-char gets `00` alpha = transparent). Use `CF_*_FILL` constants from `styles.py` in all `FormulaRule` calls; regular `*_FILL` constants are for cell formatting only.
 CF test assertions: match rules by fill color + formula pattern, not positional index — adding new CF rules shifts all indices.
 When scanning rows for data, check both None and empty string — openpyxl preserves `""` from `style_cell(ws, r, c, "")` as a non-None value.
+Section readers relying on blank col A to stop should also type-guard a known-numeric column: `if val is not None and not isinstance(val, (int, float)): break`. The blank separator row can be filled by user edits, test `_set` calls, or inserted rows — without the type guard the reader scans into the next section header. Mirrors `read_team_from_config`.
 LibreOffice `store()` strips chart series data (val/tx/cat XML) from openpyxl files. `recalc.py` preserves chart XML across LO recalc — don't bypass this.
 For charts, construct Series manually with `NumDataSource`/`NumRef`/`AxDataSource` instead of `chart.add_data()` — produces explicit OOXML elements.
 Charts referencing hidden rows must set `chart.visible_cells_only = False` — openpyxl defaults to `True` (`<c:plotVisOnly val="1"/>`), which makes Excel skip hidden-row data → blank chart.

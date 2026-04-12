@@ -489,16 +489,29 @@ def read_assignments_from_config(ws) -> list[dict]:
     if assignments_header is None:
         return []
 
-    # Skip section header + column headers
-    r = _data_row_after(assignments_header)
+    # Use assign_persons named range as authoritative span when present; skip
+    # blanks inside the range (Excel mid-insert) and keep scanning past the
+    # range end to support append-style edits that don't extend the name.
+    wb = ws.parent
+    span = _iter_named_range_rows(wb, "assign_persons") if wb is not None else None
+    if span is not None:
+        first_data, range_end = span
+    else:
+        first_data = _data_row_after(assignments_header)
+        range_end = None
+
     assignments: list[dict] = []
+    r = first_data
     while r <= ws.max_row:
         person = ws.cell(r, COL_ASSIGN_PERSON).value
-        if person is None or str(person).strip() == "":
-            break
         total_fte = ws.cell(r, COL_ASSIGN_FTE).value
         total_fte_parsed = _parse_config_float(total_fte)
-        if total_fte_parsed is None:
+        person_blank = person is None or str(person).strip() == ""
+        inside_range = range_end is not None and r <= range_end
+        if person_blank or total_fte_parsed is None:
+            if inside_range:
+                r += 1
+                continue
             break
         wp = ws.cell(r, COL_ASSIGN_WP).value
         start = ws.cell(r, COL_ASSIGN_START).value

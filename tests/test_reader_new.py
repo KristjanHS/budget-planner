@@ -679,6 +679,40 @@ def test_iter_named_range_rows_returns_none_for_unknown_name():
     assert _iter_named_range_rows(wb, "does_not_exist") is None
 
 
+def test_read_assignments_tolerates_blank_row_inside_named_range():
+    """Blank inside assign_persons range must not drop later assignments."""
+    from openpyxl.workbook.defined_name import DefinedName
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    ws.cell(20, 1, value="PERSON-WP ASSIGNMENTS")
+    ws.cell(21, 1, value="Person")
+    ws.cell(21, 2, value="WP")
+    ws.cell(21, 3, value="Total FTE")
+    ws.cell(21, 4, value="Start")
+    ws.cell(21, 5, value="End")
+    ws.cell(22, 1, value="Alice")
+    ws.cell(22, 2, value="WP1")
+    ws.cell(22, 3, value=0.5)
+    ws.cell(22, 4, value=1)
+    ws.cell(22, 5, value=12)
+    # Row 23 blank.
+    ws.cell(24, 1, value="Bob")
+    ws.cell(24, 2, value="WP2")
+    ws.cell(24, 3, value=0.3)
+    ws.cell(24, 4, value=6)
+    ws.cell(24, 5, value=18)
+    wb.defined_names["assign_persons"] = DefinedName(
+        name="assign_persons", attr_text="Config!$A$22:$A$24"
+    )
+
+    out = read_assignments_from_config(ws)
+    persons = [a["person"] for a in out]
+    assert persons == ["Alice", "Bob"], f"Got {persons}"
+
+
 def test_read_team_tolerates_blank_row_inside_named_range():
     """A blank row inside roster_ftes span must not truncate the roster."""
     from openpyxl.workbook.defined_name import DefinedName

@@ -18,8 +18,8 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 | C4 architecture, workflows, formula graph | `docs/architecture.md` | Mermaid diagrams, build order, cross-sheet dependencies |
 | Directory map (function → file) | `docs/directory-map.md` | Quick orientation: which file does what |
 | Cloud/container env, LO missing | `docs/cloud-env-setup.md` | Pre-flight checks, failure modes |
-| Config column layout | `.claude/rules/dev-workflow.md` | Grep `Config!{letter}` in ALL builders + tests when columns shift |
-| Workbook inspection, MCP tools | `.claude/rules/dev-workflow.md` § MCP Tools | `openpyxl-read` for formula/style spot-checks, `mcp-excel` for numeric sanity checks |
+| Column/row shift, code review, /impag, worktrees | `docs/dev-workflow-review.md` | Grep-cascade checks, planning protocol, worktree sync |
+| Workbook inspection, MCP tools | `docs/dev-workflow-review.md` § MCP Tools | `openpyxl-read` for formula/style spot-checks, `mcp-excel` for numeric sanity checks |
 | Add WP, add team member, add actuals, compare scenarios | `docs/common-tasks.md` | Step-by-step SOPs for common data tasks |
 | "record this", "remember this", organizing docs | `~/.claude/references/recording-principles.md` | L1/L2/L3 criteria, what belongs where |
 
@@ -63,5 +63,5 @@ pytest tests/ -v
 
 | Rule file | Key content |
 |-----------|-------------|
-| `.claude/rules/dev-workflow.md` | Build/test, linting, worktree protocol, MCP tools |
+| `.claude/rules/dev-workflow.md` | Build/test, linting, formatting, testing, invariants (core only) |
 | `.claude/rules/openpyxl-patterns.md` | openpyxl/LO gotchas (builders, styles, workbook only) |

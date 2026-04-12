@@ -694,19 +694,28 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         attr_text=f"{SHEET_CONFIG}!$B${months_row}",
     ))
 
-    # ── Set FTE Rate formula (weighted average of grade rates by FTE) ──
-    roster_first_row = roster_layout["roster_first_row"]
-    roster_last_row = roster_layout["roster_last_row"]
-    grade_first_row = grade_layout["grade_first_row"]
-    grade_last_row = grade_layout["grade_last_row"]
+    # ── Set FTE Rate formula ──
+    # If the user has authored a custom formula (preserved by the reader as
+    # project_params["rate"]), emit it verbatim. Otherwise fall back to the
+    # default weighted average of grade rates by FTE.
+    existing_rate = project_params.get("rate")
+    if isinstance(existing_rate, str) and existing_rate.startswith("="):
+        ws.cell(rate_row, 2).value = existing_rate
+    else:
+        roster_first_row = roster_layout["roster_first_row"]
+        roster_last_row = roster_layout["roster_last_row"]
+        grade_first_row = grade_layout["grade_first_row"]
+        grade_last_row = grade_layout["grade_last_row"]
 
-    grades_ref = f"$C${roster_first_row}:$C${roster_last_row}"
-    ftes_ref = f"$B${roster_first_row}:$B${roster_last_row}"
-    terms = "+".join(
-        f"({grades_ref}=$A${row})*$B${row}"
-        for row in range(grade_first_row, grade_last_row + 1)
-    )
-    ws.cell(rate_row, 2).value = f"=SUMPRODUCT({terms},{ftes_ref})/SUM({ftes_ref})"
+        grades_ref = f"$C${roster_first_row}:$C${roster_last_row}"
+        ftes_ref = f"$B${roster_first_row}:$B${roster_last_row}"
+        terms = "+".join(
+            f"({grades_ref}=$A${row})*$B${row}"
+            for row in range(grade_first_row, grade_last_row + 1)
+        )
+        ws.cell(rate_row, 2).value = (
+            f"=SUMPRODUCT({terms},{ftes_ref})/SUM({ftes_ref})"
+        )
 
     # ── Sheet Appearance ──
     ws.sheet_properties.tabColor = "4472C4"

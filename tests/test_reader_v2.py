@@ -307,6 +307,32 @@ class TestFormulaRateRoundTrip:
             f"Formula lost on read; got {project_params['rate']!r}"
         )
 
+    def test_formula_fte_rate_survives_full_rebuild(self, tmp_path):
+        """A user-authored FTE Rate formula must survive a full rebuild —
+        the Config builder must not clobber it with the default SUMPRODUCT."""
+        path = str(tmp_path / "fte_rate_rebuild.xlsx")
+        init_workbook(output_path=path)
+
+        # User replaces the FTE Rate cell with a custom formula
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        rate_row = _find_row_by_label(cfg, "FTE Rate")
+        custom_formula = "=AVERAGE(B9:B11)"
+        _set_cell(cfg, rate_row, 2, custom_formula)
+        wb.save(path)
+        wb.close()
+
+        # Rebuild the workbook — the formula must be preserved end-to-end
+        from budget_planner.workbook import rebuild_workbook
+        rebuild_workbook(input_path=path)
+
+        wb = load_workbook(path)
+        rebuilt_val = wb["Config"].cell(rate_row, 2).value
+        wb.close()
+        assert rebuilt_val == custom_formula, (
+            f"Rebuild clobbered user formula; got {rebuilt_val!r}"
+        )
+
     def test_formula_rate_roundtrip_wp_rate(self, tmp_path):
         """Formula in per-WP Rate cell survives read AND is rewritten on save."""
         path = str(tmp_path / "wp_rate_formula.xlsx")

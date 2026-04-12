@@ -25,4 +25,4 @@ Derive expected values from config imports or from the generated workbook. Tests
 
 ## Invariants (extends CLAUDE.md Critical Rules)
 - When updating meta.py, verify text against the actual builder (e.g., count summary columns in summary.py, not the plan)
-- On rebuild, all config data comes from the existing workbook (Config sheet + Capacity config block), never from config.py. Builders receive config as function parameters.
+- On rebuild, all config data (including person-WP assignments and external commitments) comes from the existing workbook's Config sheet, never from config.py. Builders receive config as function parameters.

@@ -77,7 +77,7 @@ All sheets are regenerated from scratch. Only these user-entered values survive:
 | Data | Source in old workbook |
 |------|----------------------|
 | Project params, WP definitions, team roster, grade rates, reporting periods | Config sheet sections |
-| Person-WP assignments, external commitments | Capacity config blocks |
+| Person-WP assignments, external commitments | Config sheet PERSON-WP ASSIGNMENTS (B2) + EXTERNAL COMMITMENTS (B3) sections |
 | Monthly EUR values per WP | Actuals data cells |
 
 Everything else (formulas, styling, CF, charts, _META/Plan/Summary/Trends) is overwritten.

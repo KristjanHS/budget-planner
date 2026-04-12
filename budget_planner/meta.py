@@ -181,7 +181,7 @@ SHEET: CONFIG (single source of truth for all project parameters)
   SECTION B3: EXTERNAL COMMITMENTS (below PERSON-WP ASSIGNMENTS)
     Section header "EXTERNAL COMMITMENTS" (merged A:F, section fill)
     Column headers: Person | Project | Total FTE | Start Month | End Month | EU Grant
-    All cells blue input. {num_ext} entries from seed data.
+    All cells blue input. {num_ext} entries (from config on init, preserved on rebuild).
     Named ranges: ext_persons, ext_ftes.
 
   SECTION C: WP SCHEDULE TABLE (below EXTERNAL COMMITMENTS)
@@ -255,7 +255,7 @@ SHEET: CAPACITY (primary planning surface)
     EU TOTAL per calendar year > EU Annual Ceiling: red fill (exceeds 215-day limit)
     EU TOTAL per calendar year > EU Annual Ceiling - 1: amber fill (approaching limit)
 
-  VALIDATION COLUMNS: {val_sum_col} = Sum, {val_budget_col} = Budget (from Config PERSON-WP ASSIGNMENTS Total FTE via =Config!C<row>), {val_diff_col} = Variance (per row)
+  VALIDATION COLUMNS: {val_sum_col} = Sum, {val_budget_col} = Budget (from Config PERSON-WP ASSIGNMENTS Total FTE via =Config!C<asgn_row>; falls back to =Config!C<wp_row> FTE Budget if no matching assignment row exists), {val_diff_col} = Variance (per row)
 
 ═══ PLAN SHEET STRUCTURE ═══
 

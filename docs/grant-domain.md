@@ -44,6 +44,8 @@ Staff categories (each has its own rate):
 
 Monthly rates are organisation-specific. They must reflect actual costs, not inflated project-specific salaries.
 
+**WP schedule gaps.** A work package may be active across non-contiguous month ranges (e.g. WP1 runs M8--17 and then M20--26, inactive M18--19). Auditors reject PM logged in inactive months, so the app treats the intersection of an assignment's window and the WP's active months as the only valid distribution target. A person assigned to a gapped WP keeps a single `Total FTE` scalar; the builder redistributes it only over valid months and greys out inactive cells. This keeps `Capacity Sum`, `Config Sig Assigned`, and `Plan Assigned PM` reconciled at the user-entered total with zero PM leaking into gap months.
+
 ### 2. Travel & Subsistence
 
 Direct costs for project-related travel: flights, hotels, per diem. Must be justified per trip or trip category.

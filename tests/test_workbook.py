@@ -7,6 +7,7 @@ import openpyxl
 from budget_planner.reader import discover_layout
 from budget_planner.config import WORK_PACKAGES, WP_SCHEDULE, NUM_WPS, MONTH_COL_START, PROJECT_MONTHS
 from budget_planner.layout import wp_month_bounds
+from budget_planner.workbook import init_workbook
 
 
 # ── Fixtures that don't need LibreOffice ──
@@ -191,3 +192,74 @@ def test_freeze_panes_summary_at_first_wp(workbook):
             )
             return
     pytest.fail("Could not find first WP formula row in Summary column A")
+
+
+# ── Config assignments round-trip ──
+
+
+class TestConfigAssignments:
+    """Verify assignments and external commitments are written to Config
+    and survive a rebuild round-trip."""
+
+    @pytest.fixture(scope="class")
+    def demo_wb_path(self, tmp_path_factory):
+        """Generate a workbook with demo assignments."""
+        from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
+        out = tmp_path_factory.mktemp("wb_assign") / "test_assign.xlsx"
+        init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
+        return str(out)
+
+    @pytest.fixture(scope="class")
+    def demo_wb(self, demo_wb_path):
+        return openpyxl.load_workbook(demo_wb_path, data_only=False)
+
+    def test_init_writes_config_assignments(self, demo_wb):
+        """Config sheet has a PERSON-WP ASSIGNMENTS section with data."""
+        from budget_planner.reader import read_assignments_from_config
+        from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
+
+        assignments = read_assignments_from_config(demo_wb["Config"])
+        assert len(assignments) == len(DEMO_CAPACITY_ASSIGNMENTS)
+        # Spot-check first entry
+        first = DEMO_CAPACITY_ASSIGNMENTS[0]
+        match = [a for a in assignments
+                 if a["person"] == first["person"] and a["wp"] == first["wp"]]
+        assert match, f"Expected assignment for {first['person']}/{first['wp']}"
+        assert match[0]["total_fte"] == pytest.approx(first["total_fte"])
+
+    def test_init_writes_config_externals(self, demo_wb):
+        """Config sheet has an EXTERNAL COMMITMENTS section with data."""
+        from budget_planner.reader import read_externals_from_config
+        from budget_planner.config import EXTERNAL_COMMITMENTS
+
+        externals = read_externals_from_config(demo_wb["Config"])
+        assert len(externals) == len(EXTERNAL_COMMITMENTS)
+        first = EXTERNAL_COMMITMENTS[0]
+        match = [e for e in externals
+                 if e["person"] == first["person"] and e["project"] == first["project"]]
+        assert match, f"Expected external for {first['person']}/{first['project']}"
+        assert match[0]["fte"] == pytest.approx(first["fte"])
+
+    def test_rebuild_preserves_config_assignments(self, tmp_path_factory):
+        """Rebuild reads assignments from Config and preserves them."""
+        from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS, EXTERNAL_COMMITMENTS
+        from budget_planner.reader import read_assignments_from_config, read_externals_from_config
+        from budget_planner.workbook import rebuild_workbook
+
+        out = tmp_path_factory.mktemp("wb_rebuild") / "test_rebuild.xlsx"
+        init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
+        rebuild_workbook(str(out))
+
+        wb = openpyxl.load_workbook(str(out), data_only=False)
+        assignments = read_assignments_from_config(wb["Config"])
+        externals = read_externals_from_config(wb["Config"])
+
+        assert len(assignments) == len(DEMO_CAPACITY_ASSIGNMENTS)
+        assert len(externals) == len(EXTERNAL_COMMITMENTS)
+
+        # Verify data integrity after round-trip
+        for orig in DEMO_CAPACITY_ASSIGNMENTS:
+            match = [a for a in assignments
+                     if a["person"] == orig["person"] and a["wp"] == orig["wp"]]
+            assert match, f"Lost assignment {orig['person']}/{orig['wp']} after rebuild"
+            assert match[0]["total_fte"] == pytest.approx(orig["total_fte"])

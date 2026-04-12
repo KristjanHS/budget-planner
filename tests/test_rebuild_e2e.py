@@ -21,6 +21,7 @@ from budget_planner.workbook import init_workbook, rebuild_workbook
 from budget_planner.reader import (
     discover_layout, read_config_sheet, read_team_from_config,
     read_capacity_sheet, read_plan_config,
+    read_assignments_from_config,
 )
 from budget_planner.config import MONTH_COL_START
 
@@ -354,26 +355,23 @@ class TestRebuildWithChangedAllocations:
     """Modify Capacity FTE values, rebuild, verify preservation."""
 
     def test_modified_assignment_total_fte_preserved_after_rebuild(self, assigned_init_path):
-        """Modified total_fte in Capacity assignment config block survives rebuild."""
-        from budget_planner.reader import read_capacity_assignments
-
+        """Modified total_fte in Config assignment section survives rebuild."""
         wb = openpyxl.load_workbook(assigned_init_path)
-        cap_ws = wb["Capacity"]
-        original = read_capacity_assignments(cap_ws)
+        config_ws = wb["Config"]
+        original = read_assignments_from_config(config_ws)
         assert len(original) > 0, "Need at least one assignment"
 
-        # Find the assignment config block row and modify total_fte
-        # Assignments block: col A=Person, col B=WP, col C=Total FTE, col D=Start, col E=End
-        for r in range(1, cap_ws.max_row + 1):
-            val = cap_ws.cell(r, 1).value
+        # Find the assignment section row on Config and modify total_fte
+        for r in range(1, config_ws.max_row + 1):
+            val = config_ws.cell(r, 1).value
             if isinstance(val, str) and val == original[0]["person"]:
-                wp_val = cap_ws.cell(r, 2).value
+                wp_val = config_ws.cell(r, 2).value
                 if isinstance(wp_val, str) and wp_val == original[0]["wp"]:
                     new_total_fte = 99.99
-                    _set(cap_ws, r, 3, new_total_fte)
+                    _set(config_ws, r, 3, new_total_fte)
                     break
         else:
-            pytest.fail("Could not find assignment config block row")
+            pytest.fail("Could not find assignment section row on Config")
 
         wb.save(assigned_init_path)
         wb.close()
@@ -381,7 +379,7 @@ class TestRebuildWithChangedAllocations:
         rebuild_workbook(input_path=assigned_init_path)
 
         wb = openpyxl.load_workbook(assigned_init_path)
-        rebuilt = read_capacity_assignments(wb["Capacity"])
+        rebuilt = read_assignments_from_config(wb["Config"])
         first = next(a for a in rebuilt
                      if a["person"] == original[0]["person"]
                      and a["wp"] == original[0]["wp"])
@@ -396,18 +394,16 @@ class TestRebuildWithInsertedRows:
     """User adds new rows in Excel config blocks, then rebuilds."""
 
     def test_added_assignment_row_creates_wp_row_after_rebuild(self, assigned_init_path):
-        """New assignment row added in Capacity config block -> person gets new WP row."""
-        from budget_planner.reader import read_capacity_assignments
-
+        """New assignment row added in Config section -> person gets new WP row."""
         wb = openpyxl.load_workbook(assigned_init_path)
-        cap_ws = wb["Capacity"]
-        original = read_capacity_assignments(cap_ws)
+        config_ws = wb["Config"]
+        original = read_assignments_from_config(config_ws)
 
-        # Find the last assignment row and add a new one below it
+        # Find the last assignment row on Config and add a new one below it
         last_asgn_row = None
-        for r in range(1, cap_ws.max_row + 1):
-            person = cap_ws.cell(r, 1).value
-            wp = cap_ws.cell(r, 2).value
+        for r in range(1, config_ws.max_row + 1):
+            person = config_ws.cell(r, 1).value
+            wp = config_ws.cell(r, 2).value
             if person and wp and any(a["person"] == str(person) and a["wp"] == str(wp)
                                      for a in original):
                 last_asgn_row = r
@@ -417,22 +413,21 @@ class TestRebuildWithInsertedRows:
         # Pick a person and WP that aren't already assigned together — read
         # from the workbook, not config.py, so tests survive seed data changes.
         target_person = original[0]["person"]
-        _, all_wps, _ = read_config_sheet(wb["Config"])
+        _, all_wps, _ = read_config_sheet(config_ws)
         assigned_wps = {a["wp"] for a in original if a["person"] == target_person}
         new_wp = next((wp["id"] for wp in all_wps
                        if wp["id"] not in assigned_wps), None)
         if new_wp is None:
             pytest.skip("All WPs already assigned to first person")
 
-        # Insert a new row (like a user would in Excel) to keep the blank
-        # separator between assignments and the next config block.
+        # Insert a new row (like a user would in Excel)
         new_row = last_asgn_row + 1
-        cap_ws.insert_rows(new_row)
-        _set(cap_ws, new_row, 1, target_person)
-        _set(cap_ws, new_row, 2, new_wp)
-        _set(cap_ws, new_row, 3, 2.0)   # total FTE
-        _set(cap_ws, new_row, 4, 1)     # start month
-        _set(cap_ws, new_row, 5, 12)    # end month
+        config_ws.insert_rows(new_row)
+        _set(config_ws, new_row, 1, target_person)
+        _set(config_ws, new_row, 2, new_wp)
+        _set(config_ws, new_row, 3, 2.0)   # total FTE
+        _set(config_ws, new_row, 4, 1)     # start month
+        _set(config_ws, new_row, 5, 12)    # end month
         wb.save(assigned_init_path)
         wb.close()
 
@@ -448,34 +443,36 @@ class TestRebuildWithInsertedRows:
         wb.close()
 
     def test_added_external_commitment_row_appears_after_rebuild(self, assigned_init_path):
-        """New external commitment added in Capacity config block -> person gets external row."""
+        """New external commitment added in Config section -> person gets external row."""
         wb = openpyxl.load_workbook(assigned_init_path)
-        cap_ws = wb["Capacity"]
+        config_ws = wb["Config"]
 
-        # Find EXTERNAL COMMITMENTS config block end
+        # Find EXTERNAL COMMITMENTS section on Config
         ext_header = None
-        for r in range(1, cap_ws.max_row + 1):
-            val = cap_ws.cell(r, 1).value
+        for r in range(1, config_ws.max_row + 1):
+            val = config_ws.cell(r, 1).value
             if val and "EXTERNAL COMMITMENTS" in str(val).upper():
                 ext_header = r
                 break
         assert ext_header is not None
 
-        # Find last data row in the block
+        # Find last data row in the section
         r = ext_header + 2  # skip section header + column headers
-        while r <= cap_ws.max_row and cap_ws.cell(r, 1).value:
+        while r <= config_ws.max_row and config_ws.cell(r, 1).value:
             r += 1
         insert_row = r  # first empty row after existing data
 
         # Read from workbook, not config.py, so tests survive seed data changes.
-        all_people = read_team_from_config(wb["Config"])
+        all_people = read_team_from_config(config_ws)
         new_person = all_people[-1]["name"]
         new_project = "NewExtProject"
-        _set(cap_ws, insert_row, 1, new_person)
-        _set(cap_ws, insert_row, 2, new_project)
-        _set(cap_ws, insert_row, 3, 2.0)
-        _set(cap_ws, insert_row, 4, 1)
-        _set(cap_ws, insert_row, 5, 12)
+        # Insert a new row to preserve the blank separator between sections
+        config_ws.insert_rows(insert_row)
+        _set(config_ws, insert_row, 1, new_person)
+        _set(config_ws, insert_row, 2, new_project)
+        _set(config_ws, insert_row, 3, 2.0)
+        _set(config_ws, insert_row, 4, 1)
+        _set(config_ws, insert_row, 5, 12)
         wb.save(assigned_init_path)
         wb.close()
 

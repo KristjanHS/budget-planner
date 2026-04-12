@@ -315,8 +315,11 @@ def read_assignments_from_config(ws) -> list[dict]:
         person = ws.cell(r, COL_ASSIGN_PERSON).value
         if person is None or str(person).strip() == "":
             break
-        wp = ws.cell(r, COL_ASSIGN_WP).value
         total_fte = ws.cell(r, COL_ASSIGN_FTE).value
+        # Data rows have numeric total_fte; a string means we hit a header row
+        if total_fte is not None and not isinstance(total_fte, (int, float)):
+            break
+        wp = ws.cell(r, COL_ASSIGN_WP).value
         start = ws.cell(r, COL_ASSIGN_START).value
         end = ws.cell(r, COL_ASSIGN_END).value
         assignments.append({
@@ -352,10 +355,13 @@ def read_externals_from_config(ws) -> list[dict]:
     r = ext_config_header + 2
     while r <= ws.max_row:
         person = ws.cell(r, COL_EXT_PERSON).value
-        project = ws.cell(r, COL_EXT_PROJECT).value
         if person is None or str(person).strip() == "":
             break
         fte = ws.cell(r, COL_EXT_FTE).value
+        # Data rows have numeric fte; a string means we hit a header row
+        if fte is not None and not isinstance(fte, (int, float)):
+            break
+        project = ws.cell(r, COL_EXT_PROJECT).value
         start = ws.cell(r, COL_EXT_START).value
         end = ws.cell(r, COL_EXT_END).value
         is_eu_val = ws.cell(r, COL_EXT_EU).value

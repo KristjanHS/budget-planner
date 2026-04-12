@@ -133,7 +133,9 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
                                        wp_schedule=wp_schedule,
                                        team=team,
                                        reporting_periods=reporting_periods,
-                                       grade_rates=grade_rates)
+                                       grade_rates=grade_rates,
+                                       assignments=assignments,
+                                       external_commitments=external_commitments)
 
     # Plan sheet
     plan_ws = wb.create_sheet(SHEET_PLAN)
@@ -331,6 +333,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     from budget_planner.reader import (
         read_config_sheet, read_team_from_config, read_capacity_sheet,
         read_actuals_values, read_reporting_periods, read_grade_rates,
+        read_assignments_from_config, read_externals_from_config,
     )
 
     if not os.path.exists(input_path):
@@ -366,16 +369,22 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         fallback_months=project_params["months"],
     )
 
-    # Capacity sheet → external commitments + FTE values
-    if SHEET_CAPACITY not in existing_wb.sheetnames:
-        existing_wb.close()
-        raise ValueError("Workbook has no Capacity sheet.")
-    capacity_data = read_capacity_sheet(
-        existing_wb[SHEET_CAPACITY], work_packages,
-        project_months=project_params["months"],
-    )
-    external_commitments = capacity_data["external_commitments"]
-    assignments = capacity_data["assignments"]
+    # Assignments + external commitments — prefer Config, fall back to Capacity
+    assignments = read_assignments_from_config(existing_wb[SHEET_CONFIG])
+    external_commitments = read_externals_from_config(existing_wb[SHEET_CONFIG])
+
+    if not assignments or not external_commitments:
+        if SHEET_CAPACITY not in existing_wb.sheetnames:
+            existing_wb.close()
+            raise ValueError("Workbook has no Capacity sheet.")
+        capacity_data = read_capacity_sheet(
+            existing_wb[SHEET_CAPACITY], work_packages,
+            project_months=project_params["months"],
+        )
+        if not assignments:
+            assignments = capacity_data["assignments"]
+        if not external_commitments:
+            external_commitments = capacity_data["external_commitments"]
 
     # Preserve Actuals EUR values (always)
     preserved_actuals = None

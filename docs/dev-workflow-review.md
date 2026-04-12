@@ -20,6 +20,11 @@ Run `superpowers:code-reviewer` after every /impag stage — not just at the end
 Fix pre-existing test failures when encountered during implementation — don't defer them.
 Commit or resolve dirty files at session start before executing any tasks.
 
+**Before dispatching task 1, pre-flight the plan:**
+1. Grep the central symbols the plan names (`build_workbook`, `DEFAULT_SEED`, etc.) to confirm they exist in the current tree. Plan text drifts as the code evolves; catching mis-references up front saves N subagent prompts downstream.
+2. If the plan opens with a hypothesis-first RED test, manually reproduce the hypothesis on current code *before* committing the test file. A RED test that comes back GREEN means the bug model is wrong — stop and revise rather than pushing on.
+3. Plan `build_from_fingerprint`-style tasks with "seed injection" assume an API shape — verify the real entrypoint signature in the builder module before dispatching, not after the subagent gets stuck.
+
 ## Worktrees
 Before starting work in a worktree:
 1. `git fetch origin main`

@@ -19,6 +19,7 @@ Run brainstorm → write-plan → worktree isolation for each P-item. Don't skip
 Run `superpowers:code-reviewer` after every /impag stage — not just at the end. Each stage boundary is a review checkpoint.
 Fix pre-existing test failures when encountered during implementation — don't defer them.
 Commit or resolve dirty files at session start before executing any tasks.
+**Before starting a `/impag` default-selected plan:** the default is the most recent plan by mtime, which is often a *just-completed* plan still in `docs/plans/`. Cross-check `project_state.md` and recent `git log` to confirm it's not already landed. If it is, ask the user which queued plan to run instead.
 
 **Before dispatching task 1, pre-flight the plan:**
 1. Grep the central symbols the plan names (`build_workbook`, `DEFAULT_SEED`, etc.) to confirm they exist in the current tree. Plan text drifts as the code evolves; catching mis-references up front saves N subagent prompts downstream.

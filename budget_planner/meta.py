@@ -7,8 +7,8 @@ from budget_planner.styles import WRAP, col_letter
 
 
 def build_meta_sheet(ws, layout, *, project_params, work_packages,
-                     team, external_commitments, config_layout, grade_rates,
-                     rebuild_warnings=None):
+                     team, external_commitments, config_layout, summary_layout,
+                     grade_rates, rebuild_warnings=None):
     """Populate the _META worksheet with structural documentation.
 
     Every data parameter is required: _META must document the **live**
@@ -35,6 +35,9 @@ def build_meta_sheet(ws, layout, *, project_params, work_packages,
         Layout dict from build_config_sheet(). Keys used:
         grade_first_row, grade_last_row, roster_header_row, roster_first_row,
         roster_last_row.
+    summary_layout : dict
+        Layout dict from build_summary_sheet(). Keys used:
+        first_wp_row, last_wp_row, total_row.
     grade_rates : dict
         Mapping of grade name to EUR/PM rate.
     rebuild_warnings : list or None
@@ -69,18 +72,13 @@ def build_meta_sheet(ws, layout, *, project_params, work_packages,
     cfg_last_wp = layout["config_last_wp_row"]
     cfg_total_row = cfg_last_wp + 1
 
-    # Grade table rows (from config_layout or derived)
-    if config_layout is not None:
-        cfg_grade_first = config_layout["grade_first_row"]
-        cfg_grade_last = config_layout["grade_last_row"]
-        cfg_roster_header = config_layout["roster_header_row"]
-        cfg_roster_first = config_layout["roster_first_row"]
-    else:
-        # Derive: 5 param rows + gap + section header + column header = row 9
-        cfg_grade_first = 9  # row after grade column header
-        cfg_grade_last = cfg_grade_first + len(grade_rates) - 1
-        cfg_roster_header = cfg_total_row + 3  # +2 gap + section header, +1 header
-        cfg_roster_first = cfg_roster_header + 1
+    # Grade table rows (config_layout is always provided by the orchestrator
+    # — T6 removed the lazy-import fallback and made it required in spirit;
+    # T7 removes the last None branch by threading live layouts everywhere.)
+    cfg_grade_first = config_layout["grade_first_row"]
+    cfg_grade_last = config_layout["grade_last_row"]
+    cfg_roster_header = config_layout["roster_header_row"]
+    cfg_roster_first = config_layout["roster_first_row"]
     cfg_grade_section = cfg_grade_first - 2  # section header is 2 rows above first data
     cfg_grade_header = cfg_grade_first - 1
     cfg_wp_section = cfg_first_wp - 2  # WP section header row
@@ -90,10 +88,10 @@ def build_meta_sheet(ws, layout, *, project_params, work_packages,
     num_grades = cfg_grade_last - cfg_grade_first + 1
     grade_names_str = ", ".join(grade_rates.keys())
 
-    # Summary sheet references (row 3=year headers, row 4=sub-headers, row 5+=WPs)
-    sum_first_wp = 5
-    sum_last_wp = sum_first_wp + num_wps - 1
-    sum_total = sum_last_wp + 1
+    # Summary sheet references — from live summary_layout, not hardcoded.
+    sum_first_wp = summary_layout["first_wp_row"]
+    sum_last_wp = summary_layout["last_wp_row"]
+    sum_total = summary_layout["total_row"]
 
     # Column letters
     first_mcol = col_letter(month_col_start)

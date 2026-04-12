@@ -96,6 +96,7 @@ class BuildContext:
     plan_layout: dict[str, Any] | None = None
     capacity_layout: dict[str, Any] | None = None
     actuals_layout: dict[str, Any] | None = None
+    summary_layout: dict[str, Any] | None = None
     warnings: list[str] = field(default_factory=list)
 
 
@@ -277,7 +278,7 @@ def _build_all_sheets(
     )
 
     # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout)
-    build_summary_sheet(
+    ctx.summary_layout = build_summary_sheet(
         wb,
         ctx.plan_layout,
         ctx.actuals_layout,
@@ -313,6 +314,7 @@ def _build_all_sheets(
         external_commitments=external_commitments,
         rebuild_warnings=ctx.warnings,
         config_layout=ctx.config_layout,
+        summary_layout=ctx.summary_layout,
         grade_rates=grade_rates,
     )
 

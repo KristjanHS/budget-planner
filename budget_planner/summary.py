@@ -36,6 +36,11 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None,
         WP schedule entries. Lazy-imports from config if None.
     config_layout : dict, optional
         Config sheet layout with wp_first_row, sched_first_row, etc.
+
+    Returns
+    -------
+    dict
+        Summary layout with keys ``first_wp_row``, ``last_wp_row``, ``total_row``.
     """
     if project_params is None or work_packages is None or reporting_periods is None:
         from budget_planner import config
@@ -530,3 +535,9 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None,
 
     summary.freeze_panes = f"C{SUMMARY_FIRST_WP_ROW}"
     summary.column_dimensions["B"].width = 25
+
+    return {
+        "first_wp_row": SUMMARY_FIRST_WP_ROW,
+        "last_wp_row": SUMMARY_LAST_WP_ROW,
+        "total_row": totals_row,
+    }

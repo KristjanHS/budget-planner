@@ -334,7 +334,8 @@ def test_meta_requires_all_params():
 
     required = [
         "project_params", "work_packages", "team",
-        "external_commitments", "config_layout", "grade_rates",
+        "external_commitments", "config_layout", "summary_layout",
+        "grade_rates",
     ]
     for missing in required:
         kwargs = {k: object() for k in required if k != missing}

@@ -48,7 +48,12 @@ WORK_PACKAGES = [
 WP_SCHEDULE = [
     {"id": "WP1", "start": 1,  "end": 14, "type": "flat"},
     {"id": "WP2", "start": 1,  "end": 6, "type": "front-loaded"},
-    {"id": "WP3", "start": 1,  "end": 7, "type": "front-loaded"},
+    # WP3 has a mid-WP gap (M4) — e.g. research pause between phases.
+    # Demonstrates gap-aware distribution: Alice and Dave are assigned across
+    # both phases; the Capacity builder greys out the gap months and
+    # distributes their Total FTE only across the valid months.
+    {"id": "WP3", "start": 1,  "end": 3, "type": "front-loaded"},
+    {"id": "WP3", "start": 5, "end": 7, "type": "front-loaded"},
     {"id": "WP4", "start": 2,  "end": 11, "type": "bell"},
     {"id": "WP5", "start": 4, "end": 13, "type": "bell"},
     {"id": "WP6", "start": 4, "end": 13, "type": "bell"},

@@ -8,6 +8,7 @@ from budget_planner.layout import (
     MONTH_COL_START, SHEET_CONFIG, CAPACITY_AMBER_LOAD, COL_ROSTER_FTE,
     build_year_month_headers, cell_ref,
     month_col_end as _month_col_end, val_columns,
+    wp_active_months,
     _calendar_year_groups,
 )
 from budget_planner.styles import (
@@ -79,6 +80,7 @@ def _write_person_grid(
     work_packages: list[dict],
     external_commitments: list[dict],
     wp_type_map: dict[str, str],
+    wp_active_map: dict[str, frozenset[int]],
     assign_config_rows: dict[tuple[str, str], int],
     external_config_rows: dict[tuple[str, str], int],
     person_rows: dict[str, int],
@@ -130,12 +132,17 @@ def _write_person_grid(
         # Col B: formula ref to Config WP Name
         style_cell(ws, r, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
-        # Calculate distribution
+        # Distribute across the intersection of the assignment window with
+        # the WP's active months — WP SCHEDULE may have gaps, and FTE must
+        # not be allocated to inactive months (auditors flag that).
         asgn_start = asgn["start"]
         asgn_end = asgn["end"]
-        num_active = asgn_end - asgn_start + 1
+        wp_active = wp_active_map.get(wp_id, frozenset())
+        valid_months = frozenset(
+            m for m in range(asgn_start, asgn_end + 1) if m in wp_active
+        )
         wp_curve = wp_type_map.get(wp_id, "flat")
-        monthly_values = distribute(asgn["total_fte"], num_active, wp_curve)
+        monthly_values = distribute(asgn["total_fte"], len(valid_months), wp_curve)
 
         # Write monthly cells
         comment_added = False
@@ -144,7 +151,7 @@ def _write_person_grid(
             c = month_col_start + mi
             month_num = mi + 1
 
-            if asgn_start <= month_num <= asgn_end:
+            if month_num in valid_months:
                 val = monthly_values[active_idx] if active_idx < len(monthly_values) else 0
                 active_idx += 1
                 style_cell(ws, r, c, round(val, 4), font=BLUE_INPUT, fmt="0.00")
@@ -254,6 +261,12 @@ def _write_person_grid(
     total_row = r
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
+    ws.cell(row=r, column=2).comment = Comment(
+        "Per-month SUM of all programme WP rows above for this person. External "
+        "project rows are NOT included here — see EU TOTAL for the "
+        "EU-ceiling view that includes EU-flagged externals.",
+        "Programme Budget Tool",
+    )
     for mi in range(project_params["months"]):
         c = month_col_start + mi
         cl = col_letter(c)
@@ -276,6 +289,13 @@ def _write_person_grid(
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "REMAINING", font=HEADER_FONT,
                fill=LIGHT_GREEN_FILL)
+    ws.cell(row=r, column=2).comment = Comment(
+        "Per-month = max_fte (from Config roster) − TOTAL. Negative means "
+        "this person is over-allocated to programme work in that month. External "
+        "commitments are NOT subtracted here — they shrink available "
+        "capacity via Balance on the Config Assignments table.",
+        "Programme Budget Tool",
+    )
     for mi in range(project_params["months"]):
         c = month_col_start + mi
         cl = col_letter(c)
@@ -296,6 +316,12 @@ def _write_person_grid(
     eu_total_row = r
     style_cell(ws, r, 1, fill=LIGHT_BLUE_FILL)
     style_cell(ws, r, 2, "EU TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
+    ws.cell(row=r, column=2).comment = Comment(
+        "Per-month SUM of programme WP rows + EU-flagged external project rows. "
+        "Used against the EU annual ceiling (~12 PM/year/person total "
+        "across ALL EU grants). Non-EU externals are excluded.",
+        "Programme Budget Tool",
+    )
 
     # Build list of rows that count toward EU total
     eu_row_refs = list(wp_rows.values())  # All programme WPs are EU
@@ -481,6 +507,24 @@ def build_capacity_sheet(ws, team_layout, *,
         ],
     )
 
+    # Explanatory comments on validation column headers
+    ws.cell(row=year_header_row, column=val_col_sum).comment = Comment(
+        "Row-wide SUM of the monthly FTE cells for this WP/person. "
+        "Should equal Budget — if not, Variance flags the gap.",
+        "Programme Budget Tool",
+    )
+    ws.cell(row=year_header_row, column=val_col_budget).comment = Comment(
+        "Cross-ref (green font) to this assignment's Total FTE on the "
+        "Config sheet. Edit Total FTE on Config, not here.",
+        "Programme Budget Tool",
+    )
+    ws.cell(row=year_header_row, column=val_col_diff).comment = Comment(
+        "Budget − Sum. Should be zero when the distribution matches the "
+        "assignment. Red highlight if negative (monthly total exceeds the "
+        "committed Total FTE).",
+        "Programme Budget Tool",
+    )
+
     first_person_header_row = r
 
     # ── Build per-person assignment lookup (deduplicate by person+wp) ──
@@ -490,6 +534,14 @@ def build_capacity_sheet(ws, team_layout, *,
     per_person_assignments: dict[str, list[dict]] = {}
     for entry in _dedup.values():
         per_person_assignments.setdefault(entry["person"], []).append(entry)
+
+    # Pre-compute active months per WP so the per-person grid can intersect
+    # each assignment window with the WP's valid months (WP SCHEDULE may have
+    # multiple ranges / gaps).
+    wp_active_map: dict[str, frozenset[int]] = {
+        wp["id"]: wp_active_months(wp["id"], wp_schedule)
+        for wp in work_packages
+    }
 
     # ── PER-PERSON GROUPS ──
     person_groups: dict[str, dict] = {}
@@ -502,6 +554,7 @@ def build_capacity_sheet(ws, team_layout, *,
             work_packages=work_packages,
             external_commitments=external_commitments,
             wp_type_map=wp_type_map,
+            wp_active_map=wp_active_map,
             assign_config_rows=assign_config_rows,
             external_config_rows=external_config_rows,
             person_rows=person_rows,

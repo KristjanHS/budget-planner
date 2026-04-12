@@ -112,6 +112,29 @@ def build_from_fingerprint(fp: dict, out_path: str) -> str:
                 }
             )
 
+    # Inject a WP-gap case so synthetic workbooks exercise the gap-aware
+    # Capacity distribution path (config-sheet helpers + Capacity grey-out
+    # must both respect WP SCHEDULE gaps). Requires >=2 schedule slots: we
+    # rewrite slot 0 as WP1 phase-1 and the last slot as WP1 phase-2, with
+    # a deliberate gap between them.
+    gap_wp_id: str | None = None
+    gap_window: tuple[int, int] | None = None
+    if n_wps > 0 and n_sched >= 2:
+        phase1_end = max(1, months // 4)
+        phase2_start = phase1_end + max(2, months // 6)
+        phase2_end = min(months, phase2_start + max(1, months // 4))
+        if phase2_start <= months and phase2_end >= phase2_start:
+            gap_wp_id = work_packages[0]["id"]
+            wp_schedule[0] = {
+                "id": gap_wp_id, "start": 1, "end": phase1_end,
+                "type": "front-loaded",
+            }
+            wp_schedule[-1] = {
+                "id": gap_wp_id, "start": phase2_start, "end": phase2_end,
+                "type": "front-loaded",
+            }
+            gap_window = (1, phase2_end)
+
     # Team — rotate through available grades + vary max_fte (some part-time).
     _MAX_FTE_CYCLE = [1.0, 1.0, 0.8, 1.0, 0.9, 1.0, 0.8, 1.0]
     team: list[dict[str, Any]] = [
@@ -174,7 +197,11 @@ def build_from_fingerprint(fp: dict, out_path: str) -> str:
         for i in range(n_assign):
             wp = work_packages[i % n_wps]
             sched = _sched_by_wp.get(wp["id"])
-            if sched is not None:
+            if gap_wp_id is not None and wp["id"] == gap_wp_id and gap_window is not None:
+                # Assignment on the gap WP spans both phases so Capacity
+                # exercises the gap-aware distribution path on recalc.
+                a_start, a_end = gap_window
+            elif sched is not None:
                 a_start, a_end = int(sched["start"]), int(sched["end"])
             else:
                 a_start, a_end = 1, max(1, months)

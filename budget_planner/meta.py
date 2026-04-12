@@ -220,7 +220,10 @@ SHEET: CAPACITY (primary planning surface)
       WP ID/Name formula refs to Config WP table
       Monthly FTE: static values auto-filled by distribution curves (blue input)
       Distribution type per WP: flat, front-loaded, bell, back-loaded (from Config WP SCHEDULE Type col)
-      Inactive months: grey fill, empty
+      Inactive months: grey fill, empty — determined by intersection of the assignment
+        window [Start, End] with WP SCHEDULE active months. WPs with multiple SCHEDULE
+        entries (gaps) have all gap months greyed out even if inside the assignment window.
+        Total FTE is distributed across the valid months only, never leaked into gaps.
       Users can override individual month cells post-generation for fine-tuning
     External Project Rows: project name (input), monthly FTE (flat distribution, blue input)
       Config EXTERNAL COMMITMENTS section has "EU Grant" column (Yes/No) marking EU-funded externals

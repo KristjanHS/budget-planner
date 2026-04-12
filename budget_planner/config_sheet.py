@@ -1,5 +1,6 @@
 """Config sheet builder — project parameters, work packages, and team roster."""
 
+from openpyxl.comments import Comment
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -38,6 +39,12 @@ from budget_planner.styles import (
 )
 
 
+def _apply_header_comments(ws, header_row: int, comments: dict[int, str]) -> None:
+    """Attach explanatory comments to header cells. Keys are 1-based column numbers."""
+    for col, text in comments.items():
+        ws.cell(row=header_row, column=col).comment = Comment(text, "Programme Budget Tool")
+
+
 def _write_budget_section(ws, start_row, work_packages, project_params):
     """Write the WP BUDGET section (section header, column headers, data rows, total, Excel Table).
 
@@ -63,6 +70,31 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
     for col, hdr in enumerate(budget_headers, start=1):
         style_cell(ws, budget_header_row, col, value=hdr,
                    font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    _apply_header_comments(ws, budget_header_row, {
+        COL_WP_FTE: (
+            "Total person-months budgeted for this WP across its entire "
+            "active period. Blue = user input."
+        ),
+        COL_WP_RATE: (
+            "EUR per person-month for this WP. Overrides the project default "
+            "rate. Blue = user input (can also be a formula referencing the "
+            "grade-rates table)."
+        ),
+        COL_WP_CEILING: (
+            "Auditor-visible budget cap in EUR. Formula: FTE Budget × Rate. "
+            "Black = calculated — don't edit."
+        ),
+        COL_WP_ASSIGNED_PM: (
+            "Total person-months committed to this WP across all assignment "
+            "rows. Formula: SUMIFS(assign_ftes, assign_wps, WP ID). Tells you "
+            "how much of this WP has been staffed."
+        ),
+        COL_WP_VARIANCE: (
+            "FTE Budget − Assigned PM. Positive = budget remains unassigned. "
+            "Zero = fully committed. Yellow highlight if |variance| > 0.01 "
+            "(not fully staffed or over-committed)."
+        ),
+    })
 
     # WP Budget data rows
     default_rate = project_params.get("rate", 10000)
@@ -384,6 +416,39 @@ def _write_assignments_section(ws, start_row, assignments):
     for col, hdr in enumerate(assign_headers, start=1):
         style_cell(ws, r, col, value=hdr,
                    font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    _apply_header_comments(ws, assign_header_row, {
+        COL_ASSIGN_FTE: (
+            "Total person-months this person contributes to this WP across "
+            "the window [Start Month, End Month]. The Capacity sheet "
+            "distributes this amount ONLY across the WP's active months "
+            "within the window — WP SCHEDULE gaps are excluded automatically."
+        ),
+        COL_ASSIGN_START: (
+            "First project month (1-based) this person is allocated to this "
+            "WP. Gaps in WP SCHEDULE inside this window are skipped "
+            "automatically in the Capacity grid."
+        ),
+        COL_ASSIGN_END: (
+            "Last project month (1-based) this person is allocated to this "
+            "WP. Inclusive."
+        ),
+        COL_ASSIGN_SIG_ASSIGNED: (
+            "Σ of Total FTE across all assignment rows with this Person. "
+            "Formula: SUMIFS(assign_ftes, assign_persons, Person). "
+            "This is the total programme-project commitment for this person."
+        ),
+        COL_ASSIGN_SIG_EXTERNAL: (
+            "Σ of Total FTE across the Externals table for this Person. "
+            "Captures commitments outside this programme project (other grants, "
+            "contracts, internal work) that reduce available capacity."
+        ),
+        COL_ASSIGN_BALANCE: (
+            "Remaining capacity in person-months = max_fte × project_months "
+            "− Sig Assigned − Sig External. "
+            "Red highlight if negative (over-committed); yellow if below "
+            "10% of total capacity (low headroom)."
+        ),
+    })
     r += 1
 
     # Data rows — populated entries + blank template rows up to ASSIGN_MIN_ROWS
@@ -485,6 +550,19 @@ def _write_external_section(ws, start_row, external_commitments):
     for col, hdr in enumerate(ext_headers, start=1):
         style_cell(ws, r, col, value=hdr,
                    font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    _apply_header_comments(ws, ext_header_row, {
+        COL_EXT_FTE: (
+            "Person-months this person spends on the external project across "
+            "[Start, End]. Rolled up into Sig External on the Assignments "
+            "table — reduces capacity available for programme work."
+        ),
+        COL_EXT_EU: (
+            "TRUE = this external project is another EU-funded grant. "
+            "Used by the EU annual ceiling check (~12 PM/year total across "
+            "ALL EU grants per person). FALSE = non-EU (still uses capacity "
+            "but not counted against the EU ceiling)."
+        ),
+    })
     r += 1
 
     # Data rows (all blue input)

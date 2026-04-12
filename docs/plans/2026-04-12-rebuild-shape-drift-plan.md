@@ -1197,4 +1197,29 @@ git commit -m "docs: record shape-drift fix in trigger table + internals"
 
 ## Named-range audit results
 
-*(T2 writes its findings here.)*
+Confirmed registrations in `budget_planner/config_sheet.py` (~lines 619–708) and `budget_planner/workbook.py`:
+
+| Name                  | Sheet  | Shape                                                          | Used by T#  |
+|-----------------------|--------|----------------------------------------------------------------|-------------|
+| `project_start`       | Config | `$B$<param_row>` (single cell)                                 | —           |
+| `fte_rate`            | Config | `$B$<param_row>` (single cell)                                 | —           |
+| `eu_annual_ceiling_pm`| Config | `$B$<param_row>` (single cell)                                 | —           |
+| `project_months`      | Config | `$B$<param_row>` (single cell)                                 | —           |
+| `current_month`       | Trends | `$B$1` (single cell)                                           | —           |
+| `tbl_GradeRates`      | Config | `$A$<first>:$B$<last>` (2-col grade table)                     | —           |
+| `roster_ftes`         | Config | `$B$<first>:$B$<last>`                                         | **T4**      |
+| `roster_grades`       | Config | `$C$<first>:$C$<last>`                                         | T4 (check)  |
+| `roster_lookup`       | Config | `$A$<first>:$B$<last>` (VLOOKUP target)                        | —           |
+| `sched_wp_ids`        | Config | `$A$<first>:$A$<last>`                                         | —           |
+| `sched_starts`        | Config | `$B$<first>:$B$<last>`                                         | —           |
+| `sched_ends`          | Config | `$C$<first>:$C$<last>`                                         | —           |
+| `assign_persons`      | Config | `$A$<first>:$A$<last>`                                         | **T5**      |
+| `assign_wps`          | Config | `$B$<first>:$B$<last>`                                         | —           |
+| `assign_ftes`         | Config | `$C$<first>:$C$<last>`                                         | —           |
+| `ext_persons`         | Config | `$A$<first>:$A$<last>`                                         | **T6**      |
+| `ext_ftes`            | Config | `$C$<first>:$C$<last>`                                         | —           |
+| `partner_ceiling`     | Config | created by plan.py (ref below)                                 | —           |
+
+Conclusion: the three named ranges the shape-drift fix needs — `roster_ftes`, `assign_persons`, `ext_persons` — all exist and span the canonical first/last rows of their tables as registered by `build_config_sheet`. Tasks T4–T6 can use them directly with the T3 helper.
+
+Note on probe results (not in original plan): current `read_team_from_config` (line 328) already passes when the inserted row is fully filled — prior hardening (commit `abb04c1`) made the sentinel scan robust to `_parse_config_float` edge cases. The remaining failure mode is a **blank row inside the roster** (sentinel stops at empty name cell). T1's test was updated to cover that case explicitly.

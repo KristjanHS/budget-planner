@@ -220,6 +220,28 @@ class TestDiscoverLayoutValidation:
             discover_layout(ws)
         wb.close()
 
+    def test_no_wp_budget_section_raises(self):
+        """Plan has literal WP IDs (no =Config!A{n} formula) AND Config is
+        missing the WP BUDGET section → discover_layout must raise instead of
+        silently falling back to row 8, which would write WP data to the wrong
+        Config rows on rebuild (T3)."""
+        wb = Workbook()
+        plan_ws = wb.active
+        assert plan_ws is not None
+        plan_ws.title = "Plan"
+        plan_ws.cell(1, 1, "Title:")
+        plan_ws.cell(3, 1, "PLANNED FTE (PERSON-MONTHS)")
+        plan_ws.cell(4, 1, "")
+        plan_ws.cell(5, 1, "WP ID")
+        # Literal WP ID (not a =Config!A{n} formula) — exercises the fallback
+        plan_ws.cell(6, 1, "WP1")
+        plan_ws.cell(6, 2, "Package 1")
+        # Config sheet exists but has no WP BUDGET section header
+        wb.create_sheet("Config")
+        with pytest.raises(ValueError, match="WP Budget section"):
+            discover_layout(plan_ws)
+        wb.close()
+
     def test_discover_layout_finds_wp_formula_rows(self, fresh_wb_path):
         """discover_layout correctly finds WP data rows via formula scan."""
         import openpyxl

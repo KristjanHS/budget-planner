@@ -762,14 +762,24 @@ def discover_layout(ws) -> dict:
     if cfg_wp_first is None:
         # Fallback: discover from Config sheet directly (legacy workbooks
         # with literal WP IDs instead of =Config!A{n} formulas)
-        config_ws = ws.parent[SHEET_CONFIG] if SHEET_CONFIG in ws.parent.sheetnames else None
-        if config_ws:
-            wp_section = _find_header_row(
+        config_ws = (
+            ws.parent[SHEET_CONFIG]
+            if SHEET_CONFIG in ws.parent.sheetnames
+            else None
+        )
+        wp_section = (
+            _find_header_row(
                 config_ws, SECTION_HEADER_LABELS["wp_budget"], required=False
             )
-            cfg_wp_first = _data_row_after(wp_section) if wp_section else 8
-        else:
-            cfg_wp_first = 8
+            if config_ws is not None
+            else None
+        )
+        if wp_section is None:
+            raise ValueError(
+                "Cannot locate Config WP Budget section. "
+                "Regenerate workbook with `python -m budget_planner init`."
+            )
+        cfg_wp_first = _data_row_after(wp_section)
     cfg_wp_last = cfg_wp_first + num_wps - 1
 
     return {

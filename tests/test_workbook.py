@@ -263,3 +263,61 @@ class TestConfigAssignments:
                      if a["person"] == orig["person"] and a["wp"] == orig["wp"]]
             assert match, f"Lost assignment {orig['person']}/{orig['wp']} after rebuild"
             assert match[0]["total_fte"] == pytest.approx(orig["total_fte"])
+
+
+# ── Build-order enforcement (see docs/plans/brittleness-refactor.md T5) ──
+
+def test_build_order_is_stable(tmp_path):
+    """Change detector: asserts _build_all_sheets calls builders in the order
+    documented in the workbook.py module docstring.
+
+    If this test fails, the orchestrator has been reordered. Read the
+    build-order DAG in workbook.py before "fixing" this test — downstream
+    builders consume layouts produced by upstream ones, so reordering
+    silently breaks cross-sheet formulas.
+    """
+    from unittest.mock import patch
+    from budget_planner import workbook as wb_mod
+
+    call_order: list[str] = []
+
+    def _spy(name, real):
+        def _wrapped(*args, **kwargs):
+            call_order.append(name)
+            return real(*args, **kwargs)
+        return _wrapped
+
+    targets = [
+        "build_config_sheet",
+        "build_plan_sheet",
+        "build_capacity_sheet",
+        "_apply_planned_formulas",
+        "build_actuals_sheet",
+        "build_summary_sheet",
+        "build_trends_sheet",
+        "build_meta_sheet",
+    ]
+    with (
+        patch.object(wb_mod, "build_config_sheet",
+                     _spy("build_config_sheet", wb_mod.build_config_sheet)),
+        patch.object(wb_mod, "build_plan_sheet",
+                     _spy("build_plan_sheet", wb_mod.build_plan_sheet)),
+        patch.object(wb_mod, "build_capacity_sheet",
+                     _spy("build_capacity_sheet", wb_mod.build_capacity_sheet)),
+        patch.object(wb_mod, "_apply_planned_formulas",
+                     _spy("_apply_planned_formulas", wb_mod._apply_planned_formulas)),
+        patch.object(wb_mod, "build_actuals_sheet",
+                     _spy("build_actuals_sheet", wb_mod.build_actuals_sheet)),
+        patch.object(wb_mod, "build_summary_sheet",
+                     _spy("build_summary_sheet", wb_mod.build_summary_sheet)),
+        patch.object(wb_mod, "build_trends_sheet",
+                     _spy("build_trends_sheet", wb_mod.build_trends_sheet)),
+        patch.object(wb_mod, "build_meta_sheet",
+                     _spy("build_meta_sheet", wb_mod.build_meta_sheet)),
+    ):
+        wb_mod.init_workbook(str(tmp_path / "order.xlsx"))
+
+    assert call_order == targets, (
+        "Builder call order changed. See workbook.py module docstring + "
+        "docs/plans/brittleness-refactor.md T5 before adjusting."
+    )

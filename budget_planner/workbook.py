@@ -1,7 +1,31 @@
-"""Workbook orchestrator — init, rebuild, snapshot/restore modes."""
+"""Workbook orchestrator — init, rebuild, snapshot/restore modes.
+
+Build order (load-bearing — do not reorder without reading T5 in
+docs/plans/brittleness-refactor.md)::
+
+    Config ──► Plan ──► Capacity ──► (rewrite Plan FTE)
+                │          │
+                │          └──► Actuals ──► Summary ──► Trends(full) ──► _META
+                └──► Trends(stub = current_month named range) ──┘
+
+Coupling points:
+- Plan consumes ``config_layout`` (param rows, first WP row).
+- Capacity consumes ``config_layout`` + ``layout["config_first_wp_row"]``.
+- ``_apply_planned_formulas`` overwrites Plan FTE cells using
+  ``capacity_layout`` — must run after Capacity.
+- Actuals formulas reference the ``current_month`` named range — the Trends
+  stub that creates it must run before Actuals.
+- Summary, full Trends, and _META consume every prior layout dict and must
+  run last in that order.
+
+``BuildContext`` below threads the accumulated layout dicts through
+``_build_all_sheets`` so the DAG is explicit rather than hidden in locals.
+"""
 import os
 import shutil
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from openpyxl import Workbook
 from openpyxl.comments import Comment
@@ -51,6 +75,22 @@ def restore_workbook(filepath: str) -> str:
     shutil.copy2(snapshot_path, filepath)
     print(f"Restored from: {snapshot_path}")
     return filepath
+
+
+@dataclass
+class BuildContext:
+    """Accumulated layout state threaded through ``_build_all_sheets``.
+
+    Each builder contributes a layout dict that downstream builders consume;
+    keeping them in one place (instead of named locals scattered through the
+    orchestrator) makes the DAG legible and the build order explicit.
+    """
+
+    config_layout: dict[str, Any] | None = None
+    plan_layout: dict[str, Any] | None = None
+    capacity_layout: dict[str, Any] | None = None
+    actuals_layout: dict[str, Any] | None = None
+    warnings: list[str] = field(default_factory=list)
 
 
 def _validate_config(project_params, work_packages, team, external_commitments,
@@ -125,49 +165,62 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     Expects wb to already have a '_META' sheet as the active/first sheet.
     Capacity monthly values are auto-distributed from assignments.
     Actuals month cells are always empty (or restored from preserved data).
+
+    See module docstring for the build-order DAG. The ``BuildContext`` below
+    accumulates layout dicts from each builder; downstream builders read from
+    it so the dependencies are explicit.
     """
     meta_ws = wb[SHEET_META]
+    ctx = BuildContext(warnings=rebuild_warnings or [])
 
-    # Config sheet (holds project params + WP budget/schedule + team roster)
+    # Stage 1 — Config (no dependencies)
     config_ws = wb.create_sheet(SHEET_CONFIG)
-    config_layout = build_config_sheet(config_ws, wb, project_params, work_packages,
-                                       wp_schedule=wp_schedule,
-                                       team=team,
-                                       reporting_periods=reporting_periods,
-                                       grade_rates=grade_rates,
-                                       assignments=assignments,
-                                       external_commitments=external_commitments)
+    ctx.config_layout = build_config_sheet(
+        config_ws, wb, project_params, work_packages,
+        wp_schedule=wp_schedule,
+        team=team,
+        reporting_periods=reporting_periods,
+        grade_rates=grade_rates,
+        assignments=assignments,
+        external_commitments=external_commitments,
+    )
 
-    # Plan sheet
+    # Stage 2 — Plan (consumes config_layout)
     plan_ws = wb.create_sheet(SHEET_PLAN)
-    layout = build_plan_sheet(plan_ws, wb,
-                              project_params=project_params,
-                              work_packages=work_packages,
-                              wp_schedule=wp_schedule,
-                              config_layout=config_layout)
+    ctx.plan_layout = build_plan_sheet(
+        plan_ws, wb,
+        project_params=project_params,
+        work_packages=work_packages,
+        wp_schedule=wp_schedule,
+        config_layout=ctx.config_layout,
+    )
 
-    # Capacity sheet (uses config_layout for roster person_rows)
+    # Stage 3 — Capacity (consumes config_layout + plan_layout["config_first_wp_row"])
     capacity_ws = wb.create_sheet(SHEET_CAPACITY)
-    capacity_layout = build_capacity_sheet(
-        capacity_ws, config_layout,
+    ctx.capacity_layout = build_capacity_sheet(
+        capacity_ws, ctx.config_layout,
         project_params=project_params, work_packages=work_packages,
         wp_schedule=wp_schedule,
         team=team, external_commitments=external_commitments,
         assignments=assignments,
-        config_first_wp_row=layout["config_first_wp_row"],
+        config_first_wp_row=ctx.plan_layout["config_first_wp_row"],
     )
 
-    # Overwrite planned FTE with cross-sheet formulas from Capacity
-    _apply_planned_formulas(plan_ws, layout, capacity_layout,
-                            work_packages=work_packages,
-                            project_params=project_params,
-                            wp_schedule=wp_schedule)
+    # Stage 4 — Rewrite Plan FTE as cross-sheet formulas from Capacity
+    # (must run after Capacity; Plan cells written in Stage 2 get overwritten.)
+    _apply_planned_formulas(
+        plan_ws, ctx.plan_layout, ctx.capacity_layout,
+        work_packages=work_packages,
+        project_params=project_params,
+        wp_schedule=wp_schedule,
+    )
 
-    # Trends sheet stub + current_month named range
+    # Stage 5 — Trends stub: create the ``current_month`` named range so that
+    # Actuals formulas (next stage) resolve. Full Trends content lands in
+    # Stage 8 after its dependency layouts exist.
     trends_ws = wb.create_sheet(SHEET_TRENDS)
     trends_ws.sheet_properties.tabColor = "FFD700"
     style_cell(trends_ws, 1, 1, "Current Month:", font=HEADER_FONT, border=False)
-    # Formula: auto-calculate from project start date and TODAY()
     _cm_formula = (
         f"=MAX(1,MIN({SHEET_CONFIG}!B3,"
         f"(YEAR(TODAY())-YEAR(project_start))*12"
@@ -184,41 +237,47 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
         "current_month", attr_text=cell_ref(SHEET_TRENDS, 1, 2)
     ))
 
-    # Actuals sheet
-    actuals_layout = build_actuals_sheet(
-        wb, layout,
+    # Stage 6 — Actuals (depends on plan_layout + Trends stub for current_month)
+    ctx.actuals_layout = build_actuals_sheet(
+        wb, ctx.plan_layout,
         project_params=project_params,
         work_packages=work_packages,
         wp_schedule=wp_schedule,
         preserved=preserved_actuals,
     )
 
-    # Summary sheet
-    build_summary_sheet(wb, layout, actuals_layout,
-                        project_params=project_params,
-                        work_packages=work_packages,
-                        wp_schedule=wp_schedule,
-                        reporting_periods=reporting_periods,
-                        config_layout=config_layout)
+    # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout)
+    build_summary_sheet(
+        wb, ctx.plan_layout, ctx.actuals_layout,
+        project_params=project_params,
+        work_packages=work_packages,
+        wp_schedule=wp_schedule,
+        reporting_periods=reporting_periods,
+        config_layout=ctx.config_layout,
+    )
 
-    # Trends sheet (populate after Actuals and Summary so layouts are available)
-    build_trends_sheet(trends_ws, wb, layout, actuals_layout,
-                       capacity_layout, config_layout,
-                       project_params=project_params,
-                       work_packages=work_packages,
-                       wp_schedule=wp_schedule,
-                       team=team,
-                       reporting_periods=reporting_periods)
+    # Stage 8 — Trends full (needs every prior layout)
+    build_trends_sheet(
+        trends_ws, wb, ctx.plan_layout, ctx.actuals_layout,
+        ctx.capacity_layout, ctx.config_layout,
+        project_params=project_params,
+        work_packages=work_packages,
+        wp_schedule=wp_schedule,
+        team=team,
+        reporting_periods=reporting_periods,
+    )
 
-    # _META sheet (needs layout for row references)
-    build_meta_sheet(meta_ws, layout,
-                     project_params=project_params,
-                     work_packages=work_packages,
-                     team=team,
-                     external_commitments=external_commitments,
-                     rebuild_warnings=rebuild_warnings,
-                     config_layout=config_layout,
-                     grade_rates=grade_rates)
+    # Stage 9 — _META (last; documents the state of every other sheet)
+    build_meta_sheet(
+        meta_ws, ctx.plan_layout,
+        project_params=project_params,
+        work_packages=work_packages,
+        team=team,
+        external_commitments=external_commitments,
+        rebuild_warnings=ctx.warnings,
+        config_layout=ctx.config_layout,
+        grade_rates=grade_rates,
+    )
 
     # Tab order: _META, Config, Plan, Capacity, Actuals, Trends, Summary
     wb.move_sheet(SHEET_META, offset=0)

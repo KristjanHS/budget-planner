@@ -123,11 +123,16 @@ def test_read_actuals_values_resolves_formula_refs():
     wb.close()
 
 
-def test_read_actuals_values_skips_all_zero_rows():
-    """Rows with all-zero values (no non-None) are still included since 0 != None."""
+def test_read_actuals_values_keeps_all_zero_rows():
+    """Rows with explicit numeric zero (not blank) survive the round-trip.
+
+    The fixture writes literal ``0`` to every monthly column for WP2 — these
+    read back as ``float(0.0)``, distinct from ``None`` (blank). Distinct
+    from :func:`test_read_actuals_values_preserves_all_blank_row` below,
+    which covers the all-None case introduced by T8.
+    """
     wb = _make_actuals_wb()
     result = read_actuals_values(wb["Actuals"], project_months=3)
-    # WP2 has all zeros — these are float(0), not None, so it IS included
     assert "WP2" in result
     assert result["WP2"] == [0.0, 0.0, 0.0]
     wb.close()

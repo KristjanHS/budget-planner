@@ -16,10 +16,16 @@ from budget_planner.styles import (
 )
 
 
-def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None,
-                        work_packages=None, wp_schedule=None,
-                        reporting_periods=None, config_layout=None):
+def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
+                        work_packages, wp_schedule,
+                        reporting_periods, config_layout=None):
     """Create the Summary sheet with annual budget view and budget overview.
+
+    Every data parameter is required — matching the ``build_meta_sheet``
+    contract tightened in T6 and the rest of the orchestrator. Callers must
+    pass live data; there is no lazy-import fallback to ``config.py`` seed
+    data (a caller that forgets to thread state would otherwise silently
+    render seed data into the Summary sheet).
 
     Parameters
     ----------
@@ -28,12 +34,14 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None,
         From build_plan_sheet(): config_first_wp_row, planned_first_wp_row.
     actuals_layout : dict
         From build_actuals_sheet(): first_wp_row, total_row.
-    project_params : dict, optional
-        Keys: title, start, months, rate. Lazy-imports from config if None.
-    work_packages : list[dict], optional
-        List of WP dicts. Lazy-imports from config if None.
-    wp_schedule : list[dict], optional
-        WP schedule entries. Lazy-imports from config if None.
+    project_params : dict
+        Keys: title, start, months, rate.
+    work_packages : list[dict]
+        List of WP dicts.
+    wp_schedule : list[dict]
+        WP schedule entries.
+    reporting_periods : list[dict]
+        Reporting period entries.
     config_layout : dict, optional
         Config sheet layout with wp_first_row, sched_first_row, etc.
 
@@ -42,17 +50,6 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params=None,
     dict
         Summary layout with keys ``first_wp_row``, ``last_wp_row``, ``total_row``.
     """
-    if project_params is None or work_packages is None or reporting_periods is None:
-        from budget_planner import config
-        if project_params is None:
-            project_params = config.default_project_params()
-        if work_packages is None:
-            work_packages = config.WORK_PACKAGES
-        if reporting_periods is None:
-            reporting_periods = config.REPORTING_PERIODS
-    if wp_schedule is None:
-        from budget_planner.config import WP_SCHEDULE
-        wp_schedule = WP_SCHEDULE
 
     month_col_start = MONTH_COL_START
     num_wps = len(work_packages)

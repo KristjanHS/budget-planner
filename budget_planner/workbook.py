@@ -194,6 +194,16 @@ def _build_all_sheets(
     meta_ws = wb[SHEET_META]
     ctx = BuildContext(warnings=rebuild_warnings or [])
 
+    # Single fallback point: downstream builders (esp. build_summary_sheet,
+    # build_meta_sheet) require non-None data. The orchestrator owns the
+    # lazy-load so individual builders can stay strict.
+    if wp_schedule is None:
+        from budget_planner.config import WP_SCHEDULE
+        wp_schedule = WP_SCHEDULE
+    if reporting_periods is None:
+        from budget_planner.config import REPORTING_PERIODS
+        reporting_periods = REPORTING_PERIODS
+
     # Stage 1 — Config (no dependencies)
     config_ws = wb.create_sheet(SHEET_CONFIG)
     ctx.config_layout = build_config_sheet(

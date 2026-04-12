@@ -1000,7 +1000,12 @@ def read_actuals_values(
 
     Returns:
         Dict keyed by WP ID string -> list of monthly values (float or None).
-        Only includes rows with at least one non-None value.
+        Every Actuals WP row encountered is preserved, including rows where
+        all monthly cells are blank — a row with no monthly data still
+        represents an explicit "user has touched this WP" intent (e.g.,
+        zero-spend month, or a deliberate clear). Distinguishing that from
+        "never entered" via openpyxl alone isn't possible, so we preserve
+        all rows that appear in the Actuals table.
     """
     values: dict[str, list] = {}
     wb = ws.parent
@@ -1035,9 +1040,9 @@ def read_actuals_values(
 
         monthly = _read_monthly_values(ws, r, month_col_start, project_months)
 
-        # Only include if there's at least one non-None value
-        if any(v is not None for v in monthly):
-            values[wp_id] = monthly
+        # T8: preserve every Actuals WP row — a row with all-None monthlies
+        # still documents user intent (explicit zero / deliberate clear).
+        values[wp_id] = monthly
 
         r += 1
 

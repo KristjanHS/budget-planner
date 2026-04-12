@@ -142,6 +142,48 @@ def test_read_actuals_values_stops_at_total():
     wb.close()
 
 
+def test_read_actuals_values_preserves_all_blank_row():
+    """T8: WP row with all-None monthly cells is still preserved.
+
+    Previously the reader dropped rows whose monthly values were every None
+    ("never entered"), conflating them with untouched WPs. The round-trip
+    contract is now: every Actuals WP row is preserved, blank cells included.
+    """
+    wb = Workbook()
+    plan_ws = wb.active
+    assert plan_ws is not None
+    plan_ws.title = "Plan"
+    plan_ws.cell(6, 1, "WP1")
+    plan_ws.cell(7, 1, "WP2")
+
+    actuals_ws = wb.create_sheet("Actuals")
+    actuals_ws.cell(1, 1, "ACTUAL EUR")
+    actuals_ws.cell(3, 1, "WP ID")
+    actuals_ws.cell(3, 2, "WP Name")
+    # WP1 has numeric data
+    actuals_ws.cell(4, 1, "=Plan!A6")
+    actuals_ws.cell(4, 2, "=Plan!B6")
+    actuals_ws.cell(4, 3, 100.0)
+    actuals_ws.cell(4, 4, 200.0)
+    actuals_ws.cell(4, 5, 300.0)
+    # WP2 — row exists (formula in col A resolves) but every monthly cell
+    # is blank (None). Must still appear in result.
+    actuals_ws.cell(5, 1, "=Plan!A7")
+    actuals_ws.cell(5, 2, "=Plan!B7")
+    # No cell writes for cols 3-5 — they are None
+    # TOTAL terminator
+    actuals_ws.cell(6, 1, "")
+    actuals_ws.cell(6, 2, "TOTAL")
+
+    result = read_actuals_values(actuals_ws, project_months=3)
+    assert "WP2" in result, (
+        "WP2 row was dropped even though it appears in the Actuals table. "
+        "Zero-spend / deliberately-cleared rows must survive the round-trip."
+    )
+    assert result["WP2"] == [None, None, None]
+    wb.close()
+
+
 def test_read_actuals_values_literal_wp_ids():
     """read_actuals_values handles literal (non-formula) WP IDs."""
     wb = Workbook()

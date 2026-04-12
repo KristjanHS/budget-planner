@@ -790,9 +790,10 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
 
     # ── Set FTE Rate formula ──
     # If the user has authored a custom formula (preserved by the reader as
-    # project_params["rate"]), emit it verbatim. Otherwise fall back to the
-    # default weighted average of grade rates by FTE.
-    existing_rate = project_params.get("rate")
+    # ``fte_rate_raw`` — or, for back-compat with callers that only populate
+    # ``rate``, as the legacy polymorphic ``rate`` key), emit it verbatim.
+    # Otherwise fall back to the default weighted average of grade rates by FTE.
+    existing_rate = project_params.get("fte_rate_raw", project_params.get("rate"))
     if isinstance(existing_rate, str) and existing_rate.startswith("="):
         ws.cell(rate_row, 2).value = existing_rate
     else:

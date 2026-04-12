@@ -211,11 +211,19 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
     Returns:
         Tuple of (project_params, work_packages, wp_schedule) where:
         - project_params: dict with keys 'title', 'start', 'months', 'rate',
-          'eu_ceiling_pm'
-        - work_packages: list of dicts with keys 'id', 'name', 'fte', 'rate'
+          'fte_rate_raw', 'eu_ceiling_pm'. ``rate`` is polymorphic (string for
+          formula, float for numeric) — preserved for back-compat. ``fte_rate_raw``
+          mirrors ``rate_raw`` on work_packages: the literal cell value (formula
+          string or numeric), so writers can restore a user-authored formula
+          verbatim on round-trip.
+        - work_packages: list of dicts with keys 'id', 'name', 'fte', 'rate',
+          'rate_raw'
         - wp_schedule: list of dicts with keys 'id', 'start', 'end', 'type'
     """
-    # Scan column A for known param labels (position-independent)
+    # Scan column A for known param labels (position-independent).
+    # Each entry: (dest_key, converter-or-None). The ``FTE Rate`` row is special
+    # because we want both the parsed value (``rate``, polymorphic for back-compat)
+    # AND the raw cell (``fte_rate_raw``, always-literal for formula round-trip).
     _param_map = {
         "Project Title": ("title", None),
         "Project Start": ("start", None),
@@ -224,14 +232,23 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
         "EU Annual Ceiling": ("eu_ceiling_pm", lambda v: float(v or 12.0)),
     }
     project_params: dict = {}
+    matched_keys: set[str] = set()
     for r in range(1, ws.max_row + 1):
         label = str(ws.cell(r, 1).value or "")
         for prefix, (key, converter) in _param_map.items():
             if prefix.lower() in label.lower():
                 raw = ws.cell(r, 2).value
                 project_params[key] = converter(raw) if converter else raw
+                matched_keys.add(key)
+                # Capture the raw cell for FTE Rate alongside the parsed value
+                # so builders can emit the user's formula verbatim on round-trip
+                # without relying on the polymorphic ``rate`` key. ``fte_rate_raw``
+                # is a derived side-field; it does NOT count toward the match
+                # quorum (otherwise we'd short-circuit before finding EU Ceiling).
+                if key == "rate":
+                    project_params["fte_rate_raw"] = raw
                 break
-        if len(project_params) == len(_param_map):
+        if len(matched_keys) == len(_param_map):
             break
     # Validate all params found
     for prefix, (key, _) in _param_map.items():

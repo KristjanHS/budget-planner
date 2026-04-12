@@ -386,6 +386,69 @@ class TestFormulaRateRoundTrip:
             f"Builder lost formula on rewrite; got {rebuilt_rate_val!r}"
         )
 
+    def test_formula_fte_rate_roundtrip(self, tmp_path):
+        """End-to-end: FTE Rate formula survives init → edit → rebuild.
+
+        Also asserts the reader surfaces the raw formula via ``fte_rate_raw``
+        (the explicit round-trip contract) alongside the polymorphic ``rate``.
+        """
+        path = str(tmp_path / "fte_rate_roundtrip.xlsx")
+        init_workbook(output_path=path)
+
+        # User overwrites FTE Rate with a custom formula
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        rate_row = _find_row_by_label(cfg, "FTE Rate")
+        custom_formula = "=AVERAGE(C9:C11)"
+        _set_cell(cfg, rate_row, 2, custom_formula)
+        wb.save(path)
+        wb.close()
+
+        # Reader must expose the formula via fte_rate_raw
+        wb = load_workbook(path)
+        project_params, _, _ = read_config_sheet(wb["Config"])
+        wb.close()
+        assert project_params.get("fte_rate_raw") == custom_formula, (
+            f"fte_rate_raw should mirror the literal cell; "
+            f"got {project_params.get('fte_rate_raw')!r}"
+        )
+
+        # Full rebuild must NOT clobber the user's formula
+        from budget_planner.workbook import rebuild_workbook
+        rebuild_workbook(input_path=path)
+
+        wb = load_workbook(path)
+        rebuilt_val = wb["Config"].cell(rate_row, 2).value
+        wb.close()
+        assert rebuilt_val == custom_formula, (
+            f"Rebuild clobbered user FTE Rate formula; got {rebuilt_val!r}"
+        )
+
+    def test_formula_wp_rate_roundtrip(self, tmp_path):
+        """End-to-end: per-WP Rate formula survives init → edit → rebuild."""
+        path = str(tmp_path / "wp_rate_roundtrip.xlsx")
+        init_workbook(output_path=path)
+
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        wp_header_row = _find_row_by_label(cfg, "WP BUDGET")
+        first_wp_row = wp_header_row + 2
+        formula = "=B2*1.1"
+        _set_cell(cfg, first_wp_row, COL_WP_RATE, formula)
+        wb.save(path)
+        wb.close()
+
+        # Full rebuild must preserve the per-WP formula in its Config cell
+        from budget_planner.workbook import rebuild_workbook
+        rebuild_workbook(input_path=path)
+
+        wb = load_workbook(path)
+        rebuilt_val = wb["Config"].cell(first_wp_row, COL_WP_RATE).value
+        wb.close()
+        assert rebuilt_val == formula, (
+            f"Rebuild clobbered user WP Rate formula; got {rebuilt_val!r}"
+        )
+
     def test_numeric_rate_still_works(self, tmp_path):
         """Baseline: a numeric per-WP rate round-trips as a float."""
         path = str(tmp_path / "wp_rate_numeric.xlsx")

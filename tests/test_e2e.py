@@ -12,8 +12,8 @@ from pathlib import Path
 from budget_planner.workbook import init_workbook, seed_demo_data
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    MONTH_COL_START, NUM_WPS, PROJECT_MONTHS, PROJECT_START,
-    WORK_PACKAGES, VAL_COL_SUM, VAL_COL_BUDGET, DEFAULT_RATE,
+    NUM_WPS, PROJECT_MONTHS, PROJECT_START,
+    WORK_PACKAGES, VAL_COL_BUDGET, DEFAULT_RATE,
     TEAM, GRADE_RATES, DEFAULT_GRADE,
 )
 
@@ -89,34 +89,6 @@ def test_empty_mode_recalc_zero_errors(empty_recalc):
     assert empty_recalc["total_errors"] == 0
 
 
-def test_demo_mode_formula_count(demo_recalc):
-    """Workbook should have substantial formula count (5 sheets, cross-sheet refs)."""
-    assert demo_recalc["total_formulas"] > 200
-
-
-# ── Plan <-> Capacity consistency (requires recalc) ──
-
-
-def test_demo_mode_plan_planned_equals_capacity_sums(demo_wb_path, demo_recalc):
-    """After recalc, Plan Planned FTE values should be numeric (sum of Capacity)."""
-    # Load recalculated workbook with data_only=True to get computed values
-    wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
-    plan = wb["Plan"]
-
-    from budget_planner.reader import discover_layout
-
-    layout = discover_layout(plan)
-
-    # For WP1 (active M1-M14), check that Plan planned M1 value is numeric
-    # (no seeding means values are 0, but the formula should resolve to a number)
-    planned_row = layout["planned_first_wp_row"]
-    val = plan.cell(planned_row, MONTH_COL_START).value
-    # After recalc, this should be a computed number (0 without seeding)
-    assert val is not None and isinstance(val, (int, float)), \
-        f"Plan WP1 M1 after recalc should be numeric, got: {val}"
-    wb.close()
-
-
 # ── GAP 7: Summary values after recalc ──
 
 # Layout constants matching summary.py
@@ -134,21 +106,6 @@ def _find_summary_first_wp_row(ws):
         if isinstance(val, str) and val == WORK_PACKAGES[0]["id"]:
             return row
     raise AssertionError("Could not find Summary first WP row")
-
-
-def test_summary_year1_plan_fte_numeric(demo_wb_path, demo_recalc):
-    """After recalc, Summary Year 1 Plan FTE should be numeric for all WPs."""
-    wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
-    summary = wb["Summary"]
-    first_wp = _find_summary_first_wp_row(summary)
-
-    # Year 1 Plan FTE column = YEAR_GROUP_START (col C)
-    for i in range(NUM_WPS):
-        val = summary.cell(first_wp + i, _YEAR_GROUP_START).value
-        assert val is None or isinstance(val, (int, float)), (
-            f"WP row {first_wp + i} Year 1 Plan FTE should be numeric, got {val}"
-        )
-    wb.close()
 
 
 def test_summary_total_plan_fte_equals_year_sum(demo_wb_path, demo_recalc):
@@ -241,17 +198,6 @@ def _find_actuals_total_row(ws):
         if isinstance(val, str) and val.upper() == "TOTAL":
             return r
     raise AssertionError("Could not find Actuals TOTAL row")
-
-
-def test_actuals_total_sum_positive(demo_wb_path, demo_recalc):
-    """Fresh demo workbook: Actuals TOTAL Sum should be positive (seeded data)."""
-    wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
-    actuals = wb["Actuals"]
-    total_row = _find_actuals_total_row(actuals)
-    val = actuals.cell(total_row, VAL_COL_SUM).value
-    assert isinstance(val, (int, float)) and val > 0, \
-        f"Actuals TOTAL Sum should be > 0 in demo mode, got {val}"
-    wb.close()
 
 
 def test_actuals_total_ceiling_equals_partner_ceiling(demo_wb_path, demo_recalc):

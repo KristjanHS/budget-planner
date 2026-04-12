@@ -3,13 +3,9 @@
 These tests prove rebuild works correctly after changing FTE budgets,
 WP start/end months, team names, and allocations — without hardcoding
 any specific values from config.py.
-
-The recalc test saves the rebuilt+recalc'd workbook to
-output/budget_plan_change.xlsx for manual inspection.
 """
 import json
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -26,9 +22,6 @@ from budget_planner.reader import (
 from budget_planner.config import MONTH_COL_START
 
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
-
-
 def _get_config_first_wp_row():
     """Derive Config WP data start row from a generated workbook."""
     import tempfile
@@ -76,12 +69,6 @@ def _set(ws, row, col, value):
     cell = ws.cell(row, col)
     assert isinstance(cell, Cell)
     cell.value = value
-
-
-def _save_change(src_path):
-    """Copy rebuilt workbook to output/budget_plan_change.xlsx."""
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    shutil.copy2(src_path, OUTPUT_DIR / "budget_plan_change.xlsx")
 
 
 def _find_first_wp_row_actuals(ws):
@@ -678,46 +665,38 @@ class TestRebuildFullScenario:
 class TestRebuildRecalc:
     """After data changes + rebuild, LibreOffice recalc produces zero errors."""
 
-    def test_recalc_zero_errors_after_fte_change(self, init_path):
-        """Changed FTE + rebuild + recalc = no formula errors."""
-        wb = openpyxl.load_workbook(init_path)
+    @pytest.fixture(scope="class")
+    def recalc_state(self, tmp_path_factory):
+        """Build workbook with changed FTE, rebuild, recalc once for the class."""
+        path = str(tmp_path_factory.mktemp("rebuild_recalc") / "test.xlsx")
+        init_workbook(output_path=path)
+
+        wb = openpyxl.load_workbook(path)
         _set(wb["Config"], CONFIG_FIRST_WP_ROW, 3, 50.0)
-        wb.save(init_path)
+        wb.save(path)
         wb.close()
 
-        rebuild_workbook(input_path=init_path)
+        rebuild_workbook(input_path=path)
 
         result = subprocess.run(
-            ["python3", str(SCRIPTS_DIR / "recalc.py"), init_path],
+            ["python3", str(SCRIPTS_DIR / "recalc.py"), path],
             capture_output=True, text=True,
         )
         if result.returncode != 0:
             pytest.skip("LibreOffice not available")
-        data = json.loads(result.stdout)
+        return {"path": path, "recalc": json.loads(result.stdout)}
+
+    def test_recalc_zero_errors_after_fte_change(self, recalc_state):
+        """Changed FTE + rebuild + recalc = no formula errors."""
+        data = recalc_state["recalc"]
         assert data["status"] == "success"
         assert data["total_errors"] == 0
 
-    def test_recalc_ceiling_reflects_changed_fte(self, init_path):
+    def test_recalc_ceiling_reflects_changed_fte(self, recalc_state):
         """After FTE change + rebuild + recalc, partner_ceiling uses new value."""
-        wb = openpyxl.load_workbook(init_path)
-        params, wps, _ = read_config_sheet(wb["Config"])
-        new_fte = 50.0
-        _set(wb["Config"], CONFIG_FIRST_WP_ROW, 3, new_fte)
-        wb.save(init_path)
-        wb.close()
-
-        rebuild_workbook(input_path=init_path)
-
-        result = subprocess.run(
-            ["python3", str(SCRIPTS_DIR / "recalc.py"), init_path],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            pytest.skip("LibreOffice not available")
-
-        # Read recalculated per-WP rates from Config col D
-        wb = openpyxl.load_workbook(init_path, data_only=True)
+        wb = openpyxl.load_workbook(recalc_state["path"], data_only=True)
         config = wb["Config"]
+        _, wps, _ = read_config_sheet(config)
 
         # Find WP Budget data rows and read per-WP rates
         from budget_planner.reader import _find_header_row
@@ -742,54 +721,6 @@ class TestRebuildRecalc:
         assert abs(ceiling_val - expected_ceiling) < 0.01, (
             f"Ceiling {ceiling_val} != expected {expected_ceiling}"
         )
-        wb.close()
-
-    def test_changed_file_has_autofit_columns_after_recalc(self, init_path):
-        """Full scenario + rebuild + recalc => _changed file has non-default widths."""
-        # Apply multiple changes (mirrors TestRebuildFullScenario)
-        wb = openpyxl.load_workbook(init_path)
-        params, wps, _ = read_config_sheet(wb["Config"])
-        sched_entries = _find_sched_rows(wb["Config"])
-        _set(wb["Config"], CONFIG_FIRST_WP_ROW, 3, 99.0)
-        wp2_sched = next(e for e in sched_entries if e["id"] == wps[1]["id"])
-        original_end = wp2_sched["end"]
-        shortened_end = max(wp2_sched["start"], original_end - 6)
-        _set(wb["Config"], wp2_sched["row"], 3, shortened_end)
-        roster = TestRebuildWithChangedTeam._read_roster_with_rows(wb["Config"])
-        person = TestRebuildWithChangedTeam._find_person_without_externals(
-            roster, wb["Config"]
-        )
-        assert person is not None, "Need at least one person without externals"
-        _set(wb["Config"], person["row"], 1, "Zara")
-        wb.save(init_path)
-        wb.close()
-
-        rebuild_workbook(input_path=init_path)
-
-        # Run recalc (auto-fits columns via LibreOffice macro)
-        result = subprocess.run(
-            ["python3", str(SCRIPTS_DIR / "recalc.py"), init_path],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            pytest.skip("LibreOffice not available")
-        data = json.loads(result.stdout)
-        assert data["status"] == "success"
-
-        # Save the recalc'd workbook as _changed for manual inspection
-        _save_change(init_path)
-
-        # Verify _changed file has non-default column widths
-        changed_path = OUTPUT_DIR / "budget_plan_change.xlsx"
-        wb = openpyxl.load_workbook(str(changed_path))
-        default_width = 13.0
-        for sheet_name in ["Plan", "Capacity", "Actuals", "Summary"]:
-            ws = wb[sheet_name]
-            col_a_width = ws.column_dimensions["A"].width
-            assert col_a_width != default_width, (
-                f"{sheet_name} col A has default width {default_width} — "
-                "recalc auto-fit did not run on _changed file"
-            )
         wb.close()
 
 

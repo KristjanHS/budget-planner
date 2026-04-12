@@ -1,0 +1,22 @@
+# Binary / generated output
+output/
+*.xlsx
+
+# Build artifacts
+*.egg-info/
+__pycache__/
+.venv/
+.ruff_cache/
+.pytest_cache/
+
+# Large generated HTML (89KB)
+docs/grant-architecture.html
+
+# Completed plans (active plans stay accessible)
+docs/plans/old_already_implemented/
+
+# Analysis artifacts from prior sessions
+docs/analysis/
+
+# Windows scripts (WSL interop disabled)
+*.bat

@@ -5,8 +5,9 @@ from openpyxl.styles import Font
 from openpyxl.formatting.rule import FormulaRule
 
 from budget_planner.layout import (
-    MONTH_COL_START, SHEET_CONFIG, CAPACITY_AMBER_LOAD,
-    build_year_month_headers, month_col_end as _month_col_end, val_columns,
+    MONTH_COL_START, SHEET_CONFIG, CAPACITY_AMBER_LOAD, COL_ROSTER_FTE,
+    build_year_month_headers, cell_ref,
+    month_col_end as _month_col_end, val_columns,
     _calendar_year_groups,
 )
 from budget_planner.styles import (
@@ -335,14 +336,15 @@ def _write_person_grid(
     # openpyxl assigns priority sequentially, so add red first (wins when both match).
     total_range = (f"{col_letter(month_col_start)}{total_row}:"
                    f"{col_letter(month_col_end)}{total_row}")
+    max_fte_ref = cell_ref(SHEET_CONFIG, roster_row, COL_ROSTER_FTE)
     # Red if > Max FTE (added first = highest priority, wins over amber)
     ws.conditional_formatting.add(total_range, FormulaRule(
-        formula=[f"{col_letter(month_col_start)}{total_row}>{SHEET_CONFIG}!$B${roster_row}"],
+        formula=[f"{col_letter(month_col_start)}{total_row}>{max_fte_ref}"],
         fill=CF_RED_FILL,
     ))
     # Amber if > CAPACITY_AMBER_LOAD x Max FTE (lower priority, only visible when red doesn't match)
     ws.conditional_formatting.add(total_range, FormulaRule(
-        formula=[f"{col_letter(month_col_start)}{total_row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}"],
+        formula=[f"{col_letter(month_col_start)}{total_row}>{CAPACITY_AMBER_LOAD}*{max_fte_ref}"],
         fill=CF_AMBER_FILL,
     ))
 

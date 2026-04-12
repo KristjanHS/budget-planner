@@ -17,7 +17,7 @@ from budget_planner.meta import build_meta_sheet
 from budget_planner.layout import (
     SHEET_META, SHEET_CONFIG, SHEET_PLAN, SHEET_CAPACITY,
     SHEET_ACTUALS, SHEET_TRENDS,
-    SECTION_HEADER_LABELS,
+    SECTION_HEADER_LABELS, cell_ref,
 )
 from budget_planner.styles import BLACK_FORMULA, HEADER_FONT, style_cell, apply_year_groups
 
@@ -180,7 +180,9 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
         "Override with a static number to freeze.",
         "Programme Budget Tool",
     )
-    wb.defined_names.add(DefinedName("current_month", attr_text=f"{SHEET_TRENDS}!$B$1"))
+    wb.defined_names.add(DefinedName(
+        "current_month", attr_text=cell_ref(SHEET_TRENDS, 1, 2)
+    ))
 
     # Actuals sheet
     actuals_layout = build_actuals_sheet(

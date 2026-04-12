@@ -6,6 +6,7 @@ or removing months never requires touching builder arithmetic.
 """
 
 from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 from dateutil.relativedelta import relativedelta
 
 from budget_planner.styles import (
@@ -110,6 +111,18 @@ CAPACITY_AMBER_LOAD = 0.80
 ACTUALS_AMBER_PCT_CEIL = 0.85
 ACTUALS_AMBER_BREACH_MONTHS = 12
 ACTUALS_RED_BREACH_MONTHS = 6
+
+
+def cell_ref(sheet: str, row: int, col: int, *, absolute: bool = True) -> str:
+    """Return an Excel cell reference like ``Sheet!$B$3`` from numeric coordinates.
+
+    Prefer this over hand-writing ``f"{SHEET}!$B${row}"`` so that layout column
+    changes in this module propagate to every cross-sheet formula automatically.
+    """
+    letter = get_column_letter(col)
+    if absolute:
+        return f"{sheet}!${letter}${row}"
+    return f"{sheet}!{letter}{row}"
 
 
 def month_col_end(project_months: int) -> int:

@@ -3,9 +3,10 @@
 from openpyxl.formatting.rule import FormulaRule
 
 from budget_planner.layout import (
-    MONTH_COL_START, SHEET_ACTUALS, SHEET_CONFIG,
+    MONTH_COL_START, SHEET_ACTUALS, SHEET_CONFIG, COL_WP_CEILING,
     ACTUALS_AMBER_PCT_CEIL, ACTUALS_AMBER_BREACH_MONTHS, ACTUALS_RED_BREACH_MONTHS,
-    build_year_month_headers, month_col_end as _month_col_end, val_columns,
+    build_year_month_headers, cell_ref,
+    month_col_end as _month_col_end, val_columns,
     wp_active_months,
 )
 from budget_planner.styles import (
@@ -107,9 +108,11 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
                      f"{col_letter(month_col_end)}{row}")
         style_cell(ws, row, val_col_sum, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = f"=SUM({sum_range})"
-        # Validation: Ceiling (from Config Personnel Ceiling column E)
+        # Validation: Ceiling (from Config Personnel Ceiling column)
         style_cell(ws, row, val_col_budget, font=GREEN_XREF,
-                   fmt="\u20ac#,##0").value = f"={SHEET_CONFIG}!E{config_row}"
+                   fmt="\u20ac#,##0").value = (
+            f"={cell_ref(SHEET_CONFIG, config_row, COL_WP_CEILING, absolute=False)}"
+        )
         # Validation: Variance = Ceiling - Sum
         style_cell(ws, row, val_col_diff, font=BLACK_FORMULA,
                    fmt="\u20ac#,##0").value = (

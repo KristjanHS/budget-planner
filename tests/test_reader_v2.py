@@ -1,7 +1,7 @@
 """Tests for reader extensions: read_plan_config,
 read_team_from_config, read_capacity_sheet, read_capacity_assignments."""
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from budget_planner.reader import (
     discover_layout,
@@ -9,11 +9,14 @@ from budget_planner.reader import (
     read_team_from_config,
     read_capacity_sheet,
     read_assignments_from_config,
+    read_config_sheet,
 )
 from budget_planner.config import (
     WORK_PACKAGES, TEAM, PROJECT_MONTHS, EXTERNAL_COMMITMENTS,
     DEMO_CAPACITY_ASSIGNMENTS,
 )
+from budget_planner.layout import COL_WP_RATE
+from budget_planner.workbook import init_workbook
 
 
 # ── read_plan_config ──
@@ -230,3 +233,126 @@ class TestDiscoverLayoutValidation:
             f"Expected formula at planned first WP row, got {first_val!r}"
         )
         wb.close()
+
+
+# ── T1: Formula rate round-trip ──
+
+
+def _find_row_by_label(ws, label_prefix):
+    """Return the 1-based row index of the first col-A cell whose value
+    starts with ``label_prefix`` (case-insensitive, substring)."""
+    for r in range(1, ws.max_row + 1):
+        label = str(ws.cell(r, 1).value or "")
+        if label_prefix.lower() in label.lower():
+            return r
+    raise AssertionError(f"Label '{label_prefix}' not found in column A")
+
+
+def _set_cell(ws, row: int, col: int, value) -> None:
+    """Set a cell value with pyright-safe type narrowing (skips MergedCell)."""
+    from openpyxl.cell import Cell
+    cell = ws.cell(row, col)
+    assert isinstance(cell, Cell), (
+        f"Expected regular Cell at ({row}, {col}); got {type(cell).__name__}"
+    )
+    cell.value = value
+
+
+class TestFormulaRateRoundTrip:
+    """reader.py preserves formula strings for WP rates and FTE Rate."""
+
+    def test_formula_rate_roundtrip_fte_rate(self, tmp_path):
+        """Setting FTE Rate cell to a formula string survives read."""
+        path = str(tmp_path / "fte_rate_formula.xlsx")
+        init_workbook(output_path=path)
+
+        # Overwrite FTE Rate cell (col B on the row labelled "FTE Rate (EUR)")
+        # with a simple formula and re-read.
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        rate_row = _find_row_by_label(cfg, "FTE Rate")
+        _set_cell(cfg, rate_row, 2, "=AVERAGE(B9:B11)")
+        wb.save(path)
+        wb.close()
+
+        wb = load_workbook(path)
+        project_params, _, _ = read_config_sheet(wb["Config"])
+        wb.close()
+
+        assert project_params["rate"] == "=AVERAGE(B9:B11)", (
+            f"Formula lost on read; got {project_params['rate']!r}"
+        )
+
+    def test_formula_rate_roundtrip_wp_rate(self, tmp_path):
+        """Formula in per-WP Rate cell survives read AND is rewritten on save."""
+        path = str(tmp_path / "wp_rate_formula.xlsx")
+        init_workbook(output_path=path)
+
+        # Overwrite the first WP's rate cell with a formula
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        _, original_wps, _ = read_config_sheet(cfg)
+        # Find the WP Budget first data row by locating "WP BUDGET" header
+        wp_header_row = _find_row_by_label(cfg, "WP BUDGET")
+        first_wp_row = wp_header_row + 2  # header + column-headers row
+        formula = "=Config!$B$4*1.1"
+        _set_cell(cfg, first_wp_row, COL_WP_RATE, formula)
+        wb.save(path)
+        wb.close()
+
+        # Re-read: rate_raw should preserve formula, rate should fall back to default
+        wb = load_workbook(path)
+        _, wps_after, _ = read_config_sheet(wb["Config"])
+        wb.close()
+
+        assert len(wps_after) == len(original_wps)
+        assert wps_after[0]["rate_raw"] == formula, (
+            f"Expected rate_raw to preserve formula; got {wps_after[0]['rate_raw']!r}"
+        )
+        assert isinstance(wps_after[0]["rate"], (int, float)), (
+            "numeric `rate` should remain numeric for downstream consumers"
+        )
+
+        # Now rewrite via the config-sheet builder and confirm the formula
+        # propagates back to the cell.
+        from budget_planner.config_sheet import build_config_sheet
+        out_wb = Workbook()
+        out_ws = out_wb.active
+        assert out_ws is not None
+        out_ws.title = "Config"
+        params_sample = {
+            "title": "Rebuild Test",
+            "start": __import__("datetime").datetime(2026, 1, 1),
+            "months": 60,
+            "rate": 7500,
+            "eu_ceiling_pm": 12.0,
+        }
+        build_config_sheet(out_ws, out_wb, params_sample, wps_after)
+        # Find the rate cell on the rebuilt sheet
+        rebuilt_wp_header = _find_row_by_label(out_ws, "WP BUDGET")
+        rebuilt_first_wp = rebuilt_wp_header + 2
+        rebuilt_rate_val = out_ws.cell(rebuilt_first_wp, COL_WP_RATE).value
+        assert rebuilt_rate_val == formula, (
+            f"Builder lost formula on rewrite; got {rebuilt_rate_val!r}"
+        )
+
+    def test_numeric_rate_still_works(self, tmp_path):
+        """Baseline: a numeric per-WP rate round-trips as a float."""
+        path = str(tmp_path / "wp_rate_numeric.xlsx")
+        init_workbook(output_path=path)
+
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        wp_header_row = _find_row_by_label(cfg, "WP BUDGET")
+        first_wp_row = wp_header_row + 2
+        _set_cell(cfg, first_wp_row, COL_WP_RATE, 7500)
+        wb.save(path)
+        wb.close()
+
+        wb = load_workbook(path)
+        _, wps_after, _ = read_config_sheet(wb["Config"])
+        wb.close()
+
+        assert wps_after[0]["rate"] == pytest.approx(7500.0)
+        # rate_raw captures the literal cell value (here: numeric)
+        assert wps_after[0]["rate_raw"] == 7500

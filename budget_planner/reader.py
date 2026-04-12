@@ -26,6 +26,24 @@ def _safe_float(value, default: float) -> float:
         return default
 
 
+def _parse_fte_rate(value):
+    """Parse the FTE Rate cell value.
+
+    - Formula strings (starting with ``"="``) are preserved verbatim so that
+      round-trip builds do not lose a user-authored rate formula.
+    - Numeric values (and None) are coerced to float, defaulting to 7500.
+    - Anything else (e.g. ArrayFormula objects) is returned as-is, mirroring the
+      permissive behaviour of earlier revisions.
+    """
+    if isinstance(value, str):
+        if value.startswith("="):
+            return value
+        return float(value or 7500)
+    if value is None or isinstance(value, (int, float)):
+        return float(value or 7500)
+    return value
+
+
 @overload
 def _find_header_row(
     ws, pattern: str, col: int = ..., max_row: int | None = ...,
@@ -83,7 +101,7 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
         "Project Title": ("title", None),
         "Project Start": ("start", None),
         "Project Months": ("months", lambda v: int(v or 60)),
-        "FTE Rate": ("rate", lambda v: v if not isinstance(v, (int, float, str, type(None))) else (float(v or 7500) if not isinstance(v, str) or not v.startswith("=") else v)),
+        "FTE Rate": ("rate", _parse_fte_rate),
         "EU Annual Ceiling": ("eu_ceiling_pm", lambda v: float(v or 12.0)),
     }
     project_params: dict = {}
@@ -113,11 +131,17 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
         # Stop at TOTAL row
         if col_b and str(col_b).upper() == "TOTAL":
             break
+        rate_cell = ws.cell(r, COL_WP_RATE).value
         work_packages.append({
             "id": str(wp_id),
             "name": str(col_b or ""),
             "fte": float(ws.cell(r, COL_WP_FTE).value or 0),
-            "rate": _safe_float(ws.cell(r, COL_WP_RATE).value, 6500),
+            # ``rate`` is the numeric coercion for downstream consumers (falls
+            # back to 6500 when the cell is a formula). ``rate_raw`` preserves
+            # the literal cell value — formula string or numeric — so that
+            # writers can restore the user's formula on round-trip.
+            "rate": _safe_float(rate_cell, 6500),
+            "rate_raw": rate_cell,
         })
         r += 1
 

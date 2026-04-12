@@ -76,12 +76,19 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
         # Col C: FTE Budget
         style_cell(ws, row_idx, COL_WP_FTE, value=wp["fte"], font=BLUE_INPUT,
                    fmt="0.00", border=False)
-        # Col D: Rate (€/PM) — blue input, per-WP or default
-        wp_rate = wp.get("rate", default_rate)
-        if not isinstance(wp_rate, (int, float)):
-            wp_rate = default_rate
-        style_cell(ws, row_idx, COL_WP_RATE, value=wp_rate, font=BLUE_INPUT,
-                   fmt="€#,##0", border=False)
+        # Col D: Rate (€/PM) — preserve user-authored formula when present,
+        # else fall back to the numeric rate (or project default). Formulas are
+        # styled BLACK_FORMULA per the font-color convention (CLAUDE.md Rule 3).
+        rate_raw = wp.get("rate_raw")
+        if isinstance(rate_raw, str) and rate_raw.startswith("="):
+            style_cell(ws, row_idx, COL_WP_RATE, value=rate_raw,
+                       font=BLACK_FORMULA, fmt="€#,##0", border=False)
+        else:
+            wp_rate = wp.get("rate", default_rate)
+            if not isinstance(wp_rate, (int, float)):
+                wp_rate = default_rate
+            style_cell(ws, row_idx, COL_WP_RATE, value=wp_rate, font=BLUE_INPUT,
+                       fmt="€#,##0", border=False)
         # Col E: Ceiling (€) — formula = FTE * Rate
         fte_cl = get_column_letter(COL_WP_FTE)
         rate_cl = get_column_letter(COL_WP_RATE)

@@ -393,6 +393,11 @@ def read_team_from_config(ws) -> list[dict]:
     # the user may have made without manually extending the defined name.
     wb = ws.parent
     span = _iter_named_range_rows(wb, "roster_ftes") if wb is not None else None
+    # Sanity check: the named range must not start before the first data row
+    # (corrupt/stale workbooks otherwise yield an empty roster → rebuild would
+    # silently drop everyone).
+    if span is not None and span[0] < person_header + 1:
+        span = None
     if span is not None:
         first_data, range_end = span
     else:
@@ -498,10 +503,13 @@ def read_assignments_from_config(ws) -> list[dict]:
     # range end to support append-style edits that don't extend the name.
     wb = ws.parent
     span = _iter_named_range_rows(wb, "assign_persons") if wb is not None else None
+    expected_first = _data_row_after(assignments_header)
+    if span is not None and span[0] < expected_first:
+        span = None
     if span is not None:
         first_data, range_end = span
     else:
-        first_data = _data_row_after(assignments_header)
+        first_data = expected_first
         range_end = None
 
     assignments: list[dict] = []
@@ -557,10 +565,13 @@ def read_externals_from_config(ws) -> list[dict]:
     # sentinel scan past range end for append-style edits).
     wb = ws.parent
     span = _iter_named_range_rows(wb, "ext_persons") if wb is not None else None
+    expected_first = _data_row_after(ext_config_header)
+    if span is not None and span[0] < expected_first:
+        span = None
     if span is not None:
         first_data, range_end = span
     else:
-        first_data = _data_row_after(ext_config_header)
+        first_data = expected_first
         range_end = None
 
     external_commitments: list[dict] = []

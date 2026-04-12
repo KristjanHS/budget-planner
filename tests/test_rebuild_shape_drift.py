@@ -39,8 +39,11 @@ def _simulate_excel_insert_in_named_range(wb, name: str, before_row: int, amount
     assert m, f"unexpected ref form: {ref}"
     col1, row1, col2, row2 = m.group(1), int(m.group(2)), m.group(3), m.group(4)
     last = int(row2) if row2 else row1
-    # Insert is inside the range → extend end by `amount`.
-    if row1 <= before_row <= last + 1:
+    # Extend only when the insertion is strictly inside [row1, last]. Excel
+    # does NOT auto-extend when inserting at last+1 (immediately below the
+    # range); that's an append and leaves the name untouched.
+    # Inserts above row1 are no-ops here (Excel behaves the same way).
+    if row1 <= before_row <= last:
         new_last = last + amount
         col2_part = f":${col2}${new_last}" if col2 else f":${col1}${new_last}"
         dn.attr_text = f"{sheet}!${col1}${row1}{col2_part}"

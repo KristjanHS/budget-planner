@@ -2,26 +2,25 @@
 setlocal enableextensions enabledelayedexpansion
 
 REM ============================================================
-REM  make_reproducer.bat  (Windows)
+REM  make_reproducer.bat  (Windows, runs via WSL)
 REM
 REM  Copy this file into the folder that holds your confidential
 REM  .xlsx workbook. Double-click (or run from cmd) and it will:
 REM    1. Find the single .xlsx in its own folder.
-REM    2. Run scripts.make_reproducer against it.
-REM    3. Write fp.json and synthetic.xlsx into <REPO>\tmp\.
+REM    2. Invoke the WSL python to run scripts.make_reproducer.
+REM    3. Write fp.json + synthetic.xlsx into <REPO>/tmp/ in WSL.
 REM
-REM  BEFORE FIRST USE: edit the REPO= line below to point at
-REM  your local checkout of the budget-planner repo.
+REM  No editing required. Assumes the repo lives at the WSL path
+REM  below (adjust once if you ever move the checkout).
 REM ============================================================
 
-set "REPO=C:\Users\%USERNAME%\projects\budget-planner"
-set "PYTHON=python"
+set "DISTRO=Ubuntu-22.04"
+set "REPO_WSL=~/projects/budget-planner"
 
 REM --- Resolve the folder this .bat lives in ---
 set "HERE=%~dp0"
-REM %~dp0 always ends with a backslash.
 
-REM --- Find the single .xlsx in %HERE% (skip temp ~$ lock files) ---
+REM --- Find the single .xlsx in %HERE% (skip Excel ~$ lock files) ---
 set "XLSX="
 set "XLSX_COUNT=0"
 for %%F in ("%HERE%*.xlsx") do (
@@ -44,22 +43,23 @@ if not "%XLSX_COUNT%"=="1" (
     exit /b 1
 )
 
-echo Real workbook : %XLSX%
-echo Repo          : %REPO%
-echo Output        : %REPO%\tmp\fp.json  +  synthetic.xlsx
-echo.
+REM --- Convert the Windows path to a WSL path via wslpath ---
+for /f "usebackq delims=" %%P in (`wsl -d %DISTRO% wslpath -a "%XLSX%"`) do set "XLSX_WSL=%%P"
 
-if not exist "%REPO%\scripts\make_reproducer.py" (
-    echo ERROR: REPO path does not look right — "%REPO%\scripts\make_reproducer.py" is missing.
-    echo        Edit the REPO= line at the top of this .bat file.
+if "%XLSX_WSL%"=="" (
+    echo ERROR: wslpath failed. Is WSL distro "%DISTRO%" installed?
     pause
     exit /b 1
 )
 
-pushd "%REPO%"
-%PYTHON% -m scripts.make_reproducer "%XLSX%"
+echo Real workbook : %XLSX%
+echo WSL path      : %XLSX_WSL%
+echo Repo (WSL)    : %REPO_WSL%
+echo Output        : %REPO_WSL%/tmp/fp.json  +  synthetic.xlsx
+echo.
+
+wsl -d %DISTRO% bash -lc "cd '%REPO_WSL%' && python3 -m scripts.make_reproducer '%XLSX_WSL%'"
 set "RC=%ERRORLEVEL%"
-popd
 
 if not "%RC%"=="0" (
     echo.
@@ -69,6 +69,6 @@ if not "%RC%"=="0" (
 )
 
 echo.
-echo Done. Artifacts in %REPO%\tmp\ are safe to share.
+echo Done. Artifacts in %REPO_WSL%/tmp/ are safe to share.
 pause
 endlocal

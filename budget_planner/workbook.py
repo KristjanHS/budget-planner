@@ -21,6 +21,7 @@ Coupling points:
 ``BuildContext`` below threads the accumulated layout dicts through
 ``_build_all_sheets`` so the DAG is explicit rather than hidden in locals.
 """
+
 import os
 import shutil
 from dataclasses import dataclass, field
@@ -39,9 +40,14 @@ from budget_planner.summary import build_summary_sheet
 from budget_planner.trends import build_trends_sheet
 from budget_planner.meta import build_meta_sheet
 from budget_planner.layout import (
-    SHEET_META, SHEET_CONFIG, SHEET_PLAN, SHEET_CAPACITY,
-    SHEET_ACTUALS, SHEET_TRENDS,
-    SECTION_HEADER_LABELS, cell_ref,
+    SHEET_META,
+    SHEET_CONFIG,
+    SHEET_PLAN,
+    SHEET_CAPACITY,
+    SHEET_ACTUALS,
+    SHEET_TRENDS,
+    SECTION_HEADER_LABELS,
+    cell_ref,
 )
 from budget_planner.styles import BLACK_FORMULA, HEADER_FONT, style_cell, apply_year_groups
 
@@ -93,8 +99,9 @@ class BuildContext:
     warnings: list[str] = field(default_factory=list)
 
 
-def _validate_config(project_params, work_packages, team, external_commitments,
-                     *, wp_schedule=None):
+def _validate_config(
+    project_params, work_packages, team, external_commitments, *, wp_schedule=None
+):
     """Validate extracted config data.
 
     Returns:
@@ -115,11 +122,16 @@ def _validate_config(project_params, work_packages, team, external_commitments,
     if not team:
         errors.append("Team roster is empty")
 
-    # Duplicate WP IDs
+    # Duplicate WP IDs in budget table (schedule section may repeat the same ID)
     seen_ids: set[str] = set()
     for wp in work_packages:
         if wp["id"] in seen_ids:
-            errors.append(f"Duplicate WP ID: {wp['id']}")
+            errors.append(
+                f"Duplicate WP ID in WP BUDGET table: {wp['id']}. "
+                "Use one row per ID there; for multiple active periods use "
+                "WP SCHEDULE (same ID, different Start/End), or split into "
+                "distinct IDs (e.g. WP4a, WP4b)."
+            )
         seen_ids.add(wp["id"])
 
     # External commitment person must exist in team
@@ -149,17 +161,25 @@ def _validate_config(project_params, work_packages, team, external_commitments,
                 )
         for wp in work_packages:
             if wp["id"] not in sched_wp_ids:
-                warnings.append(
-                    f"WP {wp['id']} has no schedule entry"
-                )
+                warnings.append(f"WP {wp['id']} has no schedule entry")
 
     return errors, warnings
 
 
-def _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
-                      *, wp_schedule=None, assignments=None, preserved_actuals=None,
-                      rebuild_warnings=None, reporting_periods=None,
-                      grade_rates=None):
+def _build_all_sheets(
+    wb,
+    project_params,
+    work_packages,
+    team,
+    external_commitments,
+    *,
+    grade_rates,
+    wp_schedule=None,
+    assignments=None,
+    preserved_actuals=None,
+    rebuild_warnings=None,
+    reporting_periods=None,
+):
     """Build all sheets into the workbook.
 
     Expects wb to already have a '_META' sheet as the active/first sheet.
@@ -176,7 +196,10 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     # Stage 1 — Config (no dependencies)
     config_ws = wb.create_sheet(SHEET_CONFIG)
     ctx.config_layout = build_config_sheet(
-        config_ws, wb, project_params, work_packages,
+        config_ws,
+        wb,
+        project_params,
+        work_packages,
         wp_schedule=wp_schedule,
         team=team,
         reporting_periods=reporting_periods,
@@ -188,7 +211,8 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     # Stage 2 — Plan (consumes config_layout)
     plan_ws = wb.create_sheet(SHEET_PLAN)
     ctx.plan_layout = build_plan_sheet(
-        plan_ws, wb,
+        plan_ws,
+        wb,
         project_params=project_params,
         work_packages=work_packages,
         wp_schedule=wp_schedule,
@@ -198,10 +222,13 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     # Stage 3 — Capacity (consumes config_layout + plan_layout["config_first_wp_row"])
     capacity_ws = wb.create_sheet(SHEET_CAPACITY)
     ctx.capacity_layout = build_capacity_sheet(
-        capacity_ws, ctx.config_layout,
-        project_params=project_params, work_packages=work_packages,
+        capacity_ws,
+        ctx.config_layout,
+        project_params=project_params,
+        work_packages=work_packages,
         wp_schedule=wp_schedule,
-        team=team, external_commitments=external_commitments,
+        team=team,
+        external_commitments=external_commitments,
         assignments=assignments,
         config_first_wp_row=ctx.plan_layout["config_first_wp_row"],
     )
@@ -209,7 +236,9 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
     # Stage 4 — Rewrite Plan FTE as cross-sheet formulas from Capacity
     # (must run after Capacity; Plan cells written in Stage 2 get overwritten.)
     _apply_planned_formulas(
-        plan_ws, ctx.plan_layout, ctx.capacity_layout,
+        plan_ws,
+        ctx.plan_layout,
+        ctx.capacity_layout,
         work_packages=work_packages,
         project_params=project_params,
         wp_schedule=wp_schedule,
@@ -233,13 +262,14 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
         "Override with a static number to freeze.",
         "Programme Budget Tool",
     )
-    wb.defined_names.add(DefinedName(
-        "current_month", attr_text=cell_ref(SHEET_TRENDS, 1, 2)
-    ))
+    wb.defined_names.add(
+        DefinedName("current_month", attr_text=cell_ref(SHEET_TRENDS, 1, 2))
+    )
 
     # Stage 6 — Actuals (depends on plan_layout + Trends stub for current_month)
     ctx.actuals_layout = build_actuals_sheet(
-        wb, ctx.plan_layout,
+        wb,
+        ctx.plan_layout,
         project_params=project_params,
         work_packages=work_packages,
         wp_schedule=wp_schedule,
@@ -248,7 +278,9 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
 
     # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout)
     build_summary_sheet(
-        wb, ctx.plan_layout, ctx.actuals_layout,
+        wb,
+        ctx.plan_layout,
+        ctx.actuals_layout,
         project_params=project_params,
         work_packages=work_packages,
         wp_schedule=wp_schedule,
@@ -258,8 +290,12 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
 
     # Stage 8 — Trends full (needs every prior layout)
     build_trends_sheet(
-        trends_ws, wb, ctx.plan_layout, ctx.actuals_layout,
-        ctx.capacity_layout, ctx.config_layout,
+        trends_ws,
+        wb,
+        ctx.plan_layout,
+        ctx.actuals_layout,
+        ctx.capacity_layout,
+        ctx.config_layout,
         project_params=project_params,
         work_packages=work_packages,
         wp_schedule=wp_schedule,
@@ -269,7 +305,8 @@ def _build_all_sheets(wb, project_params, work_packages, team, external_commitme
 
     # Stage 9 — _META (last; documents the state of every other sheet)
     build_meta_sheet(
-        meta_ws, ctx.plan_layout,
+        meta_ws,
+        ctx.plan_layout,
         project_params=project_params,
         work_packages=work_packages,
         team=team,
@@ -300,9 +337,13 @@ def _apply_all_year_groups(wb, project_params, current_month=None):
     """Apply column grouping by year to sheets with monthly columns."""
     for sheet_name in [SHEET_PLAN, SHEET_CAPACITY, SHEET_ACTUALS]:
         if sheet_name in wb.sheetnames:
-            apply_year_groups(wb[sheet_name], 3, project_params["months"],
-                              current_month,
-                              project_start=project_params["start"])
+            apply_year_groups(
+                wb[sheet_name],
+                3,
+                project_params["months"],
+                current_month,
+                project_start=project_params["start"],
+            )
 
 
 def _backup_existing(filepath):
@@ -317,8 +358,10 @@ def _backup_existing(filepath):
     return None
 
 
-def init_workbook(output_path: str = "output/budget_plan.xlsx",
-                  assignments: list[dict] | None = None) -> str:
+def init_workbook(
+    output_path: str = "output/budget_plan.xlsx",
+    assignments: list[dict] | None = None,
+) -> str:
     """Create a fresh workbook from config.py seed data.
 
     When assignments is None, produces empty Capacity (no WP rows per person).
@@ -353,20 +396,28 @@ def init_workbook(output_path: str = "output/budget_plan.xlsx",
 
     grade_rates = config.GRADE_RATES
 
-    _build_all_sheets(wb, project_params, work_packages, team, external_commitments,
-                      wp_schedule=wp_schedule,
-                      assignments=assignments,
-                      reporting_periods=reporting_periods,
-                      grade_rates=grade_rates)
+    _build_all_sheets(
+        wb,
+        project_params,
+        work_packages,
+        team,
+        external_commitments,
+        wp_schedule=wp_schedule,
+        assignments=assignments,
+        reporting_periods=reporting_periods,
+        grade_rates=grade_rates,
+    )
 
     # _apply_protection(wb)  # Temporarily disabled
     from datetime import date
     from dateutil.relativedelta import relativedelta as _rd
+
     _today = date.today()
     _pstart = project_params["start"]
-    _delta = _rd(_today, _pstart.date() if hasattr(_pstart, 'date') else _pstart)
-    _current_month = max(1, min(_delta.years * 12 + _delta.months + 1,
-                                project_params["months"]))
+    _delta = _rd(_today, _pstart.date() if hasattr(_pstart, "date") else _pstart)
+    _current_month = max(
+        1, min(_delta.years * 12 + _delta.months + 1, project_params["months"])
+    )
     _apply_all_year_groups(wb, project_params, current_month=_current_month)
 
     wb.active = wb.sheetnames.index(SHEET_CONFIG)
@@ -393,9 +444,14 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     """
     from openpyxl import load_workbook
     from budget_planner.reader import (
-        read_config_sheet, read_team_from_config, read_capacity_sheet,
-        read_actuals_values, read_reporting_periods, read_grade_rates,
-        read_assignments_from_config, read_externals_from_config,
+        read_config_sheet,
+        read_team_from_config,
+        read_capacity_sheet,
+        read_actuals_values,
+        read_reporting_periods,
+        read_grade_rates,
+        read_assignments_from_config,
+        read_externals_from_config,
         _find_header_row,
     )
 
@@ -404,8 +460,10 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     # Print source file timestamp
     mod_time = datetime.fromtimestamp(os.path.getmtime(input_path))
-    print(f"Reading from: {os.path.basename(input_path)} "
-          f"(modified {mod_time.strftime('%Y-%m-%d %H:%M')})")
+    print(
+        f"Reading from: {os.path.basename(input_path)} "
+        f"(modified {mod_time.strftime('%Y-%m-%d %H:%M')})"
+    )
 
     existing_wb = load_workbook(input_path, data_only=False)
 
@@ -418,7 +476,9 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             "Workbook has no Config sheet. "
             "Run 'python -m budget_planner init' to create a fresh workbook first."
         )
-    project_params, work_packages, wp_schedule = read_config_sheet(existing_wb[SHEET_CONFIG])
+    project_params, work_packages, wp_schedule = read_config_sheet(
+        existing_wb[SHEET_CONFIG]
+    )
 
     # Team roster from Config sheet
     team = read_team_from_config(existing_wb[SHEET_CONFIG])
@@ -437,12 +497,16 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     # not by the section being present-but-empty (user-cleared). This preserves
     # intentional empty state after migration.
     config_ws = existing_wb[SHEET_CONFIG]
-    has_assign_section = _find_header_row(
-        config_ws, SECTION_HEADER_LABELS["assignments"], required=False
-    ) is not None
-    has_ext_section = _find_header_row(
-        config_ws, SECTION_HEADER_LABELS["externals"], required=False
-    ) is not None
+    has_assign_section = (
+        _find_header_row(
+            config_ws, SECTION_HEADER_LABELS["assignments"], required=False
+        )
+        is not None
+    )
+    has_ext_section = (
+        _find_header_row(config_ws, SECTION_HEADER_LABELS["externals"], required=False)
+        is not None
+    )
 
     assignments = read_assignments_from_config(config_ws) if has_assign_section else []
     external_commitments = (
@@ -454,7 +518,8 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             existing_wb.close()
             raise ValueError("Workbook has no Capacity sheet.")
         capacity_data = read_capacity_sheet(
-            existing_wb[SHEET_CAPACITY], work_packages,
+            existing_wb[SHEET_CAPACITY],
+            work_packages,
             project_months=project_params["months"],
         )
         if not has_assign_section:
@@ -466,23 +531,29 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     preserved_actuals = None
     if SHEET_ACTUALS in existing_wb.sheetnames:
         preserved_actuals = read_actuals_values(
-            existing_wb[SHEET_ACTUALS], project_params["months"],
+            existing_wb[SHEET_ACTUALS],
+            project_params["months"],
         )
 
     # Calculate current_month from project start and today's date
     from datetime import date
     from dateutil.relativedelta import relativedelta as _rd
+
     _today = date.today()
     _pstart = project_params["start"]
-    _delta = _rd(_today, _pstart.date() if hasattr(_pstart, 'date') else _pstart)
-    current_month = max(1, min(_delta.years * 12 + _delta.months + 1,
-                               project_params["months"]))
+    _delta = _rd(_today, _pstart.date() if hasattr(_pstart, "date") else _pstart)
+    current_month = max(
+        1, min(_delta.years * 12 + _delta.months + 1, project_params["months"])
+    )
 
     existing_wb.close()
 
     # ── Validate ──
     errors, warnings = _validate_config(
-        project_params, work_packages, team, external_commitments,
+        project_params,
+        work_packages,
+        team,
+        external_commitments,
         wp_schedule=wp_schedule,
     )
 
@@ -513,8 +584,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     if errors:
         raise ValueError(
-            "Rebuild validation failed:\n"
-            + "\n".join(f"  ERROR: {e}" for e in errors)
+            "Rebuild validation failed:\n" + "\n".join(f"  ERROR: {e}" for e in errors)
         )
 
     for w in warnings:
@@ -527,7 +597,11 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     meta_ws.title = SHEET_META
 
     _build_all_sheets(
-        wb, project_params, work_packages, team, external_commitments,
+        wb,
+        project_params,
+        work_packages,
+        team,
+        external_commitments,
         wp_schedule=wp_schedule,
         assignments=assignments,
         preserved_actuals=preserved_actuals,
@@ -563,7 +637,10 @@ def seed_demo_data(workbook_path: str) -> str:
     """
     from openpyxl import load_workbook as _load_wb
     from budget_planner.config import (
-        DEMO_CURRENT_MONTH, DEMO_ACTUALS_MULTIPLIERS, WORK_PACKAGES, WP_SCHEDULE,
+        DEMO_CURRENT_MONTH,
+        DEMO_ACTUALS_MULTIPLIERS,
+        WORK_PACKAGES,
+        WP_SCHEDULE,
     )
     from budget_planner.layout import MONTH_COL_START, wp_month_bounds
 
@@ -582,6 +659,7 @@ def seed_demo_data(workbook_path: str) -> str:
     if first_wp_row is not None:
         # Read per-WP rates from Config col D
         from budget_planner.reader import _find_header_row, _data_row_after
+
         config_ws = wb[SHEET_CONFIG]
         wp_budget_row = _data_row_after(
             _find_header_row(config_ws, SECTION_HEADER_LABELS["wp_budget"])

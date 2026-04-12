@@ -6,57 +6,40 @@ from budget_planner.layout import MONTH_COL_START, month_col_end as _month_col_e
 from budget_planner.styles import WRAP, col_letter
 
 
-def build_meta_sheet(ws, layout, *, project_params=None, work_packages=None,
-                     team=None, external_commitments=None, rebuild_warnings=None,
-                     config_layout=None, grade_rates=None):
+def build_meta_sheet(ws, layout, *, project_params, work_packages,
+                     team, external_commitments, config_layout, grade_rates,
+                     rebuild_warnings=None):
     """Populate the _META worksheet with structural documentation.
+
+    Every data parameter is required: _META must document the **live**
+    workbook state, never config.py seed data. Callers must pass the same
+    values they handed to the other builders.
 
     Parameters
     ----------
     ws : openpyxl.worksheet.worksheet.Worksheet
         The _META sheet (already created by the caller).
     layout : dict
-        Row-number mapping produced by the plan-sheet builder.  Keys used:
+        Row-number mapping produced by the plan-sheet builder. Keys used:
         config_first_wp_row, config_last_wp_row, planned_header_row,
         planned_first_wp_row, planned_last_wp_row, planned_total_row.
-    project_params : dict or None
-        Dict with keys title, start, months, rate. Falls back to config.
-    work_packages : list or None
-        List of WP dicts. Falls back to config.
-    team : list or None
-        List of team member dicts. Falls back to config.
-    external_commitments : list or None
-        List of external commitment dicts. Falls back to config.
-    rebuild_warnings : list or None
-        List of warning strings to append to meta text.
-    config_layout : dict or None
+    project_params : dict
+        Dict with keys title, start, months, rate.
+    work_packages : list
+        List of WP dicts.
+    team : list
+        List of team member dicts.
+    external_commitments : list
+        List of external commitment dicts.
+    config_layout : dict
         Layout dict from build_config_sheet(). Keys used:
         grade_first_row, grade_last_row, roster_header_row, roster_first_row,
-        roster_last_row. Falls back to derivation from layout + grade_rates.
-    grade_rates : dict or None
-        Mapping of grade name to EUR/PM rate. Falls back to config.
+        roster_last_row.
+    grade_rates : dict
+        Mapping of grade name to EUR/PM rate.
+    rebuild_warnings : list or None
+        Optional list of warning strings to append to meta text.
     """
-    if any(v is None for v in [project_params, work_packages, team, external_commitments]):
-        from budget_planner import config
-        if project_params is None:
-            project_params = {
-                "title": config.PROJECT_TITLE, "start": config.PROJECT_START,
-                "months": config.PROJECT_MONTHS, "rate": config.DEFAULT_RATE,
-            }
-        if work_packages is None:
-            work_packages = config.WORK_PACKAGES
-        if team is None:
-            team = config.TEAM
-        if external_commitments is None:
-            external_commitments = config.EXTERNAL_COMMITMENTS
-    if grade_rates is None:
-        from budget_planner import config as _cfg
-        grade_rates = _cfg.GRADE_RATES
-
-    assert project_params is not None
-    assert work_packages is not None
-    assert team is not None
-    assert external_commitments is not None
 
     month_col_start = MONTH_COL_START
     month_col_end = _month_col_end(project_params["months"])

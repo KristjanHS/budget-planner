@@ -324,6 +324,8 @@ def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
     from budget_planner.workbook import _build_all_sheets
     from budget_planner.layout import SHEET_META, SHEET_TRENDS
 
+    from budget_planner import config as _cfg
+
     work_packages = _make_wps(num_wps)
     team = _make_team(num_team, work_packages)
     external_commitments: list[dict[str, object]] = []
@@ -338,7 +340,7 @@ def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
     meta_ws.title = SHEET_META
 
     _build_all_sheets(wb, project_params, work_packages, team,
-                      external_commitments)
+                      external_commitments, grade_rates=_cfg.GRADE_RATES)
 
     trends_ws = wb[SHEET_TRENDS]
     assert isinstance(trends_ws, Worksheet)

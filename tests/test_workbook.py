@@ -321,3 +321,22 @@ def test_build_order_is_stable(tmp_path):
         "Builder call order changed. See workbook.py module docstring + "
         "docs/plans/brittleness-refactor.md T5 before adjusting."
     )
+
+
+def test_meta_requires_all_params():
+    """T6: build_meta_sheet must refuse to build from partial data.
+
+    _META documents live workbook state, not config.py seed data. Every
+    data parameter is required so a caller that forgets to thread state
+    through gets a TypeError instead of silently emitting stale docs.
+    """
+    from budget_planner.meta import build_meta_sheet
+
+    required = [
+        "project_params", "work_packages", "team",
+        "external_commitments", "config_layout", "grade_rates",
+    ]
+    for missing in required:
+        kwargs = {k: object() for k in required if k != missing}
+        with pytest.raises(TypeError, match=missing):
+            build_meta_sheet(object(), {}, **kwargs)

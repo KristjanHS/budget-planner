@@ -630,3 +630,50 @@ def test_read_capacity_prefers_config_assignments():
         assert actual["person"] == expected["person"]
         assert actual["project"] == expected["project"]
         assert actual["is_eu"] == expected["is_eu"]
+
+
+def test_iter_named_range_rows_returns_live_row_span_after_middle_insert():
+    """Helper must report the post-insertion row span via Excel's defined_names."""
+    from openpyxl.workbook.defined_name import DefinedName
+    from budget_planner.reader import _iter_named_range_rows
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    for i, val in enumerate(["A", "B", "C"], start=5):
+        ws.cell(i, 1, value=val)
+    wb.defined_names["roster_ftes"] = DefinedName(
+        name="roster_ftes", attr_text="Config!$B$5:$B$7"
+    )
+
+    # Excel-style middle insert: shift rows 6+ down by 1.
+    ws.insert_rows(6, amount=1)
+    ws.cell(6, 1, value="MID")
+    # openpyxl does NOT update DefinedName targets on insert — simulate Excel
+    # by explicitly rewriting the range. The helper under test treats the
+    # defined_names entry as the source of truth.
+    wb.defined_names["roster_ftes"].attr_text = "Config!$B$5:$B$8"
+
+    assert _iter_named_range_rows(wb, "roster_ftes") == (5, 8)
+
+
+def test_iter_named_range_rows_handles_single_cell_ref():
+    """Single-cell absolute ref (e.g. $B$5) must return (5, 5)."""
+    from openpyxl.workbook.defined_name import DefinedName
+    from budget_planner.reader import _iter_named_range_rows
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    wb.defined_names["project_start"] = DefinedName(
+        name="project_start", attr_text="Config!$B$5"
+    )
+    assert _iter_named_range_rows(wb, "project_start") == (5, 5)
+
+
+def test_iter_named_range_rows_returns_none_for_unknown_name():
+    wb = Workbook()
+    from budget_planner.reader import _iter_named_range_rows
+    assert _iter_named_range_rows(wb, "does_not_exist") is None

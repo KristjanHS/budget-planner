@@ -170,6 +170,41 @@ def _data_row_after(header_row: int, header_rows: int = SECTION_HEADER_ROWS) -> 
     return header_row + header_rows
 
 
+_NAMED_RANGE_REF_RE = re.compile(r"\$?[A-Z]+\$?(\d+)(?::\$?[A-Z]+\$?(\d+))?$")
+
+
+def _iter_named_range_rows(wb, name: str) -> tuple[int, int] | None:
+    """Resolve a defined name to its (first_row, last_row) on the first target range.
+
+    Returns None if the name is not defined or cannot be parsed. Callers fall back
+    to sentinel-scan reading when this returns None. Excel auto-extends defined
+    names on row insertion, so this is the authoritative live span after
+    Excel-side edits.
+    """
+    dn = None
+    try:
+        dn = wb.defined_names[name]
+    except (KeyError, TypeError):
+        return None
+    if dn is None:
+        return None
+    try:
+        destinations = list(dn.destinations)
+    except Exception:
+        return None
+    if not destinations:
+        return None
+    _sheet, ref = destinations[0]
+    m = _NAMED_RANGE_REF_RE.match(ref)
+    if not m:
+        return None
+    first = int(m.group(1))
+    last = int(m.group(2)) if m.group(2) else first
+    if last < first:
+        return None
+    return (first, last)
+
+
 def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
     """Read Config sheet -> (project_params, work_packages, wp_schedule).
 

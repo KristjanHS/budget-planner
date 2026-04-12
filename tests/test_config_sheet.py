@@ -478,7 +478,8 @@ def test_config_new_named_ranges():
 
 
 def test_config_assignments_empty_list():
-    """No data rows when assignments=[] (headers only)."""
+    """When assignments=[], section has ASSIGN_MIN_ROWS blank template rows with formulas."""
+    from budget_planner.config_sheet import ASSIGN_MIN_ROWS
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -490,11 +491,15 @@ def test_config_assignments_empty_list():
         assignments=[],
         external_commitments=[],
     )
-    # assign_first_row == assign_last_row when empty (single placeholder row)
-    assert layout["assign_first_row"] == layout["assign_last_row"]
-    # No data in the first row of assignment section
     first = layout["assign_first_row"]
-    assert ws.cell(first, 1).value is None
+    last = layout["assign_last_row"]
+    assert last - first + 1 == ASSIGN_MIN_ROWS
+    # Person col is blank in template rows; F/G/H carry formulas
+    for r in range(first, last + 1):
+        assert ws.cell(r, 1).value is None
+        assert str(ws.cell(r, 6).value).startswith("=SUMIFS(assign_ftes")
+        assert str(ws.cell(r, 7).value).startswith("=SUMIFS(ext_ftes")
+        assert str(ws.cell(r, 8).value).startswith('=IF(A')
 
 
 def test_config_layout_includes_new_keys():

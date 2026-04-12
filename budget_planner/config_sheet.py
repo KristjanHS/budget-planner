@@ -352,8 +352,16 @@ def _write_rate_by_grade_section(ws, start_row, grade_rates):
     return next_row, layout
 
 
+ASSIGN_MIN_ROWS = 5
+
+
 def _write_assignments_section(ws, start_row, assignments):
     """Write the PERSON-WP ASSIGNMENTS section (section header, column headers, data rows, formulas).
+
+    Always writes at least ASSIGN_MIN_ROWS rows: populated entries first, then blank
+    template rows (blue-input A-E, formulas in F-H with IF-guarded Balance) so the
+    named ranges span a realistic area and users can type directly or insert rows
+    without the "partial merge" error from the adjacent EXTERNAL COMMITMENTS header.
 
     Returns:
         (next_row, layout_dict) where next_row is the first row after the last data row,
@@ -381,59 +389,70 @@ def _write_assignments_section(ws, start_row, assignments):
                    font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
     r += 1
 
-    # Data rows
+    # Data rows — populated entries + blank template rows up to ASSIGN_MIN_ROWS
     assign_first_row = r
     assign_config_rows: dict[tuple[str, str], int] = {}
-    for entry in assignments:
-        # Cols A-E: blue input
-        style_cell(ws, r, COL_ASSIGN_PERSON, entry["person"], font=BLUE_INPUT, border=False)
-        style_cell(ws, r, COL_ASSIGN_WP, entry["wp"], font=BLUE_INPUT, border=False)
-        style_cell(ws, r, COL_ASSIGN_FTE, entry["total_fte"], font=BLUE_INPUT,
-                   fmt="0.00", border=False)
-        style_cell(ws, r, COL_ASSIGN_START, entry["start"], font=BLUE_INPUT,
-                   fmt="0", border=False)
-        style_cell(ws, r, COL_ASSIGN_END, entry["end"], font=BLUE_INPUT,
-                   fmt="0", border=False)
-        # Col F: Sig Assigned — SUMIFS over assign_ftes by person
+    total_rows = max(len(assignments), ASSIGN_MIN_ROWS)
+    sig_assigned_cl = get_column_letter(COL_ASSIGN_SIG_ASSIGNED)
+    sig_ext_cl = get_column_letter(COL_ASSIGN_SIG_EXTERNAL)
+    for i in range(total_rows):
+        entry = assignments[i] if i < len(assignments) else None
+        # Cols A-E: blue input (empty for template rows)
+        style_cell(ws, r, COL_ASSIGN_PERSON,
+                   entry["person"] if entry else None,
+                   font=BLUE_INPUT, border=False)
+        style_cell(ws, r, COL_ASSIGN_WP,
+                   entry["wp"] if entry else None,
+                   font=BLUE_INPUT, border=False)
+        style_cell(ws, r, COL_ASSIGN_FTE,
+                   entry["total_fte"] if entry else None,
+                   font=BLUE_INPUT, fmt="0.00", border=False)
+        style_cell(ws, r, COL_ASSIGN_START,
+                   entry["start"] if entry else None,
+                   font=BLUE_INPUT, fmt="0", border=False)
+        style_cell(ws, r, COL_ASSIGN_END,
+                   entry["end"] if entry else None,
+                   font=BLUE_INPUT, fmt="0", border=False)
+        # Col F: Sig Assigned — SUMIFS returns 0 when Person cell is blank (safe)
         style_cell(ws, r, COL_ASSIGN_SIG_ASSIGNED, font=BLACK_FORMULA, fmt="0.00",
                    border=False).value = f"=SUMIFS(assign_ftes,assign_persons,A{r})"
-        # Col G: Sig External — SUMIFS over ext_ftes by person
+        # Col G: Sig External — SUMIFS returns 0 when Person cell is blank (safe)
         style_cell(ws, r, COL_ASSIGN_SIG_EXTERNAL, font=BLACK_FORMULA, fmt="0.00",
                    border=False).value = f"=SUMIFS(ext_ftes,ext_persons,A{r})"
-        # Col H: Balance — available PM minus assigned minus external
-        bal_cl = get_column_letter(COL_ASSIGN_BALANCE)
+        # Col H: Balance — IF-guarded to avoid #N/A on blank-Person template rows
         style_cell(ws, r, COL_ASSIGN_BALANCE, font=BLACK_FORMULA, fmt="0.00",
                    border=False).value = (
-            f"=VLOOKUP(A{r},roster_lookup,2,FALSE)*project_months"
-            f"-{get_column_letter(COL_ASSIGN_SIG_ASSIGNED)}{r}"
-            f"-{get_column_letter(COL_ASSIGN_SIG_EXTERNAL)}{r}"
+            f'=IF(A{r}="","",'
+            f"VLOOKUP(A{r},roster_lookup,2,FALSE)*project_months"
+            f"-{sig_assigned_cl}{r}-{sig_ext_cl}{r})"
         )
-        assign_config_rows[(entry["person"], entry["wp"])] = r
+        if entry is not None:
+            assign_config_rows[(entry["person"], entry["wp"])] = r
         r += 1
-    assign_last_row = r - 1 if assignments else assign_first_row
+    assign_last_row = r - 1
 
-    # CF on Balance column:
+    # CF on Balance column (applied to all rows, template included — CF formulas
+    # compare "" to numbers as FALSE so blank rows never trigger):
     #   red if < 0 (over-committed)
     #   yellow if < 10% of available PM (low remaining capacity)
     # Red is added first so it wins the overlap when Balance < 0.
-    if assignments:
-        bal_cl = get_column_letter(COL_ASSIGN_BALANCE)
-        person_cl = get_column_letter(COL_ASSIGN_PERSON)
-        for row_idx in range(assign_first_row, assign_last_row + 1):
-            red_rule = FormulaRule(
-                formula=[f"{bal_cl}{row_idx}<0"],
-                fill=CF_RED_FILL,
-            )
-            ws.conditional_formatting.add(f"{bal_cl}{row_idx}", red_rule)
-            yellow_rule = FormulaRule(
-                formula=[
-                    f"{bal_cl}{row_idx}<0.1*"
-                    f"VLOOKUP({person_cl}{row_idx},roster_lookup,2,FALSE)"
-                    f"*project_months"
-                ],
-                fill=CF_YELLOW_FILL,
-            )
-            ws.conditional_formatting.add(f"{bal_cl}{row_idx}", yellow_rule)
+    bal_cl = get_column_letter(COL_ASSIGN_BALANCE)
+    person_cl = get_column_letter(COL_ASSIGN_PERSON)
+    for row_idx in range(assign_first_row, assign_last_row + 1):
+        red_rule = FormulaRule(
+            formula=[f"{bal_cl}{row_idx}<0"],
+            fill=CF_RED_FILL,
+        )
+        ws.conditional_formatting.add(f"{bal_cl}{row_idx}", red_rule)
+        yellow_rule = FormulaRule(
+            formula=[
+                f"{bal_cl}{row_idx}<0.1*"
+                f"VLOOKUP({person_cl}{row_idx},roster_lookup,2,FALSE)"
+                f"*project_months"
+            ],
+            fill=CF_YELLOW_FILL,
+        )
+        ws.conditional_formatting.add(f"{bal_cl}{row_idx}", yellow_rule)
 
     next_row = r
     layout = {

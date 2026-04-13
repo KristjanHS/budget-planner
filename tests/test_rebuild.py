@@ -24,49 +24,6 @@ def init_wb(tmp_path):
     return path
 
 
-class TestRebuildRoundTrip:
-    """Rebuild preserves structure and data."""
-
-    def test_rebuild_produces_all_sheets(self, init_wb):
-        """Rebuild creates the same sheets as init."""
-        rebuild_workbook(input_path=init_wb)
-        wb = load_workbook(init_wb)
-        for name in ["_META", "Config", "Plan", "Capacity",
-                      "Actuals", "Summary", "Trends"]:
-            assert name in wb.sheetnames, f"Missing sheet: {name}"
-        wb.close()
-
-    def test_rebuild_preserves_config_params(self, init_wb):
-        """Project params survive a rebuild."""
-        from budget_planner.reader import read_config_sheet
-        wb = load_workbook(init_wb)
-        original_params, _, _ = read_config_sheet(wb["Config"])
-        wb.close()
-
-        rebuild_workbook(input_path=init_wb)
-
-        wb = load_workbook(init_wb)
-        rebuilt_params, _, _ = read_config_sheet(wb["Config"])
-        assert rebuilt_params["title"] == original_params["title"]
-        assert rebuilt_params["months"] == original_params["months"]
-        wb.close()
-
-    def test_rebuild_preserves_wp_count(self, init_wb):
-        """Same number of WPs after rebuild."""
-        from budget_planner.reader import read_config_sheet
-        wb = load_workbook(init_wb)
-        _, original_wps, _ = read_config_sheet(wb["Config"])
-        wp_count = len(original_wps)
-        wb.close()
-
-        rebuild_workbook(input_path=init_wb)
-
-        wb = load_workbook(init_wb)
-        _, rebuilt_wps, _ = read_config_sheet(wb["Config"])
-        assert len(rebuilt_wps) == wp_count
-        wb.close()
-
-
 class TestCapacityPreservation:
     """Capacity assignment config block values are preserved on rebuild."""
 

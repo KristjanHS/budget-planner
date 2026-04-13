@@ -1,22 +1,23 @@
 """Parameterized rebuild round-trip tests varying one Config-table shape at a time.
 
-Mirrors the user's Excel workflow: init a workbook, insert one row mid-section
+Mirrors the user's Excel workflow: generate a workbook, insert one row mid-section
 (via openpyxl, with named-range auto-extend emulated where Excel would do so),
 rebuild, and assert the inserted data survives.
 
-Variants (design §2a — lean matrix, one dimension per case):
-- default: no edit, just rebuild
+Variants covered here:
 - extra_wp: new row in WP BUDGET
-- extra_person: new row in TEAM ROSTER
 - extra_external: new row in EXTERNAL COMMITMENTS
 - extra_grade: new row in RATE BY GRADE
+
+(``extra_person`` is covered by ``test_rebuild_shape_drift.py``;
+``default`` — init → rebuild with no edits — is a no-op implicitly
+exercised by every other rebuild test.)
 """
 from pathlib import Path
 
 import openpyxl
 import pytest
 
-from budget_planner import config as cfg
 from budget_planner.reader import (
     read_assignments_from_config,
     read_config_sheet,
@@ -31,7 +32,6 @@ from tests.test_rebuild_shape_drift import _simulate_excel_insert_in_named_range
 
 SECTION_LABELS = {
     "wp_budget": "WP BUDGET",
-    "team_roster": "TEAM ROSTER",
     "externals": "EXTERNAL COMMITMENTS",
     "rate_by_grade": "RATE BY GRADE",
 }
@@ -47,7 +47,7 @@ def _first_data_row_after(ws, section_label: str) -> int:
 
 @pytest.mark.parametrize(
     "variant",
-    ["default", "extra_wp", "extra_person", "extra_external", "extra_grade"],
+    ["extra_wp", "extra_external", "extra_grade"],
 )
 def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
     path = tmp_path / f"wb_{variant}.xlsx"
@@ -55,7 +55,6 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
 
     wb = openpyxl.load_workbook(path)
     config_ws = wb["Config"]
-    inserted_grade = next(iter(cfg.GRADE_RATES.keys()))
 
     if variant == "extra_wp":
         data_start = _first_data_row_after(config_ws, SECTION_LABELS["wp_budget"])
@@ -65,15 +64,6 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
         config_ws.cell(insert_at, 2, "Extra WP")
         config_ws.cell(insert_at, 3, 1.0)
         config_ws.cell(insert_at, 4, 6500)
-    elif variant == "extra_person":
-        data_start = _first_data_row_after(config_ws, SECTION_LABELS["team_roster"])
-        insert_at = data_start + 1
-        config_ws.insert_rows(insert_at, amount=1)
-        config_ws.cell(insert_at, 1, "Midway Mary")
-        config_ws.cell(insert_at, 2, 0.8)
-        config_ws.cell(insert_at, 3, inserted_grade)
-        for nr in ("roster_ftes", "roster_grades", "roster_lookup"):
-            _simulate_excel_insert_in_named_range(wb, nr, insert_at, 1)
     elif variant == "extra_external":
         data_start = _first_data_row_after(config_ws, SECTION_LABELS["externals"])
         insert_at = data_start + 1
@@ -106,15 +96,6 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
         _, wps, _ = read_config_sheet(config_ws)
         ids = [w["id"] for w in wps]
         assert "WPX" in ids, f"Rebuild dropped inserted WP. Got {ids}"
-    elif variant == "extra_person":
-        roster_after = read_team_from_config(config_ws)
-        names = [p["name"] for p in roster_after]
-        assert "Midway Mary" in names, f"Rebuild dropped inserted person. Got {names}"
-        mary = next(p for p in roster_after if p["name"] == "Midway Mary")
-        assert mary["grade"] == inserted_grade, (
-            f"Rebuild dropped the inserted grade. Expected {inserted_grade!r}, "
-            f"got {mary['grade']!r}"
-        )
     elif variant == "extra_external":
         projects = [e["project"] for e in read_externals_from_config(config_ws)]
         assert "Other Grant" in projects, (

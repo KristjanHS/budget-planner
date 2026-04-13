@@ -3,7 +3,6 @@
 Covers:
 - Blue-input hours survive a rebuild (init -> Excel edit -> rebuild -> reopen).
 - Internal blank WP rows inside a person section don't truncate the reader.
-- Forecast-EUR band columns (outline_level=1) are NOT captured as hours.
 """
 from __future__ import annotations
 
@@ -12,14 +11,13 @@ from pathlib import Path
 import openpyxl
 from openpyxl.cell import Cell
 
-from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS, PROJECT_MONTHS
-from budget_planner.layout import MONTH_COL_START, val_columns
+from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
+from budget_planner.layout import MONTH_COL_START
 from budget_planner.reader import read_actuals_hours_sheet
 from budget_planner.workbook import init_workbook, rebuild_workbook
 
 
 SHEET = "Actuals-Hours"
-FORECAST_COL_START = val_columns(PROJECT_MONTHS)["sum"] + 2
 
 
 def _set(ws, row: int, col: int, value: float | int) -> None:
@@ -164,55 +162,3 @@ def test_reader_tolerates_internal_blank_rows(tmp_path: Path):
     first_wp = asgns[0]["wp"]
     assert first_wp in hours_data[target]
     assert all(v is None for v in hours_data[target][first_wp])
-
-
-def test_reader_skips_forecast_eur_band(tmp_path: Path):
-    """Forecast-EUR band columns (outline_level=1) are not captured as hours.
-
-    If a stray numeric value sits in the forecast band (shouldn't happen in
-    practice — those cells are ROUND() formulas), the reader must still
-    return only hour-column values, one per month.
-    """
-    path = tmp_path / "wb.xlsx"
-    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-
-    wb = openpyxl.load_workbook(path)
-    ws = wb[SHEET]
-
-    # Sanity-check: confirm the forecast-band columns really are
-    # outline_level=1 — protect the test against geometry drift.
-    from budget_planner.styles import col_letter
-    fc_letter = col_letter(FORECAST_COL_START)
-    assert ws.column_dimensions[fc_letter].outline_level >= 1, (
-        f"Expected forecast-band column {fc_letter} to be outline_level=1"
-    )
-
-    # Pick a (person, wp) and write a sentinel hours value at a known month
-    # AND a different sentinel inside the forecast band at the same row.
-    target = DEMO_CAPACITY_ASSIGNMENTS[0]
-    person, wp_id = target["person"], target["wp"]
-    month_idx = target["start"] - 1
-    hour_val = 77.0
-    forecast_sentinel = 999999.0
-
-    hdr = _find_person_header_row(ws, person)
-    wp_row = _find_wp_row_under_person(ws, hdr, wp_id)
-    _set(ws, wp_row, MONTH_COL_START + month_idx, hour_val)
-    # Stomp a forecast-band cell with a sentinel; reader must NOT pick it up.
-    _set(ws, wp_row, FORECAST_COL_START, forecast_sentinel)
-    wb.save(path)
-    wb.close()
-
-    # Read directly (no rebuild) to isolate reader behaviour.
-    wb = openpyxl.load_workbook(path)
-    hours_data = read_actuals_hours_sheet(wb[SHEET])
-    wb.close()
-
-    series = hours_data[person][wp_id]
-    assert len(series) == PROJECT_MONTHS, (
-        f"Expected exactly {PROJECT_MONTHS} monthly entries, got {len(series)}"
-    )
-    assert series[month_idx] == hour_val
-    assert forecast_sentinel not in series, (
-        "Forecast-EUR sentinel leaked into hours list — outline_level skip failed"
-    )

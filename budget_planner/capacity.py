@@ -11,6 +11,7 @@ from budget_planner.layout import (
     wp_active_months,
     _calendar_year_groups,
 )
+from budget_planner.person_section import plan_person_layout
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
@@ -103,6 +104,33 @@ def _write_person_grid(
     name = member["name"]
     roster_row = person_rows[name]
 
+    # Pre-compute ordered WP ids and external project names that will actually
+    # be emitted so plan_person_layout can assign row numbers up front. Skip
+    # assignments whose WP is not in work_packages — matches the old inline
+    # loop which `continue`d past missing WPs without incrementing r.
+    ordered_wp_ids: list[str] = []
+    for asgn in person_assignments:
+        wp_id = asgn["wp"]
+        if any(w["id"] == wp_id for w in work_packages):
+            ordered_wp_ids.append(wp_id)
+    person_externals = [e for e in external_commitments
+                        if e["person"] == name]
+    ordered_external_names = [e["project"] for e in person_externals]
+
+    # Preserve legacy behavior for a person with no data rows: the old code
+    # advanced past one placeholder row so TOTAL/REMAINING/EU TOTAL landed one
+    # row lower. Emulate by bumping the layout start by 1 in that case.
+    layout_start = r
+    if not ordered_wp_ids and not ordered_external_names:
+        layout_start = r + 1
+    layout = plan_person_layout(
+        start_row=layout_start,
+        wp_ids=ordered_wp_ids,
+        external_names=ordered_external_names,
+        include_remaining=True,
+        include_eu_total=True,
+    )
+
     # Person header row
     header_row = r
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
@@ -126,6 +154,9 @@ def _write_person_grid(
         if wp is None:
             continue
         config_row = _wp_config_row(wp_id, work_packages, config_first_wp_row)
+        # Row position is pre-assigned by plan_person_layout; keep `r` in sync
+        # with the inline cell-write sequence below.
+        assert r == layout.wp_rows[wp_id]
 
         # Col A: formula ref to Config WP ID
         style_cell(ws, r, 1, font=GREEN_XREF).value = f"={SHEET_CONFIG}!A{config_row}"
@@ -199,11 +230,10 @@ def _write_person_grid(
         first_wp_row_for_person = False
         r += 1
 
-    # External project rows
-    person_externals = [e for e in external_commitments
-                        if e["person"] == name]
+    # External project rows (person_externals computed above for layout)
     for entry in person_externals:
         ext_config_row = external_config_rows[(name, entry["project"])]
+        assert r == layout.external_rows[entry["project"]]
 
         # Col A: project name (blue input)
         style_cell(ws, r, 1, entry["project"], font=BLUE_INPUT)
@@ -251,14 +281,15 @@ def _write_person_grid(
 
     data_row_end = r - 1
 
-    # Handle case where person has no data rows
+    # Handle case where person has no data rows: layout_start was bumped by 1
+    # above so TOTAL sits one row lower, matching the legacy placeholder.
     if data_row_end < data_row_start:
         data_row_end = data_row_start
-        # Write an empty placeholder row so TOTAL SUM has a range
         r += 1
 
     # TOTAL row
-    total_row = r
+    assert r == layout.total_row
+    total_row = layout.total_row
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
     ws.cell(row=r, column=2).comment = Comment(
@@ -285,7 +316,9 @@ def _write_person_grid(
     r += 1
 
     # REMAINING row
-    remaining_row = r
+    assert layout.remaining_row is not None
+    assert r == layout.remaining_row
+    remaining_row = layout.remaining_row
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "REMAINING", font=HEADER_FONT,
                fill=LIGHT_GREEN_FILL)
@@ -313,7 +346,9 @@ def _write_person_grid(
     r += 1
 
     # EU TOTAL row — sum of programme WP rows + EU-flagged external rows
-    eu_total_row = r
+    assert layout.eu_total_row is not None
+    assert r == layout.eu_total_row
+    eu_total_row = layout.eu_total_row
     style_cell(ws, r, 1, fill=LIGHT_BLUE_FILL)
     style_cell(ws, r, 2, "EU TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
     ws.cell(row=r, column=2).comment = Comment(
@@ -412,7 +447,8 @@ def _write_person_grid(
             fill=CF_AMBER_FILL,
         ))
 
-    return r, {
+    assert r == layout.next_row
+    return layout.next_row, {
         "header_row": header_row,
         "wp_rows": wp_rows,
         "external_rows": external_rows,

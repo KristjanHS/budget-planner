@@ -20,6 +20,7 @@ SHEET_CONFIG = "Config"
 SHEET_PLAN = "Plan"
 SHEET_CAPACITY = "Capacity"
 SHEET_ACTUALS = "Actuals"
+SHEET_ACTUALS_HOURS = "Actuals-Hours"
 SHEET_SUMMARY = "Summary"
 SHEET_TRENDS = "Trends"
 

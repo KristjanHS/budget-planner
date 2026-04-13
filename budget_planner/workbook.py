@@ -36,6 +36,7 @@ from budget_planner.config_sheet import build_config_sheet
 from budget_planner.plan import build_plan_sheet, _apply_planned_formulas
 from budget_planner.capacity import build_capacity_sheet
 from budget_planner.actuals import build_actuals_sheet
+from budget_planner.actuals_hours import build_actuals_hours_sheet
 from budget_planner.summary import build_summary_sheet
 from budget_planner.trends import build_trends_sheet
 from budget_planner.meta import build_meta_sheet
@@ -45,6 +46,7 @@ from budget_planner.layout import (
     SHEET_PLAN,
     SHEET_CAPACITY,
     SHEET_ACTUALS,
+    SHEET_ACTUALS_HOURS,
     SHEET_TRENDS,
     SECTION_HEADER_LABELS,
     cell_ref,
@@ -178,6 +180,7 @@ def _build_all_sheets(
     wp_schedule=None,
     assignments=None,
     preserved_actuals=None,
+    preserved_actuals_hours=None,
     rebuild_warnings=None,
     reporting_periods=None,
 ):
@@ -287,6 +290,24 @@ def _build_all_sheets(
         preserved=preserved_actuals,
     )
 
+    # Stage 6b — Actuals-Hours (hour timelog; depends only on config_layout).
+    # Inserted after Actuals so tab-order matches design §7. Real rebuild
+    # preservation plumbing lands in Task 13; for now ``preserved`` is None.
+    actuals_hours_ws = wb.create_sheet(SHEET_ACTUALS_HOURS)
+    build_actuals_hours_sheet(
+        actuals_hours_ws,
+        ctx.config_layout,
+        project_params=project_params,
+        work_packages=work_packages,
+        wp_schedule=wp_schedule,
+        team=team,
+        external_commitments=external_commitments,
+        assignments=assignments,
+        config_first_wp_row=ctx.config_layout["wp_first_row"],
+        config_layout=ctx.config_layout,
+        preserved=preserved_actuals_hours,
+    )
+
     # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout)
     ctx.summary_layout = build_summary_sheet(
         wb,
@@ -328,9 +349,11 @@ def _build_all_sheets(
         grade_rates=grade_rates,
     )
 
-    # Tab order: _META, Config, Capacity, Plan, Actuals, Trends, Summary
+    # Tab order: _META, Config, Capacity, Plan, Actuals, Actuals-Hours, Trends, Summary
     wb.move_sheet(SHEET_META, offset=0)
-    wb.move_sheet(SHEET_TRENDS, offset=1)  # move after Actuals
+    # Trends stub is created before Actuals/Actuals-Hours, but belongs after
+    # them visually. Bump by 2 to hop past both.
+    wb.move_sheet(SHEET_TRENDS, offset=2)
 
 
 def _apply_protection(wb):

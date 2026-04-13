@@ -642,6 +642,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         ("Project Months", project_params["months"], "0", None),
         ("FTE Rate (EUR)", None, "€#,##0", None),  # value set later as formula
         ("EU Annual Ceiling (PM/FTE/year)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
+        ("Hours per FTE Month", 143, "0", None),
     ]
     param_rows: dict[str, int] = {}
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
@@ -707,6 +708,13 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     dn_ceiling = DefinedName("eu_annual_ceiling_pm",
                               attr_text=f"{SHEET_CONFIG}!$B${ceiling_row}")
     wb.defined_names.add(dn_ceiling)
+
+    hours_row = param_rows["Hours per FTE Month"]
+    dn_hours = DefinedName(
+        "hours_per_fte_month",
+        attr_text=f"{SHEET_CONFIG}!$B${hours_row}",
+    )
+    wb.defined_names.add(dn_hours)
 
     # Grade table named range (2-column: grade name + rate)
     dn_grades = DefinedName(

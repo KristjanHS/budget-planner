@@ -562,3 +562,24 @@ def test_config_layout_includes_new_keys():
     assert ("Bob", "WP2") in layout["assign_config_rows"]
     # Verify external_config_rows has expected entries
     assert ("Alice", "ProjectX") in layout["external_config_rows"]
+
+
+def test_hours_per_fte_month_constant_and_named_range(tmp_path):
+    from budget_planner.workbook import init_workbook
+    from openpyxl import load_workbook
+
+    path = tmp_path / "wb.xlsx"
+    init_workbook(str(path))
+    wb = load_workbook(str(path))
+
+    assert "hours_per_fte_month" in wb.defined_names
+    target = wb.defined_names["hours_per_fte_month"].attr_text
+    assert target.startswith("Config!")
+
+    sheet, cell_ref = target.split("!")
+    cfg = wb["Config"]
+    row = int(cell_ref.replace("$", "").lstrip("B"))
+    assert cfg.cell(row=row, column=2).value == 143
+
+    # Label in col A on the same row
+    assert cfg.cell(row=row, column=1).value == "Hours per FTE Month"

@@ -153,6 +153,8 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
             )
 
         # Project totals — sum each year-group column across years.
+        # `year_sum` closes over `row`; redefined per WP iteration by design.
+        # Don't hoist it out of the loop — cell refs must track the current row.
         tc = TOTAL_GROUP_START
         def year_sum(offset: int) -> str:
             cols = [col_letter(YEAR_GROUP_START + y * COLS_PER_YEAR + offset) for y in range(num_years)]

@@ -247,6 +247,11 @@ def _iter_config_section_rows(
         first_data = expected_first
         range_end = None
 
+    # `yielded_any` stands in for "collected any rows" in the pre-extraction
+    # callers (`not roster`, `not assignments`, `not external_commitments`).
+    # Equivalent only while every caller appends each yielded row — don't add
+    # conditional-skip logic on the caller side without revisiting the
+    # past-range-with-no-yields break below.
     yielded_any = False
     r = first_data
     while r <= ws.max_row:

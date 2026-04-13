@@ -25,6 +25,7 @@ CF_YELLOW_FILL = PatternFill(bgColor="FFFFFF00")
 CF_AMBER_FILL = PatternFill(bgColor="FFFFD966")
 CF_RED_FILL = PatternFill(bgColor="FFFFC7CE")
 CF_GREEN_FILL = PatternFill(bgColor="FFE2EFDA")
+CF_GREY_FILL = PatternFill(bgColor="FFD9D9D9")
 
 THIN_BORDER = Border(
     left=Side(style="thin"), right=Side(style="thin"),

@@ -25,7 +25,8 @@ def layout(workbook):
 # ── Check 2-3: Sheet existence + global params ──
 
 def test_sheets_exist(workbook):
-    for name in ["_META", "Config", "Plan", "Capacity", "Actuals", "Summary"]:
+    for name in ["_META", "Config", "Plan", "Capacity", "Actuals",
+                 "Actuals-Hours", "Plan-Forecast", "Summary"]:
         assert name in workbook.sheetnames, f"Missing sheet: {name}"
 
 
@@ -123,7 +124,15 @@ def test_summary_wp_count(workbook):
 
 def test_meta_has_modification_guide(workbook):
     meta = workbook["_META"]
-    content = str(meta["A1"].value or "")
+    # T15: meta text now exceeds Excel's 32 767-char cell limit, so the
+    # builder splits it across consecutive column-A cells. Concatenate to
+    # search across the whole document.
+    parts = []
+    for r in range(1, meta.max_row + 1):
+        v = meta.cell(r, 1).value
+        if v:
+            parts.append(str(v))
+    content = "\n".join(parts)
     assert "MODIFICATION GUIDE" in content
 
 
@@ -292,6 +301,8 @@ def test_build_order_is_stable(tmp_path):
         "build_capacity_sheet",
         "build_plan_sheet",
         "_apply_planned_formulas",
+        "build_actuals_hours_sheet",
+        "build_plan_forecast_sheet",
         "build_actuals_sheet",
         "build_summary_sheet",
         "build_trends_sheet",
@@ -308,6 +319,12 @@ def test_build_order_is_stable(tmp_path):
                      _spy("_apply_planned_formulas", wb_mod._apply_planned_formulas)),
         patch.object(wb_mod, "build_actuals_sheet",
                      _spy("build_actuals_sheet", wb_mod.build_actuals_sheet)),
+        patch.object(wb_mod, "build_actuals_hours_sheet",
+                     _spy("build_actuals_hours_sheet",
+                          wb_mod.build_actuals_hours_sheet)),
+        patch.object(wb_mod, "build_plan_forecast_sheet",
+                     _spy("build_plan_forecast_sheet",
+                          wb_mod.build_plan_forecast_sheet)),
         patch.object(wb_mod, "build_summary_sheet",
                      _spy("build_summary_sheet", wb_mod.build_summary_sheet)),
         patch.object(wb_mod, "build_trends_sheet",

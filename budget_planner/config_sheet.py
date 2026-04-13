@@ -8,6 +8,7 @@ from openpyxl.formatting.rule import FormulaRule
 from openpyxl.utils import get_column_letter
 
 from budget_planner.layout import (
+    ConfigParamRows,
     SHEET_CONFIG,
     SECTION_HEADER_LABELS,
     COL_WP_FTE, COL_WP_RATE, COL_WP_CEILING,
@@ -651,9 +652,27 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         ("FTE Rate (EUR)", None, "€#,##0", None),  # value set later as formula
         ("EU Annual Ceiling (PM/FTE/year)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
         ("Hours per FTE Month", 143, "0", None),
+        ("EUR Actuals Through Month", 1, "0", None),
     ]
-    param_rows: dict[str, int] = {}
+    # Param rows are driven by the order of param_defs above. The literal
+    # TypedDict below mirrors that order; the assertion inside the styling
+    # loop catches any drift if the two ever fall out of sync. When adding a
+    # new parameter row, also extend ``ConfigParamRows`` in ``layout.py`` —
+    # otherwise the assertion fires with ``maps it to None``.
+    param_rows: ConfigParamRows = {
+        "Project Title": 1,
+        "Project Start": 2,
+        "Project Months": 3,
+        "FTE Rate (EUR)": 4,
+        "EU Annual Ceiling (PM/FTE/year)": 5,
+        "Hours per FTE Month": 6,
+        "EUR Actuals Through Month": 7,
+    }
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
+        assert param_rows.get(label) == i, (
+            f"param_defs/param_rows drift: {label!r} at index {i} "
+            f"but ConfigParamRows maps it to {param_rows.get(label)!r}"
+        )
         # Label in column A — HEADER_FONT, no border
         style_cell(ws, i, 1, value=label, font=HEADER_FONT, border=False)
         # Value in column B — BLUE_INPUT, no border (except FTE Rate: set later)
@@ -663,7 +682,6 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         else:
             font = TITLE_FONT if i == 1 else BLUE_INPUT
             style_cell(ws, i, 2, value=value, font=font, fmt=fmt, border=False)
-        param_rows[label] = i
 
     # ── Section 2: WP Budget ──
     budget_section_row = len(param_defs) + 2  # gap row after last param
@@ -723,6 +741,13 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         attr_text=f"{SHEET_CONFIG}!$B${hours_row}",
     )
     wb.defined_names.add(dn_hours)
+
+    eur_through_row = param_rows["EUR Actuals Through Month"]
+    dn_eur_through = DefinedName(
+        "eur_actuals_through_month",
+        attr_text=f"{SHEET_CONFIG}!$B${eur_through_row}",
+    )
+    wb.defined_names.add(dn_eur_through)
 
     # Grade table named range (2-column: grade name + rate)
     dn_grades = DefinedName(
@@ -807,28 +832,24 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     ))
 
     # ── Set FTE Rate formula ──
-    # If the user has authored a custom formula (preserved by the reader as
-    # ``fte_rate_raw`` — or, for back-compat with callers that only populate
-    # ``rate``, as the legacy polymorphic ``rate`` key), emit it verbatim.
-    # Otherwise fall back to the default weighted average of grade rates by FTE.
-    existing_rate = project_params.get("fte_rate_raw", project_params.get("rate"))
-    if isinstance(existing_rate, str) and existing_rate.startswith("="):
-        ws.cell(rate_row, 2).value = existing_rate
-    else:
-        roster_first_row = roster_layout["roster_first_row"]
-        roster_last_row = roster_layout["roster_last_row"]
-        grade_first_row = grade_layout["grade_first_row"]
-        grade_last_row = grade_layout["grade_last_row"]
+    # Always regenerate from the live grade/roster layout. B4 is a read-only
+    # dashboard readout (no downstream formulas consume ``fte_rate`` after the
+    # 2026-04 Config restructure), so preserving a user-authored formula
+    # across rebuilds would only break silently when section rows shift.
+    roster_first_row = roster_layout["roster_first_row"]
+    roster_last_row = roster_layout["roster_last_row"]
+    grade_first_row = grade_layout["grade_first_row"]
+    grade_last_row = grade_layout["grade_last_row"]
 
-        grades_ref = f"$C${roster_first_row}:$C${roster_last_row}"
-        ftes_ref = f"$B${roster_first_row}:$B${roster_last_row}"
-        terms = "+".join(
-            f"({grades_ref}=$A${row})*$B${row}"
-            for row in range(grade_first_row, grade_last_row + 1)
-        )
-        ws.cell(rate_row, 2).value = (
-            f"=SUMPRODUCT({terms},{ftes_ref})/SUM({ftes_ref})"
-        )
+    grades_ref = f"$C${roster_first_row}:$C${roster_last_row}"
+    ftes_ref = f"$B${roster_first_row}:$B${roster_last_row}"
+    terms = "+".join(
+        f"({grades_ref}=$A${row})*$B${row}"
+        for row in range(grade_first_row, grade_last_row + 1)
+    )
+    ws.cell(rate_row, 2).value = (
+        f"=SUMPRODUCT({terms},{ftes_ref})/SUM({ftes_ref})"
+    )
 
     # ── Sheet Appearance ──
     ws.sheet_properties.tabColor = "4472C4"

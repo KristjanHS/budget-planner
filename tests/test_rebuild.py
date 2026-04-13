@@ -287,3 +287,57 @@ class TestGradeRoundTrip:
             assert got["name"] == expected["name"]
             assert got["max_fte"] == pytest.approx(expected["max_fte"])
             assert got["grade"] == expected["grade"]
+
+
+class TestFteRateFormula:
+    """B4 FTE Rate formula is always regenerated from live layout on rebuild."""
+
+    def test_b4_formula_references_live_layout_after_rebuild(self, tmp_path):
+        """Regression for 2026-04-13 layout-shift bug: rebuild preserved a
+        stale B4 formula that still referenced pre-shift roster/grade rows
+        when a schema change moved sections down. B4 must be regenerated
+        from the post-rebuild layout, not passed through verbatim.
+        """
+        from budget_planner.reader import _find_header_row
+
+        path = str(tmp_path / "rate_drift.xlsx")
+        init_workbook(output_path=path)
+
+        # Plant a patently wrong formula: refs rows 1-5 (project params area,
+        # not roster/grade). If rebuild passes this through verbatim, the
+        # post-rebuild cell will retain the stale refs.
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        stale_formula = (
+            "=SUMPRODUCT(($C$1:$C$5=$A$1)*$B$1,$B$1:$B$5)/SUM($B$1:$B$5)"
+        )
+        b4_cell = cfg.cell(4, 2)
+        assert isinstance(b4_cell, Cell)
+        b4_cell.value = stale_formula
+        wb.save(path)
+        wb.close()
+
+        rebuild_workbook(input_path=path)
+
+        wb = load_workbook(path)
+        cfg = wb["Config"]
+        roster_header = _find_header_row(cfg, "TEAM ROSTER")
+        grade_header = _find_header_row(cfg, "RATE BY GRADE")
+        roster_first = roster_header + 2
+        grade_first = grade_header + 2
+        b4 = cfg["B4"].value
+        wb.close()
+
+        assert isinstance(b4, str) and b4.startswith("=SUMPRODUCT("), (
+            f"B4 should be a SUMPRODUCT formula; got {b4!r}"
+        )
+        assert "$C$1:$C$5" not in b4, (
+            f"Stale pre-rebuild refs leaked through; got {b4!r}"
+        )
+        assert f"$C${roster_first}:" in b4, (
+            f"B4 should reference roster from live row {roster_first}; got {b4!r}"
+        )
+        assert f"$A${grade_first}" in b4, (
+            f"B4 should reference grades starting at live row {grade_first}; "
+            f"got {b4!r}"
+        )

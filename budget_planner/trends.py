@@ -10,8 +10,10 @@ from openpyxl.formatting.rule import FormulaRule
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS, SHEET_CAPACITY,
+    SHEET_PLAN_FORECAST,
     TREND_OK_BAND, TREND_OVER_THRESHOLD, TREND_WATCH_THRESHOLD, TREND_SLOW_THRESHOLD,
-    CAPACITY_AMBER_LOAD, month_col_end as _month_col_end, val_columns,
+    CAPACITY_AMBER_LOAD, CAPACITY_VARIANCE_FTE_RED,
+    month_col_end as _month_col_end, val_columns,
     wp_month_bounds,
 )
 from budget_planner.styles import (
@@ -27,45 +29,24 @@ from budget_planner.styles import CF_AMBER_FILL as _AMBER_CF_FILL
 from budget_planner.styles import CF_RED_FILL as _RED_CF_FILL
 
 
-def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_layout, *,
-                       project_params=None, work_packages=None, wp_schedule=None,
-                       team=None, reporting_periods=None):
+def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout, *,
+                       project_params, work_packages, wp_schedule,
+                       team, reporting_periods,
+                       plan_forecast_layout=None):
     """Build the Trends sheet: WP burn rate, cumulative chart, person load.
 
     Args:
         ws: The Trends worksheet (already has current_month in B1).
-        wb: The parent Workbook.
         layout: Plan layout dict (config_first_wp_row, etc).
         actuals_layout: Actuals layout dict (first_wp_row, cum_col, etc).
         capacity_layout: Capacity layout dict (person_groups with total_row per person).
         team_layout: Team layout dict (person_rows mapping name->row).
-        project_params: Dict with keys title, start, months, rate. Falls back to config.
-        work_packages: List of WP dicts. Falls back to config.
-        wp_schedule: WP schedule entries. Falls back to config.
-        team: List of team member dicts. Falls back to config.
-        config_layout: Config sheet layout with wp_first_row, sched_first_row, etc.
+        project_params: Dict with keys title, start, months, rate.
+        work_packages: List of WP dicts.
+        wp_schedule: WP schedule entries.
+        team: List of team member dicts.
+        reporting_periods: Reporting period entries.
     """
-    if any(v is None for v in [project_params, work_packages, team]):
-        from budget_planner import config
-        if project_params is None:
-            project_params = config.default_project_params()
-        if work_packages is None:
-            work_packages = config.WORK_PACKAGES
-        if team is None:
-            team = config.TEAM
-
-    if wp_schedule is None:
-        from budget_planner.config import WP_SCHEDULE
-        wp_schedule = WP_SCHEDULE
-
-    if reporting_periods is None:
-        from budget_planner.config import REPORTING_PERIODS
-        reporting_periods = REPORTING_PERIODS
-
-    assert project_params is not None
-    assert work_packages is not None
-    assert team is not None
-
     month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
     month_col_end = _month_col_end(project_params["months"])
@@ -267,13 +248,15 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     # Chart is anchored 2 rows below total and occupies ~15 rows of height
     chart_anchor_row = total_row + 2
     person_section_row = chart_anchor_row + 16  # chart height ~15 rows
-    write_section_header(ws, person_section_row, "PERSON LOAD", merge_end=5)
+    write_section_header(ws, person_section_row, "PERSON LOAD", merge_end=8)
 
     # Column headers
     person_header_row = person_section_row + 1
     person_headers = [
         "Person", "Avg FTE (to date)", "Avg FTE (remaining)",
         "Peak Month FTE", "Status",
+        "Actual Avg FTE (to date)", "Actual Peak FTE",
+        "Planned \u2212 Actual Variance",
     ]
     for ci, h in enumerate(person_headers, 1):
         style_cell(ws, person_header_row, ci, h, font=HEADER_FONT,
@@ -283,6 +266,11 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     person_first_row = person_header_row + 1
     person_groups = capacity_layout["person_groups"]
     person_rows_map = team_layout["person_rows"]
+    # Actual-FTE band column range on the Capacity sheet (task 9).
+    actual_col_start = capacity_layout["actual_col_start"]
+    actual_col_end = capacity_layout["actual_col_end"]
+    as_ = col_letter(actual_col_start)
+    ae_ = col_letter(actual_col_end)
 
     for pi, member in enumerate(team):
         name = member["name"]
@@ -324,6 +312,39 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
             f'IF(C{row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!B{roster_row},"WATCH","OK"))'
         )
 
+        # ── Actual-side columns (Task 12) ──────────────────────────────
+        # The Capacity Actual-FTE band lives at columns actual_col_start..
+        # actual_col_end on the same ``total_row`` (per person) as the
+        # planned band. Cells may contain "" (empty string) for inactive
+        # months; AVERAGE and MAX skip text automatically.
+        actual_range = f"{SHEET_CAPACITY}!{as_}{tr}:{ae_}{tr}"
+
+        # Col F: Actual Avg FTE (to date) — AVERAGE over slice 1..current_month.
+        # INDEX(range,1,1):INDEX(range,1,current_month) selects the first
+        # current_month columns of the actual-FTE row. IFERROR→0 when
+        # current_month=0 or slice is all text/empty.
+        style_cell(ws, row, 6, font=GREEN_XREF, fmt="0.00").value = (
+            f"=IFERROR(AVERAGE("
+            f"INDEX({actual_range},1,1):"
+            f"INDEX({actual_range},1,MAX(1,current_month))"
+            f"),0)"
+        )
+
+        # Col G: Actual Peak FTE — MAX over full actual-FTE row
+        style_cell(ws, row, 7, font=GREEN_XREF, fmt="0.00").value = (
+            f"=IFERROR(MAX({actual_range}),0)"
+        )
+
+        # Col H: Planned − Actual Variance status
+        # Nested IF on |planned_avg_to_date - actual_avg_to_date| vs
+        # CAPACITY_VARIANCE_FTE_RED (0.2 FTE) → OVER; half that → WATCH; else OK.
+        variance_threshold = CAPACITY_VARIANCE_FTE_RED
+        watch_threshold = CAPACITY_VARIANCE_FTE_RED / 2
+        style_cell(ws, row, 8, font=BLACK_FORMULA).value = (
+            f'=IF(ABS(B{row}-F{row})>{variance_threshold},"OVER",'
+            f'IF(ABS(B{row}-F{row})>{watch_threshold},"WATCH","OK"))'
+        )
+
     person_last_row = person_first_row + len(team) - 1
 
     # -- Conditional formatting: Person Status (col E) + Peak (col D) — per person --
@@ -357,15 +378,26 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     # ================================================================
     # Section 3: Cumulative LineChart + hidden helper rows
     # ================================================================
-    # Helper rows placed below person load section (2-row gap)
+    # Helper rows placed below person load section (2-row gap).
+    # Order matches series stacking on the chart for readability:
+    # Planned, Actual, Forecast, Ceiling, (labels), RP markers.
     helper_start_row = person_last_row + 2
     helper_row_planned = helper_start_row
     helper_row_actual = helper_start_row + 1
-    helper_row_ceiling = helper_start_row + 2
+    helper_row_forecast = helper_start_row + 2
+    helper_row_ceiling = helper_start_row + 3
 
     plan_first_wp = layout["planned_first_wp_row"]
     plan_last_wp = layout["planned_last_wp_row"]
     act_total = actuals_layout["total_row"]
+    # Plan-Forecast MONTHLY TOTAL row (sums forecast EUR per month).
+    # plan_forecast_layout is wired through _build_all_sheets; falls back
+    # to None only when callers wire trends in isolation (tests would catch).
+    pf_total_row = (
+        plan_forecast_layout["forecast_total_row"]
+        if plan_forecast_layout is not None
+        else None
+    )
 
     # Per-WP rate range from Config column D (for SUMPRODUCT)
     cfg_wp_first = layout["config_first_wp_row"]
@@ -403,7 +435,23 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
                 f"={prev_cl}{helper_row_actual}+{SHEET_ACTUALS}!{cl}{act_total}"
             )
 
-        # Helper Row 3: Ceiling line (flat)
+        # Helper Row 3: Cumulative forecast EUR — sums Plan-Forecast monthly
+        # totals cumulatively. Sheet name MUST be single-quoted (hyphen).
+        if pf_total_row is not None:
+            pf_ref = f"'{SHEET_PLAN_FORECAST}'!{cl}{pf_total_row}"
+            if m_idx == 0:
+                style_cell(ws, helper_row_forecast, c,
+                           font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+                    f"=SUM({pf_ref})"
+                )
+            else:
+                prev_cl = col_letter(c - 1)
+                style_cell(ws, helper_row_forecast, c,
+                           font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+                    f"={prev_cl}{helper_row_forecast}+SUM({pf_ref})"
+                )
+
+        # Helper Row 4: Ceiling line (flat)
         style_cell(ws, helper_row_ceiling, c,
                    font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
             "=partner_ceiling"
@@ -412,6 +460,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     # Hide helper rows
     ws.row_dimensions[helper_row_planned].hidden = True
     ws.row_dimensions[helper_row_actual].hidden = True
+    ws.row_dimensions[helper_row_forecast].hidden = True
     ws.row_dimensions[helper_row_ceiling].hidden = True
 
     # -- Build the LineChart --
@@ -473,8 +522,20 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     s_actual.graphicalProperties.line.solidFill = "FF0000"
     chart.series.append(s_actual)
 
-    # Series 3: Ceiling (grey dashed)
-    s_ceiling = Series(idx=2, order=2)
+    # Series 3: Cumulative forecast (amber dashed) — sums Plan-Forecast
+    # monthly totals cumulatively. Inserted between Actual and Ceiling so
+    # that legend ordering matches semantic priority.
+    s_forecast = Series(idx=2, order=2)
+    s_forecast.tx = SeriesLabel(v="Cumulative Forecast")
+    s_forecast.val = NumDataSource(numRef=NumRef(
+        f=range_str.format(helper_row_forecast, helper_row_forecast)))
+    s_forecast.cat = cat_ref
+    s_forecast.graphicalProperties.line.solidFill = "FFB300"
+    s_forecast.graphicalProperties.line.dashStyle = "dash"
+    chart.series.append(s_forecast)
+
+    # Series 4: Ceiling (grey dashed)
+    s_ceiling = Series(idx=3, order=3)
     s_ceiling.tx = SeriesLabel(v="Ceiling")
     s_ceiling.val = NumDataSource(numRef=NumRef(
         f=range_str.format(helper_row_ceiling, helper_row_ceiling)))
@@ -483,8 +544,8 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
     s_ceiling.graphicalProperties.line.dashStyle = "dash"
     chart.series.append(s_ceiling)
 
-    # Series 4: RP boundaries (green diamond markers at ceiling level)
-    s_rp = Series(idx=3, order=3)
+    # Series 5: RP boundaries (green diamond markers at ceiling level)
+    s_rp = Series(idx=4, order=4)
     s_rp.tx = SeriesLabel(v="RP End")
     s_rp.val = NumDataSource(numRef=NumRef(
         f=range_str.format(helper_row_rp, helper_row_rp)))
@@ -525,6 +586,7 @@ def build_trends_sheet(ws, wb, layout, actuals_layout, capacity_layout, team_lay
         "person_load_last_row": person_last_row,
         "helper_row_planned": helper_row_planned,
         "helper_row_actual": helper_row_actual,
+        "helper_row_forecast": helper_row_forecast,
         "helper_row_ceiling": helper_row_ceiling,
         "helper_row_labels": helper_row_labels,
         "helper_row_rp": helper_row_rp,

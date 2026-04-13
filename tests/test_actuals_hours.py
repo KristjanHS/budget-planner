@@ -41,40 +41,26 @@ def _person_assigned_wps(person_name):
 def _find_person_header_row(ws, person_name):
     """Find row of the person header (merged A:B) for ``person_name``.
 
-    Works on unrecalculated workbooks where col A holds a Config cross-ref
-    formula rather than the literal name — we locate it by finding the
-    SECTION_FILL merged header whose col-A formula points at the Config
-    roster row derived from TEAM order.
+    Person headers now carry the literal person name in col A (changed
+    from the previous ``=Config!A<roster_row>`` formula so the forecast-
+    EUR VLOOKUP against $A$<header_row> works under data_only reads).
+    We locate the row by matching col-A value == person_name AND
+    verifying the A:B merge.
     """
-    # Person header rows have col A formula =Config!A<roster_row>; the
-    # roster_row for TEAM[i] is predictable (roster first row + i), but to
-    # avoid coupling to Config internals we scan for the merged header
-    # whose col-A formula contains "Config!A" and whose col-B "TOTAL" row
-    # two-or-more rows below matches. Simpler: walk rows, match by index.
-    team_names = [m["name"] for m in TEAM]
-    idx = team_names.index(person_name)
-    # We need the idx-th section header. Sections start after month header
-    # row. Find all header rows by scanning for "SECTION_FILL merged" via
-    # col-A value starting with "=Config!A".
-    headers = []
+    merged_ranges = [(mr.min_row, mr.min_col, mr.max_col)
+                     for mr in ws.merged_cells.ranges]
     for r in range(1, ws.max_row + 1):
-        v = ws.cell(r, 1).value
-        if isinstance(v, str) and v.startswith("=Config!A"):
-            headers.append(r)
-    # Filter to person-header rows: each person has exactly one such row
-    # before its data rows. WP rows also use =Config!A<wp_row> but are not
-    # merged A:B. Cheap filter: check the merge.
-    merged_ranges = {str(mr): (mr.min_row, mr.max_row, mr.min_col, mr.max_col)
-                     for mr in ws.merged_cells.ranges}
-    person_headers = []
-    for r in headers:
+        if ws.cell(r, 1).value != person_name:
+            continue
         is_person = any(
             mr_min_r == r and mr_min_c == 1 and mr_max_c >= 2
-            for _k, (mr_min_r, _mx, mr_min_c, mr_max_c) in merged_ranges.items()
+            for mr_min_r, mr_min_c, mr_max_c in merged_ranges
         )
         if is_person:
-            person_headers.append(r)
-    return person_headers[idx]
+            return r
+    raise AssertionError(
+        f"Person header for {person_name!r} not found on {ws.title}"
+    )
 
 
 # ── Existence + tab order ──
@@ -299,7 +285,9 @@ def test_forecast_eur_header_exists(hrs):
 
 def test_forecast_eur_leaf_formula_structure(hrs):
     """Pick one active WP-person-month cell and assert its forecast-EUR
-    leaf formula has the IF-guarded VLOOKUP/hours_per_fte_month shape."""
+    leaf formula has the IF-guarded ROUND(VLOOKUP(.)/hours_per_fte_month)
+    shape. The VLOOKUP lookup value references the person header cell
+    (now a literal name, not a formula) via $A$<header_row>."""
     # Alice WP1 M1 is active — hour cell is empty input; leaf formula
     # references it and the roster_lookup rate via hours_per_fte_month.
     alice_header = _find_person_header_row(hrs, "Alice")
@@ -313,6 +301,38 @@ def test_forecast_eur_leaf_formula_structure(hrs):
     assert ",4," in leaf.replace(" ", ""), (
         f"Formula should VLOOKUP col 4 (Rate): {leaf!r}"
     )
+    # ROUND(..., 0) wrapper ensures each leaf is a whole EUR — avoids
+    # sub-cent drift when Plan-Forecast SUMs hundreds of these leaves.
+    assert "ROUND(" in leaf, (
+        f"Formula should wrap ROUND(...,0) for whole-EUR leaves: {leaf!r}"
+    )
+    # Person header is literal (not =Config!A<roster_row>) so data_only
+    # reads of the workbook can evaluate the VLOOKUP key correctly — the
+    # leaf must NOT resolve the lookup-value via a Config cross-ref.
+    assert "=Config!A" not in leaf, (
+        f"Leaf must not resolve lookup-value via Config formula: {leaf!r}"
+    )
+
+
+def test_person_header_is_literal_name(hrs):
+    """Person header cell (col A of the merged A:B banner) must carry the
+    literal person name, not a formula. The forecast-EUR VLOOKUP uses
+    this cell as the lookup value; a formula there would evaluate to
+    None under data_only reads and silently break the EUR column."""
+    for member in TEAM:
+        name = member["name"]
+        header_row = _find_person_header_row(hrs, name)
+        value = hrs.cell(header_row, 1).value
+        assert isinstance(value, str), (
+            f"Person header for {name} must be a string, got {value!r}"
+        )
+        assert not value.startswith("="), (
+            f"Person header for {name} must be literal, got formula {value!r}"
+        )
+        assert value == name, (
+            f"Person header at row {header_row} expected {name!r}, "
+            f"got {value!r}"
+        )
 
 
 def test_forecast_eur_external_row_empty(hrs):

@@ -87,7 +87,7 @@ class TestCapacityYearHeaders:
 
     def test_capacity_year_header_merges(self, workbook):
         ws = workbook["Capacity"]
-        expected = _expected_year_spans()
+        expected_planned = _expected_year_spans()
 
         # Capacity year headers are on the row right after the external
         # commitments config block + gap row.  Find by scanning for a merge
@@ -102,6 +102,21 @@ class TestCapacityYearHeaders:
         assert year_row is not None, "Capacity year header row not found"
 
         actual = _year_merges_on_row(ws, year_row)
+        # T9 mirrors year spans onto Actual + Variance bands. Expected list
+        # is the planned-side spans plus the two band mirrors.
+        from budget_planner.config import PROJECT_MONTHS as _PM
+        from budget_planner.layout import val_columns as _val_columns
+        val_diff = _val_columns(_PM)["diff"]
+        actual_start = val_diff + 2
+        variance_start = actual_start + _PM + 1
+        planned_start = 3  # MONTH_COL_START
+        expected = list(expected_planned)
+        for band_start in (actual_start, variance_start):
+            for ps, pe in expected_planned:
+                expected.append(
+                    (ps - planned_start + band_start,
+                     pe - planned_start + band_start)
+                )
         assert actual == expected, (
             f"Capacity year header merges mismatch.\n"
             f"  Expected: {expected}\n"
@@ -110,14 +125,16 @@ class TestCapacityYearHeaders:
 
 
 class TestSummaryYearHeaders:
-    """Summary year headers merge across 4 columns per year group."""
+    """Summary year headers merge across 5 columns per year group
+    (Task 10 added a Forecast EUR column between Actual EUR and Variance EUR).
+    """
 
     def test_summary_year_header_merges(self, workbook):
         ws = workbook["Summary"]
         cal_groups = list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS))
         num_years = len(cal_groups)
         YEAR_GROUP_START = 3
-        COLS_PER_YEAR = 4
+        COLS_PER_YEAR = 5
 
         # Build expected year group merges
         expected_year = []
@@ -128,7 +145,7 @@ class TestSummaryYearHeaders:
 
         # PROJECT TOTAL merge
         total_start = YEAR_GROUP_START + num_years * COLS_PER_YEAR
-        total_end = total_start + 3  # 4 columns
+        total_end = total_start + COLS_PER_YEAR - 1  # same width as year groups
         expected_total = (total_start, total_end)
 
         # Find the year header row — look for the first calendar year label

@@ -6,6 +6,7 @@ from dateutil.relativedelta import relativedelta
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_SUMMARY, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS,
+    SHEET_PLAN_FORECAST,
     val_columns, _calendar_year_groups,
 )
 from budget_planner.styles import (
@@ -17,8 +18,8 @@ from budget_planner.styles import (
 
 
 def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
-                        work_packages, wp_schedule,
-                        reporting_periods, config_layout=None):
+                        work_packages,
+                        reporting_periods, plan_forecast_layout):
     """Create the Summary sheet with annual budget view and budget overview.
 
     Every data parameter is required — matching the ``build_meta_sheet``
@@ -38,12 +39,8 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
         Keys: title, start, months, rate.
     work_packages : list[dict]
         List of WP dicts.
-    wp_schedule : list[dict]
-        WP schedule entries.
     reporting_periods : list[dict]
         Reporting period entries.
-    config_layout : dict, optional
-        Config sheet layout with wp_first_row, sched_first_row, etc.
 
     Returns
     -------
@@ -74,11 +71,13 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
 
     # Year group headers
     YEAR_GROUP_START = 3
-    COLS_PER_YEAR = 4  # Plan FTE, Plan EUR, Actual EUR, Variance EUR
+    # Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR
+    COLS_PER_YEAR = 5
 
     # Project total group
     TOTAL_GROUP_START = YEAR_GROUP_START + num_years * COLS_PER_YEAR
-    TOTAL_COLS = 4  # Plan FTE, Plan EUR, Actual EUR, Variance EUR
+    # Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR
+    TOTAL_COLS = 5
 
     # Year headers row
     style_cell(summary, r, 1, "", fill=LIGHT_BLUE_FILL)
@@ -101,13 +100,13 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
     # Sub-headers row
     style_cell(summary, r, 1, "WP ID", font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
     style_cell(summary, r, 2, "WP Name", font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    year_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Var \u20ac"]
+    year_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Fcst \u20ac", "Var \u20ac"]
     for y in range(num_years):
         for si, sh in enumerate(year_sub):
             c = YEAR_GROUP_START + y * COLS_PER_YEAR + si
             style_cell(summary, r, c, sh, font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
-    total_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Var \u20ac"]
+    total_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Fcst \u20ac", "Var \u20ac"]
     for si, sh in enumerate(total_sub):
         c = TOTAL_GROUP_START + si
         style_cell(summary, r, c, sh, font=HEADER_FONT, fill=LIGHT_GREEN_FILL, alignment=CENTER)
@@ -142,8 +141,15 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
             style_cell(summary, row, sc + 2, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
                 f"=SUM({SHEET_ACTUALS}!{first_col_l}{actuals_wp_row}:{last_col_l}{actuals_wp_row})"
             )
+            # Forecast EUR (cross-sheet ref to Plan-Forecast sheet).
+            # Sheet name contains a hyphen → Excel requires single-quotes.
+            # No current_month gate: forecast spans the full calendar year.
+            pf_wp_row = plan_forecast_layout["forecast_first_wp_row"] + i
+            style_cell(summary, row, sc + 3, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
+                f"=SUM('{SHEET_PLAN_FORECAST}'!{first_col_l}{pf_wp_row}:{last_col_l}{pf_wp_row})"
+            )
             # Variance EUR = Plan EUR - Actual EUR
-            style_cell(summary, row, sc + 3, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+            style_cell(summary, row, sc + 4, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
                 f"={col_letter(sc + 1)}{row}-{col_letter(sc + 2)}{row}"
             )
 
@@ -161,8 +167,12 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
         act_eur_cols = [col_letter(YEAR_GROUP_START + y * COLS_PER_YEAR + 2) for y in range(num_years)]
         act_eur_sum = "+".join([f"{cl}{row}" for cl in act_eur_cols])
         style_cell(summary, row, tc + 2, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={act_eur_sum}"
-        # Total variance EUR
-        style_cell(summary, row, tc + 3, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+        # Sum forecast EUR across years
+        fcst_eur_cols = [col_letter(YEAR_GROUP_START + y * COLS_PER_YEAR + 3) for y in range(num_years)]
+        fcst_eur_sum = "+".join([f"{cl}{row}" for cl in fcst_eur_cols])
+        style_cell(summary, row, tc + 3, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={fcst_eur_sum}"
+        # Total variance EUR = Plan EUR total - Actual EUR total
+        style_cell(summary, row, tc + 4, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
             f"={col_letter(tc + 1)}{row}-{col_letter(tc + 2)}{row}"
         )
 
@@ -187,7 +197,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
 
     # Conditional formatting: red on negative Variance EUR (year columns)
     for y in range(num_years):
-        var_col = YEAR_GROUP_START + y * COLS_PER_YEAR + 3
+        var_col = YEAR_GROUP_START + y * COLS_PER_YEAR + 4
         var_col_l = col_letter(var_col)
         var_range = f"{var_col_l}{SUMMARY_FIRST_WP_ROW}:{var_col_l}{SUMMARY_LAST_WP_ROW}"
         summary.conditional_formatting.add(var_range, FormulaRule(
@@ -195,11 +205,43 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
         ))
 
     # Conditional formatting: red on negative Variance EUR (project total)
-    total_var_col = TOTAL_GROUP_START + 3
+    total_var_col = TOTAL_GROUP_START + 4
     total_var_col_l = col_letter(total_var_col)
     total_var_range = f"{total_var_col_l}{SUMMARY_FIRST_WP_ROW}:{total_var_col_l}{SUMMARY_LAST_WP_ROW}"
     summary.conditional_formatting.add(total_var_range, FormulaRule(
         formula=[f"{total_var_col_l}{SUMMARY_FIRST_WP_ROW}<0"], fill=CF_RED_FILL,
+    ))
+
+    # Conditional formatting: red on Forecast EUR < 0.8 * Plan EUR (year columns).
+    # Mirrors the variance-style "material underspend" alert, per Task 10.
+    for y in range(num_years):
+        plan_eur_col = YEAR_GROUP_START + y * COLS_PER_YEAR + 1
+        fcst_col = YEAR_GROUP_START + y * COLS_PER_YEAR + 3
+        plan_eur_col_l = col_letter(plan_eur_col)
+        fcst_col_l = col_letter(fcst_col)
+        fcst_range = f"{fcst_col_l}{SUMMARY_FIRST_WP_ROW}:{fcst_col_l}{SUMMARY_LAST_WP_ROW}"
+        summary.conditional_formatting.add(fcst_range, FormulaRule(
+            formula=[
+                f"{fcst_col_l}{SUMMARY_FIRST_WP_ROW}<0.8*{plan_eur_col_l}{SUMMARY_FIRST_WP_ROW}"
+            ],
+            fill=CF_RED_FILL,
+        ))
+
+    # Conditional formatting: red on Forecast EUR < 0.8 * Plan EUR (project total)
+    total_plan_eur_col = TOTAL_GROUP_START + 1
+    total_fcst_col = TOTAL_GROUP_START + 3
+    total_plan_eur_col_l = col_letter(total_plan_eur_col)
+    total_fcst_col_l = col_letter(total_fcst_col)
+    total_fcst_range = (
+        f"{total_fcst_col_l}{SUMMARY_FIRST_WP_ROW}:"
+        f"{total_fcst_col_l}{SUMMARY_LAST_WP_ROW}"
+    )
+    summary.conditional_formatting.add(total_fcst_range, FormulaRule(
+        formula=[
+            f"{total_fcst_col_l}{SUMMARY_FIRST_WP_ROW}"
+            f"<0.8*{total_plan_eur_col_l}{SUMMARY_FIRST_WP_ROW}"
+        ],
+        fill=CF_RED_FILL,
     ))
 
     # ── BUDGET OVERVIEW ──

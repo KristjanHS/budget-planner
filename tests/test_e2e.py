@@ -93,7 +93,8 @@ def test_empty_mode_recalc_zero_errors(empty_recalc):
 
 # Layout constants matching summary.py
 _YEAR_GROUP_START = 3
-_COLS_PER_YEAR = 4  # Plan FTE, Plan EUR, Act EUR, Var EUR
+# Plan FTE, Plan EUR, Act EUR, Fcst EUR, Var EUR (Fcst added in Task 10)
+_COLS_PER_YEAR = 5
 _CAL_GROUPS = list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS))
 _NUM_YEARS = len(_CAL_GROUPS)
 _TOTAL_GROUP_START = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR

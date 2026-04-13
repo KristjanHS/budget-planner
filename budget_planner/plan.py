@@ -6,6 +6,7 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.formatting.rule import FormulaRule
 
 from budget_planner.layout import (
+    ConfigParamRows,
     MONTH_COL_START, SHEET_PLAN, SHEET_CAPACITY, SHEET_CONFIG,
     SECTION_HEADER_LABELS,
     build_year_month_headers, month_col_end as _month_col_end, val_columns,
@@ -107,7 +108,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     val_col_diff = _vcols["diff"]
 
     # -- ROW 1: COMPACT HEADER --
-    pr = config_layout["param_rows"]
+    pr: ConfigParamRows = config_layout["param_rows"]
     # A1: "Title:", B1: =Config!B{title_row}
     style_cell(ws, 1, 1, "Title:", font=HEADER_FONT, border=False)
     style_cell(ws, 1, 2, font=Font(name="Arial", bold=True, size=14, color="008000"),

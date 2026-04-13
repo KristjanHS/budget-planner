@@ -621,3 +621,28 @@ def test_hours_per_fte_month_constant_and_named_range(tmp_path):
 
     # Label in col A on the same row
     assert cfg.cell(row=row, column=1).value == "Hours per FTE Month"
+
+
+def test_eur_actuals_through_month_constant_and_named_range(tmp_path):
+    """T8: `eur_actuals_through_month` Config param + named range exist."""
+    from budget_planner.workbook import init_workbook
+    from openpyxl import load_workbook
+
+    path = tmp_path / "wb.xlsx"
+    init_workbook(str(path))
+    wb = load_workbook(str(path))
+
+    assert "eur_actuals_through_month" in wb.defined_names
+    target = wb.defined_names["eur_actuals_through_month"].attr_text
+    assert target.startswith("Config!"), target
+
+    _sheet, cell_ref = target.split("!")
+    cfg = wb["Config"]
+    row = int(cell_ref.replace("$", "").lstrip("B"))
+
+    # Default value is an integer (user bumps it manually as months close)
+    val = cfg.cell(row=row, column=2).value
+    assert isinstance(val, int), f"Expected int default, got {type(val)}: {val!r}"
+
+    # Label in col A on the same row
+    assert cfg.cell(row=row, column=1).value == "EUR Actuals Through Month"

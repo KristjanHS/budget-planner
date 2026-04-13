@@ -12,6 +12,7 @@ from budget_planner.config import (
     NUM_WPS, TEAM,
     VAL_COL_BUDGET,
 )
+from budget_planner.layout import MONTH_COL_START
 from budget_planner.styles import col_letter
 
 
@@ -246,6 +247,88 @@ def test_person_load_status_formula(trends_ws):
 
 
 # ================================================================
+# Person Load — actual-side columns (Task 12)
+# ================================================================
+
+def test_person_load_actual_headers(trends_ws):
+    """Header row gains three new columns: Actual Avg FTE (to date),
+    Actual Peak FTE, Planned - Actual Variance (cols F, G, H)."""
+    header_row = _find_row_containing(trends_ws, 1, "Person")
+    assert header_row is not None
+    col_f = trends_ws.cell(header_row, 6).value
+    col_g = trends_ws.cell(header_row, 7).value
+    col_h = trends_ws.cell(header_row, 8).value
+    assert col_f is not None and "Actual Avg FTE" in str(col_f), (
+        f"Expected 'Actual Avg FTE' header in col F, got {col_f!r}"
+    )
+    assert col_g is not None and "Actual Peak FTE" in str(col_g), (
+        f"Expected 'Actual Peak FTE' header in col G, got {col_g!r}"
+    )
+    assert col_h is not None and "Variance" in str(col_h), (
+        f"Expected 'Variance' in col H header, got {col_h!r}"
+    )
+
+
+def test_person_load_actual_avg_formula(trends_ws):
+    """Col F uses AVERAGE over Capacity Actual-FTE row sliced up to current_month."""
+    header_row = _find_row_containing(trends_ws, 1, "Person")
+    assert header_row is not None
+    first_person_row = header_row + 1
+    cell = trends_ws.cell(first_person_row, 6)
+    formula = str(cell.value)
+    assert "AVERAGE" in formula
+    assert "current_month" in formula
+    assert "Capacity!" in formula
+
+
+def test_person_load_actual_peak_formula(trends_ws):
+    """Col G uses MAX over Capacity Actual-FTE row (full range)."""
+    header_row = _find_row_containing(trends_ws, 1, "Person")
+    assert header_row is not None
+    first_person_row = header_row + 1
+    cell = trends_ws.cell(first_person_row, 7)
+    formula = str(cell.value)
+    assert "MAX" in formula
+    assert "Capacity!" in formula
+
+
+def test_person_load_variance_status_formula(trends_ws):
+    """Col H has nested IF returning OVER/WATCH/OK based on |Planned-Actual|."""
+    header_row = _find_row_containing(trends_ws, 1, "Person")
+    assert header_row is not None
+    first_person_row = header_row + 1
+    cell = trends_ws.cell(first_person_row, 8)
+    formula = str(cell.value)
+    assert "IF" in formula
+    assert '"OVER"' in formula
+    assert '"WATCH"' in formula
+    assert '"OK"' in formula
+    # Must reference the Planned Avg (col B) and Actual Avg (col F) on same row
+    row = first_person_row
+    assert f"B{row}" in formula
+    assert f"F{row}" in formula
+
+
+def test_person_load_actual_cols_font_colors(trends_ws):
+    """Actual Avg FTE (F) + Peak (G) are green cross-sheet refs; Status (H) is black."""
+    header_row = _find_row_containing(trends_ws, 1, "Person")
+    assert header_row is not None
+    first_person_row = header_row + 1
+
+    def _font_rgb(cell):
+        return str(getattr(cell.font.color, "rgb", "")).upper()
+
+    rgb_f = _font_rgb(trends_ws.cell(first_person_row, 6))
+    rgb_g = _font_rgb(trends_ws.cell(first_person_row, 7))
+    rgb_h = _font_rgb(trends_ws.cell(first_person_row, 8))
+    # GREEN_XREF = "008000" (may be serialised as 00008000)
+    assert rgb_f.endswith("008000"), f"Col F font should be GREEN_XREF, got {rgb_f}"
+    assert rgb_g.endswith("008000"), f"Col G font should be GREEN_XREF, got {rgb_g}"
+    # BLACK_FORMULA = "000000"
+    assert rgb_h.endswith("000000"), f"Col H font should be BLACK_FORMULA, got {rgb_h}"
+
+
+# ================================================================
 # Chart
 # ================================================================
 
@@ -254,12 +337,12 @@ def test_cumulative_chart_exists(trends_ws):
     assert len(trends_ws._charts) >= 1
 
 
-def test_chart_has_four_source_rows(trends_ws):
-    """Chart data spans 4 helper rows (planned, actual, ceiling, rp).
+def test_chart_has_five_source_rows(trends_ws):
+    """Chart data spans 5 helper rows (planned, actual, forecast, ceiling, rp).
 
     Note: openpyxl expands multi-column References into individual series
     on save/load roundtrip, so we check chart title + that series count
-    is a multiple of 4 (one per month column per source row).
+    is a multiple of 5 (one per month column per source row).
     """
     chart = trends_ws._charts[0]
     # After roundtrip the title is a rich Title object; extract text runs
@@ -267,9 +350,9 @@ def test_chart_has_four_source_rows(trends_ws):
         run.t for p in chart.title.tx.rich.paragraphs for run in p.r
     )
     assert "Planned vs Actual" in title_text
-    # 60 months * 4 rows = 240 series after roundtrip expansion
-    assert len(chart.series) >= 4
-    assert len(chart.series) % 4 == 0
+    # 60 months * 5 rows = 300 series after roundtrip expansion
+    assert len(chart.series) >= 5
+    assert len(chart.series) % 5 == 0
 
 
 def test_helper_rows_hidden(trends_ws):
@@ -279,8 +362,9 @@ def test_helper_rows_hidden(trends_ws):
         r for r in range(1, trends_ws.max_row + 1)
         if trends_ws.row_dimensions[r].hidden
     ]
-    assert len(hidden_rows) == 5, (
-        f"Expected 5 hidden helper rows (planned, actual, ceiling, labels, rp), "
+    assert len(hidden_rows) == 6, (
+        f"Expected 6 hidden helper rows "
+        f"(planned, actual, forecast, ceiling, labels, rp), "
         f"found {len(hidden_rows)}: {hidden_rows}"
     )
     # Verify they are contiguous
@@ -397,8 +481,8 @@ def test_trends_no_row_collisions(num_wps, num_team):
         r for r in range(1, ws.max_row + 1)
         if ws.row_dimensions[r].hidden
     )
-    assert len(hidden_rows) == 5, (
-        f"Expected 5 hidden helper rows, found {len(hidden_rows)}: {hidden_rows}"
+    assert len(hidden_rows) == 6, (
+        f"Expected 6 hidden helper rows, found {len(hidden_rows)}: {hidden_rows}"
     )
 
     # Verify no overlaps
@@ -432,14 +516,108 @@ def test_chart_has_rp_boundary_series():
     assert len(ws._charts) == 1  # type: ignore[attr-defined]
     chart = ws._charts[0]  # type: ignore[attr-defined]
 
-    # Should have 4 series: Planned, Actual, Ceiling, RP End
-    assert len(chart.series) == 4, (
-        f"Expected 4 chart series, got {len(chart.series)}"
+    # Should have 5 series: Planned, Actual, Forecast, Ceiling, RP End
+    assert len(chart.series) == 5, (
+        f"Expected 5 chart series, got {len(chart.series)}"
     )
 
     # Last series should be "RP End"
-    rp_series = chart.series[3]
+    rp_series = chart.series[4]
     assert rp_series.tx is not None
     # SeriesLabel value should contain "RP"
     label_val = getattr(rp_series.tx, 'v', None)
     assert label_val is not None and "RP" in label_val
+
+
+# ================================================================
+# Cumulative Forecast series (Task 11)
+# ================================================================
+
+def test_chart_has_cumulative_forecast_series():
+    """LineChart has a 'Cumulative Forecast' series between Actual and Ceiling.
+
+    Order: Planned (idx 0), Actual (idx 1), Forecast (idx 2),
+           Ceiling (idx 3), RP End (idx 4).
+    """
+    ws = _build_trends_only(num_wps=3, num_team=2)
+    assert len(ws._charts) == 1  # type: ignore[attr-defined]
+    chart = ws._charts[0]  # type: ignore[attr-defined]
+
+    # Forecast is at index 2 (after Actual, before Ceiling)
+    forecast = chart.series[2]
+    assert forecast.tx is not None
+    label_val = getattr(forecast.tx, 'v', None)
+    assert label_val == "Cumulative Forecast", (
+        f"Expected 'Cumulative Forecast' at series idx 2, got {label_val!r}"
+    )
+
+
+def test_cumulative_forecast_series_styling():
+    """Cumulative Forecast series is amber (FFB300) and dashed."""
+    ws = _build_trends_only(num_wps=3, num_team=2)
+    chart = ws._charts[0]  # type: ignore[attr-defined]
+    forecast = chart.series[2]
+
+    line = forecast.graphicalProperties.line
+    # solidFill is a ColorChoice after openpyxl normalises the assignment
+    color_str = getattr(line.solidFill, "srgbClr", line.solidFill)
+    assert color_str == "FFB300", (
+        f"Expected amber (FFB300) line color, got {color_str!r}"
+    )
+    # dashStyle setter writes through to the underlying prstDash element
+    dash = line.dashStyle or getattr(line, "prstDash", None)
+    assert dash == "dash", (
+        f"Expected dashed line, got dashStyle={dash!r}"
+    )
+
+
+def test_cumulative_forecast_helper_row_formulas(trends_ws):
+    """Forecast helper row contains cumulative SUM formulas referencing
+    'Plan-Forecast' MONTHLY TOTAL row, single-quoted (hyphenated sheet name).
+
+    First month: =SUM('Plan-Forecast'!<col><total_row>)
+    Subsequent: =<prev_col><helper_row>+SUM('Plan-Forecast'!<col><total_row>)
+    """
+    # Discover the forecast helper row dynamically: it's a hidden row whose
+    # cells contain references to 'Plan-Forecast'.
+    hidden_rows = sorted(
+        r for r in range(1, trends_ws.max_row + 1)
+        if trends_ws.row_dimensions[r].hidden
+    )
+
+    forecast_row = None
+    for r in hidden_rows:
+        # Probe the first month column to find the forecast helper row.
+        cell_val = trends_ws.cell(r, MONTH_COL_START).value
+        if cell_val is not None and "'Plan-Forecast'" in str(cell_val):
+            forecast_row = r
+            break
+    assert forecast_row is not None, (
+        f"No hidden helper row references 'Plan-Forecast' "
+        f"(hidden_rows={hidden_rows})"
+    )
+
+    # First-month formula: =SUM('Plan-Forecast'!<col><total_row>)
+    first_cell = trends_ws.cell(forecast_row, MONTH_COL_START).value
+    assert isinstance(first_cell, str)
+    assert first_cell.startswith("=SUM('Plan-Forecast'!"), (
+        f"First-month forecast helper formula should start with "
+        f"=SUM('Plan-Forecast'!, got {first_cell!r}"
+    )
+
+    # Second-month formula: cumulative — prev cell + SUM('Plan-Forecast'!...)
+    second_cell = trends_ws.cell(forecast_row, MONTH_COL_START + 1).value
+    assert isinstance(second_cell, str)
+    assert "'Plan-Forecast'" in second_cell, (
+        f"Second-month forecast helper should reference Plan-Forecast, "
+        f"got {second_cell!r}"
+    )
+    # Cumulative shape: previous-column ref to forecast helper row + SUM(...)
+    prev_col_letter = col_letter(MONTH_COL_START)
+    assert f"{prev_col_letter}{forecast_row}" in second_cell, (
+        f"Expected previous-column self-ref ({prev_col_letter}{forecast_row}) "
+        f"in cumulative formula, got {second_cell!r}"
+    )
+    assert "+SUM" in second_cell, (
+        f"Expected cumulative shape (prev col + SUM), got {second_cell!r}"
+    )

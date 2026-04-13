@@ -37,6 +37,7 @@ from budget_planner.plan import build_plan_sheet, _apply_planned_formulas
 from budget_planner.capacity import build_capacity_sheet
 from budget_planner.actuals import build_actuals_sheet
 from budget_planner.actuals_hours import build_actuals_hours_sheet
+from budget_planner.plan_forecast import build_plan_forecast_sheet
 from budget_planner.summary import build_summary_sheet
 from budget_planner.trends import build_trends_sheet
 from budget_planner.meta import build_meta_sheet
@@ -47,6 +48,7 @@ from budget_planner.layout import (
     SHEET_CAPACITY,
     SHEET_ACTUALS,
     SHEET_ACTUALS_HOURS,
+    SHEET_PLAN_FORECAST,
     SHEET_TRENDS,
     SECTION_HEADER_LABELS,
     cell_ref,
@@ -117,8 +119,7 @@ def _validate_config(
     if project_params["months"] <= 0 or project_params["months"] > 120:
         errors.append(f"PROJECT_MONTHS must be 1-120, got {project_params['months']}")
     rate = project_params["rate"]
-    # Rate may be a formula string or ArrayFormula (grade-based weighted average) — skip numeric check
-    if isinstance(rate, (int, float)) and rate <= 0:
+    if rate <= 0:
         errors.append(f"FTE rate must be > 0, got {rate}")
     if not work_packages:
         errors.append("Work packages table is empty")
@@ -280,23 +281,13 @@ def _build_all_sheets(
         DefinedName("current_month", attr_text=cell_ref(SHEET_TRENDS, 1, 2))
     )
 
-    # Stage 6 — Actuals (depends on plan_layout + Trends stub for current_month)
-    ctx.actuals_layout = build_actuals_sheet(
-        wb,
-        ctx.plan_layout,
-        project_params=project_params,
-        work_packages=work_packages,
-        wp_schedule=wp_schedule,
-        preserved=preserved_actuals,
-    )
-
-    # Stage 6b — Actuals-Hours (hour timelog; depends only on config_layout).
-    # Inserted after Actuals so tab-order matches design §7. Real rebuild
-    # preservation plumbing lands in Task 13; for now ``preserved`` is None.
+    # Stage 6a — Actuals-Hours (hour timelog; depends only on config_layout).
+    # Built BEFORE Actuals so Plan-Forecast can consume its layout, and
+    # Actuals can then consume Plan-Forecast's layout for the forecast
+    # monitoring columns. Tab order is fixed up at the end of this function.
     actuals_hours_ws = wb.create_sheet(SHEET_ACTUALS_HOURS)
-    build_actuals_hours_sheet(
+    actuals_hours_layout = build_actuals_hours_sheet(
         actuals_hours_ws,
-        ctx.config_layout,
         project_params=project_params,
         work_packages=work_packages,
         wp_schedule=wp_schedule,
@@ -304,26 +295,49 @@ def _build_all_sheets(
         external_commitments=external_commitments,
         assignments=assignments,
         config_first_wp_row=ctx.config_layout["wp_first_row"],
-        config_layout=ctx.config_layout,
         preserved=preserved_actuals_hours,
     )
 
-    # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout)
+    # Stage 6b — Plan-Forecast (aggregates forecast-EUR leaves from
+    # Actuals-Hours into a WP × month grid; mirrors Plan shape).
+    plan_forecast_ws = wb.create_sheet(SHEET_PLAN_FORECAST)
+    plan_forecast_layout = build_plan_forecast_sheet(
+        plan_forecast_ws,
+        project_params=project_params,
+        work_packages=work_packages,
+        wp_schedule=wp_schedule,
+        assignments=assignments,
+        config_first_wp_row=ctx.config_layout["wp_first_row"],
+        actuals_hours_layout=actuals_hours_layout,
+    )
+
+    # Stage 6c — Actuals (depends on plan_layout + Trends stub for
+    # current_month + plan_forecast_layout for the forecast block).
+    ctx.actuals_layout = build_actuals_sheet(
+        wb,
+        ctx.plan_layout,
+        project_params=project_params,
+        work_packages=work_packages,
+        wp_schedule=wp_schedule,
+        preserved=preserved_actuals,
+        plan_forecast_layout=plan_forecast_layout,
+    )
+
+    # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout,
+    # plan_forecast_layout for the Forecast EUR column per year)
     ctx.summary_layout = build_summary_sheet(
         wb,
         ctx.plan_layout,
         ctx.actuals_layout,
         project_params=project_params,
         work_packages=work_packages,
-        wp_schedule=wp_schedule,
         reporting_periods=reporting_periods,
-        config_layout=ctx.config_layout,
+        plan_forecast_layout=plan_forecast_layout,
     )
 
     # Stage 8 — Trends full (needs every prior layout)
     build_trends_sheet(
         trends_ws,
-        wb,
         ctx.plan_layout,
         ctx.actuals_layout,
         ctx.capacity_layout,
@@ -333,6 +347,7 @@ def _build_all_sheets(
         wp_schedule=wp_schedule,
         team=team,
         reporting_periods=reporting_periods,
+        plan_forecast_layout=plan_forecast_layout,
     )
 
     # Stage 9 — _META (last; documents the state of every other sheet)
@@ -347,13 +362,22 @@ def _build_all_sheets(
         config_layout=ctx.config_layout,
         summary_layout=ctx.summary_layout,
         grade_rates=grade_rates,
+        actuals_hours_layout=actuals_hours_layout,
+        plan_forecast_layout=plan_forecast_layout,
     )
 
-    # Tab order: _META, Config, Capacity, Plan, Actuals, Actuals-Hours, Trends, Summary
+    # Tab order (user-facing) differs from build order.
+    # After build the sheetlist is:
+    #   _META, Config, Capacity, Plan, Trends, Actuals-Hours, Plan-Forecast,
+    #   Actuals, Summary
+    # Target tab order:
+    #   _META, Config, Capacity, Plan, Actuals, Actuals-Hours, Plan-Forecast,
+    #   Trends, Summary
     wb.move_sheet(SHEET_META, offset=0)
-    # Trends stub is created before Actuals/Actuals-Hours, but belongs after
-    # them visually. Bump by 2 to hop past both.
-    wb.move_sheet(SHEET_TRENDS, offset=2)
+    # 1) Push Trends past Actuals-Hours + Plan-Forecast + Actuals (+3).
+    # 2) Hop Actuals leftward two slots so it sits just after Plan (-2).
+    wb.move_sheet(SHEET_TRENDS, offset=3)
+    wb.move_sheet(SHEET_ACTUALS, offset=-2)
 
 
 def _apply_protection(wb):
@@ -483,6 +507,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         read_team_from_config,
         read_capacity_sheet,
         read_actuals_values,
+        read_actuals_hours_sheet,
         read_reporting_periods,
         read_grade_rates,
         read_assignments_from_config,
@@ -570,6 +595,14 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             project_params["months"],
         )
 
+    # Preserve Actuals-Hours blue-input hours (T13).
+    preserved_actuals_hours: dict[str, dict[str, list[float | None]]] | None = None
+    if SHEET_ACTUALS_HOURS in existing_wb.sheetnames:
+        preserved_actuals_hours = read_actuals_hours_sheet(
+            existing_wb[SHEET_ACTUALS_HOURS],
+            project_months=project_params["months"],
+        )
+
     # Calculate current_month from project start and today's date
     from datetime import date
     from dateutil.relativedelta import relativedelta as _rd
@@ -617,6 +650,26 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
                 warnings.append(f"Orphaned Actuals: WP '{wp_id}' removed")
                 del preserved_actuals[wp_id]
 
+    # Prune orphaned hours (person or WP removed from config). Externals
+    # stay keyed by project name — validate against the external list.
+    if preserved_actuals_hours:
+        ext_projects_by_person: dict[str, set[str]] = {}
+        for e in external_commitments:
+            ext_projects_by_person.setdefault(e["person"], set()).add(e["project"])
+        for person in list(preserved_actuals_hours.keys()):
+            if person not in team_names:
+                warnings.append(f"Orphaned Hours: person '{person}' removed from team")
+                del preserved_actuals_hours[person]
+                continue
+            per_wp = preserved_actuals_hours[person]
+            person_exts = ext_projects_by_person.get(person, set())
+            for key in list(per_wp.keys()):
+                if key not in wp_ids and key not in person_exts:
+                    warnings.append(
+                        f"Orphaned Hours: '{key}' removed for {person}"
+                    )
+                    del per_wp[key]
+
     if errors:
         raise ValueError(
             "Rebuild validation failed:\n" + "\n".join(f"  ERROR: {e}" for e in errors)
@@ -640,6 +693,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         wp_schedule=wp_schedule,
         assignments=assignments,
         preserved_actuals=preserved_actuals,
+        preserved_actuals_hours=preserved_actuals_hours,
         rebuild_warnings=warnings if warnings else None,
         reporting_periods=reporting_periods,
         grade_rates=grade_rates,

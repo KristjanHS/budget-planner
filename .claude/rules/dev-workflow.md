@@ -34,3 +34,4 @@ Session-generated audits, analyses, and reports go in `docs/analysis/` (already 
 ## Invariants (extends CLAUDE.md Critical Rules)
 - When updating meta.py, verify text against the actual builder (e.g., count summary columns in summary.py, not the plan)
 - On rebuild, all config data (including person-WP assignments and external commitments) comes from the existing workbook's Config sheet, never from config.py. Builders receive config as function parameters.
+- When applying a code-review fix that references an existing import or helper, grep the target file first — reviewer context can be stale and a confident-sounding "already imported" claim may not be true. Verify, then apply.

@@ -28,7 +28,7 @@ from budget_planner.person_section import plan_person_layout
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    CF_AMBER_FILL, CF_RED_FILL, style_cell, col_letter,
+    CF_AMBER_FILL, CF_RED_FILL, CF_GREY_FILL, style_cell, col_letter,
 )
 
 HOUR_FMT = "#,##0"
@@ -86,7 +86,6 @@ def _write_person_hours_grid(
     work_packages: list[dict],
     external_commitments: list[dict],
     wp_active_map: dict[str, frozenset[int]],
-    person_rows: dict[str, int],
     project_params: dict,
     month_col_start: int,
     month_col_end: int,
@@ -101,7 +100,6 @@ def _write_person_hours_grid(
         (next_row, person_group_dict)
     """
     name = member["name"]
-    roster_row = person_rows[name]
 
     # Pre-compute ordered WP ids and externals so plan_person_layout can
     # assign row numbers up front — mirror the Capacity behavior.
@@ -129,7 +127,11 @@ def _write_person_hours_grid(
     header_row = r
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
     style_cell(ws, r, 1, font=HEADER_FONT, fill=SECTION_FILL)
-    ws.cell(row=r, column=1).value = f"={SHEET_CONFIG}!A{roster_row}"
+    # Literal name (not =Config!A<roster_row>) so the forecast-EUR VLOOKUP
+    # against $A$<header_row> works under data_only reads. The GREEN_XREF
+    # convention still applies (cross-sheet origin) but the header uses
+    # white-on-SECTION_FILL styling for the person banner.
+    ws.cell(row=r, column=1).value = name
     ws.cell(row=r, column=1).font = Font(name="Arial", bold=True, size=10,
                                           color="FFFFFF")
     style_cell(ws, r, 2, fill=SECTION_FILL)
@@ -186,10 +188,14 @@ def _write_person_hours_grid(
                     )
                     comment_added = True
                 # Forecast-EUR leaf — derived from the sibling hour cell.
+                # ROUND to whole EUR at the leaf so Plan-Forecast SUMs match
+                # auditor-computed totals (hours/143 is fractional; without
+                # ROUND, sub-cent drift aggregates to several EUR over a
+                # full project).
                 hour_ref = f"{col_letter(c)}{r}"
                 forecast_formula = (
-                    f'=IF({hour_ref}="","",{hour_ref}/hours_per_fte_month'
-                    f"*VLOOKUP({person_header_cell},roster_lookup,4,FALSE))"
+                    f'=IF({hour_ref}="","",ROUND({hour_ref}/hours_per_fte_month'
+                    f"*VLOOKUP({person_header_cell},roster_lookup,4,FALSE),0))"
                 )
                 style_cell(ws, r, fc, font=BLACK_FORMULA,
                            fmt=EUR_FMT).value = forecast_formula
@@ -389,7 +395,6 @@ def _write_person_hours_grid(
 
 def build_actuals_hours_sheet(
     ws,
-    team_layout,
     *,
     project_params,
     work_packages,
@@ -398,14 +403,12 @@ def build_actuals_hours_sheet(
     external_commitments,
     assignments,
     config_first_wp_row,
-    config_layout,
     preserved: dict[str, dict[str, list[float | None]]] | None = None,
 ) -> dict:
     """Build the Actuals-Hours sheet: per-person monthly hour timelog grid.
 
     Args:
         ws: The Actuals-Hours worksheet to populate.
-        team_layout: Config layout dict (needs person_rows).
         project_params: dict with 'title', 'start', 'months', 'rate'.
         work_packages: list of WP dicts.
         wp_schedule: list of WP schedule entries (for active-month greying).
@@ -414,7 +417,6 @@ def build_actuals_hours_sheet(
         assignments: list of person-WP assignment dicts (drives which WP
             rows appear per person — same intersection as Capacity).
         config_first_wp_row: First WP row in Config WP table.
-        config_layout: Config layout dict (reserved for future cross-refs).
         preserved: Optional rebuild-preservation payload
             ``{person_name: {wp_id_or_project: [hours_per_month, ...]}}``.
             When provided, blue-input hour cells are pre-filled from this
@@ -442,8 +444,6 @@ def build_actuals_hours_sheet(
     outline_pr = ws.sheet_properties.outlinePr
     if outline_pr is not None:
         outline_pr.summaryRight = True
-
-    person_rows = team_layout["person_rows"]
 
     # ── Forecast band top label row (row 1) ──
     # Merged "FORECAST EUR (from hours)" header sits above the year labels
@@ -509,7 +509,6 @@ def build_actuals_hours_sheet(
             work_packages=work_packages,
             external_commitments=external_commitments,
             wp_active_map=wp_active_map,
-            person_rows=person_rows,
             project_params=project_params,
             month_col_start=month_col_start,
             month_col_end=month_col_end,
@@ -519,6 +518,30 @@ def build_actuals_hours_sheet(
             preserved_for_person=preserved_for_person,
         )
         person_groups[name] = group
+
+    # ── Reconciliation visual: grey out forecast-EUR leaf cells whose
+    # month index is <= `eur_actuals_through_month`. Those months have
+    # been closed by finance, so the forecast cell is reference-only —
+    # the booked Actual EUR (on the Actuals sheet) is authoritative.
+    # Mirror cell on the Actuals sheet gets the opposite treatment
+    # (grey when month > threshold).
+    if person_groups:
+        last_row_used = max(
+            grp["eu_total_row"] for grp in person_groups.values()
+        )
+        fc_start_l = col_letter(forecast_col_start)
+        fc_end_l = col_letter(forecast_col_end)
+        forecast_band_range = (
+            f"{fc_start_l}{first_person_header_row}:"
+            f"{fc_end_l}{last_row_used}"
+        )
+        ws.conditional_formatting.add(forecast_band_range, FormulaRule(
+            formula=[
+                f"COLUMN({fc_start_l}{first_person_header_row})"
+                f"-COLUMN(${fc_start_l}$1)+1<=eur_actuals_through_month"
+            ],
+            fill=CF_GREY_FILL,
+        ))
 
     ws.freeze_panes = f"C{first_person_header_row}"
     ws.column_dimensions["B"].width = 25

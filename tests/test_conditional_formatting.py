@@ -49,13 +49,30 @@ class TestCapacityConditionalFormatting:
     amber/red REMAINING) + 2*years per person (EU ceiling red/amber)."""
 
     def test_capacity_rule_count(self, workbook):
-        """Yellow per WP row + 4 per person + 2*years per person (EU ceiling)."""
+        """Planned-side CF + T9 Actual-view band CF.
+
+        Planned side:
+          - yellow per WP row (variance < 0)
+          - 4 per person (TOTAL amber+red, REMAINING amber+red)
+          - 2 × years per person (EU ceiling red+amber on planned EU TOTAL)
+        T9 actual-view band (right-side grouped):
+          - 1 variance-red rule per (WP row + external row) per person
+          - 2 per person (utilisation amber+red on Actual TOTAL row)
+          - 1 × years per person (red on Actual EU TOTAL annual ceiling)
+        """
+        from budget_planner.config import EXTERNAL_COMMITMENTS
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
         total_wp_rows = len(DEMO_CAPACITY_ASSIGNMENTS)
+        total_ext_rows = len(EXTERNAL_COMMITMENTS)
         num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
-        # yellow per WP + 4 per person (TOTAL/REMAINING) + 2*years per person (EU ceiling)
-        expected = total_wp_rows + (4 + 2 * num_years) * len(TEAM)
+        planned = total_wp_rows + (4 + 2 * num_years) * len(TEAM)
+        actual_band = (
+            total_wp_rows + total_ext_rows              # variance reds
+            + 2 * len(TEAM)                              # utilisation amber+red
+            + num_years * len(TEAM)                      # EU annual ceiling red
+        )
+        expected = planned + actual_band
         assert len(rules) == expected, (
             f"Expected {expected} CF rules on Capacity, got {len(rules)}"
         )
@@ -152,11 +169,13 @@ class TestSummaryConditionalFormatting:
         ws = workbook["Summary"]
         rules = _collect_cf_rules(ws)
         num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
-        # Match by: RED_FILL + <0 formula + range sqref (contains ':')
+        # Match by: RED_FILL + <0 formula + range sqref (contains ':').
+        # Exclude the Task 10 Forecast EUR rule which uses "<0.8*...".
         variance_red_rules = [
             r for r in rules
             if r[2] is not None and r[2].endswith("FFC7CE")
             and any("<0" in f for f in r[1])
+            and not any("0.8*" in f for f in r[1])
             and ":" in r[0]
         ]
         # Year variance + project total variance = num_years + 1 total range-based red rules
@@ -175,11 +194,13 @@ class TestSummaryConditionalFormatting:
         ws = workbook["Summary"]
         rules = _collect_cf_rules(ws)
         num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
-        # Match by: RED_FILL + <0 formula + range sqref (contains ':')
+        # Match by: RED_FILL + <0 formula + range sqref (contains ':').
+        # Exclude the Task 10 Forecast EUR rule which uses "<0.8*...".
         variance_red_rules = [
             r for r in rules
             if r[2] is not None and r[2].endswith("FFC7CE")
             and any("<0" in f for f in r[1])
+            and not any("0.8*" in f for f in r[1])
             and ":" in r[0]
         ]
         # Budget Overview: num_years + 1 (year variance + project total)
@@ -190,6 +211,27 @@ class TestSummaryConditionalFormatting:
         assert len(variance_red_rules) == expected, (
             f"Expected {expected} red variance range rules "
             f"(year + total + RP + RP total), got {len(variance_red_rules)}"
+        )
+
+    def test_summary_forecast_eur_red(self, workbook):
+        """Task 10: Forecast EUR (per year + project total) has red CF when
+        Forecast EUR < 0.8 * Plan EUR. One rule per calendar year + 1 project
+        total = num_years + 1 rules.
+        """
+        ws = workbook["Summary"]
+        rules = _collect_cf_rules(ws)
+        num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
+        # Match by: RED_FILL + "0.8*" + range sqref (contains ':')
+        fcst_red_rules = [
+            r for r in rules
+            if r[2] is not None and r[2].endswith("FFC7CE")
+            and any("0.8*" in f for f in r[1])
+            and ":" in r[0]
+        ]
+        expected = num_years + 1
+        assert len(fcst_red_rules) == expected, (
+            f"Expected {expected} red Forecast EUR CF rules "
+            f"(one per year + project total), got {len(fcst_red_rules)}"
         )
 
     def test_summary_remaining_amber(self, workbook):
@@ -263,9 +305,12 @@ class TestActualsConditionalFormatting:
         """Actuals variance column has red fill for negative values."""
         ws = workbook["Actuals"]
         rules = _collect_cf_rules(ws)
-        # Actuals has 5 CF rules: variance red, %ceiling amber/red, breach amber/red
-        assert len(rules) == 5, f"Expected 5 CF rules on Actuals, got {len(rules)}"
-        # First rule is variance red
+        # Actual-EUR block: variance red, %ceiling amber/red, breach amber/red = 5
+        # Forecast block (Task 6): variance red, %ceiling amber/red, breach amber/red = 5
+        # Reconciliation grey-fill (Task 8): monthly Actual EUR future-grey = 1
+        # Total: 11
+        assert len(rules) == 11, f"Expected 11 CF rules on Actuals, got {len(rules)}"
+        # First rule is variance red on the Actual-EUR block
         sqref, formulas, fg_color = rules[0]
         assert len(formulas) == 1
         assert "<0" in formulas[0], (

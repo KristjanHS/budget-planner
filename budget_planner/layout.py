@@ -5,6 +5,8 @@ Validation-column offsets are relative to the last month column so that adding
 or removing months never requires touching builder arithmetic.
 """
 
+from typing import TypedDict
+
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from dateutil.relativedelta import relativedelta
@@ -14,6 +16,20 @@ from budget_planner.styles import (
     HEADER_FONT, LIGHT_BLUE_FILL, CENTER,
 )
 
+
+# Config!B-column parameter rows (Section 1 of Config sheet). Keys mirror the
+# literal label strings written into col A — using a TypedDict here surfaces
+# typos in consumer lookups at pyright time instead of at runtime.
+ConfigParamRows = TypedDict("ConfigParamRows", {
+    "Project Title": int,
+    "Project Start": int,
+    "Project Months": int,
+    "FTE Rate (EUR)": int,
+    "EU Annual Ceiling (PM/FTE/year)": int,
+    "Hours per FTE Month": int,
+    "EUR Actuals Through Month": int,
+})
+
 # ── Sheet name constants ──
 SHEET_META = "_META"
 SHEET_CONFIG = "Config"
@@ -21,6 +37,7 @@ SHEET_PLAN = "Plan"
 SHEET_CAPACITY = "Capacity"
 SHEET_ACTUALS = "Actuals"
 SHEET_ACTUALS_HOURS = "Actuals-Hours"
+SHEET_PLAN_FORECAST = "Plan-Forecast"
 SHEET_SUMMARY = "Summary"
 SHEET_TRENDS = "Trends"
 
@@ -115,6 +132,7 @@ TREND_OVER_THRESHOLD = 0.15
 TREND_WATCH_THRESHOLD = 0.05   # same as OK_BAND, used for WATCH vs OK boundary
 TREND_SLOW_THRESHOLD = -0.10
 CAPACITY_AMBER_LOAD = 0.80
+CAPACITY_VARIANCE_FTE_RED = 0.2  # |Planned FTE - Actual FTE| > this → red
 ACTUALS_AMBER_PCT_CEIL = 0.85
 ACTUALS_AMBER_BREACH_MONTHS = 12
 ACTUALS_RED_BREACH_MONTHS = 6
@@ -147,6 +165,33 @@ def val_columns(project_months: int) -> dict[str, int]:
         "cum": end + VAL_OFFSET_CUM,
         "pct_ceil": end + VAL_OFFSET_PCT_CEIL,
         "breach": end + VAL_OFFSET_BREACH,
+    }
+
+
+# ── Forecast monitoring column offsets (Actuals sheet) ──
+# Placed after the Actual-EUR validation block (``val_columns``) with a
+# 1-column gutter so the groupable forecast band is visually separable.
+FORECAST_GUTTER = 1
+FORECAST_OFFSET_CUM = FORECAST_GUTTER + 1
+FORECAST_OFFSET_VAR = FORECAST_GUTTER + 2
+FORECAST_OFFSET_PCT_CEIL = FORECAST_GUTTER + 3
+FORECAST_OFFSET_BREACH = FORECAST_GUTTER + 4
+
+
+def forecast_val_columns(project_months: int) -> dict[str, int]:
+    """Return dict of forecast-monitoring column numbers on Actuals.
+
+    Positioned after the Actual-EUR ``val_columns`` breach column, with a
+    1-column gutter. The four columns mirror the Actual-EUR shape:
+    ``cum_forecast``, ``var_forecast``, ``pct_ceil_forecast``,
+    ``breach_forecast``.
+    """
+    breach = val_columns(project_months)["breach"]
+    return {
+        "cum_forecast": breach + FORECAST_OFFSET_CUM,
+        "var_forecast": breach + FORECAST_OFFSET_VAR,
+        "pct_ceil_forecast": breach + FORECAST_OFFSET_PCT_CEIL,
+        "breach_forecast": breach + FORECAST_OFFSET_BREACH,
     }
 
 

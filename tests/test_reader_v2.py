@@ -286,55 +286,12 @@ def _set_cell(ws, row: int, col: int, value) -> None:
 
 
 class TestFormulaRateRoundTrip:
-    """reader.py preserves formula strings for WP rates and FTE Rate."""
+    """reader.py preserves formula strings for WP rates.
 
-    def test_formula_rate_roundtrip_fte_rate(self, tmp_path):
-        """Setting FTE Rate cell to a formula string survives read."""
-        path = str(tmp_path / "fte_rate_formula.xlsx")
-        init_workbook(output_path=path)
-
-        # Overwrite FTE Rate cell (col B on the row labelled "FTE Rate (EUR)")
-        # with a simple formula and re-read.
-        wb = load_workbook(path)
-        cfg = wb["Config"]
-        rate_row = _find_row_by_label(cfg, "FTE Rate")
-        _set_cell(cfg, rate_row, 2, "=AVERAGE(B9:B11)")
-        wb.save(path)
-        wb.close()
-
-        wb = load_workbook(path)
-        project_params, _, _ = read_config_sheet(wb["Config"])
-        wb.close()
-
-        assert project_params["rate"] == "=AVERAGE(B9:B11)", (
-            f"Formula lost on read; got {project_params['rate']!r}"
-        )
-
-    def test_formula_fte_rate_survives_full_rebuild(self, tmp_path):
-        """A user-authored FTE Rate formula must survive a full rebuild —
-        the Config builder must not clobber it with the default SUMPRODUCT."""
-        path = str(tmp_path / "fte_rate_rebuild.xlsx")
-        init_workbook(output_path=path)
-
-        # User replaces the FTE Rate cell with a custom formula
-        wb = load_workbook(path)
-        cfg = wb["Config"]
-        rate_row = _find_row_by_label(cfg, "FTE Rate")
-        custom_formula = "=AVERAGE(B9:B11)"
-        _set_cell(cfg, rate_row, 2, custom_formula)
-        wb.save(path)
-        wb.close()
-
-        # Rebuild the workbook — the formula must be preserved end-to-end
-        from budget_planner.workbook import rebuild_workbook
-        rebuild_workbook(input_path=path)
-
-        wb = load_workbook(path)
-        rebuilt_val = wb["Config"].cell(rate_row, 2).value
-        wb.close()
-        assert rebuilt_val == custom_formula, (
-            f"Rebuild clobbered user formula; got {rebuilt_val!r}"
-        )
+    FTE Rate (B4) is a dashboard readout — the builder always regenerates
+    it from the live grade/roster layout, so custom B4 formulas are
+    intentionally not preserved. See config_sheet.build_config_sheet.
+    """
 
     def test_formula_rate_roundtrip_wp_rate(self, tmp_path):
         """Formula in per-WP Rate cell survives read AND is rewritten on save."""
@@ -387,44 +344,6 @@ class TestFormulaRateRoundTrip:
         rebuilt_rate_val = out_ws.cell(rebuilt_first_wp, COL_WP_RATE).value
         assert rebuilt_rate_val == formula, (
             f"Builder lost formula on rewrite; got {rebuilt_rate_val!r}"
-        )
-
-    def test_formula_fte_rate_roundtrip(self, tmp_path):
-        """End-to-end: FTE Rate formula survives init → edit → rebuild.
-
-        Also asserts the reader surfaces the raw formula via ``fte_rate_raw``
-        (the explicit round-trip contract) alongside the polymorphic ``rate``.
-        """
-        path = str(tmp_path / "fte_rate_roundtrip.xlsx")
-        init_workbook(output_path=path)
-
-        # User overwrites FTE Rate with a custom formula
-        wb = load_workbook(path)
-        cfg = wb["Config"]
-        rate_row = _find_row_by_label(cfg, "FTE Rate")
-        custom_formula = "=AVERAGE(C9:C11)"
-        _set_cell(cfg, rate_row, 2, custom_formula)
-        wb.save(path)
-        wb.close()
-
-        # Reader must expose the formula via fte_rate_raw
-        wb = load_workbook(path)
-        project_params, _, _ = read_config_sheet(wb["Config"])
-        wb.close()
-        assert project_params.get("fte_rate_raw") == custom_formula, (
-            f"fte_rate_raw should mirror the literal cell; "
-            f"got {project_params.get('fte_rate_raw')!r}"
-        )
-
-        # Full rebuild must NOT clobber the user's formula
-        from budget_planner.workbook import rebuild_workbook
-        rebuild_workbook(input_path=path)
-
-        wb = load_workbook(path)
-        rebuilt_val = wb["Config"].cell(rate_row, 2).value
-        wb.close()
-        assert rebuilt_val == custom_formula, (
-            f"Rebuild clobbered user FTE Rate formula; got {rebuilt_val!r}"
         )
 
     def test_formula_wp_rate_roundtrip(self, tmp_path):

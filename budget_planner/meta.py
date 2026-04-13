@@ -49,11 +49,10 @@ def build_meta_sheet(ws, layout, *, project_params, work_packages,
         Mapping of grade name to EUR/PM rate.
     actuals_hours_layout : dict or None
         Layout dict from build_actuals_hours_sheet(). When provided, a
-        dedicated Actuals-Hours section is rendered. Partial doc in Stage 1
-        (hours-timelog v1); full rewrite lands in Task 15.
+        dedicated Actuals-Hours section is rendered.
     plan_forecast_layout : dict or None
         Layout dict from build_plan_forecast_sheet(). When provided, a
-        dedicated Plan-Forecast section is rendered. Partial doc in Stage 1.
+        dedicated Plan-Forecast section is rendered.
     rebuild_warnings : list or None
         Optional list of warning strings to append to meta text.
     """

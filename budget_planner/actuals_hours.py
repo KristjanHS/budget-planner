@@ -416,7 +416,7 @@ def build_actuals_hours_sheet(
         preserved: Optional rebuild-preservation payload
             ``{person_name: {wp_id_or_project: [hours_per_month, ...]}}``.
             When provided, blue-input hour cells are pre-filled from this
-            map (None entries are skipped). Task 13 wires the reader.
+            map (None entries are skipped).
 
     Returns:
         actuals_hours_layout dict: ``{year_header_row, month_header_row,

@@ -306,7 +306,6 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
     COLS_PER_RP = 4  # Plan FTE, Plan EUR, Act EUR, Var EUR
 
     RP_TOTAL_GROUP_START = RP_GROUP_START + num_rps * COLS_PER_RP
-    RP_COLS_PER_YEAR = 4
 
     # RP headers row
     style_cell(summary, r, 1, "", fill=LIGHT_BLUE_FILL)
@@ -323,11 +322,11 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
             style_cell(summary, r, c2, fill=LIGHT_BLUE_FILL)
 
     summary.merge_cells(start_row=r, start_column=RP_TOTAL_GROUP_START,
-                        end_row=r, end_column=RP_TOTAL_GROUP_START + RP_COLS_PER_YEAR - 1)
+                        end_row=r, end_column=RP_TOTAL_GROUP_START + COLS_PER_RP - 1)
     style_cell(summary, r, RP_TOTAL_GROUP_START,
                font=Font(name="Arial", bold=True, size=10, color="FFFFFF"),
                fill=SECTION_FILL, alignment=CENTER).value = "PROJECT TOTAL"
-    for c2 in range(RP_TOTAL_GROUP_START + 1, RP_TOTAL_GROUP_START + RP_COLS_PER_YEAR):
+    for c2 in range(RP_TOTAL_GROUP_START + 1, RP_TOTAL_GROUP_START + COLS_PER_RP):
         style_cell(summary, r, c2, fill=SECTION_FILL)
     r += 1
 
@@ -433,7 +432,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
                        fill=LIGHT_GREEN_FILL, fmt=fmt).value = (
                 f"=SUM({col_range})"
             )
-    for si in range(RP_COLS_PER_YEAR):
+    for si in range(COLS_PER_RP):
         c = RP_TOTAL_GROUP_START + si
         fmt = "0.00" if si == 0 else "\u20ac#,##0"
         col_range = (f"{col_letter(c)}{RP_FIRST_WP_ROW}:"

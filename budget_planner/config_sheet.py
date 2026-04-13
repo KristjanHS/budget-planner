@@ -13,7 +13,7 @@ from budget_planner.layout import (
     COL_WP_FTE, COL_WP_RATE, COL_WP_CEILING,
     COL_WP_ASSIGNED_PM, COL_WP_VARIANCE, WP_BUDGET_LAST_COL,
     COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE, SCHED_LAST_COL,
-    COL_ROSTER_FTE, COL_ROSTER_GRADE, ROSTER_LAST_COL,
+    COL_ROSTER_FTE, COL_ROSTER_GRADE, COL_ROSTER_RATE, ROSTER_LAST_COL,
     COL_GRADE_RATE, GRADE_LAST_COL,
     COL_RP_START, COL_RP_END, RP_LAST_COL,
     COL_ASSIGN_PERSON, COL_ASSIGN_WP, COL_ASSIGN_FTE,
@@ -263,12 +263,13 @@ def _write_roster_section(ws, start_row, team):
     """
     r = start_row
 
-    # Section header — merged A:C
+    # Section header — merged A:D
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=ROSTER_LAST_COL)
     style_cell(ws, r, 1, value=SECTION_HEADER_LABELS["team_roster"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
     style_cell(ws, r, 2, fill=SECTION_FILL)
     style_cell(ws, r, COL_ROSTER_GRADE, fill=SECTION_FILL)
+    style_cell(ws, r, COL_ROSTER_RATE, fill=SECTION_FILL)
     r += 1
 
     # Column headers
@@ -278,6 +279,8 @@ def _write_roster_section(ws, start_row, team):
     style_cell(ws, r, COL_ROSTER_FTE, "Max FTE", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
     style_cell(ws, r, COL_ROSTER_GRADE, "Grade", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    style_cell(ws, r, COL_ROSTER_RATE, "Rate (EUR/PM)", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
     r += 1
 
@@ -290,6 +293,11 @@ def _write_roster_section(ws, start_row, team):
                    fmt="0.00")
         style_cell(ws, r, COL_ROSTER_GRADE, member.get("grade", "Mid"),
                    font=BLUE_INPUT)
+        # Rate (EUR/PM) — black formula derived from Grade via tbl_GradeRates.
+        grade_cl = get_column_letter(COL_ROSTER_GRADE)
+        style_cell(ws, r, COL_ROSTER_RATE,
+                   value=f"=VLOOKUP({grade_cl}{r},tbl_GradeRates,2,FALSE)",
+                   font=BLACK_FORMULA, fmt="€#,##0")
         person_rows[member["name"]] = r
         r += 1
     roster_last_row = r - 1
@@ -783,10 +791,12 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         attr_text=f"{SHEET_CONFIG}!$C${e_first}:$C${e_last}",
     ))
 
-    # Roster lookup (2-column: person name + max FTE) for VLOOKUP in Balance formula
+    # Roster lookup (4-column: name, max FTE, grade, rate) — col 2 = Max FTE
+    # used by the Assignments Balance formula; col 4 = Rate EUR/PM used by the
+    # Actuals-Hours forecast-EUR leaves.
     wb.defined_names.add(DefinedName(
         "roster_lookup",
-        attr_text=f"{SHEET_CONFIG}!$A${roster_layout['roster_first_row']}:$B${roster_layout['roster_last_row']}",
+        attr_text=f"{SHEET_CONFIG}!$A${roster_layout['roster_first_row']}:$D${roster_layout['roster_last_row']}",
     ))
 
     # Project months named range (single cell) for Balance formula

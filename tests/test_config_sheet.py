@@ -242,6 +242,44 @@ def test_roster_grade_column():
         assert ws.cell(row, 3).value == member["grade"]
 
 
+def test_roster_has_grade_and_rate_columns():
+    """Roster has Grade (col C, blue input) and Rate (col D, black VLOOKUP)."""
+    _wb, ws, layout = _build_with_grades()
+    header_row = layout["roster_header_row"]
+    assert ws.cell(header_row, 3).value == "Grade"
+    assert ws.cell(header_row, 4).value == "Rate (EUR/PM)"
+    first = layout["roster_first_row"]
+    # Grade is blue user input.
+    grade_font = str(ws.cell(first, 3).font.color.rgb).upper()
+    assert grade_font.endswith("0000FF"), (
+        f"Grade should be blue input, got {grade_font}"
+    )
+    # Rate is a black formula doing VLOOKUP against tbl_GradeRates.
+    rate_val = ws.cell(first, 4).value
+    assert isinstance(rate_val, str) and rate_val.startswith("="), (
+        f"Expected Rate formula, got {rate_val!r}"
+    )
+    assert "VLOOKUP" in rate_val
+    assert "tbl_GradeRates" in rate_val
+    rate_font = str(ws.cell(first, 4).font.color.rgb).upper()
+    assert rate_font.endswith("000000"), (
+        f"Rate should be black formula, got {rate_font}"
+    )
+    # Rate number format is EUR.
+    assert "€" in ws.cell(first, 4).number_format
+
+
+def test_roster_lookup_spans_cols_a_to_d():
+    """roster_lookup named range covers A:D (name, max_fte, grade, rate)."""
+    wb, _ws, layout = _build_with_grades()
+    target = wb.defined_names["roster_lookup"].attr_text
+    expected = (
+        f"Config!$A${layout['roster_first_row']}"
+        f":$D${layout['roster_last_row']}"
+    )
+    assert target == expected, f"Expected {expected!r}, got {target!r}"
+
+
 def test_fte_rate_is_formula():
     """FTE Rate cell contains a SUMPRODUCT weighted-average formula, not a static value."""
     _wb, ws, layout = _build_with_grades()

@@ -32,6 +32,44 @@ from budget_planner.styles import (
 )
 
 HOUR_FMT = "#,##0"
+EUR_FMT = "€#,##0"
+FORECAST_BAND_LABEL = "FORECAST EUR (from hours)"
+
+
+def _mirror_year_month_headers_to_band(
+    ws, year_header_row: int, month_header_row: int,
+    month_col_start: int, months: int, project_start,
+    forecast_col_start: int,
+) -> None:
+    """Copy year + month header labels onto the forecast-EUR band.
+
+    Mirrors the hours-side calendar-year labels (merged across each year's
+    column span) and the per-month ``M<n>-<MmmYY>`` labels.
+    """
+    from openpyxl.styles import Font as _Font
+    small = _Font(name="Arial", size=8)
+    # Year row — merge across each calendar-year span.
+    for group_start, span in _calendar_year_groups(project_start, months):
+        yr_start_col = forecast_col_start + group_start
+        yr_end_col = yr_start_col + span - 1
+        # Pull label from the hours-side cell (already written).
+        src_year_col = month_col_start + group_start
+        label = ws.cell(row=year_header_row, column=src_year_col).value
+        if span > 1:
+            ws.merge_cells(start_row=year_header_row, start_column=yr_start_col,
+                           end_row=year_header_row, end_column=yr_end_col)
+        style_cell(ws, year_header_row, yr_start_col, value=label,
+                   font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
+        for c2 in range(yr_start_col + 1, yr_end_col + 1):
+            style_cell(ws, year_header_row, c2, fill=LIGHT_BLUE_FILL)
+    # Month row — one label per column.
+    for mi in range(months):
+        src_month = ws.cell(row=month_header_row, column=month_col_start + mi)
+        style_cell(
+            ws, month_header_row, forecast_col_start + mi,
+            value=src_month.value,
+            font=small, fill=LIGHT_BLUE_FILL,
+        )
 
 
 def _wp_config_row(wp_id, work_packages, config_first_wp_row):
@@ -53,6 +91,7 @@ def _write_person_hours_grid(
     month_col_start: int,
     month_col_end: int,
     val_col_sum: int,
+    forecast_col_start: int,
     config_first_wp_row: int,
     preserved_for_person: dict[str, list[float | None]] | None,
 ) -> tuple[int, dict]:
@@ -94,7 +133,13 @@ def _write_person_hours_grid(
     ws.cell(row=r, column=1).font = Font(name="Arial", bold=True, size=10,
                                           color="FFFFFF")
     style_cell(ws, r, 2, fill=SECTION_FILL)
+    # Also style forecast-band cells on header row so banding aligns.
+    for mi in range(project_params["months"]):
+        style_cell(ws, r, forecast_col_start + mi, fill=SECTION_FILL)
     r += 1
+
+    # Person-name header cell used as the lookup key for rate VLOOKUP.
+    person_header_cell = f"$A${header_row}"
 
     data_row_start = r
     wp_rows: dict[str, int] = {}
@@ -121,6 +166,7 @@ def _write_person_hours_grid(
         comment_added = False
         for mi in range(project_params["months"]):
             c = month_col_start + mi
+            fc = forecast_col_start + mi
             month_num = mi + 1
 
             if month_num in wp_active:
@@ -139,9 +185,20 @@ def _write_person_hours_grid(
                         "Programme Budget Tool",
                     )
                     comment_added = True
+                # Forecast-EUR leaf — derived from the sibling hour cell.
+                hour_ref = f"{col_letter(c)}{r}"
+                forecast_formula = (
+                    f'=IF({hour_ref}="","",{hour_ref}/hours_per_fte_month'
+                    f"*VLOOKUP({person_header_cell},roster_lookup,4,FALSE))"
+                )
+                style_cell(ws, r, fc, font=BLACK_FORMULA,
+                           fmt=EUR_FMT).value = forecast_formula
             else:
                 style_cell(ws, r, c, "", font=BLUE_INPUT, fill=GREY_FILL,
                            fmt=HOUR_FMT)
+                # Inactive months — forecast-EUR cell is empty + grey too.
+                style_cell(ws, r, fc, "", font=BLACK_FORMULA, fill=GREY_FILL,
+                           fmt=EUR_FMT)
 
         # Validation: Sum column only (no Budget/Variance — hours log is a
         # record, not a budget-vs-actual view; design §1).
@@ -170,6 +227,7 @@ def _write_person_hours_grid(
 
         for mi in range(project_params["months"]):
             c = month_col_start + mi
+            fc = forecast_col_start + mi
             month_num = mi + 1
 
             if ext_start <= month_num <= ext_end:
@@ -182,6 +240,12 @@ def _write_person_hours_grid(
             else:
                 style_cell(ws, r, c, "", font=BLUE_INPUT, fill=GREY_FILL,
                            fmt=HOUR_FMT)
+            # External rows never contribute to programme EUR forecast — they are
+            # non-programme projects (even if EU-flagged for the annual ceiling).
+            # Leave the forecast-band cell empty + grey so the band stays
+            # visually aligned but doesn't imply programme budget burn.
+            style_cell(ws, r, fc, "", font=BLACK_FORMULA, fill=GREY_FILL,
+                       fmt=EUR_FMT)
 
         sum_range = (f"{col_letter(month_col_start)}{r}:"
                      f"{col_letter(month_col_end)}{r}")
@@ -216,6 +280,17 @@ def _write_person_hours_grid(
                    fmt=HOUR_FMT).value = (
             f"=SUM({cl}{data_row_start}:{cl}{data_row_end})"
         )
+        # Forecast-band TOTAL: sum WP-row forecast cells (externals are
+        # empty in this band — they don't consume programme budget).
+        fc = forecast_col_start + mi
+        fcl = col_letter(fc)
+        if wp_rows:
+            wp_refs = ",".join(f"{fcl}{row}" for row in wp_rows.values())
+            forecast_total = f"=SUM({wp_refs})"
+        else:
+            forecast_total = "=0"
+        style_cell(ws, r, fc, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
+                   fmt=EUR_FMT).value = forecast_total
     scl = col_letter(val_col_sum)
     style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt=HOUR_FMT).value = (
@@ -253,6 +328,17 @@ def _write_person_hours_grid(
             formula = "=0"
         style_cell(ws, r, c, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
                    fmt=HOUR_FMT).value = formula
+        # Forecast-band EU TOTAL: only programme WP rows contribute EUR (EU-flagged
+        # externals are non-programme projects — empty in the forecast band).
+        fc = forecast_col_start + mi
+        fcl = col_letter(fc)
+        if wp_rows:
+            wp_refs = ",".join(f"{fcl}{row}" for row in wp_rows.values())
+            eu_forecast = f"=SUM({wp_refs})"
+        else:
+            eu_forecast = "=0"
+        style_cell(ws, r, fc, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
+                   fmt=EUR_FMT).value = eu_forecast
 
     # Sum column for EU TOTAL
     if eu_row_refs:
@@ -342,21 +428,54 @@ def build_actuals_hours_sheet(
     if assignments is None:
         assignments = []
 
+    months = project_params["months"]
     month_col_start = MONTH_COL_START
-    month_col_end = _month_col_end(project_params["months"])
-    _vcols = val_columns(project_params["months"])
+    month_col_end = _month_col_end(months)
+    _vcols = val_columns(months)
     val_col_sum = _vcols["sum"]
+    # Forecast-EUR band: one gutter col after Sum, then ``months`` cols.
+    forecast_col_start = val_col_sum + 2
+    forecast_col_end = forecast_col_start + months - 1
 
     ws.sheet_properties.tabColor = "C00000"  # distinct red — hours timelog
+    # Place the outline collapse button to the right of the grouped columns.
+    outline_pr = ws.sheet_properties.outlinePr
+    if outline_pr is not None:
+        outline_pr.summaryRight = True
 
     person_rows = team_layout["person_rows"]
 
+    # ── Forecast band top label row (row 1) ──
+    # Merged "FORECAST EUR (from hours)" header sits above the year labels
+    # so the forecast band is visually distinct from the hour inputs.
+    band_label_row = 1
+    ws.merge_cells(start_row=band_label_row, start_column=forecast_col_start,
+                   end_row=band_label_row, end_column=forecast_col_end)
+    style_cell(ws, band_label_row, forecast_col_start,
+               value=FORECAST_BAND_LABEL,
+               font=HEADER_FONT, fill=LIGHT_GREEN_FILL, alignment=None)
+
     # ── Header rows (Sum only — no Budget/Variance) ──
-    r = 1
+    r = band_label_row + 1
     year_header_row, month_header_row, r = build_year_month_headers(
         ws, r, project_params, month_col_start,
         val_headers=[(val_col_sum, "Sum")],
     )
+
+    # Mirror year + month headers across the forecast band so auditors see
+    # the same month labels there.
+    _mirror_year_month_headers_to_band(
+        ws, year_header_row, month_header_row,
+        month_col_start, months, project_params["start"],
+        forecast_col_start,
+    )
+
+    # Mark each forecast-band month column as outline group level 1 so the
+    # user can collapse the band via Excel's outline button. Visible by
+    # default per the "prefer outline groups over hidden" rule.
+    for mi in range(months):
+        cl = col_letter(forecast_col_start + mi)
+        ws.column_dimensions[cl].outline_level = 1
 
     ws.cell(row=year_header_row, column=val_col_sum).comment = Comment(
         "Row-wide SUM of hours logged this row. Per-person TOTAL and EU "
@@ -395,6 +514,7 @@ def build_actuals_hours_sheet(
             month_col_start=month_col_start,
             month_col_end=month_col_end,
             val_col_sum=val_col_sum,
+            forecast_col_start=forecast_col_start,
             config_first_wp_row=config_first_wp_row,
             preserved_for_person=preserved_for_person,
         )
@@ -406,5 +526,8 @@ def build_actuals_hours_sheet(
     return {
         "year_header_row": year_header_row,
         "month_header_row": month_header_row,
+        "band_label_row": band_label_row,
+        "forecast_col_start": forecast_col_start,
+        "forecast_col_end": forecast_col_end,
         "person_groups": person_groups,
     }

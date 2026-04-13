@@ -62,7 +62,8 @@ SCHED_LAST_COL = 4
 # Team Roster section (Config sheet)
 COL_ROSTER_FTE = 2
 COL_ROSTER_GRADE = 3
-ROSTER_LAST_COL = 3
+COL_ROSTER_RATE = 4
+ROSTER_LAST_COL = 4
 
 # Reporting Periods section (Config sheet)
 COL_RP_START = 2

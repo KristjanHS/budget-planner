@@ -12,6 +12,10 @@ from budget_planner.layout import MONTH_COL_START, val_columns
 from budget_planner.styles import GREY_FILL, col_letter
 
 
+FORECAST_COL_START = val_columns(PROJECT_MONTHS)["sum"] + 2
+FORECAST_COL_END = FORECAST_COL_START + PROJECT_MONTHS - 1
+
+
 @pytest.fixture(scope="module")
 def wb_path(tmp_path_factory):
     out = tmp_path_factory.mktemp("ah") / "wb.xlsx"
@@ -260,15 +264,115 @@ def test_actuals_hours_eu_ceiling_cf_per_year(hrs):
 
 # ── Sum column only (no Budget/Variance) ──
 
+# ── Forecast-EUR band (Task 4) ──
+
+def test_forecast_eur_band_columns_are_outline_grouped(hrs):
+    """Each forecast-EUR month column is outline_level 1 so the band can
+    be collapsed via Excel's outline toggle."""
+    for col in range(FORECAST_COL_START, FORECAST_COL_END + 1):
+        cl = col_letter(col)
+        level = hrs.column_dimensions[cl].outline_level
+        assert level == 1, (
+            f"Col {cl} expected outline_level=1, got {level}"
+        )
+    # Outline summary button on the right.
+    assert hrs.sheet_properties.outlinePr.summaryRight is True
+
+
+def test_forecast_eur_header_exists(hrs):
+    """A merged band-label cell contains 'FORECAST EUR' above the forecast
+    month columns."""
+    # The band label sits at row 1 starting at FORECAST_COL_START.
+    label = hrs.cell(1, FORECAST_COL_START).value
+    assert isinstance(label, str) and "FORECAST EUR" in label.upper(), (
+        f"Expected FORECAST EUR band label, got {label!r}"
+    )
+    # Merged across the band.
+    top_left = f"{col_letter(FORECAST_COL_START)}1"
+    bottom_right = f"{col_letter(FORECAST_COL_END)}1"
+    merged = [str(mr) for mr in hrs.merged_cells.ranges]
+    expected = f"{top_left}:{bottom_right}"
+    assert expected in merged, (
+        f"Expected merge {expected} in {merged}"
+    )
+
+
+def test_forecast_eur_leaf_formula_structure(hrs):
+    """Pick one active WP-person-month cell and assert its forecast-EUR
+    leaf formula has the IF-guarded VLOOKUP/hours_per_fte_month shape."""
+    # Alice WP1 M1 is active — hour cell is empty input; leaf formula
+    # references it and the roster_lookup rate via hours_per_fte_month.
+    alice_header = _find_person_header_row(hrs, "Alice")
+    wp1_row = alice_header + 1
+    leaf = hrs.cell(wp1_row, FORECAST_COL_START).value
+    assert isinstance(leaf, str), f"Expected str formula, got {leaf!r}"
+    assert leaf.startswith("=IF("), f"Formula must start with =IF(: {leaf!r}"
+    assert "hours_per_fte_month" in leaf, f"Missing hours_per_fte_month: {leaf!r}"
+    assert "roster_lookup" in leaf, f"Missing roster_lookup: {leaf!r}"
+    # Column 4 is the Rate column in the widened roster_lookup.
+    assert ",4," in leaf.replace(" ", ""), (
+        f"Formula should VLOOKUP col 4 (Rate): {leaf!r}"
+    )
+
+
+def test_forecast_eur_external_row_empty(hrs):
+    """External-project rows in the forecast band are empty — externals are
+    non-programme projects and don't consume programme EUR budget."""
+    # Alice has 3 WP rows (WP1-WP3) + 1 external (ProjectX).
+    alice_header = _find_person_header_row(hrs, "Alice")
+    alice_ext_row = alice_header + 4  # 3 WP rows + 1st external
+    # The row label in col A should be the literal project name.
+    assert hrs.cell(alice_ext_row, 1).value == "ProjectX"
+    # All forecast-band cells on that row must be empty.
+    for mi in range(PROJECT_MONTHS):
+        cell = hrs.cell(alice_ext_row, FORECAST_COL_START + mi)
+        assert cell.value in (None, ""), (
+            f"External row @ band col {mi} should be empty, got {cell.value!r}"
+        )
+
+
+def test_forecast_eur_inactive_month_empty_and_grey(hrs):
+    """Inactive-month forecast-band cells carry GREY_FILL and are empty —
+    mirror the hour side so the band visually aligns."""
+    # Bob's WP4 row is inactive at M1 (WP4 starts M2).
+    bob_header = _find_person_header_row(hrs, "Bob")
+    wp4_row = bob_header + 1
+    cell = hrs.cell(wp4_row, FORECAST_COL_START)  # M1 on forecast side
+    assert cell.value in (None, "")
+    assert str(getattr(cell.fill.fgColor, "rgb", "")).upper().endswith(
+        str(GREY_FILL.fgColor.rgb).upper()
+    ), f"Inactive forecast cell should be grey, got {cell.fill.fgColor.rgb!r}"
+
+
+def test_forecast_eur_total_row_sums_wp_rows(hrs):
+    """Per-person TOTAL row in the forecast band = SUM of WP-row forecast
+    cells for that month. Externals are blank so they aren't in the SUM."""
+    alice_header = _find_person_header_row(hrs, "Alice")
+    # Alice: 3 WP rows (header+1, +2, +3) + 1 external at +4 → TOTAL at +5.
+    wp_rows = [alice_header + 1, alice_header + 2, alice_header + 3]
+    total_row = alice_header + 5
+    assert hrs.cell(total_row, 2).value == "TOTAL"
+    fcl = col_letter(FORECAST_COL_START)
+    formula = hrs.cell(total_row, FORECAST_COL_START).value
+    assert isinstance(formula, str)
+    assert formula.startswith("=SUM("), f"Expected SUM(), got {formula!r}"
+    for wp_r in wp_rows:
+        assert f"{fcl}{wp_r}" in formula, (
+            f"TOTAL @ band M1 missing {fcl}{wp_r}: {formula!r}"
+        )
+
+
 def test_actuals_hours_has_only_sum_validation_column(hrs):
-    """Year header row should have 'Sum' label at val_col_sum, and empty
-    (no label) at val_col_budget / val_col_diff — hours log has no budget."""
+    """Year header row has 'Sum' at val_col_sum and no Budget/Variance
+    label at val_col_budget — the hours log has no budget-vs-actual view.
+
+    (val_col_diff is now reused by the forecast-EUR band; Task 4 added the
+    collapsible parallel EUR columns starting at val_col_sum + 2.)
+    """
     vcols = val_columns(PROJECT_MONTHS)
-    # Year header row = 1 in this sheet (no title row)
-    year_row = 1
+    # Year header row = 2 (row 1 now carries the FORECAST EUR band label).
+    year_row = 2
     sum_label = hrs.cell(year_row, vcols["sum"]).value
     budget_label = hrs.cell(year_row, vcols["budget"]).value
-    diff_label = hrs.cell(year_row, vcols["diff"]).value
     assert sum_label == "Sum"
     assert budget_label in (None, "")
-    assert diff_label in (None, "")

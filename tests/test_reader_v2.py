@@ -43,7 +43,7 @@ def test_read_plan_config_extracts_wp_definitions(fresh_wb_path):
 
 
 def test_read_team_from_config_names_and_fte(fresh_wb_path):
-    """read_team_from_config returns roster with correct names and max_fte."""
+    """read_team_from_config returns roster with correct name, max_fte, grade."""
     import openpyxl
     wb = openpyxl.load_workbook(fresh_wb_path)
     roster = read_team_from_config(wb["Config"])
@@ -52,6 +52,9 @@ def test_read_team_from_config_names_and_fte(fresh_wb_path):
     for got, expected in zip(roster, TEAM):
         assert got["name"] == expected["name"]
         assert got["max_fte"] == pytest.approx(expected["max_fte"])
+        # Grade round-trips through Config — the widened roster with a Rate
+        # column doesn't affect the reader's per-person grade extraction.
+        assert got["grade"] == expected["grade"]
     wb.close()
 
 

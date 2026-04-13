@@ -24,7 +24,7 @@ from budget_planner.layout import (
     wp_active_months,
     _calendar_year_groups,
 )
-from budget_planner.person_section import plan_person_layout
+from budget_planner.person_section import plan_person_layout, PersonGridContext
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
@@ -74,16 +74,9 @@ def _mirror_year_month_headers_to_band(
 
 def _write_person_hours_grid(
     ws, r: int, member: dict, *,
+    ctx: PersonGridContext,
     person_assignments: list[dict],
-    work_packages: list[dict],
-    external_commitments: list[dict],
-    wp_active_map: dict[str, frozenset[int]],
-    project_params: dict,
-    month_col_start: int,
-    month_col_end: int,
-    val_col_sum: int,
     forecast_col_start: int,
-    config_first_wp_row: int,
     preserved_for_person: dict[str, list[float | None]] | None,
 ) -> tuple[int, dict]:
     """Write one person's hour-grid section (header, WP rows, externals, totals).
@@ -91,6 +84,17 @@ def _write_person_hours_grid(
     Returns:
         (next_row, person_group_dict)
     """
+    # Unpack loop-invariant context — keeps the cell-write body unchanged
+    # from the pre-refactor signature.
+    work_packages = ctx.work_packages
+    external_commitments = ctx.external_commitments
+    wp_active_map = ctx.wp_active_map
+    project_params = ctx.project_params
+    month_col_start = ctx.month_col_start
+    month_col_end = ctx.month_col_end
+    val_col_sum = ctx.val_col_sum
+    config_first_wp_row = ctx.config_first_wp_row
+
     name = member["name"]
 
     # O(1) WP lookups — avoid O(N²) linear scans in the per-assignment loops
@@ -494,21 +498,24 @@ def build_actuals_hours_sheet(
 
     person_groups: dict[str, dict] = {}
 
+    ctx = PersonGridContext(
+        work_packages=work_packages,
+        external_commitments=external_commitments,
+        wp_active_map=wp_active_map,
+        project_params=project_params,
+        month_col_start=month_col_start,
+        month_col_end=month_col_end,
+        val_col_sum=val_col_sum,
+        config_first_wp_row=config_first_wp_row,
+    )
     for member in team:
         name = member["name"]
         preserved_for_person = preserved.get(name) if preserved else None
         r, group = _write_person_hours_grid(
             ws, r, member,
+            ctx=ctx,
             person_assignments=per_person_assignments.get(name, []),
-            work_packages=work_packages,
-            external_commitments=external_commitments,
-            wp_active_map=wp_active_map,
-            project_params=project_params,
-            month_col_start=month_col_start,
-            month_col_end=month_col_end,
-            val_col_sum=val_col_sum,
             forecast_col_start=forecast_col_start,
-            config_first_wp_row=config_first_wp_row,
             preserved_for_person=preserved_for_person,
         )
         person_groups[name] = group

@@ -9,6 +9,27 @@ view); Actuals-Hours does not (hours log, not a budget).
 from dataclasses import dataclass
 
 
+@dataclass(frozen=True)
+class PersonGridContext:
+    """Loop-invariant inputs shared across every per-person grid write.
+
+    Used by ``capacity._write_person_grid`` and
+    ``actuals_hours._write_person_hours_grid`` — each builder receives one
+    context instance plus its sheet-specific extras (per-person data,
+    val-column offsets unique to that sheet, etc.). Fields mirror the
+    orchestrator's pre-loop computations; bundling them avoids threading
+    8 kwargs through every person-loop call site.
+    """
+    work_packages: list[dict]
+    external_commitments: list[dict]
+    wp_active_map: dict[str, frozenset[int]]
+    project_params: dict
+    month_col_start: int
+    month_col_end: int
+    val_col_sum: int
+    config_first_wp_row: int
+
+
 @dataclass
 class PersonLayout:
     header_row: int

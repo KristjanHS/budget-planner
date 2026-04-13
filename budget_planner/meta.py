@@ -86,9 +86,7 @@ def build_meta_sheet(ws, layout, *, project_params, work_packages,
     cfg_last_wp = layout["config_last_wp_row"]
     cfg_total_row = cfg_last_wp + 1
 
-    # Grade table rows (config_layout is always provided by the orchestrator
-    # — T6 removed the lazy-import fallback and made it required in spirit;
-    # T7 removes the last None branch by threading live layouts everywhere.)
+    # Grade table rows (config_layout is always provided by the orchestrator).
     cfg_grade_first = config_layout["grade_first_row"]
     cfg_grade_last = config_layout["grade_last_row"]
     cfg_roster_header = config_layout["roster_header_row"]
@@ -107,7 +105,7 @@ def build_meta_sheet(ws, layout, *, project_params, work_packages,
     sum_last_wp = summary_layout["last_wp_row"]
     sum_total = summary_layout["total_row"]
 
-    # ── Stage 1 hours-timelog layouts (optional until Task 15 rewrite) ──
+    # ── Hours-timelog layouts (still optional on the builder signature) ──
     # When the orchestrator threads these through, emit live row numbers;
     # otherwise fall back to placeholder dashes so the doc still renders.
     if actuals_hours_layout is not None:

@@ -595,7 +595,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             project_params["months"],
         )
 
-    # Preserve Actuals-Hours blue-input hours (T13).
+    # Preserve Actuals-Hours blue-input hours across rebuild.
     preserved_actuals_hours: dict[str, dict[str, list[float | None]]] | None = None
     if SHEET_ACTUALS_HOURS in existing_wb.sheetnames:
         preserved_actuals_hours = read_actuals_hours_sheet(

@@ -26,14 +26,6 @@ ACTUAL_BAND_LABEL = "ACTUAL FTE (from hours)"
 VARIANCE_BAND_LABEL = "VARIANCE FTE (Planned − Actual)"
 
 
-def _wp_config_row(wp_id, work_packages, config_first_wp_row):
-    """Return the Config sheet WP table row for a WP ID."""
-    for i, wp in enumerate(work_packages):
-        if wp["id"] == wp_id:
-            return config_first_wp_row + i
-    raise ValueError(f"Unknown WP ID: {wp_id}")
-
-
 # ── Distribution curves ──
 
 def distribute(total_fte: float, num_months: int, curve: str) -> list[float]:
@@ -118,6 +110,12 @@ def _write_person_grid(
     config_param_rows: ConfigParamRows = team_layout["param_rows"]
     ceiling_row = config_param_rows["EU Annual Ceiling (PM/FTE/year)"]
 
+    # O(1) WP lookups — avoid O(N²) linear scans in the per-assignment loops
+    # below (one scan for filtering, another for data-write, plus a third for
+    # the Config-row offset).
+    wp_by_id = {w["id"]: w for w in work_packages}
+    wp_idx = {w["id"]: i for i, w in enumerate(work_packages)}
+
     # Pre-compute ordered WP ids and external project names that will actually
     # be emitted so plan_person_layout can assign row numbers up front. Skip
     # assignments whose WP is not in work_packages — matches the old inline
@@ -125,7 +123,7 @@ def _write_person_grid(
     ordered_wp_ids: list[str] = []
     for asgn in person_assignments:
         wp_id = asgn["wp"]
-        if any(w["id"] == wp_id for w in work_packages):
+        if wp_id in wp_by_id:
             ordered_wp_ids.append(wp_id)
     person_externals = [e for e in external_commitments
                         if e["person"] == name]
@@ -164,10 +162,10 @@ def _write_person_grid(
     first_wp_row_for_person = True
     for asgn in person_assignments:
         wp_id = asgn["wp"]
-        wp = next((w for w in work_packages if w["id"] == wp_id), None)
+        wp = wp_by_id.get(wp_id)
         if wp is None:
             continue
-        config_row = _wp_config_row(wp_id, work_packages, config_first_wp_row)
+        config_row = config_first_wp_row + wp_idx[wp_id]
         # Row position is pre-assigned by plan_person_layout; keep `r` in sync
         # with the inline cell-write sequence below.
         assert r == layout.wp_rows[wp_id]

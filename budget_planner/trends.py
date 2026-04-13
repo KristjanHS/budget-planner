@@ -312,7 +312,7 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
             f'IF(C{row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!B{roster_row},"WATCH","OK"))'
         )
 
-        # ── Actual-side columns (Task 12) ──────────────────────────────
+        # ── Actual-side columns ────────────────────────────────────────
         # The Capacity Actual-FTE band lives at columns actual_col_start..
         # actual_col_end on the same ``total_row`` (per person) as the
         # planned band. Cells may contain "" (empty string) for inactive

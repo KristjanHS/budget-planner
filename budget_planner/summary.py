@@ -71,13 +71,12 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
 
     # Year group headers
     YEAR_GROUP_START = 3
-    # Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR
+    # Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR — same 5-column
+    # shape for each calendar-year group AND for the PROJECT TOTAL group.
     COLS_PER_YEAR = 5
 
     # Project total group
     TOTAL_GROUP_START = YEAR_GROUP_START + num_years * COLS_PER_YEAR
-    # Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR
-    TOTAL_COLS = 5
 
     # Year headers row
     style_cell(summary, r, 1, "", fill=LIGHT_BLUE_FILL)
@@ -91,9 +90,9 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
         for c2 in range(start_col + 1, end_col + 1):
             style_cell(summary, r, c2, fill=LIGHT_BLUE_FILL)
 
-    summary.merge_cells(start_row=r, start_column=TOTAL_GROUP_START, end_row=r, end_column=TOTAL_GROUP_START + TOTAL_COLS - 1)
+    summary.merge_cells(start_row=r, start_column=TOTAL_GROUP_START, end_row=r, end_column=TOTAL_GROUP_START + COLS_PER_YEAR - 1)
     style_cell(summary, r, TOTAL_GROUP_START, font=Font(name="Arial", bold=True, size=10, color="FFFFFF"), fill=SECTION_FILL, alignment=CENTER).value = "PROJECT TOTAL"
-    for c2 in range(TOTAL_GROUP_START + 1, TOTAL_GROUP_START + TOTAL_COLS):
+    for c2 in range(TOTAL_GROUP_START + 1, TOTAL_GROUP_START + COLS_PER_YEAR):
         style_cell(summary, r, c2, fill=SECTION_FILL)
     r += 1
 
@@ -189,7 +188,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
             col_range = f"{col_letter(c)}{SUMMARY_FIRST_WP_ROW}:{col_letter(c)}{SUMMARY_LAST_WP_ROW}"
             style_cell(summary, totals_row, c, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt=fmt).value = f"=SUM({col_range})"
 
-    for si in range(TOTAL_COLS):
+    for si in range(COLS_PER_YEAR):
         c = TOTAL_GROUP_START + si
         fmt = "0.00" if si == 0 else "\u20ac#,##0"
         col_range = f"{col_letter(c)}{SUMMARY_FIRST_WP_ROW}:{col_letter(c)}{SUMMARY_LAST_WP_ROW}"
@@ -213,7 +212,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
     ))
 
     # Conditional formatting: red on Forecast EUR < 0.8 * Plan EUR (year columns).
-    # Mirrors the variance-style "material underspend" alert, per Task 10.
+    # Mirrors the variance-style "material underspend" alert.
     for y in range(num_years):
         plan_eur_col = YEAR_GROUP_START + y * COLS_PER_YEAR + 1
         fcst_col = YEAR_GROUP_START + y * COLS_PER_YEAR + 3
@@ -307,7 +306,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
     COLS_PER_RP = 4  # Plan FTE, Plan EUR, Act EUR, Var EUR
 
     RP_TOTAL_GROUP_START = RP_GROUP_START + num_rps * COLS_PER_RP
-    RP_TOTAL_COLS = 4
+    RP_COLS_PER_YEAR = 4
 
     # RP headers row
     style_cell(summary, r, 1, "", fill=LIGHT_BLUE_FILL)
@@ -324,11 +323,11 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
             style_cell(summary, r, c2, fill=LIGHT_BLUE_FILL)
 
     summary.merge_cells(start_row=r, start_column=RP_TOTAL_GROUP_START,
-                        end_row=r, end_column=RP_TOTAL_GROUP_START + RP_TOTAL_COLS - 1)
+                        end_row=r, end_column=RP_TOTAL_GROUP_START + RP_COLS_PER_YEAR - 1)
     style_cell(summary, r, RP_TOTAL_GROUP_START,
                font=Font(name="Arial", bold=True, size=10, color="FFFFFF"),
                fill=SECTION_FILL, alignment=CENTER).value = "PROJECT TOTAL"
-    for c2 in range(RP_TOTAL_GROUP_START + 1, RP_TOTAL_GROUP_START + RP_TOTAL_COLS):
+    for c2 in range(RP_TOTAL_GROUP_START + 1, RP_TOTAL_GROUP_START + RP_COLS_PER_YEAR):
         style_cell(summary, r, c2, fill=SECTION_FILL)
     r += 1
 
@@ -434,7 +433,7 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
                        fill=LIGHT_GREEN_FILL, fmt=fmt).value = (
                 f"=SUM({col_range})"
             )
-    for si in range(RP_TOTAL_COLS):
+    for si in range(RP_COLS_PER_YEAR):
         c = RP_TOTAL_GROUP_START + si
         fmt = "0.00" if si == 0 else "\u20ac#,##0"
         col_range = (f"{col_letter(c)}{RP_FIRST_WP_ROW}:"

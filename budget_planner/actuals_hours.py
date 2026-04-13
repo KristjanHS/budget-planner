@@ -72,14 +72,6 @@ def _mirror_year_month_headers_to_band(
         )
 
 
-def _wp_config_row(wp_id, work_packages, config_first_wp_row):
-    """Return the Config sheet WP table row for a WP ID."""
-    for i, wp in enumerate(work_packages):
-        if wp["id"] == wp_id:
-            return config_first_wp_row + i
-    raise ValueError(f"Unknown WP ID: {wp_id}")
-
-
 def _write_person_hours_grid(
     ws, r: int, member: dict, *,
     person_assignments: list[dict],
@@ -101,14 +93,18 @@ def _write_person_hours_grid(
     """
     name = member["name"]
 
+    # O(1) WP lookups — avoid O(N²) linear scans in the per-assignment loops
+    # below (filter + Config-row offset).
+    wp_by_id = {w["id"]: w for w in work_packages}
+    wp_idx = {w["id"]: i for i, w in enumerate(work_packages)}
+
     # Pre-compute ordered WP ids and externals so plan_person_layout can
     # assign row numbers up front — mirror the Capacity behavior.
     ordered_wp_ids: list[str] = []
     for asgn in person_assignments:
         wp_id = asgn["wp"]
-        if any(w["id"] == wp_id for w in work_packages):
-            if wp_id not in ordered_wp_ids:
-                ordered_wp_ids.append(wp_id)
+        if wp_id in wp_by_id and wp_id not in ordered_wp_ids:
+            ordered_wp_ids.append(wp_id)
     person_externals = [e for e in external_commitments if e["person"] == name]
     ordered_external_names = [e["project"] for e in person_externals]
 
@@ -150,7 +146,7 @@ def _write_person_hours_grid(
     # ── programme WP rows ──
     first_wp_row_for_person = True
     for wp_id in ordered_wp_ids:
-        config_row = _wp_config_row(wp_id, work_packages, config_first_wp_row)
+        config_row = config_first_wp_row + wp_idx[wp_id]
         assert r == layout.wp_rows[wp_id]
 
         style_cell(ws, r, 1, font=GREEN_XREF).value = (
@@ -173,7 +169,7 @@ def _write_person_hours_grid(
 
             if month_num in wp_active:
                 # Start blank — user fills at month-end. Preserved values
-                # (from rebuild, Task 13) overwrite blanks when provided.
+                # from a prior rebuild overwrite blanks when provided.
                 val: float | str = ""
                 if preserved_months is not None and mi < len(preserved_months):
                     p = preserved_months[mi]

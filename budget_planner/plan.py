@@ -9,7 +9,8 @@ from budget_planner.layout import (
     ConfigParamRows,
     MONTH_COL_START, SHEET_PLAN, SHEET_CAPACITY, SHEET_CONFIG,
     SECTION_HEADER_LABELS,
-    build_year_month_headers, month_col_end as _month_col_end, val_columns,
+    build_year_month_headers, cell_ref,
+    month_col_end as _month_col_end, val_columns,
     wp_active_months,
 )
 from budget_planner.styles import (
@@ -126,7 +127,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
 
     # partner_ceiling named range -> Plan!$G$1
     wb.defined_names.add(DefinedName(
-        "partner_ceiling", attr_text=f"{SHEET_PLAN}!$G$1"
+        "partner_ceiling", attr_text=cell_ref(SHEET_PLAN, 1, 7)
     ))
     ws.cell(row=1, column=7).comment = Comment(
         "Personnel costs only (direct). The 25% indirect flat rate "

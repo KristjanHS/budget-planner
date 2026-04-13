@@ -44,8 +44,10 @@ SHEET_TRENDS = "Trends"
 # Column structure: A=ID, B=Name, C onwards = months
 MONTH_COL_START = 3
 
-# ── Section header contract (see docs/plans/archived/2026-04-12-brittleness-refactor.md T2) ──
-SECTION_HEADER_ROWS = 2  # section title + column header, data starts at +2
+# ── Section header contract ──
+# Every labelled section on the Config sheet uses: title row, header row,
+# then data starting at offset +2. Readers rely on this exact layout.
+SECTION_HEADER_ROWS = 2
 
 SECTION_HEADER_LABELS = {
     "wp_budget": "WP BUDGET",
@@ -61,8 +63,8 @@ SECTION_HEADER_LABELS = {
 
 # ── Config sheet column constants ──
 # WP Budget section (Config sheet)
-COL_WP_ID = 1      # used by Phase 1 readers
-COL_WP_NAME = 2    # used by Phase 1 readers
+COL_WP_ID = 1
+COL_WP_NAME = 2
 COL_WP_FTE = 3
 COL_WP_RATE = 4
 COL_WP_CEILING = 5
@@ -91,7 +93,7 @@ RP_LAST_COL = 3
 COL_GRADE_RATE = 2
 GRADE_LAST_COL = 2
 
-# Person-WP Assignments (Config sheet — also still referenced by Capacity until Stage 2)
+# Person-WP Assignments (Config sheet)
 COL_ASSIGN_PERSON = 1
 COL_ASSIGN_WP = 2
 COL_ASSIGN_FTE = 3
@@ -107,7 +109,7 @@ ASSIGN_LAST_COL = 8
 # EXTERNAL COMMITMENTS section header.
 ASSIGN_MIN_ROWS = 5
 
-# External Commitments (Config sheet — also still referenced by Capacity until Stage 2)
+# External Commitments (Config sheet)
 COL_EXT_PERSON = 1
 COL_EXT_PROJECT = 2
 COL_EXT_FTE = 3

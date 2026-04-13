@@ -860,7 +860,7 @@ def read_capacity_sheet(
 
     wp_ids = {wp["id"] for wp in config_wps}
 
-    # Try Config-based readers first (new sections from Phase 1)
+    # Try Config-based readers first; Capacity-based fallback below.
     wb = ws.parent
     config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
     assignments: list[dict] = []
@@ -1047,7 +1047,7 @@ def read_actuals_values(
 
         monthly = _read_monthly_values(ws, r, month_col_start, project_months)
 
-        # T8: preserve every Actuals WP row — a row with all-None monthlies
+        # Preserve every Actuals WP row — a row with all-None monthlies
         # still documents user intent (explicit zero / deliberate clear).
         values[wp_id] = monthly
 

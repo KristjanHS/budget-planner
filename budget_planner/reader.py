@@ -1,6 +1,7 @@
 """Read existing workbooks for round-trip updates."""
 
 import re
+from collections.abc import Iterator
 from decimal import Decimal
 from typing import Literal, overload
 
@@ -202,6 +203,71 @@ def _iter_named_range_rows(wb, name: str) -> tuple[int, int] | None:
     return (first, last)
 
 
+def _iter_config_section_rows(
+    ws,
+    *,
+    header_row: int,
+    named_range: str | None,
+    key_col: int,
+    numeric_col: int,
+) -> Iterator[tuple[int, float]]:
+    """Yield ``(row, numeric_parsed)`` for each data row of a Config-sheet section.
+
+    Encapsulates the hybrid named-range-or-sentinel scan used by the roster,
+    assignments, and externals readers (see design doc
+    ``docs/plans/archived/2026-04-12-rebuild-shape-drift-design.md``):
+
+    * Resolves the named range (when present) to bound the section, so
+      Excel-side row inserts don't require sentinel heuristics.
+    * Tolerates internal blank rows *inside* the range — Excel mid-insert
+      leaves gaps that would otherwise trip a naive sentinel loop.
+    * Falls back to sentinel termination past ``range_end`` (or when no
+      named range is defined) to support append-style edits that didn't
+      extend the defined name.
+    * Preserves ``_parse_config_float`` break-on-invalid semantics: a
+      cell that parses as ``None`` (bool, formula string, empty/whitespace,
+      non-numeric) stops the scan outside the range; inside the range it
+      is skipped as a mid-insert blank.
+
+    Callers still perform their own row-payload extraction after each
+    yield — this helper owns only the loop/span/sentinel plumbing.
+    """
+    wb = ws.parent
+    span = (
+        _iter_named_range_rows(wb, named_range)
+        if wb is not None and named_range
+        else None
+    )
+    expected_first = _data_row_after(header_row)
+    if span is not None and span[0] < expected_first:
+        span = None
+    if span is not None:
+        first_data, range_end = span
+    else:
+        first_data = expected_first
+        range_end = None
+
+    yielded_any = False
+    r = first_data
+    while r <= ws.max_row:
+        key_val = ws.cell(r, key_col).value
+        numeric_parsed = _parse_config_float(ws.cell(r, numeric_col).value)
+        key_blank = key_val is None or str(key_val).strip() == ""
+        inside_range = range_end is not None and r <= range_end
+        # Past range_end with nothing collected — section is empty; break
+        # rather than sentinel-scan into the next section's header.
+        if range_end is not None and r > range_end and not yielded_any:
+            break
+        if key_blank or numeric_parsed is None:
+            if inside_range:
+                r += 1
+                continue
+            break
+        yielded_any = True
+        yield r, numeric_parsed
+        r += 1
+
+
 def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
     """Read Config sheet -> (project_params, work_packages, wp_schedule).
 
@@ -377,53 +443,22 @@ def read_team_from_config(ws) -> list[dict]:
         ws, SECTION_HEADER_LABELS["team_roster"], required=True
     )
 
-    # TEAM ROSTER has a 1-row header (title + column-headers on the same row pair
-    # where the section label row IS the title and the next row is the column
-    # header). Data starts at person_header + 1 — do NOT use _data_row_after here.
+    # Detect whether Grade column exists (col C header on the column-header row).
     person_header = roster_section + 1
-
-    # Detect whether Grade column exists (col C header)
     has_grade_col = False
     grade_hdr = ws.cell(person_header, COL_ROSTER_GRADE).value
     if grade_hdr and "grade" in str(grade_hdr).lower():
         has_grade_col = True
 
-    # Use roster_ftes named range as authoritative bounds when present; within
-    # the range, tolerate internal blanks (Excel-side mid-insert leaves gaps).
-    # Past the range, fall back to sentinel scan to support append-style edits
-    # the user may have made without manually extending the defined name.
-    wb = ws.parent
-    span = _iter_named_range_rows(wb, "roster_ftes") if wb is not None else None
-    # Sanity check: the named range must not start before the first data row
-    # (corrupt/stale workbooks otherwise yield an empty roster → rebuild would
-    # silently drop everyone).
-    if span is not None and span[0] < person_header + 1:
-        span = None
-    if span is not None:
-        first_data, range_end = span
-    else:
-        first_data = person_header + 1
-        range_end = None
-
     roster: list[dict] = []
-    r = first_data
-    while r <= ws.max_row:
+    for r, max_fte_parsed in _iter_config_section_rows(
+        ws,
+        header_row=roster_section,
+        named_range="roster_ftes",
+        key_col=1,
+        numeric_col=COL_ROSTER_FTE,
+    ):
         name = ws.cell(r, 1).value
-        max_fte = ws.cell(r, COL_ROSTER_FTE).value
-        max_fte_parsed = _parse_config_float(max_fte)
-        name_blank = name is None or str(name).strip() == ""
-        inside_range = range_end is not None and r <= range_end
-        # Past range_end with no entries yet — the section is empty; break
-        # rather than sentinel-scan into the next section's header.
-        if range_end is not None and r > range_end and not roster:
-            break
-        if name_blank or max_fte_parsed is None:
-            if inside_range:
-                # Tolerate blanks inside the named range — Excel-side mid-insert.
-                r += 1
-                continue
-            # Outside the range (or no range at all): sentinel termination.
-            break
         grade = DEFAULT_GRADE
         if has_grade_col:
             grade_val = ws.cell(r, COL_ROSTER_GRADE).value
@@ -436,7 +471,6 @@ def read_team_from_config(ws) -> list[dict]:
                 "grade": grade,
             }
         )
-        r += 1
 
     return roster
 
@@ -499,35 +533,15 @@ def read_assignments_from_config(ws) -> list[dict]:
     if assignments_header is None:
         return []
 
-    # Use assign_persons named range as authoritative span when present; skip
-    # blanks inside the range (Excel mid-insert) and keep scanning past the
-    # range end to support append-style edits that don't extend the name.
-    wb = ws.parent
-    span = _iter_named_range_rows(wb, "assign_persons") if wb is not None else None
-    expected_first = _data_row_after(assignments_header)
-    if span is not None and span[0] < expected_first:
-        span = None
-    if span is not None:
-        first_data, range_end = span
-    else:
-        first_data = expected_first
-        range_end = None
-
     assignments: list[dict] = []
-    r = first_data
-    while r <= ws.max_row:
+    for r, total_fte_parsed in _iter_config_section_rows(
+        ws,
+        header_row=assignments_header,
+        named_range="assign_persons",
+        key_col=COL_ASSIGN_PERSON,
+        numeric_col=COL_ASSIGN_FTE,
+    ):
         person = ws.cell(r, COL_ASSIGN_PERSON).value
-        total_fte = ws.cell(r, COL_ASSIGN_FTE).value
-        total_fte_parsed = _parse_config_float(total_fte)
-        person_blank = person is None or str(person).strip() == ""
-        inside_range = range_end is not None and r <= range_end
-        if range_end is not None and r > range_end and not assignments:
-            break
-        if person_blank or total_fte_parsed is None:
-            if inside_range:
-                r += 1
-                continue
-            break
         wp = ws.cell(r, COL_ASSIGN_WP).value
         start = ws.cell(r, COL_ASSIGN_START).value
         end = ws.cell(r, COL_ASSIGN_END).value
@@ -540,7 +554,6 @@ def read_assignments_from_config(ws) -> list[dict]:
                 "end": int(end or 1),
             }
         )
-        r += 1
 
     return assignments
 
@@ -561,35 +574,15 @@ def read_externals_from_config(ws) -> list[dict]:
     if ext_config_header is None:
         return []
 
-    # Use ext_persons named range as authoritative span when present; same
-    # hybrid semantics as roster/assignments (tolerate internal blanks, allow
-    # sentinel scan past range end for append-style edits).
-    wb = ws.parent
-    span = _iter_named_range_rows(wb, "ext_persons") if wb is not None else None
-    expected_first = _data_row_after(ext_config_header)
-    if span is not None and span[0] < expected_first:
-        span = None
-    if span is not None:
-        first_data, range_end = span
-    else:
-        first_data = expected_first
-        range_end = None
-
     external_commitments: list[dict] = []
-    r = first_data
-    while r <= ws.max_row:
+    for r, fte_parsed in _iter_config_section_rows(
+        ws,
+        header_row=ext_config_header,
+        named_range="ext_persons",
+        key_col=COL_EXT_PERSON,
+        numeric_col=COL_EXT_FTE,
+    ):
         person = ws.cell(r, COL_EXT_PERSON).value
-        fte = ws.cell(r, COL_EXT_FTE).value
-        fte_parsed = _parse_config_float(fte)
-        person_blank = person is None or str(person).strip() == ""
-        inside_range = range_end is not None and r <= range_end
-        if range_end is not None and r > range_end and not external_commitments:
-            break
-        if person_blank or fte_parsed is None:
-            if inside_range:
-                r += 1
-                continue
-            break
         project = ws.cell(r, COL_EXT_PROJECT).value
         start = ws.cell(r, COL_EXT_START).value
         end = ws.cell(r, COL_EXT_END).value
@@ -604,7 +597,6 @@ def read_externals_from_config(ws) -> list[dict]:
                 "is_eu": str(is_eu_val).strip().upper() in ("YES", "TRUE", "1"),
             }
         )
-        r += 1
 
     return external_commitments
 

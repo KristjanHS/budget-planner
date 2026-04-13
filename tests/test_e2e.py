@@ -1,77 +1,17 @@
 """End-to-end tests requiring LibreOffice for formula recalculation.
 
 Tests skip gracefully when LibreOffice is not available.
+
+Shared fixtures (`demo_wb_path`, `demo_recalc`) live in `conftest.py` at
+session scope so other modules can consume the same recalc'd workbook.
 """
-import json
-import subprocess
-
-import pytest
 import openpyxl
-from pathlib import Path
 
-from budget_planner.workbook import init_workbook, seed_demo_data
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
     NUM_WPS, PROJECT_MONTHS, PROJECT_START,
     WORK_PACKAGES, VAL_COL_BUDGET, DEFAULT_RATE,
-    TEAM, GRADE_RATES, DEFAULT_GRADE,
 )
-
-
-def _weighted_avg_rate():
-    """Compute expected FTE rate from config seed data (grade-weighted average)."""
-    total_fte = sum(m["max_fte"] for m in TEAM)
-    weighted = sum(
-        GRADE_RATES[m.get("grade", DEFAULT_GRADE)] * m["max_fte"] for m in TEAM
-    )
-    return weighted / total_fte
-
-SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
-
-
-# ── Fixtures ──
-
-
-@pytest.fixture(scope="module")
-def demo_wb_path(tmp_path_factory):
-    """Generate a demo workbook (init with assignments + seed_demo_data)."""
-    from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
-    out = tmp_path_factory.mktemp("e2e") / "demo.xlsx"
-    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    seed_demo_data(str(out))
-    return str(out)
-
-
-@pytest.fixture(scope="module")
-def demo_recalc(demo_wb_path):
-    """Recalculate demo workbook via LibreOffice."""
-    result = subprocess.run(
-        ["python3", str(SCRIPTS_DIR / "recalc.py"), demo_wb_path],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        pytest.skip("LibreOffice not available")
-    return json.loads(result.stdout)
-
-
-@pytest.fixture(scope="module")
-def empty_wb_path(tmp_path_factory):
-    """Generate an empty (no demo) workbook."""
-    out = tmp_path_factory.mktemp("e2e_empty") / "empty.xlsx"
-    init_workbook(str(out))
-    return str(out)
-
-
-@pytest.fixture(scope="module")
-def empty_recalc(empty_wb_path):
-    """Recalculate empty workbook via LibreOffice."""
-    result = subprocess.run(
-        ["python3", str(SCRIPTS_DIR / "recalc.py"), empty_wb_path],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        pytest.skip("LibreOffice not available")
-    return json.loads(result.stdout)
 
 
 # ── Recalc tests ──
@@ -81,12 +21,6 @@ def test_demo_mode_recalc_zero_errors(demo_recalc):
     """Generate demo workbook -> recalc -> 0 formula errors across all 5 sheets."""
     assert demo_recalc["status"] == "success"
     assert demo_recalc["total_errors"] == 0
-
-
-def test_empty_mode_recalc_zero_errors(empty_recalc):
-    """Generate empty workbook -> recalc -> 0 formula errors."""
-    assert empty_recalc["status"] == "success"
-    assert empty_recalc["total_errors"] == 0
 
 
 # ── GAP 7: Summary values after recalc ──

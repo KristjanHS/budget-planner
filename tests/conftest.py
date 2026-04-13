@@ -1,7 +1,13 @@
 """Shared fixtures for programme budget planner tests."""
+import json
+import subprocess
+from pathlib import Path
+
 import pytest
 
-from budget_planner.workbook import init_workbook
+from budget_planner.workbook import init_workbook, seed_demo_data
+
+SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 
 
 @pytest.fixture(scope="session")
@@ -21,4 +27,26 @@ def assigned_wb_path(tmp_path_factory):
     return str(out)
 
 
+@pytest.fixture(scope="session")
+def demo_wb_path(tmp_path_factory):
+    """Generate a demo workbook (init with assignments + seed_demo_data).
 
+    Read-only — tests that consume this fixture MUST NOT save or rebuild.
+    """
+    from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
+    out = tmp_path_factory.mktemp("demo_wb") / "demo.xlsx"
+    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
+    seed_demo_data(str(out))
+    return str(out)
+
+
+@pytest.fixture(scope="session")
+def demo_recalc(demo_wb_path):
+    """Recalculate demo workbook via LibreOffice (skips if LO unavailable)."""
+    result = subprocess.run(
+        ["python3", str(SCRIPTS_DIR / "recalc.py"), demo_wb_path],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        pytest.skip("LibreOffice not available")
+    return json.loads(result.stdout)

@@ -152,6 +152,15 @@ def cell_ref(sheet: str, row: int, col: int, *, absolute: bool = True) -> str:
     return f"{sheet}!{letter}{row}"
 
 
+def month_range_ref(row: int, start_col: int, end_col: int) -> str:
+    """Return ``"A5:Z5"`` for a horizontal range on one row.
+
+    Use for SUM-across-months formulas and range-scoped CF targets to avoid
+    hand-typing matched column-letter pairs.
+    """
+    return f"{get_column_letter(start_col)}{row}:{get_column_letter(end_col)}{row}"
+
+
 def month_col_end(project_months: int) -> int:
     """Last month column number."""
     return MONTH_COL_START + project_months - 1

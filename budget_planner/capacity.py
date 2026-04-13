@@ -9,7 +9,7 @@ from budget_planner.layout import (
     ConfigParamRows,
     MONTH_COL_START, SHEET_CONFIG, SHEET_ACTUALS_HOURS,
     CAPACITY_AMBER_LOAD, CAPACITY_VARIANCE_FTE_RED, COL_ROSTER_FTE,
-    build_year_month_headers, cell_ref,
+    build_year_month_headers, cell_ref, month_range_ref,
     month_col_end as _month_col_end, val_columns,
     wp_active_months,
     _calendar_year_groups,
@@ -210,8 +210,7 @@ def _write_person_grid(
                            fmt="0.00")
 
         # Validation columns
-        sum_range = (f"{col_letter(month_col_start)}{r}:"
-                     f"{col_letter(month_col_end)}{r}")
+        sum_range = month_range_ref(r, month_col_start, month_col_end)
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                    fmt="0.00").value = f"=SUM({sum_range})"
 
@@ -272,8 +271,7 @@ def _write_person_grid(
                            fmt="0.00")
 
         # Validation columns
-        sum_range = (f"{col_letter(month_col_start)}{r}:"
-                     f"{col_letter(month_col_end)}{r}")
+        sum_range = month_range_ref(r, month_col_start, month_col_end)
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                    fmt="0.00").value = f"=SUM({sum_range})"
 
@@ -407,8 +405,7 @@ def _write_person_grid(
     # Conditional formatting for TOTAL row
     # Excel CF priority: lower number = higher priority = wins conflicts.
     # openpyxl assigns priority sequentially, so add red first (wins when both match).
-    total_range = (f"{col_letter(month_col_start)}{total_row}:"
-                   f"{col_letter(month_col_end)}{total_row}")
+    total_range = month_range_ref(total_row, month_col_start, month_col_end)
     max_fte_ref = cell_ref(SHEET_CONFIG, roster_row, COL_ROSTER_FTE)
     # Red if > Max FTE (added first = highest priority, wins over amber)
     ws.conditional_formatting.add(total_range, FormulaRule(
@@ -422,8 +419,7 @@ def _write_person_grid(
     ))
 
     # Conditional formatting for REMAINING row
-    remaining_range = (f"{col_letter(month_col_start)}{remaining_row}:"
-                       f"{col_letter(month_col_end)}{remaining_row}")
+    remaining_range = month_range_ref(remaining_row, month_col_start, month_col_end)
     remaining_amber_threshold = 1 - CAPACITY_AMBER_LOAD
     # Red if < 0 (added first = highest priority, wins over amber)
     ws.conditional_formatting.add(remaining_range, FormulaRule(

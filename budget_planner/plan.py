@@ -9,7 +9,7 @@ from budget_planner.layout import (
     ConfigParamRows,
     MONTH_COL_START, SHEET_PLAN, SHEET_CAPACITY, SHEET_CONFIG,
     SECTION_HEADER_LABELS,
-    build_year_month_headers, cell_ref,
+    build_year_month_headers, cell_ref, month_range_ref,
     month_col_end as _month_col_end, val_columns,
     wp_active_months,
 )
@@ -182,8 +182,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
                 cell.protection = Protection(locked=True)
 
         # Validation columns
-        sum_range = (f"{col_letter(month_col_start)}{row}:"
-                     f"{col_letter(month_col_end)}{row}")
+        sum_range = month_range_ref(row, month_col_start, month_col_end)
         style_cell(ws, row, val_col_sum, font=BLACK_FORMULA,
                    fmt="0.00").value = f"=SUM({sum_range})"
         # Budget: FTE Budget from Config WP table col C

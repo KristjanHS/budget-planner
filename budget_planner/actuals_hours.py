@@ -19,7 +19,7 @@ from openpyxl.styles import Font
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_CONFIG,
-    build_year_month_headers,
+    build_year_month_headers, month_range_ref,
     month_col_end as _month_col_end, val_columns,
     wp_active_months,
     _calendar_year_groups,
@@ -204,8 +204,7 @@ def _write_person_hours_grid(
 
         # Validation: Sum column only (no Budget/Variance — hours log is a
         # record, not a budget-vs-actual view; design §1).
-        sum_range = (f"{col_letter(month_col_start)}{r}:"
-                     f"{col_letter(month_col_end)}{r}")
+        sum_range = month_range_ref(r, month_col_start, month_col_end)
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                    fmt=HOUR_FMT).value = f"=SUM({sum_range})"
 
@@ -249,8 +248,7 @@ def _write_person_hours_grid(
             style_cell(ws, r, fc, "", font=BLACK_FORMULA, fill=GREY_FILL,
                        fmt=EUR_FMT)
 
-        sum_range = (f"{col_letter(month_col_start)}{r}:"
-                     f"{col_letter(month_col_end)}{r}")
+        sum_range = month_range_ref(r, month_col_start, month_col_end)
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                    fmt=HOUR_FMT).value = f"=SUM({sum_range})"
 

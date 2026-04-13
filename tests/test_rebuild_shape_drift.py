@@ -151,6 +151,10 @@ def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
     assert "Midway Mary" in names_after, (
         f"Rebuild dropped the mid-inserted person. Roster after rebuild: {names_after}"
     )
+    mary = next(p for p in roster_after if p["name"] == "Midway Mary")
+    assert mary["grade"] == next(iter(cfg.GRADE_RATES.keys())), (
+        f"Rebuild dropped the mid-inserted person's grade. Got {mary['grade']!r}"
+    )
     dropped_assignees = {a["person"] for a in assignments_after} - set(names_after)
     assert not dropped_assignees, (
         f"Rebuild has assignments pointing at persons no longer in roster: {dropped_assignees}"

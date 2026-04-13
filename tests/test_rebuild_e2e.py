@@ -628,10 +628,14 @@ class TestRebuildFullScenario:
         wb = openpyxl.load_workbook(init_path)
 
         # Config round-trip
-        _, rebuilt_wps, rebuilt_sched = read_config_sheet(wb["Config"])
+        rebuilt_params, rebuilt_wps, rebuilt_sched = read_config_sheet(wb["Config"])
         assert rebuilt_wps[0]["fte"] == pytest.approx(99.0)
         wp2_rebuilt = next(s for s in rebuilt_sched if s["id"] == wps[1]["id"])
         assert wp2_rebuilt["end"] == shortened_end
+        # Untouched project params survive the rebuild (regression gate for
+        # builders that might clobber title/months on a mixed-edit rebuild).
+        assert rebuilt_params["title"] == params["title"]
+        assert rebuilt_params["months"] == params["months"]
 
         # Team name round-trip
         rebuilt_roster = read_team_from_config(wb["Config"])

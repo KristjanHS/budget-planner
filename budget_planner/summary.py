@@ -152,24 +152,16 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
                 f"={col_letter(sc + 1)}{row}-{col_letter(sc + 2)}{row}"
             )
 
-        # Project totals
+        # Project totals — sum each year-group column across years.
         tc = TOTAL_GROUP_START
-        # Sum planned FTE across years
-        plan_year_cols = [col_letter(YEAR_GROUP_START + y * COLS_PER_YEAR) for y in range(num_years)]
-        plan_sum = "+".join([f"{cl}{row}" for cl in plan_year_cols])
-        style_cell(summary, row, tc, font=BLACK_FORMULA, fmt="0.00").value = f"={plan_sum}"
-        # Sum planned EUR across years
-        plan_eur_cols = [col_letter(YEAR_GROUP_START + y * COLS_PER_YEAR + 1) for y in range(num_years)]
-        plan_eur_sum = "+".join([f"{cl}{row}" for cl in plan_eur_cols])
-        style_cell(summary, row, tc + 1, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={plan_eur_sum}"
-        # Sum actual EUR across years
-        act_eur_cols = [col_letter(YEAR_GROUP_START + y * COLS_PER_YEAR + 2) for y in range(num_years)]
-        act_eur_sum = "+".join([f"{cl}{row}" for cl in act_eur_cols])
-        style_cell(summary, row, tc + 2, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={act_eur_sum}"
-        # Sum forecast EUR across years
-        fcst_eur_cols = [col_letter(YEAR_GROUP_START + y * COLS_PER_YEAR + 3) for y in range(num_years)]
-        fcst_eur_sum = "+".join([f"{cl}{row}" for cl in fcst_eur_cols])
-        style_cell(summary, row, tc + 3, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={fcst_eur_sum}"
+        def year_sum(offset: int) -> str:
+            cols = [col_letter(YEAR_GROUP_START + y * COLS_PER_YEAR + offset) for y in range(num_years)]
+            return "+".join(f"{cl}{row}" for cl in cols)
+
+        style_cell(summary, row, tc, font=BLACK_FORMULA, fmt="0.00").value = f"={year_sum(0)}"
+        style_cell(summary, row, tc + 1, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={year_sum(1)}"
+        style_cell(summary, row, tc + 2, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={year_sum(2)}"
+        style_cell(summary, row, tc + 3, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={year_sum(3)}"
         # Total variance EUR = Plan EUR total - Actual EUR total
         style_cell(summary, row, tc + 4, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
             f"={col_letter(tc + 1)}{row}-{col_letter(tc + 2)}{row}"

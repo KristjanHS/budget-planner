@@ -138,9 +138,10 @@ can reference it.
    - Add small test: Actuals-Hours sheet has `Cum hours (to date)`
      header and per-WP-row SUM+INDEX formula.
 
-5. **`budget_planner/meta.py`** — update _META Capacity block to
-   describe the 2-col to-date layout; update Actuals-Hours block to
-   mention the new cum-hours column.
+5. ~~**`budget_planner/meta.py`**~~ — OBSOLETE: `_META` sheet was removed 2026-04-14.
+   Update `docs/internals.md` Capacity block instead to describe the
+   2-col to-date layout; update Actuals-Hours block to mention the new
+   cum-hours column.
 
 ## Rollout
 

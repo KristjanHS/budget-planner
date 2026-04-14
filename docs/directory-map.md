@@ -10,7 +10,6 @@ budget_planner/
   plan.py              # Plan sheet: compact header + planned FTE block
   capacity.py          # Capacity sheet: per-person monthly FTE allocation grid
   summary.py           # Summary sheet: budget overview + calendar-year aggregation
-  meta.py              # _META sheet: AI-agent-readable documentation
   actuals.py           # Actuals sheet: EUR per WP per month from accountant
   trends.py            # Trends sheet: burn rate, cumulative chart, person load
   reader.py            # Layout detection + Config/Capacity/Actuals readers

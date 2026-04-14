@@ -6,7 +6,7 @@
 
 **Architecture:** Add one new blue input (`hours_actuals_through_month`) + three derived Config cells (`months_elapsed_hours`, `months_elapsed_eur`, `reconciled_through_month`). Wire those into existing builders. All actual-side derived readouts switch to cumulative-through-a-through-month semantics. No input-cell semantics change — skip-and-cumulate entry remains valid.
 
-**Tech Stack:** openpyxl, python 3.11+, pytest. See `CLAUDE.md` for Critical Rules (formula-only, colour convention, inactive-month greying, named-range invariants, _META sync).
+**Tech Stack:** openpyxl, python 3.11+, pytest. See `CLAUDE.md` for Critical Rules (formula-only, colour convention, inactive-month greying, named-range invariants).
 
 **Reference:** Design doc — `docs/plans/2026-04-14-hours-timelog-v2-design.md`.
 
@@ -14,7 +14,7 @@
 
 ## Stage 1 — Foundation (T1–T4)
 
-Stage boundary: all new Config params + named ranges exist, reader round-trips them, _META documents them, and row grouping renders on Capacity + Actuals-Hours. No consumer code yet depends on the new named ranges.
+Stage boundary: all new Config params + named ranges exist, reader round-trips them, `docs/design-invariants.md` + `docs/internals.md` document them (post-_META removal), and row grouping renders on Capacity + Actuals-Hours. No consumer code yet depends on the new named ranges.
 
 ### Task 1: Add `hours_actuals_through_month` input + three derived named ranges
 
@@ -122,34 +122,9 @@ Init workbook → user edits B8 to `5` via openpyxl → save → `rebuild_workbo
 
 ---
 
-### Task 3: _META update (Critical Rule 6)
+### Task 3: ~~_META update~~ — OBSOLETE (2026-04-14)
 
-**Files:**
-- Modify: `budget_planner/meta.py`
-- Test: `tests/test_workbook.py` (if it asserts _META content) — otherwise rely on pyright + structural tests.
-
-**Step 1: Add two-cadence note.**
-
-Under the design-time assumptions section of _META (search for `eur_actuals_through_month` references — near line 374), add a block explaining:
-- Hours cadence: monthly cells on Actuals-Hours, user enters skip-and-cumulate; trust boundary at `hours_actuals_through_month`.
-- EUR cadence: WP-level only on Actuals, 2–3 month finance-close lag; trust boundary at `eur_actuals_through_month`.
-- Derived: `reconciled_through_month = MIN(eur, hours)` — authoritative boundary for any head-to-head comparison.
-
-**Step 2: Extend the NAMED RANGES inventory.**
-
-Search for the `hours_per_fte_month  = Config!$B$<row>` block. Add four entries for the new ranges with their Config cell coordinates and meaning.
-
-**Step 3: Document to-date block, reconciliation section, raw-monthly collapsed band.**
-
-Append a new section or extend the sheet-by-sheet inventory (Capacity, Trends, Actuals-Hours) to describe what lands in Stage 2/3.
-
-**Step 4: Verify no _META cell exceeds 32 767 chars.**
-
-`_split_meta_for_cells` already handles this — just ensure the split boundaries still align with semantic sections.
-
-**Step 5: Run tests + pyright.**
-
-`pytest tests/ -q && pyright`
+The `_META` sheet was removed on 2026-04-14 (see `docs/plans/archived/2026-04-14-remove-meta-sheet-design.md`). Cross-sheet invariants now live in `docs/design-invariants.md` and named-range documentation lives in `docs/internals.md`. When resuming, add the two-cadence note + new named-range entries to those docs instead. Skip this task — no code change needed.
 
 ---
 
@@ -194,7 +169,7 @@ Per sheet (Capacity, Actuals-Hours):
 - All Stage 1 tasks committed.
 - `pytest tests/ -v` green (all ~420 tests).
 - `pyright` clean.
-- `_META` updated.
+- Named-range inventory + two-cadence note landed in `docs/design-invariants.md` + `docs/internals.md` (post-_META removal).
 - Save checkpoint in `memory/project_state.md` noting Stage 1 done + next-up Stage 2 (T5–T9).
 
 Run retrospective via `/retro` at the stage boundary.
@@ -238,7 +213,7 @@ All black (same-sheet formulas) or green (cross-sheet to Actuals-Hours). Tests c
 - Actuals-Hours: cosmetic grey shading past `hours_actuals_through_month` on forecast-EUR leaves; add "Cumulative hours to date" + "Actual PM to date" summary rows above existing TOTAL.
 - Plan-Forecast: cosmetic grey shading past `hours_actuals_through_month`.
 
-**Stage 2 completion gate:** same as Stage 1 (full tests + pyright + _META + checkpoint + /retro).
+**Stage 2 completion gate:** same as Stage 1 (full tests + pyright + invariant/internals doc updates + checkpoint + /retro).
 
 ---
 

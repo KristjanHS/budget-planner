@@ -50,7 +50,7 @@ Design principle derived from this reality: **no derived view reads a single-mon
 
 `eur_actuals_through_month`, `hours_per_fte_month`, `project_start`, `fte_rate`, `roster_lookup`, `eu_annual_ceiling_pm` already exist from v1.
 
-**_META update:** document the two-cadence reality as a design-time assumption; future readers (AI or human) understand why two independent through-months exist, not one.
+**Docs update (post-_META removal 2026-04-14):** document the two-cadence reality as a design-time assumption in `docs/design-invariants.md`; future readers (AI or human) understand why two independent through-months exist, not one.
 
 ## W1 — Row grouping
 
@@ -187,7 +187,7 @@ No new convention. Critical Rule 3 preserved.
 - **Rule 3** (colour): blue/green/black mapping unchanged.
 - **Rule 4** (inactive-month greying + empty): new shading rule (`> through-month`) is separate and non-conflicting.
 - **Rule 5** (`project_start` + `fte_rate` named ranges): untouched.
-- **Rule 6** (_META reflects current structure): explicit update under Deliverables.
+- ~~**Rule 6** (_META reflects current structure)~~ — OBSOLETE: `_META` sheet removed 2026-04-14; invariants now live in `docs/design-invariants.md`.
 
 ## Deliverables
 
@@ -198,7 +198,7 @@ No new convention. Critical Rule 3 preserved.
 5. `budget_planner/summary.py`: per-column partial-year shading; CF gated on fully-covered years.
 6. `budget_planner/actuals_hours.py`: cosmetic shading past `hours_actuals_through_month`; new summary rows (Cumulative hours to date, Actual PM to date). Shared geometry helper gains row-group application for W1.
 7. `budget_planner/plan_forecast.py`: cosmetic shading past `hours_actuals_through_month`.
-8. `budget_planner/meta.py`: _META updates — new named ranges, two-cadence reality note, Reconciliation section, to-date block, collapsed raw-monthly band (**Critical Rule 6**).
+8. ~~`budget_planner/meta.py`~~ — OBSOLETE (2026-04-14 `_META` removal). Instead: update `docs/design-invariants.md` + `docs/internals.md` with new named ranges, two-cadence reality note, Reconciliation section, to-date block, collapsed raw-monthly band.
 9. `budget_planner/reader.py` + rebuild: new named ranges round-trip; to-date block is derived (no input), skip on read; row outline levels preserved on rebuild.
 
 ## Test coverage (additions)

@@ -29,14 +29,14 @@ graph TB
   end
   subgraph "Sheet Builders"
     CFG_S["config_sheet.py"] & PLAN["plan.py"] & CAP["capacity.py"]
-    ACT["actuals.py"] & SUM["summary.py"] & TRENDS["trends.py"] & META["meta.py"]
+    ACT["actuals.py"] & SUM["summary.py"] & TRENDS["trends.py"]
   end
   subgraph "Shared Infrastructure"
     LAYOUT["layout.py"] & STYLES["styles.py"]
     CONFIG["config.py"] & READER["reader.py"]
   end
   CLI --> WB
-  WB --> CFG_S & PLAN & CAP & ACT & SUM & TRENDS & META
+  WB --> CFG_S & PLAN & CAP & ACT & SUM & TRENDS
   WB -->|"init"| CONFIG
   WB -->|"rebuild"| READER
   CFG_S & PLAN & CAP & ACT & SUM & TRENDS --> LAYOUT & STYLES
@@ -59,7 +59,6 @@ sequenceDiagram
   participant AC as actuals
   participant SM as summary
   participant T2 as trends (content)
-  participant MT as meta
   WB->>CS: build_config_sheet()
   Note right of CS: Returns config_layout
   WB->>PL: build_plan_sheet(config_layout)
@@ -73,7 +72,6 @@ sequenceDiagram
   Note right of AC: Returns actuals_layout
   WB->>SM: build_summary_sheet(plan_layout, actuals_layout)
   WB->>T2: build_trends_sheet(all layouts)
-  WB->>MT: build_meta_sheet(plan_layout)
 ```
 
 ## Init Workflow
@@ -196,7 +194,6 @@ budget-planner/
 │   ├── actuals.py            # Actuals sheet builder
 │   ├── trends.py             # Trends sheet builder
 │   ├── summary.py            # Summary sheet builder
-│   ├── meta.py               # _META sheet builder
 │   ├── reader.py             # Round-trip reader (Config, Team, Capacity, Actuals)
 │   └── workbook.py           # Orchestrator: init_workbook() + rebuild_workbook()
 ├── setup.bat                 # Windows: create venv + install deps

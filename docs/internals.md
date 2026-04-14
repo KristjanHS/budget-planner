@@ -29,7 +29,6 @@ def build_<sheet>_sheet(ws, wb, ..., *, project_params=None, work_packages=None,
 | actuals | plan_layout |
 | summary | plan_layout + actuals_layout |
 | trends | all upstream layouts |
-| meta | plan_layout |
 
 ### Per-Sheet Notes
 

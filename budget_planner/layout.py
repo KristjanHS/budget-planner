@@ -32,7 +32,6 @@ ConfigParamRows = TypedDict("ConfigParamRows", {
 })
 
 # ── Sheet name constants ──
-SHEET_META = "_META"
 SHEET_CONFIG = "Config"
 SHEET_PLAN = "Plan"
 SHEET_CAPACITY = "Capacity"

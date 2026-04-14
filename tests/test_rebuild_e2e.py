@@ -650,7 +650,7 @@ class TestRebuildFullScenario:
         assert "Zara" in cap_data["person_groups"]
 
         # All sheets present
-        for name in ["_META", "Config", "Plan", "Capacity",
+        for name in ["Config", "Plan", "Capacity",
                       "Actuals", "Summary", "Trends"]:
             assert name in wb.sheetnames
 

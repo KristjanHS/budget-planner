@@ -56,10 +56,6 @@ OUT_OF_WINDOW = frozenset(range(1, 31)) - VALID_MONTHS - GAP_MONTHS_IN_WINDOW
 def cap_ws(tmp_path_factory):
     """Build a minimal workbook with the gap-WP scenario; return the Capacity sheet."""
     wb = Workbook()
-    meta = wb.active
-    assert meta is not None
-    meta.title = "_META"
-
     cfg_ws = wb.create_sheet("Config")
     config_layout = build_config_sheet(
         cfg_ws, wb, PROJECT_PARAMS, WORK_PACKAGES,

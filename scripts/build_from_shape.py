@@ -21,7 +21,6 @@ from openpyxl import Workbook
 from budget_planner.config import PROJECT_MONTHS
 from budget_planner.workbook import (
     SHEET_CONFIG,
-    SHEET_META,
     _apply_all_year_groups,
     _build_all_sheets,
 )
@@ -224,9 +223,6 @@ def build_from_fingerprint(fp: dict, out_path: str) -> str:
     }
 
     wb = Workbook()
-    meta_ws = wb.active
-    assert meta_ws is not None
-    meta_ws.title = SHEET_META
 
     _build_all_sheets(
         wb,

@@ -12,7 +12,6 @@ BUILDER_MODULES = [
     "budget_planner.actuals",
     "budget_planner.summary",
     "budget_planner.trends",
-    "budget_planner.meta",
 ]
 
 

@@ -22,9 +22,8 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
                         reporting_periods, plan_forecast_layout):
     """Create the Summary sheet with annual budget view and budget overview.
 
-    Every data parameter is required — matching the ``build_meta_sheet``
-    contract tightened in T6 and the rest of the orchestrator. Callers must
-    pass live data; there is no lazy-import fallback to ``config.py`` seed
+    Every data parameter is required — the orchestrator threads live data
+    through, and there is no lazy-import fallback to ``config.py`` seed
     data (a caller that forgets to thread state would otherwise silently
     render seed data into the Summary sheet).
 

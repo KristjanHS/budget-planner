@@ -26,7 +26,6 @@ from budget_planner.reader import (
     read_team_from_config,
 )
 from budget_planner.workbook import init_workbook, rebuild_workbook
-from tests._shape_invariants import assert_meta_matches_live
 from tests.test_rebuild_shape_drift import _simulate_excel_insert_in_named_range
 
 
@@ -107,12 +106,10 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
             f"Rebuild dropped inserted grade. Got {list(grades)}"
         )
 
-    # Universal invariants: every assignment points at a live roster name, and
-    # _META text reflects the live team count.
+    # Universal invariant: every assignment points at a live roster name.
     roster_names = {p["name"] for p in read_team_from_config(config_ws)}
     orphaned = {
         a["person"] for a in read_assignments_from_config(config_ws)
     } - roster_names
     assert not orphaned, f"Orphaned assignments after rebuild: {orphaned}"
-    assert_meta_matches_live(wb)
     wb.close()

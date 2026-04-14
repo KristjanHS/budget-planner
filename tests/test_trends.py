@@ -406,7 +406,7 @@ def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
     from openpyxl import Workbook as WB
     from openpyxl.worksheet.worksheet import Worksheet
     from budget_planner.workbook import _build_all_sheets
-    from budget_planner.layout import SHEET_META, SHEET_TRENDS
+    from budget_planner.layout import SHEET_TRENDS
 
     from budget_planner import config as _cfg
 
@@ -419,10 +419,6 @@ def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
     }
 
     wb = WB()
-    meta_ws = wb.active
-    assert meta_ws is not None
-    meta_ws.title = SHEET_META
-
     _build_all_sheets(wb, project_params, work_packages, team,
                       external_commitments, grade_rates=_cfg.GRADE_RATES)
 

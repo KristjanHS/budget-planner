@@ -25,7 +25,7 @@ def layout(workbook):
 # ── Check 2-3: Sheet existence + global params ──
 
 def test_sheets_exist(workbook):
-    for name in ["_META", "Config", "Plan", "Capacity", "Actuals",
+    for name in ["Config", "Plan", "Capacity", "Actuals",
                  "Actuals-Hours", "Plan-Forecast", "Summary"]:
         assert name in workbook.sheetnames, f"Missing sheet: {name}"
 
@@ -118,22 +118,6 @@ def test_summary_wp_count(workbook):
             count += 1
     # Budget Overview + RP Summary each have one formula row per WP
     assert count == NUM_WPS * 2, f"Summary has {count} WP rows, expected {NUM_WPS * 2}"
-
-
-# ── _META ──
-
-def test_meta_has_modification_guide(workbook):
-    meta = workbook["_META"]
-    # T15: meta text now exceeds Excel's 32 767-char cell limit, so the
-    # builder splits it across consecutive column-A cells. Concatenate to
-    # search across the whole document.
-    parts = []
-    for r in range(1, meta.max_row + 1):
-        v = meta.cell(r, 1).value
-        if v:
-            parts.append(str(v))
-    content = "\n".join(parts)
-    assert "MODIFICATION GUIDE" in content
 
 
 # ── Freeze panes ──
@@ -306,7 +290,6 @@ def test_build_order_is_stable(tmp_path):
         "build_actuals_sheet",
         "build_summary_sheet",
         "build_trends_sheet",
-        "build_meta_sheet",
     ]
     with (
         patch.object(wb_mod, "build_config_sheet",
@@ -329,8 +312,6 @@ def test_build_order_is_stable(tmp_path):
                      _spy("build_summary_sheet", wb_mod.build_summary_sheet)),
         patch.object(wb_mod, "build_trends_sheet",
                      _spy("build_trends_sheet", wb_mod.build_trends_sheet)),
-        patch.object(wb_mod, "build_meta_sheet",
-                     _spy("build_meta_sheet", wb_mod.build_meta_sheet)),
     ):
         wb_mod.init_workbook(str(tmp_path / "order.xlsx"))
 
@@ -338,23 +319,3 @@ def test_build_order_is_stable(tmp_path):
         "Builder call order changed. See workbook.py module docstring + "
         "docs/plans/archived/2026-04-12-brittleness-refactor.md T5 before adjusting."
     )
-
-
-def test_meta_requires_all_params():
-    """T6: build_meta_sheet must refuse to build from partial data.
-
-    _META documents live workbook state, not config.py seed data. Every
-    data parameter is required so a caller that forgets to thread state
-    through gets a TypeError instead of silently emitting stale docs.
-    """
-    from budget_planner.meta import build_meta_sheet
-
-    required = [
-        "project_params", "work_packages", "team",
-        "external_commitments", "config_layout", "summary_layout",
-        "grade_rates",
-    ]
-    for missing in required:
-        kwargs = {k: object() for k in required if k != missing}
-        with pytest.raises(TypeError, match=missing):
-            build_meta_sheet(object(), {}, **kwargs)

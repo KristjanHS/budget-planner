@@ -37,9 +37,6 @@ def capacity_layout(tmp_path_factory):
     from budget_planner.config_sheet import build_config_sheet
 
     wb = WB()
-    meta_ws = wb.active
-    assert meta_ws is not None
-    meta_ws.title = "_META"
     config_ws = wb.create_sheet("Config")
     config_layout = build_config_sheet(config_ws, wb,
                                         {"title": "Test", "start": __import__("datetime").datetime(2026, 11, 1),

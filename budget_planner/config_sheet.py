@@ -718,8 +718,8 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
 
     # ── Label-cell comments for rows A4..A11 ──
     # Each param-row label gets an explanatory comment so the spreadsheet is
-    # self-documenting when _META is collapsed. Comments are sized to fit
-    # their text via ``sized_comment`` (default openpyxl boxes truncate).
+    # self-documenting in-tab. Comments are sized to fit their text via
+    # ``sized_comment`` (default openpyxl boxes truncate).
     _param_label_comments = {
         param_rows["FTE Rate (EUR)"]: (
             "Project-wide default rate per person-month in EUR. The value "

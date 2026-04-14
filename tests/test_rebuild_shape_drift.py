@@ -13,7 +13,6 @@ from budget_planner.reader import (
     read_team_from_config,
 )
 from budget_planner.workbook import init_workbook, rebuild_workbook
-from tests._shape_invariants import assert_meta_matches_live
 
 
 def _find_roster_first_data_row(ws):
@@ -110,7 +109,6 @@ def test_blank_row_mid_roster_does_not_truncate_rebuild(tmp_path: Path):
     assert not dropped_assignees, (
         f"Rebuild has assignments pointing at persons no longer in roster: {dropped_assignees}"
     )
-    assert_meta_matches_live(wb)
     wb.close()
 
 
@@ -240,5 +238,4 @@ def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
     assert not dropped_assignees, (
         f"Rebuild has assignments pointing at persons no longer in roster: {dropped_assignees}"
     )
-    assert_meta_matches_live(wb)
     wb.close()

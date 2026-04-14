@@ -6,7 +6,7 @@ docs/plans/archived/2026-04-12-brittleness-refactor.md)::
     Config ──► Capacity ──► Plan ──► (rewrite Plan FTE)
                                │
                                ├──► Trends(stub = current_month named range)
-                               └──► Actuals ──► Summary ──► Trends(full) ──► _META
+                               └──► Actuals ──► Summary ──► Trends(full)
 
 Coupling points:
 - Capacity consumes ``config_layout`` (param rows, first WP row).
@@ -15,7 +15,7 @@ Coupling points:
   ``capacity_layout`` — must run after both Capacity and Plan.
 - Actuals formulas reference the ``current_month`` named range — the Trends
   stub that creates it must run before Actuals.
-- Summary, full Trends, and _META consume every prior layout dict and must
+- Summary and full Trends consume every prior layout dict and must
   run last in that order.
 
 ``BuildContext`` below threads the accumulated layout dicts through
@@ -24,7 +24,7 @@ Coupling points:
 
 import os
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -41,9 +41,7 @@ from budget_planner.actuals_hours import build_actuals_hours_sheet
 from budget_planner.plan_forecast import build_plan_forecast_sheet
 from budget_planner.summary import build_summary_sheet
 from budget_planner.trends import build_trends_sheet
-from budget_planner.meta import build_meta_sheet
 from budget_planner.layout import (
-    SHEET_META,
     SHEET_CONFIG,
     SHEET_PLAN,
     SHEET_CAPACITY,
@@ -104,7 +102,6 @@ class BuildContext:
     capacity_layout: dict[str, Any] | None = None
     actuals_layout: dict[str, Any] | None = None
     summary_layout: dict[str, Any] | None = None
-    warnings: list[str] = field(default_factory=list)
 
 
 def _validate_config(
@@ -185,12 +182,14 @@ def _build_all_sheets(
     assignments=None,
     preserved_actuals=None,
     preserved_actuals_hours=None,
-    rebuild_warnings=None,
     reporting_periods=None,
 ):
     """Build all sheets into the workbook.
 
-    Expects wb to already have a '_META' sheet as the active/first sheet.
+    The caller provides a fresh ``Workbook()``. Any sheets present before
+    this function runs (e.g. openpyxl's default ``Sheet``) are treated as
+    throwaway scaffolding and removed once the real sheets exist.
+
     Capacity monthly values are auto-distributed from assignments.
     Actuals month cells are always empty (or restored from preserved data).
 
@@ -198,12 +197,12 @@ def _build_all_sheets(
     accumulates layout dicts from each builder; downstream builders read from
     it so the dependencies are explicit.
     """
-    meta_ws = wb[SHEET_META]
-    ctx = BuildContext(warnings=rebuild_warnings or [])
+    _initial_sheets = list(wb.sheetnames)
+    ctx = BuildContext()
 
-    # Single fallback point: downstream builders (esp. build_summary_sheet,
-    # build_meta_sheet) require non-None data. The orchestrator owns the
-    # lazy-load so individual builders can stay strict.
+    # Single fallback point: downstream builders (esp. build_summary_sheet)
+    # require non-None data. The orchestrator owns the lazy-load so
+    # individual builders can stay strict.
     if wp_schedule is None:
         from budget_planner.config import WP_SCHEDULE
         wp_schedule = WP_SCHEDULE
@@ -358,30 +357,19 @@ def _build_all_sheets(
         plan_forecast_layout=plan_forecast_layout,
     )
 
-    # Stage 9 — _META (last; documents the state of every other sheet)
-    build_meta_sheet(
-        meta_ws,
-        ctx.plan_layout,
-        project_params=project_params,
-        work_packages=work_packages,
-        team=team,
-        external_commitments=external_commitments,
-        rebuild_warnings=ctx.warnings,
-        config_layout=ctx.config_layout,
-        summary_layout=ctx.summary_layout,
-        grade_rates=grade_rates,
-        actuals_hours_layout=actuals_hours_layout,
-        plan_forecast_layout=plan_forecast_layout,
-    )
+    # Drop the scaffolding sheet(s) the caller handed us — the real sheets
+    # are now in place, so the throwaway `Sheet` can go.
+    for _name in _initial_sheets:
+        if _name in wb.sheetnames:
+            del wb[_name]
 
     # Tab order (user-facing) differs from build order.
     # After build the sheetlist is:
-    #   _META, Config, Capacity, Plan, Trends, Actuals-Hours, Plan-Forecast,
+    #   Config, Capacity, Plan, Trends, Actuals-Hours, Plan-Forecast,
     #   Actuals, Summary
     # Target tab order:
-    #   _META, Config, Capacity, Plan, Actuals, Actuals-Hours, Plan-Forecast,
+    #   Config, Capacity, Plan, Actuals, Actuals-Hours, Plan-Forecast,
     #   Trends, Summary
-    wb.move_sheet(SHEET_META, offset=0)
     # 1) Push Trends past Actuals-Hours + Plan-Forecast + Actuals (+3).
     # 2) Hop Actuals leftward two slots so it sits just after Plan (-2).
     wb.move_sheet(SHEET_TRENDS, offset=3)
@@ -457,9 +445,6 @@ def init_workbook(
     reporting_periods = config.REPORTING_PERIODS
 
     wb = Workbook()
-    meta_ws = wb.active
-    assert meta_ws is not None
-    meta_ws.title = SHEET_META
 
     grade_rates = config.GRADE_RATES
 
@@ -688,9 +673,6 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     # ── Generate new workbook ──
     wb = Workbook()
-    meta_ws = wb.active
-    assert meta_ws is not None
-    meta_ws.title = SHEET_META
 
     _build_all_sheets(
         wb,
@@ -702,7 +684,6 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         assignments=assignments,
         preserved_actuals=preserved_actuals,
         preserved_actuals_hours=preserved_actuals_hours,
-        rebuild_warnings=warnings if warnings else None,
         reporting_periods=reporting_periods,
         grade_rates=grade_rates,
     )

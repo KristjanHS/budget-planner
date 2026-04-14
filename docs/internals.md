@@ -108,7 +108,7 @@ All sheets are regenerated from scratch. Only these user-entered values survive:
 | Person-WP assignments, external commitments | Config sheet PERSON-WP ASSIGNMENTS (B2) + EXTERNAL COMMITMENTS (B3) sections |
 | Monthly EUR values per WP | Actuals data cells |
 
-Everything else (formulas, styling, CF, charts, _META/Plan/Summary/Trends) is overwritten.
+Everything else (formulas, styling, CF, charts, Plan/Summary/Trends) is overwritten.
 
 ### Preserved Data Structures
 
@@ -126,7 +126,7 @@ preserved_actuals: dict[str, list[float | None]]
 - WP removed from config: Capacity + Actuals entries dropped (warning)
 - External commitment references missing team member: hard error
 
-All orphaned data is logged and included in `_META` sheet's LAST REBUILD LOG.
+All orphaned data is printed to stderr at rebuild time. Hard errors abort rebuild; warnings do not.
 
 ### Row-Span Resolution (named-range-primary)
 

@@ -156,7 +156,7 @@ flowchart TD
 User-facing tab order (set in `workbook.py` after build): **Config → Capacity → Plan → Actuals → Actuals-Hours → Plan-Forecast → Trends → Summary**. Note the Cross-Sheet Formula References diagram above omits `Actuals-Hours` and `Plan-Forecast`; those two sheets form a secondary data chain documented here in prose.
 
 ### Config
-Single source of truth for project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, and the grade rate table. Hosts the named ranges `project_start` and `fte_rate`. No distinctive tab color. Upstream to every other sheet.
+Single source of truth for project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, and the grade rate table. Hosts the named ranges `project_start` and `fte_rate`. **Tab color: Blue (4472C4).** Upstream to every other sheet.
 
 ### Capacity
 Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects. Includes a to-date block (Plan/Actual/Variance in PM and %) that reads from Actuals-Hours. Feeds Plan via `SUM(Capacity!…)`.

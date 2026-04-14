@@ -13,7 +13,7 @@ Add a row to `tbl_WorkPackages` on the Config sheet in Excel. Run `python -m bud
 Add a row to the TEAM ROSTER section on the Config sheet. Run `python -m budget_planner rebuild` + pytest.
 
 ## "Add a new column/metric to Summary"
-Modify `budget_planner/summary.py`. Update `budget_planner/meta.py` text. Run + pytest.
+Modify `budget_planner/summary.py`. If the change introduces a new cross-sheet invariant or trust boundary, also update `docs/design-invariants.md`; if it shifts row/column layout, reflect that in `budget_planner/layout.py` + `docs/internals.md`. Run + pytest.
 
 ## "Import actuals from timesheet"
 Not applicable — the Actuals sheet tracks EUR costs from the accountant, not FTE from timesheets.

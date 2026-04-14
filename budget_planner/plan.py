@@ -1,6 +1,5 @@
 """Plan sheet builder — compact header + planned FTE block."""
 
-from openpyxl.comments import Comment
 from openpyxl.styles import Font, Protection
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.formatting.rule import FormulaRule
@@ -17,6 +16,7 @@ from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     GREY_FILL, LIGHT_GREEN_FILL,
     CF_RED_FILL, style_cell, col_letter, write_section_header,
+    sized_comment,
 )
 
 
@@ -129,11 +129,10 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     wb.defined_names.add(DefinedName(
         "partner_ceiling", attr_text=cell_ref(SHEET_PLAN, 1, 7)
     ))
-    ws.cell(row=1, column=7).comment = Comment(
+    ws.cell(row=1, column=7).comment = sized_comment(
         "Personnel costs only (direct). The 25% indirect flat rate "
         "(the programme regulation) is added on top when computing "
-        "total eligible costs.",
-        "Budget Planner",
+        "total eligible costs."
     )
 
     # Row 2: blank separator (no action needed)

@@ -1,6 +1,5 @@
 """Config sheet builder — project parameters, work packages, and team roster."""
 
-from openpyxl.comments import Comment
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -36,6 +35,7 @@ from budget_planner.styles import (
     CF_YELLOW_FILL,
     CF_RED_FILL,
     CENTER,
+    sized_comment,
     style_cell,
 )
 
@@ -43,7 +43,7 @@ from budget_planner.styles import (
 def _apply_header_comments(ws, header_row: int, comments: dict[int, str]) -> None:
     """Attach explanatory comments to header cells. Keys are 1-based column numbers."""
     for col, text in comments.items():
-        ws.cell(row=header_row, column=col).comment = Comment(text, "Programme Budget Tool")
+        ws.cell(row=header_row, column=col).comment = sized_comment(text)
 
 
 def _write_budget_section(ws, start_row, work_packages, project_params):
@@ -652,8 +652,22 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         ("FTE Rate (EUR)", None, "€#,##0", None),  # value set later as formula
         ("EU Annual Ceiling (PM/FTE/year)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
         ("Hours per FTE Month", 143, "0", None),
-        ("EUR Actuals Through Month", 1, "0", None),
-        ("Hours Actuals Through Month", 1, "0", None),
+        # Through-month params are user-edited integers. On rebuild the reader
+        # surfaces any existing value via project_params; on fresh init it
+        # defaults to 1 (= "only project month 1 is closed"). Hardcoding 1
+        # here would clobber the user's edit across rebuild.
+        (
+            "EUR Actuals Through Month",
+            project_params.get("eur_actuals_through_month", 1),
+            "0",
+            None,
+        ),
+        (
+            "Hours Actuals Through Month",
+            project_params.get("hours_actuals_through_month", 1),
+            "0",
+            None,
+        ),
     ]
     # Param rows are driven by the order of param_defs above. The literal
     # TypedDict below mirrors that order; the assertion inside the styling
@@ -701,6 +715,68 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         r = derived_first_row + offset
         style_cell(ws, r, 1, value=label, font=HEADER_FONT, border=False)
         style_cell(ws, r, 2, value=formula, font=BLACK_FORMULA, fmt="0", border=False)
+
+    # ── Label-cell comments for rows A4..A11 ──
+    # Each param-row label gets an explanatory comment so the spreadsheet is
+    # self-documenting when _META is collapsed. Comments are sized to fit
+    # their text via ``sized_comment`` (default openpyxl boxes truncate).
+    _param_label_comments = {
+        param_rows["FTE Rate (EUR)"]: (
+            "Project-wide default rate per person-month in EUR. The value "
+            "here is a SUMPRODUCT-derived weighted average from the roster "
+            "(grade × rate × max FTE). Black = formula — do not hand-edit. "
+            "To change it, edit RATE BY GRADE or the per-person grade in "
+            "TEAM ROSTER."
+        ),
+        param_rows["EU Annual Ceiling (PM/FTE/year)"]: (
+            "Maximum person-months a team member may charge to EU-funded "
+            "projects per calendar year — across ALL EU grants, not just "
+            "this one. Drives the Capacity EU TOTAL per-year conditional "
+            "formatting and the EU ceiling pro-rated check."
+        ),
+        param_rows["Hours per FTE Month"]: (
+            "Convention for how many hours equal 1 person-month of "
+            "full-time effort. EU/programme defaults to 143 h/month. Used to "
+            "convert hours logged on Actuals-Hours into person-months on "
+            "Capacity and into EUR on Plan-Forecast. Blue = user input."
+        ),
+        param_rows["EUR Actuals Through Month"]: (
+            "Latest project month for which WP-level Actual EUR figures "
+            "from finance close are trusted and complete. Integer month "
+            "index, 1-based. Actual EUR typically lags hours by 2–3 months "
+            "(finance-close cadence). Reconciliation and summary views use "
+            "this as the trust boundary for EUR-side cumulative figures. "
+            "Blue = user input."
+        ),
+        param_rows["Hours Actuals Through Month"]: (
+            "Latest project month for which the hours timelog on "
+            "Actuals-Hours is trusted and complete. Integer month index, "
+            "1-based. Because hours are entered skip-and-cumulate "
+            "(intermediate months blank, cumulative figure dropped into a "
+            "later month), the only safe aggregate is cumulative through "
+            "this month. Blue = user input."
+        ),
+        derived_first_row: (
+            "Derived from Hours Actuals Through Month (=MAX(1,$B$8)). "
+            "Used as the denominator for to-date rate calculations (Avg "
+            "FTE to date, Utilisation to date). Floored at 1 to keep "
+            "denominators safe when no hours have been reported yet. "
+            "Black = formula."
+        ),
+        derived_first_row + 1: (
+            "Derived from EUR Actuals Through Month (=MAX(1,$B$7)). "
+            "Used by the Breach-In cumulative-slope extrapolation on the "
+            "Actuals sheet. Floored at 1. Black = formula."
+        ),
+        derived_first_row + 2: (
+            "=MIN($B$7,$B$8) — the boundary beyond which a "
+            "Forecast-vs-Actual head-to-head reconciliation cannot be "
+            "trusted. Summary table on Trends and the gap chart use this "
+            "as their cutoff. Black = formula."
+        ),
+    }
+    for row_num, text in _param_label_comments.items():
+        ws.cell(row=row_num, column=1).comment = sized_comment(text)
 
     # ── Section 2: WP Budget ──
     # Gap row sits AFTER the derived block; budget section starts two rows below

@@ -5,7 +5,6 @@ from openpyxl.chart import LineChart
 from openpyxl.chart.data_source import AxDataSource, NumDataSource, NumRef, StrRef
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.series import Series, SeriesLabel
-from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 
 from budget_planner.layout import (
@@ -21,6 +20,7 @@ from budget_planner.styles import (
     LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     CENTER, style_cell, col_letter, write_section_header,
     auto_fit_columns,
+    sized_comment,
 )
 
 # CF fills imported from styles — DXF context requires bgColor
@@ -74,11 +74,8 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
                    fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
     # Cell comment on Exhaustion Mo. header
-    ws.cell(row=header_row, column=7).comment = Comment(
-        "Projection is linear based on quarterly actuals. "
-        "Accuracy improves after Q2.",
-        "Programme Budget Tool",
-    )
+    ws.cell(row=header_row, column=7).comment = sized_comment("Projection is linear based on quarterly actuals. "
+        "Accuracy improves after Q2.")
 
     # WP data rows
     first_wp_data_row = header_row + 1
@@ -245,9 +242,11 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     # ================================================================
     # Section 2: Person Load Table
     # ================================================================
-    # Chart is anchored 2 rows below total and occupies ~15 rows of height
+    # Chart is anchored 2 rows below total. Chart height is 7.5 cm (~14
+    # rows at default row height) so PERSON LOAD sits just below it at
+    # chart_anchor_row + 14 without overlap.
     chart_anchor_row = total_row + 2
-    person_section_row = chart_anchor_row + 16  # chart height ~15 rows
+    person_section_row = chart_anchor_row + 14
     write_section_header(ws, person_section_row, "PERSON LOAD", merge_end=8)
 
     # Column headers
@@ -560,7 +559,7 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
 
     # Chart dimensions and placement
     chart.width = 30
-    chart.height = 15
+    chart.height = 7.5
     ws.add_chart(chart, f"A{chart_anchor_row}")
 
     # ================================================================

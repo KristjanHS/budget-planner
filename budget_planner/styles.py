@@ -72,6 +72,49 @@ def col_letter(c):
     return get_column_letter(c)
 
 
+# Comment box sizing — openpyxl defaults (144×79 pt) truncate any comment
+# longer than ~2 short lines. These helpers compute a box big enough for the
+# actual text. Heuristic: 7pt per char wide, 16pt per line tall, with a
+# min/max clamp so single-word comments don't get a postage-stamp box and
+# paragraph-length ones don't cover the whole screen.
+_COMMENT_CHAR_WIDTH_PT = 7
+_COMMENT_LINE_HEIGHT_PT = 16
+_COMMENT_MIN_WIDTH_PT = 220
+_COMMENT_MAX_WIDTH_PT = 520
+_COMMENT_MIN_HEIGHT_PT = 60
+_COMMENT_MAX_HEIGHT_PT = 400
+
+
+def sized_comment(text: str, author: str = "Programme Budget Tool"):
+    """Return an openpyxl Comment whose box is sized to fit ``text``.
+
+    openpyxl's default box (144×79 pt) silently clips most multi-sentence
+    comments. This helper estimates a box large enough for the full text,
+    clamped to a readable range. Width is chosen from the longest wrapped
+    line; height from the resulting wrapped line count.
+    """
+    from openpyxl.comments import Comment as _Comment
+    lines = text.splitlines() or [""]
+    longest = max((len(line) for line in lines), default=0)
+    width = min(_COMMENT_MAX_WIDTH_PT,
+                max(_COMMENT_MIN_WIDTH_PT, longest * _COMMENT_CHAR_WIDTH_PT))
+    # Chars that fit on one visual line at the chosen width.
+    chars_per_line = max(1, width // _COMMENT_CHAR_WIDTH_PT)
+    wrapped_lines = 0
+    for line in lines:
+        if not line:
+            wrapped_lines += 1
+        else:
+            wrapped_lines += -(-len(line) // chars_per_line)  # ceil div
+    height = min(_COMMENT_MAX_HEIGHT_PT,
+                 max(_COMMENT_MIN_HEIGHT_PT,
+                     wrapped_lines * _COMMENT_LINE_HEIGHT_PT))
+    c = _Comment(text, author)
+    c.width = width
+    c.height = height
+    return c
+
+
 def write_section_header(ws, row, title, merge_end):
     """Write a merged section header row with SECTION_FONT/SECTION_FILL."""
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=merge_end)

@@ -1,6 +1,5 @@
 """Capacity sheet builder — per-person monthly FTE allocation."""
 
-from openpyxl.comments import Comment
 from openpyxl.styles import Font
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.properties import Outline
@@ -14,11 +13,14 @@ from budget_planner.layout import (
     wp_active_months,
     _calendar_year_groups,
 )
-from budget_planner.person_section import plan_person_layout, PersonGridContext
+from budget_planner.person_section import (
+    plan_person_layout, PersonGridContext, apply_person_row_outline,
+)
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     CF_AMBER_FILL, CF_RED_FILL, style_cell, col_letter,
+    sized_comment,
 )
 
 # Band label shown above the Actual-FTE columns (row 1 merged).
@@ -203,11 +205,8 @@ def _write_person_grid(
                 active_idx += 1
                 style_cell(ws, r, c, round(val, 4), font=BLUE_INPUT, fmt="0.00")
                 if first_wp_row_for_person and not comment_added:
-                    ws.cell(row=r, column=c).comment = Comment(
-                        "Enter monthly FTE allocation for each work "
-                        "package and external project.",
-                        "Programme Budget Tool",
-                    )
+                    ws.cell(row=r, column=c).comment = sized_comment("Enter monthly FTE allocation for each work "
+                        "package and external project.")
                     comment_added = True
             else:
                 style_cell(ws, r, c, "", font=BLUE_INPUT, fill=GREY_FILL,
@@ -306,12 +305,9 @@ def _write_person_grid(
     total_row = layout.total_row
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
-    ws.cell(row=r, column=2).comment = Comment(
-        "Per-month SUM of all programme WP rows above for this person. External "
+    ws.cell(row=r, column=2).comment = sized_comment("Per-month SUM of all programme WP rows above for this person. External "
         "project rows are NOT included here — see EU TOTAL for the "
-        "EU-ceiling view that includes EU-flagged externals.",
-        "Programme Budget Tool",
-    )
+        "EU-ceiling view that includes EU-flagged externals.")
     for mi in range(project_params["months"]):
         c = month_col_start + mi
         cl = col_letter(c)
@@ -336,13 +332,10 @@ def _write_person_grid(
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "REMAINING", font=HEADER_FONT,
                fill=LIGHT_GREEN_FILL)
-    ws.cell(row=r, column=2).comment = Comment(
-        "Per-month = max_fte (from Config roster) − TOTAL. Negative means "
+    ws.cell(row=r, column=2).comment = sized_comment("Per-month = max_fte (from Config roster) − TOTAL. Negative means "
         "this person is over-allocated to programme work in that month. External "
         "commitments are NOT subtracted here — they shrink available "
-        "capacity via Balance on the Config Assignments table.",
-        "Programme Budget Tool",
-    )
+        "capacity via Balance on the Config Assignments table.")
     for mi in range(project_params["months"]):
         c = month_col_start + mi
         cl = col_letter(c)
@@ -365,12 +358,9 @@ def _write_person_grid(
     eu_total_row = layout.eu_total_row
     style_cell(ws, r, 1, fill=LIGHT_BLUE_FILL)
     style_cell(ws, r, 2, "EU TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
-    ws.cell(row=r, column=2).comment = Comment(
-        "Per-month SUM of programme WP rows + EU-flagged external project rows. "
+    ws.cell(row=r, column=2).comment = sized_comment("Per-month SUM of programme WP rows + EU-flagged external project rows. "
         "Used against the EU annual ceiling (~12 PM/year/person total "
-        "across ALL EU grants). Non-EU externals are excluded.",
-        "Programme Budget Tool",
-    )
+        "across ALL EU grants). Non-EU externals are excluded.")
 
     # Build list of rows that count toward EU total
     eu_row_refs = list(wp_rows.values())  # All programme WPs are EU
@@ -662,6 +652,7 @@ def _write_person_grid(
         ))
 
     assert r == layout.next_row
+    apply_person_row_outline(ws, layout)
     return layout.next_row, {
         "header_row": header_row,
         "wp_rows": wp_rows,
@@ -753,11 +744,17 @@ def build_capacity_sheet(ws, team_layout, *,
     ws.sheet_properties.tabColor = "7030A0"
 
     # Outline groups: right-side Actual + Variance bands collapse right.
+    # summaryBelow=False places the row-outline collapse button next to each
+    # person header (above the block), so collapsing hides that person's
+    # data rows beneath the header rather than above the next header.
     outline_pr = ws.sheet_properties.outlinePr
     if outline_pr is None:
-        ws.sheet_properties.outlinePr = Outline(summaryRight=True)
+        ws.sheet_properties.outlinePr = Outline(
+            summaryRight=True, summaryBelow=False,
+        )
     else:
         outline_pr.summaryRight = True
+        outline_pr.summaryBelow = False
 
     # Mark Actual + Variance band columns as outline group level 1 so users
     # can collapse the whole right-side block via the outline button.
@@ -823,22 +820,13 @@ def build_capacity_sheet(ws, team_layout, *,
                        font=_small, fill=LIGHT_BLUE_FILL)
 
     # Explanatory comments on validation column headers
-    ws.cell(row=year_header_row, column=val_col_sum).comment = Comment(
-        "Row-wide SUM of the monthly FTE cells for this WP/person. "
-        "Should equal Budget — if not, Variance flags the gap.",
-        "Programme Budget Tool",
-    )
-    ws.cell(row=year_header_row, column=val_col_budget).comment = Comment(
-        "Cross-ref (green font) to this assignment's Total FTE on the "
-        "Config sheet. Edit Total FTE on Config, not here.",
-        "Programme Budget Tool",
-    )
-    ws.cell(row=year_header_row, column=val_col_diff).comment = Comment(
-        "Budget − Sum. Should be zero when the distribution matches the "
+    ws.cell(row=year_header_row, column=val_col_sum).comment = sized_comment("Row-wide SUM of the monthly FTE cells for this WP/person. "
+        "Should equal Budget — if not, Variance flags the gap.")
+    ws.cell(row=year_header_row, column=val_col_budget).comment = sized_comment("Cross-ref (green font) to this assignment's Total FTE on the "
+        "Config sheet. Edit Total FTE on Config, not here.")
+    ws.cell(row=year_header_row, column=val_col_diff).comment = sized_comment("Budget − Sum. Should be zero when the distribution matches the "
         "assignment. Red highlight if negative (monthly total exceeds the "
-        "committed Total FTE).",
-        "Programme Budget Tool",
-    )
+        "committed Total FTE).")
 
     first_person_header_row = r
 

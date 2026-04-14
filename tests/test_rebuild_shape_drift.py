@@ -114,6 +114,87 @@ def test_blank_row_mid_roster_does_not_truncate_rebuild(tmp_path: Path):
     wb.close()
 
 
+def test_hours_actuals_through_month_round_trip(tmp_path: Path):
+    """T2: user-edited hours_actuals_through_month survives rebuild.
+
+    Covers the full init -> user edit -> rebuild -> reopen flow for the new
+    v2 Config rows (B8 blue input + B9-B11 derived formulas + four named
+    ranges). Also bumps B7 (eur_actuals_through_month) so the MIN in B11 has
+    something non-trivial to resolve. Second rebuild verifies stability
+    (the preserved value survives when it is itself the starting point).
+    """
+    path = tmp_path / "wb.xlsx"
+    init_workbook(str(path))
+
+    # ── Simulate user edit in Excel: set B7=3 and B8=5 ──
+    wb = openpyxl.load_workbook(path)
+    config_ws = wb["Config"]
+    config_ws["B7"] = 3  # eur_actuals_through_month
+    config_ws["B8"] = 5  # hours_actuals_through_month
+    wb.save(path)
+    wb.close()
+
+    # ── First rebuild ──
+    rebuild_workbook(str(path))
+
+    wb = openpyxl.load_workbook(path)
+    config_ws = wb["Config"]
+
+    # (a) User value preserved in B8.
+    assert config_ws["B8"].value == 5, (
+        f"Rebuild clobbered hours_actuals_through_month: "
+        f"expected 5, got {config_ws['B8'].value!r}"
+    )
+
+    # (b) Derived formulas still exact-string match in B9-B11.
+    assert config_ws["B9"].value == "=MAX(1,$B$8)", (
+        f"B9 derived formula drift: {config_ws['B9'].value!r}"
+    )
+    assert config_ws["B10"].value == "=MAX(1,$B$7)", (
+        f"B10 derived formula drift: {config_ws['B10'].value!r}"
+    )
+    assert config_ws["B11"].value == "=MIN($B$7,$B$8)", (
+        f"B11 derived formula drift: {config_ws['B11'].value!r}"
+    )
+
+    # (c) All four named ranges still point at Config!$B$8..$B$11.
+    expected_targets = {
+        "hours_actuals_through_month": "Config!$B$8",
+        "months_elapsed_hours": "Config!$B$9",
+        "months_elapsed_eur": "Config!$B$10",
+        "reconciled_through_month": "Config!$B$11",
+    }
+    for name, expected in expected_targets.items():
+        assert name in wb.defined_names, (
+            f"Named range {name!r} lost across rebuild"
+        )
+        assert wb.defined_names[name].attr_text == expected, (
+            f"Named range {name!r} drifted: "
+            f"expected {expected!r}, got {wb.defined_names[name].attr_text!r}"
+        )
+
+    wb.close()
+
+    # ── Second rebuild: stability check ──
+    rebuild_workbook(str(path))
+
+    wb = openpyxl.load_workbook(path)
+    config_ws = wb["Config"]
+    assert config_ws["B8"].value == 5, (
+        f"Second rebuild clobbered preserved hours_actuals_through_month: "
+        f"expected 5, got {config_ws['B8'].value!r}"
+    )
+    # Derived formulas still present (their values would be filled by recalc,
+    # but on a freshly rebuilt workbook openpyxl sees the formula string).
+    assert config_ws["B9"].value == "=MAX(1,$B$8)"
+    # Bystander: an untouched param row (Hours per FTE Month, B6=143) stays put —
+    # proves the preservation is selective, not wholesale.
+    assert config_ws["B6"].value == 143, (
+        f"Hours per FTE Month (B6) drifted unexpectedly: {config_ws['B6'].value!r}"
+    )
+    wb.close()
+
+
 def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
     """User inserts a new person row in the middle of Team Roster; rebuild must keep them."""
     path = tmp_path / "wb.xlsx"

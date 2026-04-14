@@ -12,6 +12,6 @@ if not exist .venv\Scripts\activate.bat (
 call .venv\Scripts\activate.bat
 python -m budget_planner init --demo
 echo.
-echo Demo workbook created in output\budget_plan.xlsx
+echo Demo workbook created in output\budget_plan_demo.xlsx
 echo Open it in Excel to recalculate formulas, then save.
 pause

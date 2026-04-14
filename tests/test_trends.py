@@ -490,10 +490,10 @@ def test_trends_no_row_collisions(num_wps, num_team):
     chart_anchor = total_row + 2  # matches the code
     assert chart_anchor > total_row, "Chart anchor must be after TOTAL row"
 
-    # Person section must start after chart (chart height ~15 rows)
-    assert person_section >= chart_anchor + 15, (
+    # Person section must start after chart (chart height 7.5 cm ≈ 14 rows)
+    assert person_section >= chart_anchor + 14, (
         f"Person section row {person_section} too close to chart at {chart_anchor}. "
-        f"Chart needs ~15 rows of height."
+        f"Chart needs ~14 rows of height."
     )
 
     # Helper rows must be after person data

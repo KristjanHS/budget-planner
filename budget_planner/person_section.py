@@ -78,3 +78,19 @@ def plan_person_layout(
         eu_total_row=eu_total_row,
         next_row=r,
     )
+
+
+def apply_person_row_outline(ws, layout: PersonLayout) -> None:
+    """Mark every body row of a person block as ``outline_level=1``.
+
+    Body rows = everything between the header row (exclusive) and
+    ``next_row`` (exclusive) — i.e. WP rows, external rows, TOTAL,
+    optional REMAINING, optional EU TOTAL. Header row stays at the
+    default level 0 so the outline button (with ``summaryBelow=False``
+    on the sheet) sits next to the header and collapses the block
+    beneath it.
+
+    Idempotent: calling twice leaves the final level at 1.
+    """
+    for r in range(layout.header_row + 1, layout.next_row):
+        ws.row_dimensions[r].outline_level = 1

@@ -16,7 +16,6 @@ Formula shape per WP × active-month cell::
 - Inactive months (WP not scheduled) are greyed out and empty.
 """
 
-from openpyxl.comments import Comment
 from openpyxl.styles import Font
 from openpyxl.formatting.rule import FormulaRule
 
@@ -29,6 +28,7 @@ from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     GREY_FILL, LIGHT_GREEN_FILL,
     CF_RED_FILL, style_cell, col_letter, write_section_header,
+    sized_comment,
 )
 
 
@@ -242,11 +242,8 @@ def build_plan_forecast_sheet(
     ))
 
     # Comment on the ceiling header — explain provenance
-    ws.cell(row=1, column=7).comment = Comment(
-        "Sum of WP ceilings from Config. Same value as Plan!G1 and "
-        "Actuals!G1 — verify all three agree.",
-        "Programme Budget Tool",
-    )
+    ws.cell(row=1, column=7).comment = sized_comment("Sum of WP ceilings from Config. Same value as Plan!G1 and "
+        "Actuals!G1 — verify all three agree.")
 
     # Freeze panes: lock WP ID/Name cols + header rows
     ws.freeze_panes = f"C{first_wp_row}"

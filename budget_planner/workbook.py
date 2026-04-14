@@ -29,7 +29,6 @@ from datetime import datetime
 from typing import Any
 
 from openpyxl import Workbook
-from openpyxl.comments import Comment
 from openpyxl.workbook.defined_name import DefinedName
 
 from budget_planner.config_sheet import build_config_sheet
@@ -53,7 +52,9 @@ from budget_planner.layout import (
     SECTION_HEADER_LABELS,
     cell_ref,
 )
-from budget_planner.styles import BLACK_FORMULA, HEADER_FONT, style_cell, apply_year_groups
+from budget_planner.styles import (
+    BLACK_FORMULA, HEADER_FONT, style_cell, apply_year_groups, sized_comment,
+)
 
 
 def snapshot_workbook(filepath: str) -> str:
@@ -272,11 +273,8 @@ def _build_all_sheets(
     )
     style_cell(trends_ws, 1, 2, font=BLACK_FORMULA, border=False)
     trends_ws["B1"].value = _cm_formula
-    trends_ws["B1"].comment = Comment(
-        "Auto-calculated from project start and today's date. "
-        "Override with a static number to freeze.",
-        "Programme Budget Tool",
-    )
+    trends_ws["B1"].comment = sized_comment("Auto-calculated from project start and today's date. "
+        "Override with a static number to freeze.")
     wb.defined_names.add(
         DefinedName("current_month", attr_text=cell_ref(SHEET_TRENDS, 1, 2))
     )
@@ -712,11 +710,14 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
 
 def seed_demo_data(workbook_path: str) -> str:
-    """Seed Actuals EUR and current_month after workbook is built.
+    """Seed Actuals EUR, Actuals-Hours, and through-month Config params.
 
     Capacity FTE values are now auto-distributed by the builder via
-    assignments — this function only seeds Actuals EUR spend and
-    sets current_month on Trends.
+    assignments — this function seeds Actuals EUR spend, per-person
+    Actuals-Hours, and sets the two-cadence through-month params on
+    Config (B7 EUR-through, B8 hours-through) to non-default values
+    so the reconciliation visuals (greyed forecast-EUR band,
+    Capacity to-date block) have something to render.
 
     Args:
         workbook_path: Path to an existing workbook (from init_workbook).
@@ -728,6 +729,8 @@ def seed_demo_data(workbook_path: str) -> str:
     from budget_planner.config import (
         DEMO_CURRENT_MONTH,
         DEMO_ACTUALS_MULTIPLIERS,
+        DEMO_CAPACITY_ASSIGNMENTS,
+        TEAM,
         WORK_PACKAGES,
         WP_SCHEDULE,
     )
@@ -764,6 +767,70 @@ def seed_demo_data(workbook_path: str) -> str:
                 col = MONTH_COL_START + m_idx
                 eur_value = round(monthly_planned * multiplier)
                 act_ws.cell(row, col).value = eur_value
+
+    # ── Seed Config through-month params (non-default) ──
+    # EUR lags 3 months behind hours (finance close cadence).
+    # Hours close at month-end: set to DEMO_CURRENT_MONTH.
+    # EUR through = DEMO_CURRENT_MONTH - 3 (3-month finance lag).
+    config_ws = wb[SHEET_CONFIG]
+    hours_through = DEMO_CURRENT_MONTH
+    eur_through = max(1, DEMO_CURRENT_MONTH - 3)
+    for r in range(1, 20):
+        label = config_ws.cell(r, 1).value
+        if label == "EUR Actuals Through Month":
+            style_cell(config_ws, r, 2, eur_through, border=False)
+        elif label == "Hours Actuals Through Month":
+            style_cell(config_ws, r, 2, hours_through, border=False)
+
+    # ── Seed Actuals-Hours per-person monthly hours ──
+    # Reconstruct per-person WP ordering from DEMO_CAPACITY_ASSIGNMENTS
+    # (dedup by person+wp preserving first occurrence) — mirrors the
+    # order actuals_hours.py builds rows in.
+    HOURS_PER_FTE_MONTH = 143
+    per_person: dict[str, list[dict]] = {}
+    seen: set[tuple[str, str]] = set()
+    for asgn in DEMO_CAPACITY_ASSIGNMENTS:
+        key = (asgn["person"], asgn["wp"])
+        if key in seen:
+            continue
+        seen.add(key)
+        per_person.setdefault(asgn["person"], []).append(asgn)
+
+    team_names = {m["name"] for m in TEAM}
+    wp_index = {w["id"]: i for i, w in enumerate(WORK_PACKAGES)}
+
+    if SHEET_ACTUALS_HOURS in wb.sheetnames:
+        hours_ws = wb[SHEET_ACTUALS_HOURS]
+        name_to_header_row: dict[str, int] = {}
+        for r in range(1, hours_ws.max_row + 1):
+            v = hours_ws.cell(r, 1).value
+            if isinstance(v, str) and v in team_names:
+                name_to_header_row[v] = r
+
+        for member in TEAM:
+            name = member["name"]
+            header_row = name_to_header_row.get(name)
+            if header_row is None:
+                continue
+            for i, asgn in enumerate(per_person.get(name, [])):
+                wp_id = asgn["wp"]
+                if wp_id not in wp_index:
+                    continue
+                row = header_row + 1 + i
+                wp_start, wp_end = wp_month_bounds(wp_id, WP_SCHEDULE)
+                a_start = max(wp_start, asgn["start"])
+                a_end = min(wp_end, asgn["end"])
+                active_months = a_end - a_start + 1
+                if active_months <= 0:
+                    continue
+                monthly_fte = asgn["total_fte"] / active_months
+                multiplier = DEMO_ACTUALS_MULTIPLIERS[
+                    wp_index[wp_id] % len(DEMO_ACTUALS_MULTIPLIERS)
+                ]
+                for m_idx in range(a_start - 1, min(a_end, hours_through)):
+                    col = MONTH_COL_START + m_idx
+                    hours = round(monthly_fte * HOURS_PER_FTE_MONTH * multiplier)
+                    hours_ws.cell(row, col).value = hours
 
     wb.save(workbook_path)
     wb.close()

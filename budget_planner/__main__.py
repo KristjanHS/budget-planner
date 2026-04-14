@@ -24,10 +24,17 @@ def _subcommand_mode():
     if command == "init":
         parser.add_argument("--demo", action="store_true",
                             help="Seed Capacity + Actuals with demo data")
-        parser.add_argument("-o", "--output",
-                            default="output/budget_plan.xlsx")
+        # Default is None so we can distinguish "user overrode" from
+        # "auto-pick based on --demo" — demo runs land at a _demo-suffixed
+        # path by default so they don't clobber the real workbook.
+        parser.add_argument("-o", "--output", default=None)
         args = parser.parse_args(sys.argv[2:])
-        output = args.output
+        if args.output is not None:
+            output = args.output
+        elif args.demo:
+            output = "output/budget_plan_demo.xlsx"
+        else:
+            output = "output/budget_plan.xlsx"
         if args.demo:
             from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
             init_workbook(output_path=output,

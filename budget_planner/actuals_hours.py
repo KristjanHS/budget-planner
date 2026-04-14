@@ -13,9 +13,9 @@ REMAINING row, no rebuild-preservation plumbing yet — those land in later
 tasks.
 """
 
-from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Font
+from openpyxl.worksheet.properties import Outline
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_CONFIG,
@@ -24,11 +24,14 @@ from budget_planner.layout import (
     wp_active_months,
     _calendar_year_groups,
 )
-from budget_planner.person_section import plan_person_layout, PersonGridContext
+from budget_planner.person_section import (
+    plan_person_layout, PersonGridContext, apply_person_row_outline,
+)
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     SECTION_FILL, GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     CF_AMBER_FILL, CF_RED_FILL, CF_GREY_FILL, style_cell, col_letter,
+    sized_comment,
 )
 
 HOUR_FMT = "#,##0"
@@ -181,11 +184,8 @@ def _write_person_hours_grid(
                         val = p
                 style_cell(ws, r, c, val, font=BLUE_INPUT, fmt=HOUR_FMT)
                 if first_wp_row_for_person and not comment_added:
-                    ws.cell(row=r, column=c).comment = Comment(
-                        "Enter hours worked per month for this work package. "
-                        "Leave blank until the month closes.",
-                        "Programme Budget Tool",
-                    )
+                    ws.cell(row=r, column=c).comment = sized_comment("Enter hours worked per month for this work package. "
+                        "Leave blank until the month closes.")
                     comment_added = True
                 # Forecast-EUR leaf — derived from the sibling hour cell.
                 # ROUND to whole EUR at the leaf so Plan-Forecast SUMs match
@@ -272,11 +272,8 @@ def _write_person_hours_grid(
     total_row = layout.total_row
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
-    ws.cell(row=r, column=2).comment = Comment(
-        "Per-month SUM of all hours logged across programme WP rows and external "
-        "project rows for this person.",
-        "Programme Budget Tool",
-    )
+    ws.cell(row=r, column=2).comment = sized_comment("Per-month SUM of all hours logged across programme WP rows and external "
+        "project rows for this person.")
     for mi in range(project_params["months"]):
         c = month_col_start + mi
         cl = col_letter(c)
@@ -308,12 +305,9 @@ def _write_person_hours_grid(
     eu_total_row = layout.eu_total_row
     style_cell(ws, r, 1, fill=LIGHT_BLUE_FILL)
     style_cell(ws, r, 2, "EU TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
-    ws.cell(row=r, column=2).comment = Comment(
-        "Per-month SUM of programme WP rows + EU-flagged external project rows "
+    ws.cell(row=r, column=2).comment = sized_comment("Per-month SUM of programme WP rows + EU-flagged external project rows "
         "(hours). Compared per calendar year against "
-        "eu_annual_ceiling_pm × hours_per_fte_month.",
-        "Programme Budget Tool",
-    )
+        "eu_annual_ceiling_pm × hours_per_fte_month.")
 
     eu_row_refs = list(wp_rows.values())
     for proj, ext_row in external_rows.items():
@@ -382,6 +376,7 @@ def _write_person_hours_grid(
         ))
 
     assert r == layout.next_row
+    apply_person_row_outline(ws, layout)
     return layout.next_row, {
         "header_row": header_row,
         "wp_rows": wp_rows,
@@ -438,10 +433,17 @@ def build_actuals_hours_sheet(
     forecast_col_end = forecast_col_start + months - 1
 
     ws.sheet_properties.tabColor = "C00000"  # distinct red — hours timelog
-    # Place the outline collapse button to the right of the grouped columns.
+    # Place the column-outline collapse button to the right of grouped columns;
+    # place the row-outline button next to each person header (summaryBelow=False)
+    # so collapsing a person hides their rows beneath the header.
     outline_pr = ws.sheet_properties.outlinePr
-    if outline_pr is not None:
+    if outline_pr is None:
+        ws.sheet_properties.outlinePr = Outline(
+            summaryRight=True, summaryBelow=False,
+        )
+    else:
         outline_pr.summaryRight = True
+        outline_pr.summaryBelow = False
 
     # ── Forecast band top label row (row 1) ──
     # Merged "FORECAST EUR (from hours)" header sits above the year labels
@@ -475,11 +477,8 @@ def build_actuals_hours_sheet(
         cl = col_letter(forecast_col_start + mi)
         ws.column_dimensions[cl].outline_level = 1
 
-    ws.cell(row=year_header_row, column=val_col_sum).comment = Comment(
-        "Row-wide SUM of hours logged this row. Per-person TOTAL and EU "
-        "TOTAL rows sum across these.",
-        "Programme Budget Tool",
-    )
+    ws.cell(row=year_header_row, column=val_col_sum).comment = sized_comment("Row-wide SUM of hours logged this row. Per-person TOTAL and EU "
+        "TOTAL rows sum across these.")
 
     first_person_header_row = r
 

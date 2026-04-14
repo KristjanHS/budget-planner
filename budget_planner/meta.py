@@ -158,13 +158,66 @@ PURPOSE: Track planned FTE allocation and actual EUR spend per work package per 
 8. Summary        — Calendar-year aggregation. Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR per WP per year (5 cols/year) + project total group. Budget overview + Form C reporting-period block.
 9. Trends         — WP burn rate & exhaustion, cumulative EUR chart (Planned + Actual + Cumulative Forecast + Ceiling), person load (planned + actual-side cols). Tab color: Gold (FFD700).
 
+═══ DESIGN-TIME ASSUMPTIONS: TWO-CADENCE ACTUALS ═══
+
+The workbook records actuals on two separate cadences. Any derived view
+that reads actual data must pick the correct trust boundary — mixing them
+produces wrong answers that look right.
+
+  HOURS CADENCE (per-person × per-WP × per-month cells on Actuals-Hours).
+    - Granularity: monthly, per person per WP.
+    - Entry convention: skip-and-cumulate is valid. A user may leave
+      intermediate months blank and enter the cumulative hours-to-date in
+      a later month. This means a single-month cell is NOT authoritative
+      for that month — only the running cumulative total is.
+    - Trust boundary: `hours_actuals_through_month` (Config!$B$8, blue
+      input integer). Months 1..hours_actuals_through_month are closed for
+      hours; later months are forecast-only territory.
+
+  EUR CADENCE (WP-level totals on the Actuals sheet).
+    - Granularity: monthly, per WP (no per-person EUR on Actuals).
+    - Entry convention: driven by accountant/finance close, which runs
+      with a 2–3 month lag behind the hours timelog.
+    - Trust boundary: `eur_actuals_through_month` (Config!$B$7, blue
+      input integer). Months past this index are not yet reconciled.
+
+  DERIVED BOUNDARY.
+    - `reconciled_through_month = MIN(eur_actuals_through_month,
+      hours_actuals_through_month)` (Config!$B$11, black formula).
+    - This is the authoritative boundary for any HEAD-TO-HEAD comparison
+      between Actual EUR and Forecast EUR (hours-derived). Past this
+      month at least one side is stale or missing.
+
+  DESIGN PRINCIPLE (enforce on every new actual-side readout).
+    No derived view reads a single-month cell as authoritative for that
+    month. Every actual-side readout is EITHER:
+      (a) a cumulative-through-a-through-month total, or
+      (b) a to-date RATE (cumulative / months_elapsed_*).
+    Raw monthly actual cells surface only in collapsed / clearly-labelled
+    bands ("reliable only when hours were entered per-month"), never as
+    the input to a derived metric.
+
+  FORWARD-NOTE (hours-timelog v2 scaffolding).
+    Stage 1 (current) wires the Config inputs + named ranges only; no
+    consumer code reads them yet — so if you grep for
+    `hours_actuals_through_month` and find only Config + this file, that
+    is expected mid-rollout, not drift. Stage 2 (W2) adds a to-date
+    column block on Capacity, switches Breach-In to a cumulative-slope
+    formula, drives per-column partial-year shading on Summary by the
+    stricter of the two through-months, and adds cosmetic grey shading
+    past the through-month on Actuals-Hours + Plan-Forecast. Stage 3
+    (W3) adds a Reconciliation section on Trends: three health cells
+    (EUR through / Hours through / Reconciled through), a per-WP summary
+    table with cumulative Forecast vs Actual EUR + gap %, and a gap-over-
+    time LineChart clipped at `reconciled_through_month`.
+
 ═══ CONFIG SHEET STRUCTURE ═══
 
 SHEET: CONFIG (single source of truth for all project parameters)
   Tab color: Blue (4472C4)
   Freeze panes: A{cfg_wp_section}
 
-  SECTION A: PROJECT PARAMETERS (rows 1-5)
+  SECTION A: PROJECT PARAMETERS (rows 1-11)
     Row 1: A1="Project Title",            B1=<title>           (blue input)
     Row 2: A2="Project Start",            B2=<date>            (blue input, MMM YYYY)
     Row 3: A3="Project Months",           B3=<integer>         (blue input)
@@ -172,7 +225,13 @@ SHEET: CONFIG (single source of truth for all project parameters)
            Weighted average: =SUMPRODUCT(IFERROR(VLOOKUP(roster_grades,tbl_GradeRates,2,FALSE),0)*roster_ftes)/SUM(roster_ftes)
            Derives rate from per-grade rates weighted by team FTE. Not directly editable.
     Row 5: A5="EU Annual Ceiling (PM/FTE/year)", B5=<ceiling> (blue input, 0.00; default 12.0 ≈ 215 days/year)
-    Row 6: (blank separator)
+    Row 6: A6="Hours per FTE Month",      B6=<hours>           (blue input, 0; default 143 ≈ 215 days/year × 8h / 12)
+    Row 7: A7="EUR Actuals Through Month", B7=<month index>    (blue input, 0; last project month with finance-closed Actual EUR)
+    Row 8: A8="Hours Actuals Through Month", B8=<month index>  (blue input, 0; last project month with closed hour timelog — twin of row 7)
+    Row 9: A9="Months Elapsed (Hours)",   B9=<formula>         (black formula, 0; =MAX(1,$B$8); to-date-rate denominator for hours-side readouts)
+    Row 10: A10="Months Elapsed (EUR)",   B10=<formula>        (black formula, 0; =MAX(1,$B$7); to-date-rate denominator for EUR-side readouts)
+    Row 11: A11="Reconciled Through Month", B11=<formula>      (black formula, 0; =MIN($B$7,$B$8); authoritative boundary for head-to-head Actual EUR vs Forecast EUR comparisons)
+    (blank separator row before the WP BUDGET section)
 
   SECTION B: WP BUDGET TABLE (rows {cfg_wp_section}-{cfg_total_row})
     Row {cfg_wp_section}: Section header "WP BUDGET" (merged A:G, section fill)
@@ -372,7 +431,7 @@ SHEET: ACTUALS (EUR actuals from accountant)
     Source of truth: Plan-Forecast totals → Actuals forecast block → Summary/Trends.
 
   RECONCILIATION VISUAL (T8 — eur_actuals_through_month):
-    The named cell `eur_actuals_through_month` (Config!$B$<row>, blue input,
+    The named cell `eur_actuals_through_month` (Config!$B$7, blue input,
     integer) records the last month for which the accountant has closed Actual
     EUR. Months past that index are not yet reconciled. CF rule on the Actual-
     EUR monthly grid (rows 4-{act_total}, cols {first_mcol}-{last_mcol}):
@@ -701,8 +760,12 @@ SHEET: TRENDS (PM dashboard — burn rate, exhaustion, person load)
   project_months       = Config!$B$3   (integer project duration)
   fte_rate              = Config!$B$4   (weighted-average EUR/PM rate — formula, not static input)
   eu_annual_ceiling_pm = Config!$B$5   (max PM per calendar year across all EU grants; ≈215 days)
-  hours_per_fte_month  = Config!$B$<row>  (hours per FTE-month; default 143 ≈ 215 days/year / 12 × 8h; divisor for Actuals-Hours forecast-EUR leaves and Capacity Actual-FTE band)
-  eur_actuals_through_month = Config!$B$<row>  (last month index with finance-closed Actual EUR; blue input integer. Drives the T8 reconciliation CF on Actuals + Actuals-Hours: months past this index grey on Actuals; months ≤ this index grey on Actuals-Hours forecast band.)
+  hours_per_fte_month  = Config!$B$6   (hours per FTE-month; default 143 ≈ 215 days/year / 12 × 8h; divisor for Actuals-Hours forecast-EUR leaves and Capacity Actual-FTE band)
+  eur_actuals_through_month = Config!$B$7   (last month index with finance-closed Actual EUR; blue input integer. Drives the T8 reconciliation CF on Actuals + Actuals-Hours: months past this index grey on Actuals; months ≤ this index grey on Actuals-Hours forecast band.)
+  hours_actuals_through_month = Config!$B$8  (last month index with closed hour timelog; blue input integer. Twin of eur_actuals_through_month — trust boundary for cumulative hours totals and for every hours-derived to-date readout.)
+  months_elapsed_hours = Config!$B$9   (=MAX(1, hours_actuals_through_month); black formula. To-date-rate denominator for hours-side cumulative → monthly rate conversions; floor of 1 keeps the denominator safe before any report has landed.)
+  months_elapsed_eur   = Config!$B$10  (=MAX(1, eur_actuals_through_month); black formula. To-date-rate denominator for EUR-side cumulative → monthly rate conversions; same floor-of-1 rationale.)
+  reconciled_through_month = Config!$B$11  (=MIN(eur_actuals_through_month, hours_actuals_through_month); black formula. Authoritative boundary for head-to-head Actual EUR vs Forecast EUR comparisons — past this month at least one side is stale or missing.)
   tbl_GradeRates       = Config!$A${cfg_grade_first}:$B${cfg_grade_last}  (grade name + rate lookup table)
   roster_ftes          = Config!$B${cfg_roster_first}:$B${cfg_roster_last}  (team Max FTE column)
   roster_grades        = Config!$C${cfg_roster_first}:$C${cfg_roster_last}  (team Grade column)

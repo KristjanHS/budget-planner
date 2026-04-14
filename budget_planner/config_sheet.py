@@ -653,6 +653,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         ("EU Annual Ceiling (PM/FTE/year)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
         ("Hours per FTE Month", 143, "0", None),
         ("EUR Actuals Through Month", 1, "0", None),
+        ("Hours Actuals Through Month", 1, "0", None),
     ]
     # Param rows are driven by the order of param_defs above. The literal
     # TypedDict below mirrors that order; the assertion inside the styling
@@ -667,6 +668,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         "EU Annual Ceiling (PM/FTE/year)": 5,
         "Hours per FTE Month": 6,
         "EUR Actuals Through Month": 7,
+        "Hours Actuals Through Month": 8,
     }
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
         assert param_rows.get(label) == i, (
@@ -683,8 +685,27 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
             font = TITLE_FONT if i == 1 else BLUE_INPUT
             style_cell(ws, i, 2, value=value, font=font, fmt=fmt, border=False)
 
+    # ── Section 1b: Derived parameters (black, formula-driven) ──
+    # These sit directly below the blue-input params. Labels in col A use
+    # HEADER_FONT; formulas in col B use BLACK_FORMULA (same-sheet refs).
+    # Through-month cells hold integer month indices (1 = project month 1),
+    # not dates — so `months_elapsed` IS the through-month, floored at 1 to
+    # keep to-date-rate denominators safe when no report has landed yet.
+    derived_params = [
+        ("Months Elapsed (Hours)", "=MAX(1,$B$8)"),
+        ("Months Elapsed (EUR)", "=MAX(1,$B$7)"),
+        ("Reconciled Through Month", "=MIN($B$7,$B$8)"),
+    ]
+    derived_first_row = len(param_defs) + 1  # first row after the blue-input block
+    for offset, (label, formula) in enumerate(derived_params):
+        r = derived_first_row + offset
+        style_cell(ws, r, 1, value=label, font=HEADER_FONT, border=False)
+        style_cell(ws, r, 2, value=formula, font=BLACK_FORMULA, fmt="0", border=False)
+
     # ── Section 2: WP Budget ──
-    budget_section_row = len(param_defs) + 2  # gap row after last param
+    # Gap row sits AFTER the derived block; budget section starts two rows below
+    # the last derived row to preserve the existing visual separator.
+    budget_section_row = len(param_defs) + len(derived_params) + 2
     next_row, budget_layout = _write_budget_section(ws, budget_section_row,
                                                     work_packages, project_params)
 
@@ -748,6 +769,25 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         attr_text=f"{SHEET_CONFIG}!$B${eur_through_row}",
     )
     wb.defined_names.add(dn_eur_through)
+
+    hours_through_row = param_rows["Hours Actuals Through Month"]
+    wb.defined_names.add(DefinedName(
+        "hours_actuals_through_month",
+        attr_text=f"{SHEET_CONFIG}!$B${hours_through_row}",
+    ))
+    # Derived cells — positions follow derived_first_row contract above.
+    wb.defined_names.add(DefinedName(
+        "months_elapsed_hours",
+        attr_text=f"{SHEET_CONFIG}!$B${derived_first_row}",
+    ))
+    wb.defined_names.add(DefinedName(
+        "months_elapsed_eur",
+        attr_text=f"{SHEET_CONFIG}!$B${derived_first_row + 1}",
+    ))
+    wb.defined_names.add(DefinedName(
+        "reconciled_through_month",
+        attr_text=f"{SHEET_CONFIG}!$B${derived_first_row + 2}",
+    ))
 
     # Grade table named range (2-column: grade name + rate)
     dn_grades = DefinedName(

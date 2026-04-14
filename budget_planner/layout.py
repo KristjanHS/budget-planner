@@ -28,6 +28,7 @@ ConfigParamRows = TypedDict("ConfigParamRows", {
     "EU Annual Ceiling (PM/FTE/year)": int,
     "Hours per FTE Month": int,
     "EUR Actuals Through Month": int,
+    "Hours Actuals Through Month": int,
 })
 
 # ── Sheet name constants ──

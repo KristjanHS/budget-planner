@@ -623,6 +623,53 @@ def test_hours_per_fte_month_constant_and_named_range(tmp_path):
     assert cfg.cell(row=row, column=1).value == "Hours per FTE Month"
 
 
+def test_hours_actuals_through_month_param_and_named_ranges():
+    """T1: hours_actuals_through_month blue input + three derived named ranges.
+
+    Checks structural contracts that consumers in T5+ will depend on:
+    - B8 is the blue-input `Hours Actuals Through Month` seed = 1.
+    - Rows 9/10/11 carry the derived label/formula pairs in col A/B.
+    - Four named ranges resolve to Config!$B$8..$B$11.
+    """
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    build_config_sheet(ws, wb, _sample_params(), _sample_wps())
+
+    # ── Labels in column A on rows 8-11 ──
+    assert ws.cell(8, 1).value == "Hours Actuals Through Month"
+    assert ws.cell(9, 1).value == "Months Elapsed (Hours)"
+    assert ws.cell(10, 1).value == "Months Elapsed (EUR)"
+    assert ws.cell(11, 1).value == "Reconciled Through Month"
+
+    # ── Blue input cell: value + font ──
+    b8 = ws.cell(8, 2)
+    assert b8.value == 1
+    assert "0000FF" in str(b8.font.color.rgb).upper()
+
+    # ── Derived cells: exact formulas + BLACK_FORMULA font ──
+    assert ws.cell(9, 2).value == "=MAX(1,$B$8)"
+    assert ws.cell(10, 2).value == "=MAX(1,$B$7)"
+    assert ws.cell(11, 2).value == "=MIN($B$7,$B$8)"
+    for r in (9, 10, 11):
+        rgb = str(ws.cell(r, 2).font.color.rgb).upper()
+        assert rgb.endswith("000000"), (
+            f"Derived row {r} col B should be BLACK_FORMULA, got {rgb}"
+        )
+
+    # ── Named ranges point at the right cells ──
+    names = wb.defined_names
+    assert "hours_actuals_through_month" in names
+    assert names["hours_actuals_through_month"].attr_text == "Config!$B$8"
+    assert "months_elapsed_hours" in names
+    assert names["months_elapsed_hours"].attr_text == "Config!$B$9"
+    assert "months_elapsed_eur" in names
+    assert names["months_elapsed_eur"].attr_text == "Config!$B$10"
+    assert "reconciled_through_month" in names
+    assert names["reconciled_through_month"].attr_text == "Config!$B$11"
+
+
 def test_eur_actuals_through_month_constant_and_named_range(tmp_path):
     """T8: `eur_actuals_through_month` Config param + named range exist."""
     from budget_planner.workbook import init_workbook

@@ -30,6 +30,7 @@ When a refactor touches both the reader and a builder, the test must exercise th
 
 ## Docs
 Session-generated audits, analyses, and reports go in `docs/analysis/` (already in `.claudeignore` — keeps them out of auto-loaded context). The `docs/` root is for trigger-indexed reference docs listed in CLAUDE.md. Don't drop one-off session outputs into the reference tier.
+Bucket-migration tasks (moving content out of a sheet/module): before committing, grep the old identifier across `docs/`, `CLAUDE.md`, `.claude/rules/`. Additive migrations leave stale prose in downstream docs the migrator never opened.
 
 ## Invariants (extends CLAUDE.md Critical Rules)
 - On rebuild, all config data (including person-WP assignments and external commitments) comes from the existing workbook's Config sheet, never from config.py. Builders receive config as function parameters.

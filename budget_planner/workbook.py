@@ -33,7 +33,9 @@ from openpyxl.workbook.defined_name import DefinedName
 
 from budget_planner.config_sheet import build_config_sheet
 from budget_planner.plan import build_plan_sheet, _apply_planned_formulas
-from budget_planner.capacity import build_capacity_sheet
+from budget_planner.capacity import (
+    build_capacity_sheet, apply_capacity_todate_formulas,
+)
 from budget_planner.actuals import build_actuals_sheet
 from budget_planner.actuals_hours import build_actuals_hours_sheet
 from budget_planner.plan_forecast import build_plan_forecast_sheet
@@ -294,6 +296,14 @@ def _build_all_sheets(
         assignments=assignments,
         config_first_wp_row=ctx.config_layout["wp_first_row"],
         preserved=preserved_actuals_hours,
+    )
+
+    # Back-patch Capacity to-date block now that Actuals-Hours rows exist.
+    apply_capacity_todate_formulas(
+        capacity_ws,
+        ctx.capacity_layout,
+        actuals_hours_layout,
+        project_params=project_params,
     )
 
     # Stage 6b — Plan-Forecast (aggregates forecast-EUR leaves from
@@ -786,6 +796,7 @@ def seed_demo_data(workbook_path: str) -> str:
     # Reconstruct per-person WP ordering from DEMO_CAPACITY_ASSIGNMENTS
     # (dedup by person+wp preserving first occurrence) — mirrors the
     # order actuals_hours.py builds rows in.
+    from budget_planner.layout import wp_active_months as _wp_active_months
     HOURS_PER_FTE_MONTH = 143
     per_person: dict[str, list[dict]] = {}
     seen: set[tuple[str, str]] = set()
@@ -798,6 +809,10 @@ def seed_demo_data(workbook_path: str) -> str:
 
     team_names = {m["name"] for m in TEAM}
     wp_index = {w["id"]: i for i, w in enumerate(WORK_PACKAGES)}
+    wp_active_set = {
+        w["id"]: _wp_active_months(w["id"], WP_SCHEDULE)
+        for w in WORK_PACKAGES
+    }
 
     if SHEET_ACTUALS_HOURS in wb.sheetnames:
         hours_ws = wb[SHEET_ACTUALS_HOURS]
@@ -827,7 +842,11 @@ def seed_demo_data(workbook_path: str) -> str:
                 multiplier = DEMO_ACTUALS_MULTIPLIERS[
                     wp_index[wp_id] % len(DEMO_ACTUALS_MULTIPLIERS)
                 ]
+                active_set = wp_active_set[wp_id]
                 for m_idx in range(a_start - 1, min(a_end, hours_through)):
+                    month_num = m_idx + 1
+                    if month_num not in active_set:
+                        continue
                     col = MONTH_COL_START + m_idx
                     hours = round(monthly_fte * HOURS_PER_FTE_MONTH * multiplier)
                     hours_ws.cell(row, col).value = hours

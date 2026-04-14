@@ -151,6 +151,34 @@ flowchart TD
   CAP --> TRENDS
 ```
 
+## Sheet Responsibilities
+
+User-facing tab order (set in `workbook.py` after build): **Config → Capacity → Plan → Actuals → Actuals-Hours → Plan-Forecast → Trends → Summary**. Note the Cross-Sheet Formula References diagram above omits `Actuals-Hours` and `Plan-Forecast`; those two sheets form a secondary data chain documented here in prose.
+
+### Config
+Single source of truth for project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, and the grade rate table. Hosts the named ranges `project_start` and `fte_rate`. No distinctive tab color. Upstream to every other sheet.
+
+### Capacity
+Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects. Includes a to-date block (Plan/Actual/Variance in PM and %) that reads from Actuals-Hours. Feeds Plan via `SUM(Capacity!…)`.
+
+### Plan
+Compact 1-row header + Planned-FTE block whose cells are `=SUM(Capacity!…)` per WP × month. Downstream consumers: Summary, Trends.
+
+### Actuals
+EUR actuals per WP per month (input from accountant) **plus** a parallel forecast-monitoring block that reads Plan-Forecast. Monthly Actual-EUR cells past `eur_actuals_through_month` are greyed via CF — those months are not closed yet. **Tab color: Blue.**
+
+### Actuals-Hours
+Per-person monthly hour timelog + sibling forecast-EUR band (`outline_level=1`, collapsible). Sole source of forecast-EUR leaves in the workbook. Consumes named ranges `hours_per_fte_month`, `eu_annual_ceiling_pm`, `roster_lookup`, `eur_actuals_through_month`. **Tab color: Red (C00000).** *Not in the Cross-Sheet diagram:* Data flow OUT → Plan-Forecast (SUM per WP × month) → Actuals forecast block → Capacity to-date band → Summary Forecast EUR/year → Trends Cumulative Forecast.
+
+### Plan-Forecast
+WP × month forecast-EUR grid aggregating the leaf formulas on Actuals-Hours; mirrors Plan's shape. **Tab color: Green (00B050).** *Not in the Cross-Sheet diagram:* Data flow IN ← Actuals-Hours forecast-EUR leaves; OUT → Actuals forecast monitoring block, Summary Forecast EUR/year, Trends Cumulative Forecast helper row.
+
+### Summary
+Calendar-year aggregation. Per WP per year: Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR (5 cols/year) plus project total group. Also hosts the budget overview and the Form C reporting-period block. Consumes `fte_rate` and `partner_ceiling`.
+
+### Trends
+WP burn rate & exhaustion, cumulative EUR chart (Planned + Actual + Cumulative Forecast + Ceiling), per-person load (planned + actual-side columns). Hosts the `current_month` named range (stub written in build Stage 5 so Actuals formulas resolve). **Tab color: Gold (FFD700).**
+
 ## Project Structure
 
 ```

@@ -38,3 +38,39 @@ scripts/
   recalc.py            # LibreOffice recalculation script
   office/              # LibreOffice helpers
 ```
+
+## Sheet responsibilities
+
+One bullet per worksheet — what it is, what feeds it, what it feeds. Build order matches `_build_all_sheets` in `workbook.py`. See `docs/architecture.md` for the full cross-sheet formula graph.
+
+- **Config** — Single source of truth: project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, grade rate table.
+  - IN ← user edits only (blue input cells).
+  - OUT → every other sheet (params, named ranges `project_start` / `fte_rate`, WP list, roster).
+
+- **Capacity** — Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects. Auto-distributed from Config assignments on init/rebuild; user tunes month-by-month.
+  - IN ← Config (assignments, WP list, roster, months); Actuals-Hours (Actual-FTE to-date band).
+  - OUT → Plan (planned FTE formulas); Summary (plan FTE per year).
+
+- **Plan** — Compact 1-row header + Planned FTE block. Pure formula mirror of Capacity shaped as WP × month.
+  - IN ← Capacity (SUM per WP × month).
+  - OUT → Summary (Plan EUR = Plan FTE × rate); Trends (planned cumulative curve).
+
+- **Actuals** — EUR actuals per WP per month (accountant input) plus a parallel forecast-monitoring block reading Plan-Forecast. CF greys monthly Actual EUR cells past `eur_actuals_through_month` (not-yet-closed months). Tab color: Blue.
+  - IN ← user EUR input; Plan-Forecast (forecast block).
+  - OUT → Summary (Actual EUR per year); Trends (cumulative actual curve).
+
+- **Actuals-Hours** — Per-person monthly hour timelog plus a sibling forecast-EUR band (outline_level=1, collapsible). Sole source of forecast-EUR leaves. Tab color: Red (C00000). Consumes named ranges `hours_per_fte_month`, `eu_annual_ceiling_pm`, `roster_lookup`, `eur_actuals_through_month`.
+  - IN ← user hour input (primary input surface for hours; two-cadence model).
+  - OUT → Plan-Forecast (forecast-EUR leaves SUMmed per WP × month); Capacity (Actual-FTE to-date band).
+
+- **Plan-Forecast** — WP × month forecast-EUR grid aggregating the leaf formulas on Actuals-Hours. Mirrors Plan shape. Tab color: Green (00B050).
+  - IN ← Actuals-Hours (forecast-EUR leaves, SUM per WP × month).
+  - OUT → Actuals (forecast monitoring block); Summary (Forecast EUR per year); Trends (Cumulative Forecast helper row).
+
+- **Summary** — Calendar-year aggregation: Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR per WP per year (5 cols/year) + project total group. Budget overview + Form C reporting-period block.
+  - IN ← Plan, Actuals, Plan-Forecast, Config (reporting periods).
+  - OUT → (terminal read-only view; no downstream sheet consumes it).
+
+- **Trends** — WP burn rate & exhaustion, cumulative EUR chart (Planned + Actual + Cumulative Forecast + Ceiling), person load (planned + actual-side cols). Tab color: Gold (FFD700).
+  - IN ← Plan, Actuals, Plan-Forecast, Capacity.
+  - OUT → (terminal read-only view + embedded chart).

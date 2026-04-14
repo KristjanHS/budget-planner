@@ -14,7 +14,8 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 | Sheet builders, stateless pattern | `docs/internals.md` § Sheet Builders | Builder contract, dependency chain; don't add state |
 | Reader breaks, rebuild loses data | `docs/internals.md` § Reader and Rebuild | Formula chain resolution, fragile parsing |
 | Column offsets, month positioning, styles | `docs/internals.md` § Layout and Styling | `layout.py` is single source; don't duplicate constants |
-| Config/Capacity structure changes | `budget_planner/meta.py` | Critical Rule 6: _META must reflect current sheet structure |
+| Cross-sheet invariant, trust boundary, derived-metric rule | `docs/design-invariants.md` | Two-cadence actuals, single-month-cell rule; update before merge |
+| Workbook structure change (new sheet, new column, row shift) | `docs/internals.md` + `budget_planner/layout.py` | Structure lives in code + internals.md; no prose duplicate |
 | C4 architecture, workflows, formula graph | `docs/architecture.md` | Mermaid diagrams, build order, cross-sheet dependencies |
 | Directory map (function → file) | `docs/directory-map.md` | Quick orientation: which file does what |
 | Cloud/container env, LO missing | `docs/cloud-env-setup.md` | Pre-flight checks, failure modes |
@@ -58,7 +59,7 @@ pytest tests/ -v
 3. **Font color convention is sacred**: Blue = input, Black = formula, Green = cross-sheet ref. Never mix these.
 4. **Inactive month cells must be greyed out and empty.** Auditors flag time logged outside WP active periods.
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
-6. **_META sheet must be updated** whenever you change the workbook structure. It's the primary documentation for future AI agents.
+6. **New architectural invariants must be recorded in `docs/design-invariants.md`** before merge. A new cross-sheet constraint, trust boundary, or derived-metric rule is a spec, not an implementation detail — future agents need it in loaded context. Structural facts (rows/columns/freeze panes) don't trigger this rule — `layout.py` and `docs/internals.md` cover them.
 7. **Cell protection** *(temporarily disabled)*: When re-enabled, all sheets are protected (password "grant"). Only blue input cells are unlocked. See `_apply_protection()` in workbook.py.
 
 ## Rules Index (path-gated — auto-loaded when touching `**/*.py`)

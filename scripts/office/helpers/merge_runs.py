@@ -10,7 +10,7 @@ Also:
 
 from pathlib import Path
 
-import defusedxml.minidom
+import defusedxml.minidom  # pyright: ignore[reportMissingModuleSource]
 
 
 def merge_runs(input_dir: str) -> tuple[int, str]:

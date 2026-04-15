@@ -23,9 +23,12 @@ from budget_planner.styles import (
     sized_comment,
 )
 
-# Band label shown above the Actual-FTE columns (row 1 merged).
-ACTUAL_BAND_LABEL = "ACTUAL FTE (from hours)"
-VARIANCE_BAND_LABEL = "VARIANCE FTE (Planned − Actual)"
+# Band labels for the raw monthly Actual/Variance bands (row 1 merged).
+# Both bands default to collapsed (see the column_dimensions setup in
+# build_capacity_sheet); the warning text flags that per-month values are
+# only trustworthy when hours are entered month-by-month.
+ACTUAL_BAND_LABEL = "ACTUAL FTE (raw monthly — unreliable unless hours entered per-month)"
+VARIANCE_BAND_LABEL = "VARIANCE FTE (raw monthly — unreliable unless hours entered per-month)"
 
 
 # ── Distribution curves ──
@@ -734,15 +737,16 @@ def build_capacity_sheet(ws, team_layout, *,
     actual_col_end = actual_col_start + months - 1
     variance_col_start = actual_col_end + 2  # 1-col gutter after Actual
     variance_col_end = variance_col_start + months - 1
-    # To-date block: 4 always-visible summary columns at the far right.
+    # To-date block: 2 always-visible summary columns at the far right.
     # Sits outside the raw-monthly outline group so auditors always see
-    # Plan/Actual/Variance-to-date even when the monthly bands are collapsed.
+    # Actual/Variance-to-date even when the monthly bands are collapsed.
+    # See docs/plans/2026-04-14-t5-simplification-design.md — the 4-col
+    # (+ util + ceil) layout was dropped because util/ceil duplicate the
+    # planned-side CF signals already on this sheet.
     todate_col_start = variance_col_end + 2  # 1-col gutter after Variance
-    todate_col_plan = todate_col_start
-    todate_col_actual = todate_col_start + 1
-    todate_col_var = todate_col_start + 2
-    todate_col_pct = todate_col_start + 3
-    todate_col_end = todate_col_pct
+    todate_col_actual = todate_col_start
+    todate_col_var = todate_col_start + 1
+    todate_col_end = todate_col_var
 
     # Build WP type lookup from schedule (first matching entry per WP)
     wp_type_map: dict[str, str] = {}
@@ -765,11 +769,15 @@ def build_capacity_sheet(ws, team_layout, *,
         outline_pr.summaryRight = True
         outline_pr.summaryBelow = False
 
-    # Mark Actual + Variance band columns as outline group level 1 so users
-    # can collapse the whole right-side block via the outline button.
+    # Raw monthly Actual + Variance bands are outline level 1 AND default
+    # collapsed: per-month values are unreliable when the PI enters hours
+    # with skipped months (T6). The to-date block provides the reliable
+    # summary. User expands on-demand via the outline button.
     for mi in range(months):
-        ws.column_dimensions[col_letter(actual_col_start + mi)].outline_level = 1
-        ws.column_dimensions[col_letter(variance_col_start + mi)].outline_level = 1
+        for col in (actual_col_start + mi, variance_col_start + mi):
+            cd = ws.column_dimensions[col_letter(col)]
+            cd.outline_level = 1
+            cd.hidden = True
 
     person_rows = team_layout["person_rows"]
     assign_config_rows = team_layout["assign_config_rows"]
@@ -796,9 +804,10 @@ def build_capacity_sheet(ws, team_layout, *,
                font=HEADER_FONT, fill=LIGHT_GREEN_FILL, alignment=CENTER)
     ws.cell(row=band_label_row, column=todate_col_start).comment = sized_comment(
         "Progress snapshot through Config!B8 (Hours Actuals Through Month). "
-        "Plan PM: sum of planned FTE through that month. "
-        "Actual PM: logged hours through that month / hours_per_fte_month. "
-        "Variance: Plan − Actual. Variance % red when ≥ ±20%."
+        "Actual PM: logged hours through that month / hours_per_fte_month "
+        "(reads from Actuals-Hours cum-hours col). "
+        "Variance PM: Plan − Actual on TOTAL + EU TOTAL rows only; red when < 0. "
+        "WP and external rows show values only where they carry signal."
     )
 
     # ── YEAR + MONTH HEADER ROWS (once, before first person group) ──
@@ -843,10 +852,8 @@ def build_capacity_sheet(ws, team_layout, *,
 
     # To-date block headers — one column label per metric.
     todate_labels = [
-        (todate_col_plan, "Plan PM"),
         (todate_col_actual, "Actual PM"),
         (todate_col_var, "Variance PM"),
-        (todate_col_pct, "Variance %"),
     ]
     for col, label in todate_labels:
         style_cell(ws, year_header_row, col, fill=LIGHT_BLUE_FILL)
@@ -923,10 +930,8 @@ def build_capacity_sheet(ws, team_layout, *,
         "variance_col_start": variance_col_start,
         "variance_col_end": variance_col_end,
         "todate_col_start": todate_col_start,
-        "todate_col_plan": todate_col_plan,
         "todate_col_actual": todate_col_actual,
         "todate_col_var": todate_col_var,
-        "todate_col_pct": todate_col_pct,
         "todate_col_end": todate_col_end,
         "person_groups": person_groups,
         "external_config_rows": external_config_rows,
@@ -937,134 +942,123 @@ def build_capacity_sheet(ws, team_layout, *,
 def apply_capacity_todate_formulas(
     ws, capacity_layout, actuals_hours_layout, *, project_params,
 ):
-    """Write Plan PM / Actual PM / Variance PM / Variance % formulas onto
-    the to-date block reserved by ``build_capacity_sheet``.
+    """Write Actual PM / Variance PM formulas onto the 2-col to-date block
+    reserved by ``build_capacity_sheet``.
 
     Called after both Capacity and Actuals-Hours sheets have been built,
     so per-person row numbers are known on both sides. The block mirrors
     the ``hours_actuals_through_month`` window (Config!B8): everything
     is summed up to that month inclusive.
 
-    For each person group:
-      * Programme WP rows get full Plan / Actual / Variance / Variance % cells.
-      * External rows: grey placeholder (no programme plan, no programme forecast).
-      * TOTAL row: sums the WP rows' Plan PM and Actual PM cells.
-      * EU TOTAL row: sums WP rows (EU-flagged externals are non-programme,
-        contribute hours but not programme PM — kept consistent with the
-        existing programme PM semantics on this block).
-      * REMAINING row: empty.
+    Per design ``docs/plans/2026-04-14-t5-simplification-design.md``:
+      * WP row: Actual PM reads the Actuals-Hours cum-hours helper col
+        divided by hours_per_fte_month (green cross-sheet ref).
+        Variance PM is blank + grey — only meaningful at person-level.
+      * External row: blank + grey across both cols (non-programme).
+      * TOTAL row: Actual PM = SUM(WP Actual cells); Variance PM =
+        (windowed plan sum on same-row planned cells) − Actual.
+      * EU TOTAL row: same pattern (EU TOTAL's planned monthly cells
+        already sum EU-flagged WPs per month, so the same windowed SUM
+        suffices).
+      * REMAINING row: blank + grey.
 
-    Variance % red CF fires at ±20% (absolute).
+    CF: Variance PM < 0 red on TOTAL + EU TOTAL only (2·TEAM rules).
     """
     months = project_params["months"]
     month_col_start_l = col_letter(MONTH_COL_START)
     month_col_end_l = col_letter(MONTH_COL_START + months - 1)
 
-    plan_col = capacity_layout["todate_col_plan"]
     actual_col = capacity_layout["todate_col_actual"]
     var_col = capacity_layout["todate_col_var"]
-    pct_col = capacity_layout["todate_col_pct"]
-    plan_cl = col_letter(plan_col)
     actual_cl = col_letter(actual_col)
     var_cl = col_letter(var_col)
-    pct_cl = col_letter(pct_col)
 
     ah_groups = actuals_hours_layout.get("person_groups", {})
+    cum_hours_col = actuals_hours_layout["cum_hours_col"]
+    cum_cl = col_letter(cum_hours_col)
 
-    def _plan_pm_formula(cap_row: int) -> str:
-        # SUM the planned monthly cells on Capacity across the first
-        # ``hours_actuals_through_month`` columns. Guarded against
-        # zero (named range may resolve to 0 pre-actuals).
-        range_ref = f"${month_col_start_l}${cap_row}:${month_col_end_l}${cap_row}"
+    def _wp_actual_formula(ah_row: int) -> str:
+        # Single cross-sheet ref to Actuals-Hours helper col, divided by
+        # hours_per_fte_month. The windowed SUM+INDEX lives on that helper
+        # col, not here — see design doc.
         return (
-            f"=IF(hours_actuals_through_month<=0,0,"
-            f"SUM(${month_col_start_l}${cap_row}:"
-            f"INDEX({range_ref},1,hours_actuals_through_month)))"
+            f"='{SHEET_ACTUALS_HOURS}'!${cum_cl}${ah_row}"
+            f"/hours_per_fte_month"
         )
 
-    def _actual_pm_formula(ah_row: int) -> str:
-        # SUM hours on the sibling Actuals-Hours row, truncated to the
-        # same month window, divided by hours_per_fte_month (Config!B6).
-        ah = (f"'{SHEET_ACTUALS_HOURS}'!${month_col_start_l}${ah_row}:"
-              f"${month_col_end_l}${ah_row}")
+    def _windowed_plan_sum(row: int) -> str:
+        # SUM the planned monthly cells on this row (typically a TOTAL or
+        # EU TOTAL row, whose per-month cells already sum all WPs or
+        # EU-flagged WPs) across the first hours_actuals_through_month
+        # columns.
+        rng = f"${month_col_start_l}${row}:${month_col_end_l}${row}"
         return (
-            f"=IF(hours_actuals_through_month<=0,0,"
-            f"SUM('{SHEET_ACTUALS_HOURS}'!${month_col_start_l}${ah_row}:"
-            f"INDEX({ah},1,hours_actuals_through_month))"
-            f"/hours_per_fte_month)"
+            f"IF(hours_actuals_through_month<=0,0,"
+            f"SUM(${month_col_start_l}${row}:"
+            f"INDEX({rng},1,hours_actuals_through_month)))"
         )
-
-    def _var_formula(row: int) -> str:
-        return f"={plan_cl}{row}-{actual_cl}{row}"
-
-    def _pct_formula(row: int) -> str:
-        return (f"=IF(ABS({plan_cl}{row})<0.01,0,"
-                f"{var_cl}{row}/{plan_cl}{row})")
 
     for name, cap_group in capacity_layout["person_groups"].items():
         ah_group = ah_groups.get(name, {})
         ah_wp_rows: dict[str, int] = ah_group.get("wp_rows", {})
 
-        # Programme WP rows — full to-date quartet.
+        # Programme WP rows — Actual PM only (cross-sheet); Variance PM blank.
         for wp_id, cap_row in cap_group["wp_rows"].items():
-            style_cell(ws, cap_row, plan_col, font=BLACK_FORMULA,
-                       fmt="0.00").value = _plan_pm_formula(cap_row)
             ah_row = ah_wp_rows.get(wp_id)
             if ah_row is not None:
                 style_cell(ws, cap_row, actual_col, font=GREEN_XREF,
-                           fmt="0.00").value = _actual_pm_formula(ah_row)
+                           fmt="0.00").value = _wp_actual_formula(ah_row)
             else:
                 style_cell(ws, cap_row, actual_col, value=0,
                            font=BLACK_FORMULA, fmt="0.00")
-            style_cell(ws, cap_row, var_col, font=BLACK_FORMULA,
-                       fmt="0.00").value = _var_formula(cap_row)
-            style_cell(ws, cap_row, pct_col, font=BLACK_FORMULA,
-                       fmt="0.0%").value = _pct_formula(cap_row)
+            style_cell(ws, cap_row, var_col, value="",
+                       font=BLACK_FORMULA, fill=GREY_FILL)
 
-        # External rows — non-programme: leave blank/grey across the block.
+        # External rows — non-programme: blank/grey across the block.
         for ext_row in cap_group["external_rows"].values():
-            for c in (plan_col, actual_col, var_col, pct_col):
+            for c in (actual_col, var_col):
                 style_cell(ws, ext_row, c, value="",
                            font=BLACK_FORMULA, fill=GREY_FILL)
 
-        # TOTAL + EU TOTAL rows — sum WP rows on the to-date block.
+        # TOTAL + EU TOTAL rows — Actual = SUM(WP actuals);
+        # Variance = windowed plan sum − Actual.
         wp_rows = list(cap_group["wp_rows"].values())
 
-        def _sum_wp(col_l: str, rows: list[int]) -> str:
+        def _sum_wp_actuals(rows: list[int]) -> str:
             if not rows:
                 return "=0"
-            refs = ",".join(f"{col_l}{rr}" for rr in rows)
+            refs = ",".join(f"{actual_cl}{rr}" for rr in rows)
             return f"=SUM({refs})"
 
-        for summary_row in (cap_group["total_row"], cap_group["eu_total_row"]):
-            style_cell(ws, summary_row, plan_col, font=BLACK_FORMULA,
-                       fill=LIGHT_GREEN_FILL,
-                       fmt="0.00").value = _sum_wp(plan_cl, wp_rows)
+        total_row = cap_group["total_row"]
+        eu_total_row = cap_group["eu_total_row"]
+
+        for summary_row in (total_row, eu_total_row):
             style_cell(ws, summary_row, actual_col, font=BLACK_FORMULA,
                        fill=LIGHT_GREEN_FILL,
-                       fmt="0.00").value = _sum_wp(actual_cl, wp_rows)
+                       fmt="0.00").value = _sum_wp_actuals(wp_rows)
+            var_formula = (
+                f"={_windowed_plan_sum(summary_row)}"
+                f"-{actual_cl}{summary_row}"
+            )
             style_cell(ws, summary_row, var_col, font=BLACK_FORMULA,
                        fill=LIGHT_GREEN_FILL,
-                       fmt="0.00").value = _var_formula(summary_row)
-            style_cell(ws, summary_row, pct_col, font=BLACK_FORMULA,
-                       fill=LIGHT_GREEN_FILL,
-                       fmt="0.0%").value = _pct_formula(summary_row)
+                       fmt="0.00").value = var_formula
 
         # REMAINING row — leave empty/grey; no meaningful to-date value.
         rem_row = cap_group.get("remaining_row")
         if rem_row is not None:
-            for c in (plan_col, actual_col, var_col, pct_col):
+            for c in (actual_col, var_col):
                 style_cell(ws, rem_row, c, value="",
                            font=BLACK_FORMULA, fill=GREY_FILL)
 
-        # CF: Variance % red when |x| ≥ 20% on WP rows + summary rows.
-        cf_rows = wp_rows + [cap_group["total_row"], cap_group["eu_total_row"]]
-        for rr in cf_rows:
-            cell_ref_str = f"{pct_cl}{rr}"
+        # CF: Variance PM red when < 0 on TOTAL + EU TOTAL rows only.
+        for rr in (total_row, eu_total_row):
+            cell_ref_str = f"{var_cl}{rr}"
             ws.conditional_formatting.add(
                 cell_ref_str,
                 FormulaRule(
-                    formula=[f"ABS({cell_ref_str})>=0.2"],
+                    formula=[f"{cell_ref_str}<0"],
                     fill=CF_RED_FILL,
                 ),
             )

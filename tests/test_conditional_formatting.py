@@ -49,18 +49,20 @@ class TestCapacityConditionalFormatting:
     amber/red REMAINING) + 2*years per person (EU ceiling red/amber)."""
 
     def test_capacity_rule_count(self, workbook):
-        """Planned-side CF + T9 Actual-view band CF + T5 to-date Variance% CF.
+        """Planned-side CF + T9 Actual-view band CF + simplified to-date CF.
 
         Planned side:
           - yellow per WP row (variance < 0)
           - 4 per person (TOTAL amber+red, REMAINING amber+red)
           - 2 × years per person (EU ceiling red+amber on planned EU TOTAL)
-        T9 actual-view band (right-side grouped):
+        T9 actual-view band (right-side grouped, raw monthly):
           - 1 variance-red rule per (WP row + external row) per person
           - 2 per person (utilisation amber+red on Actual TOTAL row)
           - 1 × years per person (red on Actual EU TOTAL annual ceiling)
-        T5 to-date block (Variance % red ±20%):
-          - 1 per WP row + 2 per person (TOTAL, EU TOTAL)
+        To-date block (kaizen simplification 2026-04-14 — 2 cols only):
+          - 2 per person (Variance PM red < 0 on TOTAL + EU TOTAL only).
+            Variance-% CF and util/ceil CF dropped per design doc
+            ``docs/plans/2026-04-14-t5-simplification-design.md``.
         """
         from budget_planner.config import EXTERNAL_COMMITMENTS
         ws = workbook["Capacity"]
@@ -74,7 +76,7 @@ class TestCapacityConditionalFormatting:
             + 2 * len(TEAM)                              # utilisation amber+red
             + num_years * len(TEAM)                      # EU annual ceiling red
         )
-        todate = total_wp_rows + 2 * len(TEAM)
+        todate = 2 * len(TEAM)                           # Variance PM < 0 on TOTAL + EU TOTAL
         expected = planned + actual_band + todate
         assert len(rules) == expected, (
             f"Expected {expected} CF rules on Capacity, got {len(rules)}"

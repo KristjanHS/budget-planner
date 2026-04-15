@@ -396,3 +396,49 @@ def test_actuals_hours_has_only_sum_validation_column(hrs):
     budget_label = hrs.cell(year_row, vcols["budget"]).value
     assert sum_label == "Sum"
     assert budget_label in (None, "")
+
+
+# ── Cum-hours helper column (feeds Capacity to-date Actual PM) ──
+
+CUM_HOURS_COL = FORECAST_COL_END + 2
+
+
+def test_cum_hours_header_present(hrs):
+    """Header row carries the 'Cum hours (to date)' label."""
+    # Month header row = 3 (band=1, year=2, month=3).
+    assert hrs.cell(3, CUM_HOURS_COL).value == "Cum hours (to date)"
+
+
+def test_cum_hours_wp_row_formula_shape(hrs):
+    """WP rows carry a windowed SUM+INDEX formula keyed on
+    ``hours_actuals_through_month``."""
+    alice_row = _find_person_header_row(hrs, "Alice") + 1  # first WP row
+    formula = hrs.cell(alice_row, CUM_HOURS_COL).value
+    assert isinstance(formula, str)
+    assert formula.startswith("=IF(hours_actuals_through_month<=0,0,")
+    assert "INDEX" in formula
+    start_cl = col_letter(MONTH_COL_START)
+    end_cl = col_letter(MONTH_COL_START + PROJECT_MONTHS - 1)
+    assert f"${start_cl}${alice_row}:${end_cl}${alice_row}" in formula
+
+
+def test_cum_hours_total_and_eu_total_formulas(hrs):
+    """TOTAL and EU TOTAL rows also carry the windowed SUM — Capacity's
+    aggregate path doesn't need it today, but the helper col is uniform
+    per row so cross-section reads remain consistent."""
+    alice_header = _find_person_header_row(hrs, "Alice")
+    total_row = None
+    eu_total_row = None
+    for r in range(alice_header + 1, alice_header + 30):
+        if hrs.cell(r, 2).value == "TOTAL":
+            total_row = r
+        elif hrs.cell(r, 2).value == "EU TOTAL":
+            eu_total_row = r
+            break
+    assert total_row is not None
+    assert eu_total_row is not None
+    for row in (total_row, eu_total_row):
+        formula = hrs.cell(row, CUM_HOURS_COL).value
+        assert isinstance(formula, str)
+        assert "hours_actuals_through_month" in formula
+        assert "INDEX" in formula

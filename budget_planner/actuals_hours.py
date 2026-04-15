@@ -75,11 +75,30 @@ def _mirror_year_month_headers_to_band(
         )
 
 
+def _cum_hours_formula(row: int, month_col_start: int, months: int) -> str:
+    """Windowed cumulative SUM of this row's hour cells up to
+    ``hours_actuals_through_month`` (Config!B8).
+
+    Written on the Capacity-consumed ``cum_hours_col`` as a single helper
+    so Capacity can reference one cell per row instead of rebuilding a
+    cross-sheet SUM+INDEX (see ``docs/plans/2026-04-14-t5-simplification-design.md``).
+    """
+    start_cl = col_letter(month_col_start)
+    end_cl = col_letter(month_col_start + months - 1)
+    rng = f"${start_cl}${row}:${end_cl}${row}"
+    return (
+        f"=IF(hours_actuals_through_month<=0,0,"
+        f"SUM(${start_cl}${row}:"
+        f"INDEX({rng},1,hours_actuals_through_month)))"
+    )
+
+
 def _write_person_hours_grid(
     ws, r: int, member: dict, *,
     ctx: PersonGridContext,
     person_assignments: list[dict],
     forecast_col_start: int,
+    cum_hours_col: int,
     preserved_for_person: dict[str, list[float | None]] | None,
 ) -> tuple[int, dict]:
     """Write one person's hour-grid section (header, WP rows, externals, totals).
@@ -211,6 +230,10 @@ def _write_person_hours_grid(
         sum_range = month_range_ref(r, month_col_start, month_col_end)
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                    fmt=HOUR_FMT).value = f"=SUM({sum_range})"
+        style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA,
+                   fmt=HOUR_FMT).value = _cum_hours_formula(
+            r, month_col_start, project_params["months"],
+        )
 
         wp_rows[wp_id] = r
         first_wp_row_for_person = False
@@ -255,6 +278,10 @@ def _write_person_hours_grid(
         sum_range = month_range_ref(r, month_col_start, month_col_end)
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                    fmt=HOUR_FMT).value = f"=SUM({sum_range})"
+        style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA,
+                   fmt=HOUR_FMT).value = _cum_hours_formula(
+            r, month_col_start, project_params["months"],
+        )
 
         external_rows[entry["project"]] = r
         r += 1
@@ -296,6 +323,11 @@ def _write_person_hours_grid(
     style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt=HOUR_FMT).value = (
         f"=SUM({scl}{data_row_start}:{scl}{data_row_end})"
+    )
+    style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA,
+               fill=LIGHT_GREEN_FILL,
+               fmt=HOUR_FMT).value = _cum_hours_formula(
+        r, month_col_start, project_params["months"],
     )
     r += 1
 
@@ -348,6 +380,13 @@ def _write_person_hours_grid(
     else:
         style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
                    fill=LIGHT_BLUE_FILL, fmt=HOUR_FMT).value = "=0"
+    # Cum hours on EU TOTAL: windowed SUM of this row's (per-month EU SUM)
+    # cells — mirrors the TOTAL-row pattern.
+    style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA,
+               fill=LIGHT_BLUE_FILL,
+               fmt=HOUR_FMT).value = _cum_hours_formula(
+        r, month_col_start, project_params["months"],
+    )
     r += 1
 
     # ── EU ceiling CF per calendar year on EU TOTAL row ──
@@ -431,6 +470,11 @@ def build_actuals_hours_sheet(
     # Forecast-EUR band: one gutter col after Sum, then ``months`` cols.
     forecast_col_start = val_col_sum + 2
     forecast_col_end = forecast_col_start + months - 1
+    # Cum-hours helper column (one gutter after the forecast band). Sits
+    # outside the forecast outline group so it remains visible when the
+    # forecast band collapses; Capacity's to-date Actual PM references this
+    # cell divided by hours_per_fte_month (see design doc 2026-04-14-t5).
+    cum_hours_col = forecast_col_end + 2
 
     ws.sheet_properties.tabColor = "C00000"  # distinct red — hours timelog
     # Place the column-outline collapse button to the right of grouped columns;
@@ -480,6 +524,18 @@ def build_actuals_hours_sheet(
     ws.cell(row=year_header_row, column=val_col_sum).comment = sized_comment("Row-wide SUM of hours logged this row. Per-person TOTAL and EU "
         "TOTAL rows sum across these.")
 
+    # Cum-hours header: year row blank but fill-matched; month row carries
+    # the label. Green so the reader sees this col as a helper aggregate.
+    style_cell(ws, year_header_row, cum_hours_col, fill=LIGHT_GREEN_FILL)
+    style_cell(ws, month_header_row, cum_hours_col,
+               value="Cum hours (to date)", font=HEADER_FONT,
+               fill=LIGHT_GREEN_FILL)
+    ws.cell(row=month_header_row, column=cum_hours_col).comment = sized_comment(
+        "Cumulative hours on this row through Config!B8 (Hours Actuals "
+        "Through Month). Capacity's to-date Actual PM reads this cell "
+        "divided by hours_per_fte_month."
+    )
+
     first_person_header_row = r
 
     # ── Per-person assignment lookup (dedup by person+wp) ──
@@ -515,6 +571,7 @@ def build_actuals_hours_sheet(
             ctx=ctx,
             person_assignments=per_person_assignments.get(name, []),
             forecast_col_start=forecast_col_start,
+            cum_hours_col=cum_hours_col,
             preserved_for_person=preserved_for_person,
         )
         person_groups[name] = group
@@ -552,5 +609,6 @@ def build_actuals_hours_sheet(
         "band_label_row": band_label_row,
         "forecast_col_start": forecast_col_start,
         "forecast_col_end": forecast_col_end,
+        "cum_hours_col": cum_hours_col,
         "person_groups": person_groups,
     }

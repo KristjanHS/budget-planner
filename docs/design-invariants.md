@@ -36,18 +36,29 @@ No derived view reads a single-month cell as authoritative for that month. Every
 
 Raw monthly actual cells surface only in collapsed / clearly-labelled bands ("reliable only when hours were entered per-month"), never as the input to a derived metric.
 
-### Forward-note (hours-timelog v2 rollout)
+### Rollout status (hours-timelog v2)
 
-Stage 1 (complete) wires the Config inputs + named ranges only; no consumer code reads them yet — so if you grep for `hours_actuals_through_month` and find only Config + docs, that is expected mid-rollout, not drift.
+Stage 1 wired the Config inputs + named ranges only; no consumer code read them yet — so if you grep for `hours_actuals_through_month` in an early-rollout checkout and find only Config + docs, that was expected mid-rollout, not drift.
 
-Stage 2 (W2) adds a to-date column block on Capacity, switches Breach-In to a cumulative-slope formula, drives per-column partial-year shading on Summary by the stricter of the two through-months, and adds cosmetic grey shading past the through-month on `Actuals-Hours` + `Plan-Forecast`.
+Stage 2 added a to-date column block on Capacity, switched Breach-In to a cumulative-slope formula, drove per-column partial-year shading on Summary by the stricter of the two through-months, and added cosmetic grey shading past the through-month on `Actuals-Hours` + `Plan-Forecast`.
 
-Stage 3 (W3) adds a Reconciliation section on Trends: three health cells (EUR through / Hours through / Reconciled through), a per-WP summary table with cumulative Forecast vs Actual EUR + gap %, and a gap-over-time LineChart clipped at `reconciled_through_month`.
+Stage 3 added a Reconciliation section on Trends: three health cells (EUR through / Hours through / Reconciled through), a per-WP summary table with cumulative Forecast vs Actual EUR + gap %, and a gap-over-time LineChart clipped at `reconciled_through_month`.
+
+Stage 4 (T14–T15) will harden rebuild preservation + the shape fingerprint.
 
 ## Future invariants (reserved)
 
 Placeholders for invariants that have a home elsewhere today but belong here when the next cross-sheet rule lands. Write them up when the next invariant accretes — don't flesh them out speculatively.
 
 - **Font color convention** (Critical Rule 3 pointer): Blue = input, Black = formula, Green = cross-sheet ref.
-- **Named-range contract**: `project_start`, `fte_rate`, `hours_actuals_through_month`, `eur_actuals_through_month`, `reconciled_through_month`, `months_elapsed_*` — what each guarantees, who writes it, who reads it.
+- **Named-range contract**: who writes vs reads each named range.
+
+  | Named range | Written by | Read by |
+  |---|---|---|
+  | `project_start` | `config_sheet.py` (Config!$B$2) | nearly every builder (date math, headers) |
+  | `fte_rate` | `config_sheet.py` (Config!$B$4) | `plan.py` leaves (currently via direct Config ref; pending consolidation) |
+  | `hours_actuals_through_month` | `config_sheet.py` (Config!$B$8, blue input) | `capacity.py`, `actuals_hours.py` (greying), `plan_forecast.py` (greying), `summary.py` (partial-year shading), `trends.py` (reconciliation, NA-clipping) |
+  | `eur_actuals_through_month` | `config_sheet.py` (Config!$B$7, blue input) | `actuals.py` (Breach-In cumulative-slope, As-of), `summary.py`, `trends.py` |
+  | `reconciled_through_month` | `config_sheet.py` (Config!$B$11, derived MIN) | `trends.py` (reconciliation health + summary + gap chart) |
+  | `months_elapsed_hours` / `months_elapsed_eur` | `config_sheet.py` (derived DATEDIF) | `capacity.py` (per-person avg), `trends.py` (Person Load avg) |
 - **Reader/builder round-trip rule**: readers use named ranges (not coordinates); tolerate internal blanks; rebuild must preserve user-authored values on blue input cells.

@@ -510,6 +510,24 @@ def test_trends_no_row_collisions(num_wps, num_team):
         f"Chart needs ~14 rows of height."
     )
 
+    # Gap chart (T13) sits between the cumulative chart and the person
+    # section. Pin the gap-chart → person-section margin directly so the
+    # reconciliation block can't silently grow into Person Load.
+    from openpyxl.utils.cell import coordinate_from_string
+    assert len(ws._charts) == 2, (  # type: ignore[attr-defined]
+        f"Expected 2 charts (cumulative + gap), got {len(ws._charts)}"  # type: ignore[attr-defined]
+    )
+    gap_anchor = ws._charts[1].anchor  # type: ignore[attr-defined]
+    # openpyxl anchors a chart either as a string like "A123" or as a
+    # OneCellAnchor/TwoCellAnchor with `_from.row` (0-indexed).
+    if isinstance(gap_anchor, str):
+        _, gap_chart_anchor_row = coordinate_from_string(gap_anchor)
+    else:
+        gap_chart_anchor_row = gap_anchor._from.row + 1
+    assert person_section >= gap_chart_anchor_row + 14, (
+        f"Person section {person_section} overlaps gap chart at {gap_chart_anchor_row}"
+    )
+
     # Helper rows must be after person data
     assert hidden_rows[0] > last_person, (
         f"First helper row {hidden_rows[0]} overlaps person data ending at {last_person}"

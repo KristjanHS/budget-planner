@@ -140,10 +140,10 @@ def recalc(filename, timeout=30):
     try:
         wb = load_workbook(filename, data_only=True)
 
-        # Hard errors: indicate formula bugs. #N/A is tracked separately
-        # because NA() is an intentional idiom (LineChart series clipping,
-        # lookup sentinels) — Excel itself produces it by design, not as
-        # a failure mode.
+        # Hard errors: indicate formula bugs. #N/A on the Trends sheet is
+        # tracked separately because NA() is an intentional chart-clipping
+        # idiom there (T10/T13 helper rows). On any other sheet, #N/A is
+        # a real error (e.g. VLOOKUP miss) and must be reported as such.
         excel_errors = [
             "#VALUE!",
             "#DIV/0!",
@@ -151,6 +151,7 @@ def recalc(filename, timeout=30):
             "#NAME?",
             "#NULL!",
             "#NUM!",
+            "#N/A",
         ]
         error_details = {err: [] for err in excel_errors}
         na_locations: list[str] = []
@@ -161,7 +162,10 @@ def recalc(filename, timeout=30):
             for row in ws.iter_rows():
                 for cell in row:
                     if cell.value is not None and isinstance(cell.value, str):
-                        if "#N/A" in cell.value:
+                        # Trends-only NA exemption: NA() is an intentional
+                        # chart-clipping idiom on Trends helper rows (T10/T13).
+                        # On any other sheet, #N/A is a real error.
+                        if sheet_name == "Trends" and "#N/A" in cell.value:
                             na_locations.append(f"{sheet_name}!{cell.coordinate}")
                             continue
                         for err in excel_errors:

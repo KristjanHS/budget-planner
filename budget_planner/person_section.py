@@ -35,6 +35,8 @@ class PersonLayout:
     header_row: int
     wp_rows: dict[str, int]
     external_rows: dict[str, int]
+    cum_hours_todate_row: int | None
+    actual_pm_todate_row: int | None
     total_row: int
     remaining_row: int | None
     eu_total_row: int | None
@@ -48,11 +50,17 @@ def plan_person_layout(
     external_names: list[str],
     include_remaining: bool,
     include_eu_total: bool,
+    include_hours_todate_summary: bool = False,
 ) -> PersonLayout:
     """Compute sequential row positions for a single person's section.
 
     Layout order: header, one row per WP id, one row per external name,
-    TOTAL, optional REMAINING, optional EU TOTAL.
+    optional ``Cumulative hours to date`` + ``Actual PM to date`` summary
+    rows (when ``include_hours_todate_summary`` is True), TOTAL, optional
+    REMAINING, optional EU TOTAL.
+
+    The hours-to-date summary rows are Actuals-Hours-only; Capacity
+    passes False (the default) and the layout is unchanged.
     """
     r = start_row
     header_row = r
@@ -61,6 +69,12 @@ def plan_person_layout(
     r += len(wp_ids)
     external_rows = {name: r + i for i, name in enumerate(external_names)}
     r += len(external_names)
+    cum_hours_todate_row = r if include_hours_todate_summary else None
+    if include_hours_todate_summary:
+        r += 1
+    actual_pm_todate_row = r if include_hours_todate_summary else None
+    if include_hours_todate_summary:
+        r += 1
     total_row = r
     r += 1
     remaining_row = r if include_remaining else None
@@ -73,6 +87,8 @@ def plan_person_layout(
         header_row=header_row,
         wp_rows=wp_rows,
         external_rows=external_rows,
+        cum_hours_todate_row=cum_hours_todate_row,
+        actual_pm_todate_row=actual_pm_todate_row,
         total_row=total_row,
         remaining_row=remaining_row,
         eu_total_row=eu_total_row,

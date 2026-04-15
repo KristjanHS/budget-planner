@@ -23,7 +23,7 @@ from budget_planner.layout import (
     month_col_end,
     wp_active_months,
 )
-from budget_planner.styles import GREY_FILL, col_letter
+from budget_planner.styles import CF_GREY_FILL, GREY_FILL, col_letter
 
 
 # ── Fixtures ──
@@ -227,6 +227,38 @@ def test_plan_forecast_ceiling_column_refs_config(pf):
     wp_row = _find_wp_row(pf, 0)
     val = pf.cell(wp_row, ceil_col).value
     assert isinstance(val, str) and val.startswith("=Config!E"), val
+
+
+def test_plan_forecast_grey_cf_past_hours_actuals_threshold(pf):
+    """A cosmetic grey CF shades forecast-EUR cells whose month index is
+    past ``hours_actuals_through_month`` — no hours yet, so the forecast
+    aggregates zero and should read as empty/unreliable rather than zero."""
+    target_grey = str(CF_GREY_FILL.bgColor.rgb).upper()
+    # MONTH_COL_START = col C; the month band spans C..<end>.
+    month_start_l = col_letter(MONTH_COL_START)
+
+    found_formula = None
+    for cf_range in pf.conditional_formatting:
+        rng_str = str(cf_range)
+        if month_start_l not in rng_str:
+            continue
+        for rule in pf.conditional_formatting[cf_range]:
+            fill = getattr(rule.dxf, "fill", None) if rule.dxf else None
+            if fill is None:
+                continue
+            bg = str(getattr(fill.bgColor, "rgb", "") or "").upper()
+            if not bg.endswith(target_grey):
+                continue
+            for f in (rule.formula or []):
+                if "hours_actuals_through_month" in f:
+                    found_formula = f
+                    break
+
+    assert found_formula is not None, (
+        "Missing grey CF keyed on hours_actuals_through_month on the "
+        "Plan-Forecast monthly range"
+    )
+    assert ">hours_actuals_through_month" in found_formula, found_formula
 
 
 def test_plan_forecast_sum_column_totals_months(pf):

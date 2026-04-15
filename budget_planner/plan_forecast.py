@@ -27,7 +27,7 @@ from budget_planner.layout import (
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     GREY_FILL, LIGHT_GREEN_FILL,
-    CF_RED_FILL, style_cell, col_letter, write_section_header,
+    CF_GREY_FILL, CF_RED_FILL, style_cell, col_letter, write_section_header,
     sized_comment,
 )
 
@@ -239,6 +239,21 @@ def build_plan_forecast_sheet(
     cf_range = f"{diff_col_l}{first_wp_row}:{diff_col_l}{last_wp_row}"
     ws.conditional_formatting.add(cf_range, FormulaRule(
         formula=[f"{diff_col_l}{first_wp_row}<0"], fill=CF_RED_FILL,
+    ))
+
+    # Cosmetic grey CF: forecast-EUR cells for months past
+    # ``hours_actuals_through_month`` — no hours logged yet, so the forecast
+    # aggregates zero contributions and should read as empty/unreliable
+    # rather than a firm projection. Spans the WP block + TOTAL row.
+    ms = col_letter(month_col_start)
+    me = col_letter(m_end)
+    forecast_body_range = f"{ms}{first_wp_row}:{me}{total_row}"
+    ws.conditional_formatting.add(forecast_body_range, FormulaRule(
+        formula=[
+            f"COLUMN({ms}{first_wp_row})-COLUMN(${ms}$1)+1"
+            f">hours_actuals_through_month"
+        ],
+        fill=CF_GREY_FILL,
     ))
 
     # Comment on the ceiling header — explain provenance

@@ -143,6 +143,7 @@ def _write_person_hours_grid(
         external_names=ordered_external_names,
         include_remaining=False,
         include_eu_total=True,
+        include_hours_todate_summary=True,
     )
 
     # ── Person header row ──
@@ -294,6 +295,34 @@ def _write_person_hours_grid(
         data_row_end = data_row_start
         r += 1
 
+    # ── Hours-to-date summary rows (above TOTAL) ──
+    # Two cumulative-through-``hours_actuals_through_month`` aggregates per
+    # person: total hours logged and the person-months equivalent. Summaries
+    # sit ABOVE TOTAL; TOTAL's per-month SUM still spans only the data rows
+    # (``data_row_start..data_row_end``) so it doesn't double-count these.
+    cum_hours_cl = col_letter(cum_hours_col)
+    assert layout.cum_hours_todate_row is not None
+    assert layout.actual_pm_todate_row is not None
+    assert r == layout.cum_hours_todate_row
+    cum_hours_todate_row = layout.cum_hours_todate_row
+    style_cell(ws, r, 2, "Cumulative hours to date",
+               font=HEADER_FONT)
+    style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA,
+               fmt=HOUR_FMT).value = (
+        f"=SUM({cum_hours_cl}{data_row_start}:"
+        f"{cum_hours_cl}{data_row_end})"
+    )
+    r += 1
+
+    assert r == layout.actual_pm_todate_row
+    actual_pm_todate_row = layout.actual_pm_todate_row
+    style_cell(ws, r, 2, "Actual PM to date", font=HEADER_FONT)
+    style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA,
+               fmt="0.00").value = (
+        f"={cum_hours_cl}{cum_hours_todate_row}/hours_per_fte_month"
+    )
+    r += 1
+
     # ── TOTAL row (SUM of all data rows, hours per month) ──
     assert r == layout.total_row
     total_row = layout.total_row
@@ -420,6 +449,8 @@ def _write_person_hours_grid(
         "header_row": header_row,
         "wp_rows": wp_rows,
         "external_rows": external_rows,
+        "cum_hours_todate_row": cum_hours_todate_row,
+        "actual_pm_todate_row": actual_pm_todate_row,
         "total_row": total_row,
         "eu_total_row": eu_total_row,
     }
@@ -596,6 +627,16 @@ def build_actuals_hours_sheet(
             formula=[
                 f"COLUMN({fc_start_l}{first_person_header_row})"
                 f"-COLUMN(${fc_start_l}$1)+1<=eur_actuals_through_month"
+            ],
+            fill=CF_GREY_FILL,
+        ))
+        # Second grey pass: forecast-EUR cells for months with no hours yet
+        # logged (``month > hours_actuals_through_month``) are empty/unreliable
+        # — shade so auditors don't mistake a blank for a zero forecast.
+        ws.conditional_formatting.add(forecast_band_range, FormulaRule(
+            formula=[
+                f"COLUMN({fc_start_l}{first_person_header_row})"
+                f"-COLUMN(${fc_start_l}$1)+1>hours_actuals_through_month"
             ],
             fill=CF_GREY_FILL,
         ))

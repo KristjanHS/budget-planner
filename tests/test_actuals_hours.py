@@ -119,6 +119,12 @@ def test_actuals_hours_person_has_assigned_wp_rows(hrs):
             f"{name}: expected {len(expected_wps)} WP rows, got {wp_row_count}"
         )
 
+        # Next two rows are the hours-to-date summary (col A blank;
+        # col B carries the label).
+        assert hrs.cell(r, 2).value == "Cumulative hours to date"
+        assert hrs.cell(r + 1, 2).value == "Actual PM to date"
+        r += 2
+
         # Next row should be TOTAL label
         total_label = hrs.cell(r, 2).value
         assert total_label == "TOTAL", (
@@ -183,7 +189,8 @@ def test_actuals_hours_total_row_sums_data_rows(hrs):
     expected_data_rows = 3 + 1
     data_row_start = alice_header + 1
     data_row_end = alice_header + expected_data_rows
-    total_row = data_row_end + 1
+    # +2 for the hours-to-date summary rows between externals and TOTAL.
+    total_row = data_row_end + 3
     assert hrs.cell(total_row, 2).value == "TOTAL"
 
     m1_col = MONTH_COL_START
@@ -205,8 +212,9 @@ def test_actuals_hours_eu_total_references_grant_wps_and_eu_externals(hrs):
     wp_rows = [bob_header + 1, bob_header + 2, bob_header + 3]
     ext_projectx_row = bob_header + 4  # first external = ProjectX (not EU)
     ext_horizon_row = bob_header + 5   # second external = HorizonEU-Alpha (EU)
-    total_row = bob_header + 6
-    eu_total_row = bob_header + 7
+    # +2 for the hours-to-date summary rows inserted above TOTAL.
+    total_row = bob_header + 8
+    eu_total_row = bob_header + 9
 
     assert hrs.cell(total_row, 2).value == "TOTAL"
     assert hrs.cell(eu_total_row, 2).value == "EU TOTAL"
@@ -368,9 +376,10 @@ def test_forecast_eur_total_row_sums_wp_rows(hrs):
     """Per-person TOTAL row in the forecast band = SUM of WP-row forecast
     cells for that month. Externals are blank so they aren't in the SUM."""
     alice_header = _find_person_header_row(hrs, "Alice")
-    # Alice: 3 WP rows (header+1, +2, +3) + 1 external at +4 → TOTAL at +5.
+    # Alice: 3 WP rows (header+1..+3) + 1 external (+4) + 2 hours-to-date
+    # summary rows (+5, +6) → TOTAL at +7.
     wp_rows = [alice_header + 1, alice_header + 2, alice_header + 3]
-    total_row = alice_header + 5
+    total_row = alice_header + 7
     assert hrs.cell(total_row, 2).value == "TOTAL"
     fcl = col_letter(FORECAST_COL_START)
     formula = hrs.cell(total_row, FORECAST_COL_START).value

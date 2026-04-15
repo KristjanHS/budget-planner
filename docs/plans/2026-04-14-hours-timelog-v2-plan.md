@@ -215,6 +215,14 @@ All black (same-sheet formulas) or green (cross-sheet to Actuals-Hours). Tests c
 
 **Stage 2 completion gate:** same as Stage 1 (full tests + pyright + invariant/internals doc updates + checkpoint + /retro).
 
+**Stage 2 T5/T6 status (2026-04-14 kaizen redesign):** T5 (2-col kaizen to-date + cum-hours on Actuals-Hours) committed in `dccd5ac` + `d28a4d7`. T6 (raw-monthly hidden) done. Resume at **T7**.
+
+**Stage 2 T5 review deferrals (address inside their target task if triggered):**
+- I1: reviewer claimed EU TOTAL Actual PM should filter EU-flagged WPs — rejected (all programme WPs are EU; EU flag applies to externals only). Revisit only if a non-EU WP ever lands in `DEMO_CAPACITY_ASSIGNMENTS`.
+- N1: `tests/test_capacity_todate.py::test_total_actual_sums_wp_actuals` detects WP rows via `startswith("WP")` — fragile if WP IDs change; tighten when that test churns.
+- N2: cum-hours header row in `actuals_hours.py` uses `month_header_row` implicitly — add header-row assertion if a future refactor shifts it.
+- N3: No test asserts outline level on `cum_hours_col` — add if grouping visibility regresses.
+
 ---
 
 ## Stage 3 — W3 reconciliation (T10–T13)
@@ -268,6 +276,10 @@ Summary table (one row per programme WP):
 - `eur_actuals_through_month` + `hours_actuals_through_month` user-entered values must be preserved.
 - Add tests to `test_rebuild_shape_drift.py` covering shape-drift scenarios with new Config rows (insert/delete within the Project Parameters band).
 
+**Stage 1 review deferrals to address here:**
+- Add a test that reads named-range targets from the workbook and asserts they match the row numbers in `docs/internals.md` (Tab Colors / Freeze Panes / Row-Order Contract tables).
+- `_person_body_rows` in `tests/test_row_grouping.py` has an end-clamp imprecision on the last person — tighten if T14 grows that test.
+
 ### Task 15: Full e2e + shape fingerprint
 
 - Extend `test_shape_fingerprint.py` if needed.
@@ -285,3 +297,40 @@ Summary table (one row per programme WP):
 - **Do not touch** Plan sheet builders (out of scope — Plan is forward-looking monthly and untouched).
 - **Do not** reinterpret input cells as cumulative — explicitly rejected in the design.
 - When a to-date formula references `Actuals-Hours`, prefer SUMIFS with the Config through-month as the comparison RHS — avoids per-month ISNUMBER gymnastics that fail cross-platform (see `.claude/rules/openpyxl-patterns.md`).
+
+---
+
+## Post-v2 follow-ups (after Stage 4 lands)
+
+### Version stamp in generated xlsx
+
+**Requirement:** Every `python -m budget_planner init` and `python -m budget_planner rebuild` writes a code-version marker into the workbook. The point is "which commit produced this workbook" so an older xlsx can be mapped back to the exact code for debugging — not a monotonic release counter.
+
+**Why:** The PI iterates on this tool; when something looks wrong in an older workbook, we need to know which builder version emitted it — without the marker, reproducing bugs is guesswork.
+
+**How to apply:**
+- When touching the generation pipeline (`workbook.py`), include a version-stamp step.
+- Stamped value: a commit identifier — `git describe --always --dirty` or `git rev-parse --short HEAD` (fallback to "unknown" if not a git checkout or subprocess fails).
+- Placement: a named cell on `Config` (candidate name: `version_stamp`). The `_META` sheet was removed 2026-04-14, so the former landing spot no longer exists; a Config named cell survives rebuild, is visible to auditors, and integrates with the existing named-range contract.
+- Rebuild must overwrite the stamp (reflects the code that did the rebuild, not the original init).
+
+### Other standing follow-ups (cross-workstream)
+
+- Tier B simplifications from `docs/analysis/2026-04-13-simplification-audit.md`: section-reader skeleton (risk: sentinel-break semantics are load-bearing), `_year_col_indices()` helper.
+- Mutation-testing baseline: `plan.py` 55.0% pre-brittleness-refactor. Re-run after v2.
+- Extract shared CF grey-boundary helper when a third consumer appears (currently: `actuals.py` + `actuals_hours.py`).
+- Case-by-case audit of rebuild warnings → should-they-be-fatal? (archived design §3).
+- `docs/plans/2026-04-13-hours-timelog-design.md` still has 2 `_META` prose refs (v1, superseded); scrub only if it becomes load-bearing.
+
+## Cross-session gotchas (canonical — mirrored in memory)
+
+See `memory/project_cross_session_gotchas.md` for runtime-loaded form.
+
+- **`months_elapsed_*` uses `MAX(1, through_month)`, NOT DATEDIF** — through-month cells are integer month indices, not dates. The design doc is stale on this one point; in-code comment is ground truth.
+- **`'Plan-Forecast'` must be single-quoted** in formulas — the hyphen triggers `#NAME?` in LO recalc.
+- **`eur_actuals_through_month` / `hours_actuals_through_month` default to `1`** (integer literal). Reader treats both as optional so legacy minimal-Config fixtures keep parsing.
+- **`_any_nonnull` (not `_any_nonzero`)** in `read_actuals_hours_sheet`: duplicate-key preference favours any row with logged data, including 0.0.
+- **`COLS_PER_YEAR = 5` additions cascade** through `test_integration.py`, `test_e2e.py`, `test_merged_cells.py` — update all three.
+- **`build_config_sheet` None-default fallbacks are dual-caller load-bearing** — the orchestrator passes kwargs but ~15 fixtures call it bare. Don't remove them.
+- **Windowed-plan-sum idiom:** `IF(hours_actuals_through_month<=0,0,SUM($start:INDEX(range,1,hours_actuals_through_month)))` — used on both Actuals-Hours cum-hours col and Capacity TOTAL/EU TOTAL Variance PM. Keep both callsites in sync if the idiom evolves.
+- **Process lesson:** When a CF rule-count assertion needs updating 2+ times during a single task's implementation, stop and question the design — that churn usually means the feature is adding too many rules (T5 4-col block went 113 → 134 → 146 during T6; kaizen reduced back to 121).

@@ -33,6 +33,7 @@ Session-generated audits, analyses, and reports go in `docs/analysis/` (already 
 Bucket-migration tasks (moving content out of a sheet/module): before committing, grep the old identifier across `docs/` (including `docs/plans/*.md` — non-archived plan files gate paused-work resumption and will mislead the next implementing agent), `CLAUDE.md`, and `.claude/rules/`. Additive migrations leave stale prose in downstream docs the migrator never opened.
 
 ## Invariants (extends CLAUDE.md Critical Rules)
+- Before merge, record any new architectural invariant in `docs/design-invariants.md` — a cross-sheet constraint, trust boundary, or derived-metric rule is a spec, not an implementation detail. Structural facts (rows/columns/freeze panes) don't trigger this rule; `layout.py` + `docs/internals.md` cover them.
 - On rebuild, all config data (including person-WP assignments and external commitments) comes from the existing workbook's Config sheet, never from config.py. Builders receive config as function parameters.
 - When applying a code-review fix that references an existing import or helper, grep the target file first — reviewer context can be stale and a confident-sounding "already imported" claim may not be true. Verify, then apply.
 - CF rule-count churn is a design signal. When a single task's implementation bumps a CF-count assertion more than once, pause rather than re-fix the count — usually the task is duplicating a signal already rendered elsewhere on the sheet.

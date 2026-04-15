@@ -22,57 +22,23 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 | Add WP, add team member, add actuals, compare scenarios | `docs/common-tasks.md` | Step-by-step SOPs for common data tasks |
 | Rebuild drops rows, stale Config refs | `docs/plans/archived/2026-04-12-rebuild-shape-drift-design.md` | Readers use named ranges; tolerate internal blanks |
 | Debugging against user's confidential workbook | `docs/debugging-your-real-file.md` | Run `make_reproducer.py`; never send the real file |
+| Run commands, generate workbook, compare scenarios, dev setup | `docs/commands.md` | Init, rebuild, snapshot/restore, pytest, recalc |
 | "record this", "remember this", organizing docs | `~/.claude/references/recording-principles.md` | L1/L2/L3 criteria, what belongs where |
-
-## Key Commands
-
-```bash
-# Set up dev environment
-uv venv && uv pip install -e ".[dev]"
-
-# Create a fresh empty workbook from config.py seed data
-python -m budget_planner init
-
-# Create a workbook with demo Capacity + Actuals data
-python -m budget_planner init --demo
-
-# Rebuild from existing workbook (preserves assignments + Actuals EUR)
-python -m budget_planner rebuild
-
-# Snapshot / restore for scenario comparison
-python -m budget_planner --snapshot output/budget_plan.xlsx
-python -m budget_planner --restore output/budget_plan.xlsx
-
-# Recalculate formulas (MANDATORY after any generation)
-python scripts/recalc.py output/budget_plan.xlsx
-
-# Run full test suite
-pytest tests/ -v
-```
 
 ## Critical Rules
 
 1. **Always use Excel formulas, never hardcode calculated values in Python.** The spreadsheet must remain dynamic.
-2. **After every generation, run `pytest tests/ -v`** and verify all pass before presenting to user.
+2. **After every generation: `python scripts/recalc.py output/budget_plan.xlsx` then `pytest tests/ -v`.** Skipping recalc makes `data_only=True` reads return None — tests pass silently on broken output. Verify all pass before presenting to user.
 3. **Font color convention is sacred**: Blue = input, Black = formula, Green = cross-sheet ref. Never mix these.
 4. **Inactive month cells must be greyed out and empty.** Auditors flag time logged outside WP active periods.
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
-6. **New architectural invariants** (cross-sheet constraint, trust boundary, derived-metric rule) must be recorded in `docs/design-invariants.md` before merge. Structural facts (rows/columns/freeze panes) don't trigger this — `layout.py` + `docs/internals.md` cover them. Extended rationale in `.claude/rules/dev-workflow.md`.
+6. **New architectural invariants** (cross-sheet constraint, trust boundary, derived-metric rule) must be recorded in `docs/design-invariants.md` before merge. Rationale + scope carve-out in `.claude/rules/dev-workflow.md`.
 
-## Rules Index (path-gated — auto-loaded when touching `**/*.py`)
+## Rules Index (path-gated — auto-loaded when touching matching files)
 
-| Rule file | Key content |
-|-----------|-------------|
-| `.claude/rules/dev-workflow.md` | Build/test, linting, formatting, testing, invariants (incl. design-invariants.md update-before-merge rule) |
-| `.claude/rules/openpyxl-patterns.md` | openpyxl/LO gotchas (builders, styles, workbook only) |
-
-## Reference Index (tail echo — long-conversation recall)
-
-Most-loaded references when context has drifted:
-- `docs/internals.md` + `budget_planner/layout.py` — sheet builders, readers, rebuild, layout/column offsets.
-- `docs/design-invariants.md` — cross-sheet invariants, trust boundaries, derived-metric rules.
-- `docs/grant-domain.md` — programme cost model, funding rates, PM→EUR chain.
-- `docs/dev-workflow-review.md` — code review, /impag, worktrees, MCP-tool details.
-- `docs/plans/2026-04-14-hours-timelog-v2-plan.md` — active v2 plan (resume at next un-done task).
-
-Full catalogue in the top-of-file Reference Index.
+| Rule file | Triggers on | Key content |
+|-----------|-------------|-------------|
+| `.claude/rules/dev-workflow.md` | `**/*.py` | Build/test, linting, formatting, testing, invariants |
+| `.claude/rules/openpyxl-patterns.md` | builder `.py` files | openpyxl/LO core gotchas (CF, formulas, protection, insert_rows) |
+| `.claude/rules/openpyxl-charts.md` | `trends.py` | Chart series, LO recalc chart-XML strip, visible_cells_only |
+| `.claude/rules/openpyxl-readers.md` | `workbook.py`, `reader.py`, `config_sheet.py` | Section-reader type guards, `_find_header_row` collisions |

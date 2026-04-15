@@ -421,7 +421,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     ws.column_dimensions["B"].width = 25
 
     return {
-        "header_row": 1,
+        "asof_row": 1,       # "As of" header row (T7 addition; section header shifted to row 2)
         "year_row": year_row,
         "month_row": month_row,
         "first_wp_row": first_wp_row,

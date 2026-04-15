@@ -986,11 +986,12 @@ def apply_capacity_todate_formulas(
             f"/hours_per_fte_month"
         )
 
-    def _windowed_plan_sum(row: int) -> str:
-        # SUM the planned monthly cells on this row (typically a TOTAL or
-        # EU TOTAL row, whose per-month cells already sum all WPs or
-        # EU-flagged WPs) across the first hours_actuals_through_month
-        # columns.
+    def _windowed_plan_sum_expr(row: int) -> str:
+        # Returns an *expression fragment* (no leading ``=``) so callers can
+        # splice it into a compound formula. SUMs the planned monthly cells
+        # on this row (typically a TOTAL or EU TOTAL row, whose per-month
+        # cells already sum all WPs) across the first
+        # ``hours_actuals_through_month`` columns.
         rng = f"${month_col_start_l}${row}:${month_col_end_l}${row}"
         return (
             f"IF(hours_actuals_through_month<=0,0,"
@@ -1038,7 +1039,7 @@ def apply_capacity_todate_formulas(
                        fill=LIGHT_GREEN_FILL,
                        fmt="0.00").value = _sum_wp_actuals(wp_rows)
             var_formula = (
-                f"={_windowed_plan_sum(summary_row)}"
+                f"={_windowed_plan_sum_expr(summary_row)}"
                 f"-{actual_cl}{summary_row}"
             )
             style_cell(ws, summary_row, var_col, font=BLACK_FORMULA,

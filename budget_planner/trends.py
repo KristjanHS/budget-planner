@@ -239,13 +239,156 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     style_cell(ws, total_row, 7, "", fill=LIGHT_GREEN_FILL)
 
     # ================================================================
-    # Section 2: Person Load Table
+    # Section 2a: Reconciliation — Forecast vs Actual EUR
     # ================================================================
     # Chart is anchored 2 rows below total. Chart height is 7.5 cm (~14
-    # rows at default row height) so PERSON LOAD sits just below it at
-    # chart_anchor_row + 14 without overlap.
+    # rows at default row height), so the Reconciliation block starts at
+    # chart_anchor_row + 14 (immediately after the chart).
     chart_anchor_row = total_row + 2
-    person_section_row = chart_anchor_row + 14
+    recon_section_row = chart_anchor_row + 14
+
+    # Layout inside reconciliation block (offsets from recon_section_row):
+    #   +0: section header
+    #   +1: blank
+    #   +2: Actuals EUR through
+    #   +3: Hours through
+    #   +4: Reconciled through
+    #   +5: blank
+    #   +6: table header
+    #   +7..+6+num_wps: WP data rows
+    #   +7+num_wps:     TOTAL row
+    #   +8+num_wps:     blank spacer
+    write_section_header(
+        ws, recon_section_row,
+        "RECONCILIATION: FORECAST vs ACTUAL EUR", merge_end=5,
+    )
+
+    recon_health_eur_through_row = recon_section_row + 2
+    recon_health_hours_through_row = recon_section_row + 3
+    recon_health_reconciled_row = recon_section_row + 4
+
+    # Health row 1: Actuals EUR through — green cross-sheet (named range → Config)
+    style_cell(ws, recon_health_eur_through_row, 1,
+               value="Actuals EUR through", font=HEADER_FONT)
+    style_cell(ws, recon_health_eur_through_row, 2,
+               font=GREEN_XREF, fmt="0").value = "=eur_actuals_through_month"
+
+    # Health row 2: Hours through — green cross-sheet (named range → Config)
+    style_cell(ws, recon_health_hours_through_row, 1,
+               value="Hours through", font=HEADER_FONT)
+    style_cell(ws, recon_health_hours_through_row, 2,
+               font=GREEN_XREF, fmt="0").value = "=hours_actuals_through_month"
+
+    # Health row 3: Reconciled through — same-sheet derived name (black)
+    style_cell(ws, recon_health_reconciled_row, 1,
+               value="Reconciled through", font=HEADER_FONT)
+    style_cell(ws, recon_health_reconciled_row, 2,
+               font=BLACK_FORMULA, fmt="0").value = "=reconciled_through_month"
+
+    # Per-WP reconciliation table header
+    recon_table_header_row = recon_section_row + 6
+    recon_headers = ["WP", "Cum Forecast EUR", "Cum Actual EUR", "Gap EUR", "Gap %"]
+    for ci, h in enumerate(recon_headers, 1):
+        style_cell(ws, recon_table_header_row, ci, h, font=HEADER_FONT,
+                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
+
+    recon_first_wp_row = recon_table_header_row + 1
+    recon_last_wp_row = recon_first_wp_row + num_wps - 1
+
+    # Data refs
+    pf_first_wp_row = (
+        plan_forecast_layout["forecast_first_wp_row"]
+        if plan_forecast_layout is not None
+        else None
+    )
+    act_first_wp_row = actuals_layout["first_wp_row"]
+    cfg_first_wp = layout["config_first_wp_row"]
+
+    for i in range(num_wps):
+        row = recon_first_wp_row + i
+        config_row = cfg_first_wp + i
+        actuals_wp_row = act_first_wp_row + i
+
+        # Col A: WP ID (green cross-sheet ref to Config)
+        style_cell(ws, row, 1, font=GREEN_XREF).value = (
+            f"={SHEET_CONFIG}!A{config_row}"
+        )
+
+        # Col B: Cumulative Forecast EUR through reconciled_through_month.
+        # Uses INDEX window so the SUM range is bounded by the through-month
+        # cell count. Sheet name must be single-quoted (hyphen).
+        if pf_first_wp_row is not None:
+            pf_wp_row = pf_first_wp_row + i
+            pf_range_full = (
+                f"'{SHEET_PLAN_FORECAST}'!${ms}${pf_wp_row}:${me}${pf_wp_row}"
+            )
+            pf_start_ref = f"'{SHEET_PLAN_FORECAST}'!${ms}${pf_wp_row}"
+            style_cell(ws, row, 2, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
+                f"=IF(reconciled_through_month<=0,0,"
+                f"SUM({pf_start_ref}:INDEX({pf_range_full},1,"
+                f"reconciled_through_month)))"
+            )
+
+        # Col C: Cumulative Actual EUR through reconciled_through_month.
+        act_range_full = (
+            f"{SHEET_ACTUALS}!${ms}${actuals_wp_row}:${me}${actuals_wp_row}"
+        )
+        act_start_ref = f"{SHEET_ACTUALS}!${ms}${actuals_wp_row}"
+        style_cell(ws, row, 3, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
+            f"=IF(reconciled_through_month<=0,0,"
+            f"SUM({act_start_ref}:INDEX({act_range_full},1,"
+            f"reconciled_through_month)))"
+        )
+
+        # Col D: Gap EUR = Actual - Forecast (same-sheet derived → black)
+        style_cell(ws, row, 4, font=BLACK_FORMULA,
+                   fmt="\u20ac#,##0").value = f"=C{row}-B{row}"
+
+        # Col E: Gap % = D / B, guarded against zero forecast.
+        style_cell(ws, row, 5, font=BLACK_FORMULA,
+                   fmt="0.0%").value = f"=IFERROR(D{row}/B{row},0)"
+
+    # TOTAL row immediately after last WP row
+    recon_total_row = recon_last_wp_row + 1
+    style_cell(ws, recon_total_row, 1, "TOTAL", font=HEADER_FONT,
+               fill=LIGHT_GREEN_FILL)
+    style_cell(ws, recon_total_row, 2, font=BLACK_FORMULA,
+               fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0").value = (
+        f"=SUM(B${recon_first_wp_row}:B${recon_last_wp_row})"
+    )
+    style_cell(ws, recon_total_row, 3, font=BLACK_FORMULA,
+               fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0").value = (
+        f"=SUM(C${recon_first_wp_row}:C${recon_last_wp_row})"
+    )
+    style_cell(ws, recon_total_row, 4, font=BLACK_FORMULA,
+               fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0").value = (
+        f"=C{recon_total_row}-B{recon_total_row}"
+    )
+    style_cell(ws, recon_total_row, 5, font=BLACK_FORMULA,
+               fill=LIGHT_GREEN_FILL, fmt="0.0%").value = (
+        f"=IFERROR(D{recon_total_row}/B{recon_total_row},0)"
+    )
+
+    # -- Conditional formatting: Gap % (col E), data rows + TOTAL row --
+    # Red added first (highest priority) so red wins at |gap| > 10%.
+    recon_e_range = f"E{recon_first_wp_row}:E{recon_total_row}"
+    recon_e_ref = f"E{recon_first_wp_row}"
+    # Red: |gap %| > 10%
+    ws.conditional_formatting.add(recon_e_range, FormulaRule(
+        formula=[f"ABS({recon_e_ref})>0.10"], fill=_RED_CF_FILL,
+    ))
+    # Amber: |gap %| > 5%
+    ws.conditional_formatting.add(recon_e_range, FormulaRule(
+        formula=[f"ABS({recon_e_ref})>0.05"], fill=_AMBER_CF_FILL,
+    ))
+
+    # ================================================================
+    # Section 2: Person Load Table
+    # ================================================================
+    # Push Person Load below the reconciliation block (9 + num_wps rows
+    # total: header + blank + 3 health + blank + table header + WP rows +
+    # TOTAL + trailing blank spacer).
+    person_section_row = recon_section_row + 9 + num_wps
     write_section_header(ws, person_section_row, "PERSON LOAD", merge_end=4)
 
     # Column headers
@@ -536,6 +679,14 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         "burn_rate_last_wp_row": last_wp_data_row,
         "burn_rate_total_row": total_row,
         "chart_anchor_row": chart_anchor_row,
+        "recon_section_row": recon_section_row,
+        "recon_health_eur_through_row": recon_health_eur_through_row,
+        "recon_health_hours_through_row": recon_health_hours_through_row,
+        "recon_health_reconciled_row": recon_health_reconciled_row,
+        "recon_table_header_row": recon_table_header_row,
+        "recon_first_wp_row": recon_first_wp_row,
+        "recon_last_wp_row": recon_last_wp_row,
+        "recon_total_row": recon_total_row,
         "person_load_section_row": person_section_row,
         "person_load_header_row": person_header_row,
         "person_load_first_row": person_first_row,

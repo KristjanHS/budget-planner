@@ -259,3 +259,146 @@ def test_recon_gap_pct_cf_red_before_amber(recon_ws):
         f"Red priority must be lower (higher precedence) than amber. "
         f"red={red_priority} amber={amber_priority}"
     )
+
+
+# ================================================================
+# Gap-over-time chart (Task 13)
+# ================================================================
+
+def _gap_chart_anchor_row(ws):
+    """Return the expected gap-chart anchor row (1-indexed).
+
+    = recon total row + 2. Derived from the workbook rather than
+    hardcoded so seed-data changes don't invalidate the test.
+    """
+    recon_row = _recon_section_row(ws)
+    total_row = recon_row + 7 + NUM_WPS
+    return total_row + 2
+
+
+def test_gap_chart_exists_at_reconciliation_anchor(recon_ws):
+    """A second LineChart is anchored at the reconciliation gap anchor row.
+
+    openpyxl anchors use 0-indexed rows; the gap anchor row is 1-indexed.
+    """
+    charts = recon_ws._charts  # type: ignore[attr-defined]
+    assert len(charts) >= 2, (
+        f"Expected at least 2 charts on Trends, got {len(charts)}"
+    )
+    expected_row_0idx = _gap_chart_anchor_row(recon_ws) - 1
+    gap_chart = charts[1]
+    actual_row_0idx = gap_chart.anchor._from.row
+    assert actual_row_0idx == expected_row_0idx, (
+        f"Gap chart anchor row: expected {expected_row_0idx} (0-indexed), "
+        f"got {actual_row_0idx}"
+    )
+
+
+def test_gap_chart_series_count(recon_ws):
+    """Gap chart has exactly 2 series: Gap + Zero reference."""
+    charts = recon_ws._charts  # type: ignore[attr-defined]
+    gap_chart = charts[1]
+    assert len(gap_chart.series) == 2, (
+        f"Expected 2 series (gap + zero), got {len(gap_chart.series)}"
+    )
+
+
+def test_gap_chart_title_mentions_gap(recon_ws):
+    """Gap chart title contains 'Gap'."""
+    charts = recon_ws._charts  # type: ignore[attr-defined]
+    gap_chart = charts[1]
+    # chart.title can be Title object or string; extract text robustly.
+    title = gap_chart.title
+    if title is None:
+        title_text = ""
+    elif isinstance(title, str):
+        title_text = title
+    else:
+        # Title with rich-text runs
+        try:
+            title_text = " ".join(
+                run.t for p in title.tx.rich.p for run in p.r  # type: ignore[attr-defined]
+            )
+        except AttributeError:
+            title_text = str(title)
+    assert "Gap" in title_text, (
+        f"Gap chart title should mention 'Gap', got {title_text!r}"
+    )
+
+
+def test_gap_chart_has_zero_reference_line(recon_ws):
+    """Second series on the gap chart is the dashed zero reference."""
+    charts = recon_ws._charts  # type: ignore[attr-defined]
+    gap_chart = charts[1]
+    zero_series = gap_chart.series[1]
+    line = zero_series.graphicalProperties.line
+    dash = line.dashStyle or getattr(line, "prstDash", None)
+    assert dash == "dash", (
+        f"Expected dashed line on zero-reference series, got dashStyle={dash!r}"
+    )
+
+
+def _find_hidden_row_with_first_month_formula(ws, predicate):
+    """Return first hidden row whose col C (first month) formula matches."""
+    from budget_planner.layout import MONTH_COL_START
+    for r in range(1, ws.max_row + 1):
+        if not ws.row_dimensions[r].hidden:
+            continue
+        v = ws.cell(r, MONTH_COL_START).value
+        if v is not None and predicate(str(v)):
+            return r
+    return None
+
+
+def test_gap_helper_row_formula(recon_ws):
+    """Gap helper row's first-month formula is =<cl><actual>-<cl><forecast>.
+
+    Discovers the helper rows dynamically via openpyxl — matches the
+    pattern used elsewhere in the trends test suite.
+    """
+    from budget_planner.layout import MONTH_COL_START
+    from budget_planner.styles import col_letter
+
+    # Find the actual helper row (the hidden row with an Actuals! ref in
+    # its first-month cell).
+    actual_row = _find_hidden_row_with_first_month_formula(
+        recon_ws, lambda f: "Actuals!" in f and "eur_actuals_through_month" in f
+    )
+    forecast_row = _find_hidden_row_with_first_month_formula(
+        recon_ws, lambda f: "'Plan-Forecast'!" in f
+    )
+    assert actual_row is not None, "Could not locate actual helper row"
+    assert forecast_row is not None, "Could not locate forecast helper row"
+
+    cl = col_letter(MONTH_COL_START)
+    expected = f"={cl}{actual_row}-{cl}{forecast_row}"
+
+    gap_row = _find_hidden_row_with_first_month_formula(
+        recon_ws, lambda f: f == expected
+    )
+    assert gap_row is not None, (
+        f"Could not find gap helper row with formula {expected!r}"
+    )
+
+
+def test_gap_helper_row_hidden(recon_ws):
+    """Both gap helper rows (gap + zero) are hidden. Asserted together so
+    the pair-check is localised."""
+    # Discover the gap row by its identifying formula structure.
+    gap_row = _find_hidden_row_with_first_month_formula(
+        recon_ws,
+        lambda f: f.startswith("=C") and "-C" in f and "Actuals" not in f,
+    )
+    assert gap_row is not None, "Gap helper row not found"
+    assert recon_ws.row_dimensions[gap_row].hidden is True
+
+
+def test_zero_helper_row_hidden(recon_ws):
+    """Zero reference helper row contains =0 formula and is hidden."""
+    zero_row = _find_hidden_row_with_first_month_formula(
+        recon_ws, lambda f: f == "=0"
+    )
+    assert zero_row is not None, (
+        "Zero reference helper row (formula '=0') not found"
+    )
+    assert recon_ws.row_dimensions[zero_row].hidden is True

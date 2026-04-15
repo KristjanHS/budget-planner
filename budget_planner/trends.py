@@ -383,12 +383,19 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     ))
 
     # ================================================================
-    # Section 2: Person Load Table
+    # Section 2b: Reconciliation gap-over-time chart anchor
     # ================================================================
-    # Push Person Load below the reconciliation block (9 + num_wps rows
-    # total: header + blank + 3 health + blank + table header + WP rows +
-    # TOTAL + trailing blank spacer).
-    person_section_row = recon_section_row + 9 + num_wps
+    # Gap chart sits immediately below the RECONCILIATION TOTAL row, with
+    # one blank spacer in between. Chart height is 7.5 cm (~14 rows); add
+    # one trailing spacer before PERSON LOAD.
+    recon_gap_chart_anchor_row = recon_total_row + 2
+
+    # ================================================================
+    # Section 3: Person Load Table
+    # ================================================================
+    # Push Person Load below the gap chart (chart anchor + 14 rows chart
+    # + 1 trailing spacer = + 15).
+    person_section_row = recon_gap_chart_anchor_row + 15
     write_section_header(ws, person_section_row, "PERSON LOAD", merge_end=4)
 
     # Column headers
@@ -600,6 +607,27 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
             )
     ws.row_dimensions[helper_row_rp].hidden = True
 
+    # Helper Rows 7 + 8: gap-over-time + zero reference line.
+    # Gap = cumulative actual - cumulative forecast per month. Because the
+    # actual and forecast helper rows already emit NA() past their
+    # respective through-months, subtraction naturally propagates NA()
+    # past reconciled_through_month (= MIN of the two).
+    helper_row_gap = helper_row_rp + 1
+    helper_row_zero = helper_row_gap + 1
+    for m_idx in range(project_params["months"]):
+        c = month_col_start + m_idx
+        cl = col_letter(c)
+        # Gap helper: actual - forecast. Black same-sheet derived.
+        style_cell(ws, helper_row_gap, c,
+                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+            f"={cl}{helper_row_actual}-{cl}{helper_row_forecast}"
+        )
+        # Zero reference: formula =0 (Rule 1: formulas only).
+        style_cell(ws, helper_row_zero, c,
+                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = "=0"
+    ws.row_dimensions[helper_row_gap].hidden = True
+    ws.row_dimensions[helper_row_zero].hidden = True
+
     cat_ref = AxDataSource(strRef=StrRef(
         f=range_str.format(helper_row_labels, helper_row_labels)))
 
@@ -663,6 +691,51 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     ws.add_chart(chart, f"A{chart_anchor_row}")
 
     # ================================================================
+    # Gap-over-time chart (cumulative Actual EUR − cumulative Forecast EUR)
+    # ================================================================
+    # Single-series line showing drift of actual vs forecast. Clips via
+    # NA() past reconciled_through_month (inherited from the actual /
+    # forecast helper rows). A second dashed-grey zero reference line
+    # makes sign of drift visually obvious.
+    gap_chart = LineChart()
+    gap_chart.title = "Cumulative EUR Gap (Actual \u2212 Forecast)"
+    gap_chart.style = 10
+    gap_chart.visible_cells_only = False  # helper rows are hidden
+    gap_chart.y_axis.numFmt = "\u20ac#,##0"
+    gap_chart.y_axis.tickLblPos = "nextTo"
+    gap_chart.y_axis.delete = False
+    gap_chart.x_axis.axPos = "b"
+    gap_chart.x_axis.tickLblPos = "nextTo"
+    gap_chart.x_axis.delete = False
+
+    # Reuse the month-label helper row from the cumulative chart.
+    gap_cat_ref = AxDataSource(strRef=StrRef(
+        f=range_str.format(helper_row_labels, helper_row_labels)))
+
+    # Series 1: Gap (solid purple)
+    s_gap = Series(idx=0, order=0)
+    s_gap.tx = SeriesLabel(v="Gap (Actual \u2212 Forecast)")
+    s_gap.val = NumDataSource(numRef=NumRef(
+        f=range_str.format(helper_row_gap, helper_row_gap)))
+    s_gap.cat = gap_cat_ref
+    s_gap.graphicalProperties.line.solidFill = "7030A0"
+    gap_chart.series.append(s_gap)
+
+    # Series 2: Zero reference (grey dashed)
+    s_zero = Series(idx=1, order=1)
+    s_zero.tx = SeriesLabel(v="Zero")
+    s_zero.val = NumDataSource(numRef=NumRef(
+        f=range_str.format(helper_row_zero, helper_row_zero)))
+    s_zero.cat = gap_cat_ref
+    s_zero.graphicalProperties.line.solidFill = "808080"
+    s_zero.graphicalProperties.line.dashStyle = "dash"
+    gap_chart.series.append(s_zero)
+
+    gap_chart.width = 30
+    gap_chart.height = 7.5
+    ws.add_chart(gap_chart, f"A{recon_gap_chart_anchor_row}")
+
+    # ================================================================
     # Column widths
     # ================================================================
     auto_fit_columns(ws)
@@ -697,4 +770,7 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         "helper_row_ceiling": helper_row_ceiling,
         "helper_row_labels": helper_row_labels,
         "helper_row_rp": helper_row_rp,
+        "helper_row_gap": helper_row_gap,
+        "helper_row_zero": helper_row_zero,
+        "recon_gap_chart_anchor_row": recon_gap_chart_anchor_row,
     }

@@ -380,9 +380,9 @@ def test_helper_rows_hidden(trends_ws):
         r for r in range(1, trends_ws.max_row + 1)
         if trends_ws.row_dimensions[r].hidden
     ]
-    assert len(hidden_rows) == 6, (
-        f"Expected 6 hidden helper rows "
-        f"(planned, actual, forecast, ceiling, labels, rp), "
+    assert len(hidden_rows) == 8, (
+        f"Expected 8 hidden helper rows "
+        f"(planned, actual, forecast, ceiling, labels, rp, gap, zero), "
         f"found {len(hidden_rows)}: {hidden_rows}"
     )
     # Verify they are contiguous
@@ -495,8 +495,8 @@ def test_trends_no_row_collisions(num_wps, num_team):
         r for r in range(1, ws.max_row + 1)
         if ws.row_dimensions[r].hidden
     )
-    assert len(hidden_rows) == 6, (
-        f"Expected 6 hidden helper rows, found {len(hidden_rows)}: {hidden_rows}"
+    assert len(hidden_rows) == 8, (
+        f"Expected 8 hidden helper rows, found {len(hidden_rows)}: {hidden_rows}"
     )
 
     # Verify no overlaps
@@ -526,8 +526,8 @@ def test_chart_has_rp_boundary_series():
     """Trends cumulative chart has an RP boundary marker series."""
     ws = _build_trends_only(num_wps=3, num_team=2)
 
-    # Find the chart
-    assert len(ws._charts) == 1  # type: ignore[attr-defined]
+    # Find the cumulative chart (first chart; second is the gap chart)
+    assert len(ws._charts) == 2  # type: ignore[attr-defined]
     chart = ws._charts[0]  # type: ignore[attr-defined]
 
     # Should have 5 series: Planned, Actual, Forecast, Ceiling, RP End
@@ -554,7 +554,7 @@ def test_chart_has_cumulative_forecast_series():
            Ceiling (idx 3), RP End (idx 4).
     """
     ws = _build_trends_only(num_wps=3, num_team=2)
-    assert len(ws._charts) == 1  # type: ignore[attr-defined]
+    assert len(ws._charts) == 2  # type: ignore[attr-defined]
     chart = ws._charts[0]  # type: ignore[attr-defined]
 
     # Forecast is at index 2 (after Actual, before Ceiling)

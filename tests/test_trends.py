@@ -202,115 +202,84 @@ def test_person_load_person_count(trends_ws):
     assert count == len(TEAM)
 
 
+def test_person_load_headers_are_four(trends_ws):
+    """Person Load header row has exactly 4 headers (Person, Avg FTE to date,
+    Plan Avg FTE to date, Variance to-date %) — cols A-D; col E onward empty."""
+    header_row = _find_row_containing(trends_ws, 1, "Person")
+    assert header_row is not None
+    expected = [
+        "Person",
+        "Avg FTE to date",
+        "Plan Avg FTE to date",
+        "Variance to-date %",
+    ]
+    for i, h in enumerate(expected, 1):
+        got = trends_ws.cell(header_row, i).value
+        assert got == h, f"Col {i} header: expected {h!r}, got {got!r}"
+    # Col E (5) must be empty to prove no residual column was kept
+    assert trends_ws.cell(header_row, 5).value is None, (
+        f"Col E header should be empty, got {trends_ws.cell(header_row, 5).value!r}"
+    )
+
+
 def test_person_load_avg_to_date_formula(trends_ws):
-    """Col B has SUMPRODUCT formula for Avg FTE (to date)."""
+    """Col B = Capacity to-date Actual PM / months_elapsed_hours, IFERROR-wrapped."""
     header_row = _find_row_containing(trends_ws, 1, "Person")
     assert header_row is not None
     first_person_row = header_row + 1
     cell = trends_ws.cell(first_person_row, 2)
     formula = str(cell.value)
-    assert "SUMPRODUCT" in formula
-    assert "current_month" in formula
+    assert "Capacity!" in formula, f"Col B must reference Capacity sheet: {formula!r}"
+    assert "months_elapsed_hours" in formula, (
+        f"Col B must divide by months_elapsed_hours: {formula!r}"
+    )
+    assert "IFERROR" in formula, (
+        f"Col B must wrap division in IFERROR to guard DIV/0: {formula!r}"
+    )
 
 
-def test_person_load_avg_remaining_formula(trends_ws):
-    """Col C has SUMPRODUCT formula for Avg FTE (remaining)."""
+def test_person_load_plan_avg_to_date_formula(trends_ws):
+    """Col C = (Capacity Actual + Variance) / months_elapsed_hours, IFERROR-wrapped."""
     header_row = _find_row_containing(trends_ws, 1, "Person")
     assert header_row is not None
     first_person_row = header_row + 1
     cell = trends_ws.cell(first_person_row, 3)
     formula = str(cell.value)
-    assert "SUMPRODUCT" in formula
-    assert "current_month" in formula
+    assert "Capacity!" in formula, f"Col C must reference Capacity: {formula!r}"
+    assert "months_elapsed_hours" in formula, (
+        f"Col C must divide by months_elapsed_hours: {formula!r}"
+    )
+    # Plan = Actual + Variance — both Capacity refs must appear, and a '+' between
+    assert formula.count("Capacity!") >= 2, (
+        f"Col C must sum two Capacity refs (Actual + Variance): {formula!r}"
+    )
+    assert "IFERROR" in formula
 
 
-def test_person_load_peak_formula(trends_ws):
-    """Col D has MAX formula for Peak Month FTE."""
+def test_person_load_variance_to_date_pct_formula(trends_ws):
+    """Col D = Variance / (Actual + Variance), IFERROR-wrapped, 0.0% format."""
     header_row = _find_row_containing(trends_ws, 1, "Person")
     assert header_row is not None
     first_person_row = header_row + 1
     cell = trends_ws.cell(first_person_row, 4)
     formula = str(cell.value)
-    assert "MAX" in formula
     assert "Capacity!" in formula
-
-
-def test_person_load_status_formula(trends_ws):
-    """Col E has IF formula with Config sheet reference."""
-    header_row = _find_row_containing(trends_ws, 1, "Person")
-    assert header_row is not None
-    first_person_row = header_row + 1
-    cell = trends_ws.cell(first_person_row, 5)
-    formula = str(cell.value)
-    assert "IF" in formula
-    assert "Config!" in formula
-
-
-# ================================================================
-# Person Load — actual-side columns (Task 12)
-# ================================================================
-
-def test_person_load_actual_headers(trends_ws):
-    """Header row gains three new columns: Actual Avg FTE (to date),
-    Actual Peak FTE, Planned - Actual Variance (cols F, G, H)."""
-    header_row = _find_row_containing(trends_ws, 1, "Person")
-    assert header_row is not None
-    col_f = trends_ws.cell(header_row, 6).value
-    col_g = trends_ws.cell(header_row, 7).value
-    col_h = trends_ws.cell(header_row, 8).value
-    assert col_f is not None and "Actual Avg FTE" in str(col_f), (
-        f"Expected 'Actual Avg FTE' header in col F, got {col_f!r}"
+    assert "IFERROR" in formula, (
+        f"Col D must wrap in IFERROR to guard zero plan: {formula!r}"
     )
-    assert col_g is not None and "Actual Peak FTE" in str(col_g), (
-        f"Expected 'Actual Peak FTE' header in col G, got {col_g!r}"
+    # Denominator is a sum of two Capacity refs (Actual + Variance)
+    assert formula.count("Capacity!") >= 3, (
+        f"Col D must reference Capacity thrice (1 numerator, 2 denominator): "
+        f"{formula!r}"
     )
-    assert col_h is not None and "Variance" in str(col_h), (
-        f"Expected 'Variance' in col H header, got {col_h!r}"
+    # Percentage format
+    assert cell.number_format == "0.0%", (
+        f"Col D number_format must be '0.0%', got {cell.number_format!r}"
     )
 
 
-def test_person_load_actual_avg_formula(trends_ws):
-    """Col F uses AVERAGE over Capacity Actual-FTE row sliced up to current_month."""
-    header_row = _find_row_containing(trends_ws, 1, "Person")
-    assert header_row is not None
-    first_person_row = header_row + 1
-    cell = trends_ws.cell(first_person_row, 6)
-    formula = str(cell.value)
-    assert "AVERAGE" in formula
-    assert "current_month" in formula
-    assert "Capacity!" in formula
-
-
-def test_person_load_actual_peak_formula(trends_ws):
-    """Col G uses MAX over Capacity Actual-FTE row (full range)."""
-    header_row = _find_row_containing(trends_ws, 1, "Person")
-    assert header_row is not None
-    first_person_row = header_row + 1
-    cell = trends_ws.cell(first_person_row, 7)
-    formula = str(cell.value)
-    assert "MAX" in formula
-    assert "Capacity!" in formula
-
-
-def test_person_load_variance_status_formula(trends_ws):
-    """Col H has nested IF returning OVER/WATCH/OK based on |Planned-Actual|."""
-    header_row = _find_row_containing(trends_ws, 1, "Person")
-    assert header_row is not None
-    first_person_row = header_row + 1
-    cell = trends_ws.cell(first_person_row, 8)
-    formula = str(cell.value)
-    assert "IF" in formula
-    assert '"OVER"' in formula
-    assert '"WATCH"' in formula
-    assert '"OK"' in formula
-    # Must reference the Planned Avg (col B) and Actual Avg (col F) on same row
-    row = first_person_row
-    assert f"B{row}" in formula
-    assert f"F{row}" in formula
-
-
-def test_person_load_actual_cols_font_colors(trends_ws):
-    """Actual Avg FTE (F) + Peak (G) are green cross-sheet refs; Status (H) is black."""
+def test_person_load_value_cols_are_green(trends_ws):
+    """Cols B, C, D are all green cross-sheet refs (GREEN_XREF)."""
     header_row = _find_row_containing(trends_ws, 1, "Person")
     assert header_row is not None
     first_person_row = header_row + 1
@@ -318,14 +287,63 @@ def test_person_load_actual_cols_font_colors(trends_ws):
     def _font_rgb(cell):
         return str(getattr(cell.font.color, "rgb", "")).upper()
 
-    rgb_f = _font_rgb(trends_ws.cell(first_person_row, 6))
-    rgb_g = _font_rgb(trends_ws.cell(first_person_row, 7))
-    rgb_h = _font_rgb(trends_ws.cell(first_person_row, 8))
-    # GREEN_XREF = "008000" (may be serialised as 00008000)
-    assert rgb_f.endswith("008000"), f"Col F font should be GREEN_XREF, got {rgb_f}"
-    assert rgb_g.endswith("008000"), f"Col G font should be GREEN_XREF, got {rgb_g}"
-    # BLACK_FORMULA = "000000"
-    assert rgb_h.endswith("000000"), f"Col H font should be BLACK_FORMULA, got {rgb_h}"
+    for col in (2, 3, 4):
+        rgb = _font_rgb(trends_ws.cell(first_person_row, col))
+        assert rgb.endswith("008000"), (
+            f"Col {col} font should be GREEN_XREF (008000), got {rgb}"
+        )
+
+
+def test_person_load_variance_cf_rules(trends_ws):
+    """Col D has red (>0.20) and amber (>0.10) CF rules; red priority beats amber."""
+    header_row = _find_row_containing(trends_ws, 1, "Person")
+    assert header_row is not None
+    first_person_row = header_row + 1
+    last_person_row = first_person_row + len(TEAM) - 1
+
+    target_range = f"D{first_person_row}:D{last_person_row}"
+
+    # Collect all CF rules applied to that exact range.
+    # openpyxl's ConditionalFormatting keys stringify as "<ConditionalFormatting R>" —
+    # probe the range by substring match rather than exact str() equality.
+    rules = []
+    for cf_range in trends_ws.conditional_formatting:
+        if target_range not in str(cf_range):
+            continue
+        for rule in trends_ws.conditional_formatting[cf_range]:
+            rules.append(rule)
+
+    # Match by formula content (CF fill color identity is DXF-context-dependent).
+    # Red threshold = 0.2 (20%), amber threshold = 0.1 (10%) — match on the
+    # exact ">N" suffix to avoid 0.1 substring-matching inside 0.10 etc.
+    red_rules = [
+        r for r in rules
+        if r.formula and "ABS" in r.formula[0] and ">0.2" in r.formula[0]
+    ]
+    amber_rules = [
+        r for r in rules
+        if r.formula and "ABS" in r.formula[0] and ">0.1" in r.formula[0]
+        and ">0.2" not in r.formula[0]
+    ]
+
+    assert len(red_rules) == 1, (
+        f"Expected one red (>0.20) CF rule on {target_range}, "
+        f"got rules={[r.formula for r in rules]}"
+    )
+    assert len(amber_rules) == 1, (
+        f"Expected one amber (>0.10) CF rule on {target_range}, "
+        f"got rules={[r.formula for r in rules]}"
+    )
+
+    # Red must come first → lower priority number → higher priority
+    red_priority = red_rules[0].priority
+    amber_priority = amber_rules[0].priority
+    assert red_priority is not None and amber_priority is not None
+    assert red_priority < amber_priority, (
+        f"Red rule must have higher CF priority (lower number) than amber "
+        f"so red wins at >=20%. red_priority={red_priority}, "
+        f"amber_priority={amber_priority}"
+    )
 
 
 # ================================================================

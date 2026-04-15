@@ -11,7 +11,6 @@ from budget_planner.layout import (
     MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS, SHEET_CAPACITY,
     SHEET_PLAN_FORECAST,
     TREND_OK_BAND, TREND_OVER_THRESHOLD, TREND_WATCH_THRESHOLD, TREND_SLOW_THRESHOLD,
-    CAPACITY_AMBER_LOAD, CAPACITY_VARIANCE_FTE_RED,
     month_col_end as _month_col_end, val_columns,
     wp_month_bounds,
 )
@@ -247,15 +246,15 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     # chart_anchor_row + 14 without overlap.
     chart_anchor_row = total_row + 2
     person_section_row = chart_anchor_row + 14
-    write_section_header(ws, person_section_row, "PERSON LOAD", merge_end=8)
+    write_section_header(ws, person_section_row, "PERSON LOAD", merge_end=4)
 
     # Column headers
     person_header_row = person_section_row + 1
     person_headers = [
-        "Person", "Avg FTE (to date)", "Avg FTE (remaining)",
-        "Peak Month FTE", "Status",
-        "Actual Avg FTE (to date)", "Actual Peak FTE",
-        "Planned \u2212 Actual Variance",
+        "Person",
+        "Avg FTE to date",
+        "Plan Avg FTE to date",
+        "Variance to-date %",
     ]
     for ci, h in enumerate(person_headers, 1):
         style_cell(ws, person_header_row, ci, h, font=HEADER_FONT,
@@ -265,11 +264,12 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     person_first_row = person_header_row + 1
     person_groups = capacity_layout["person_groups"]
     person_rows_map = team_layout["person_rows"]
-    # Actual-FTE band column range on the Capacity sheet (task 9).
-    actual_col_start = capacity_layout["actual_col_start"]
-    actual_col_end = capacity_layout["actual_col_end"]
-    as_ = col_letter(actual_col_start)
-    ae_ = col_letter(actual_col_end)
+    # Capacity TO-DATE band column letters: Actual PM + Variance PM columns
+    # hold the per-person windowed sums already computed by the Capacity
+    # builder. Plan PM to date = Actual + Variance (same identity as
+    # Capacity's to-date band).
+    todate_actual_cl = col_letter(capacity_layout["todate_col_actual"])
+    todate_var_cl = col_letter(capacity_layout["todate_col_var"])
 
     for pi, member in enumerate(team):
         name = member["name"]
@@ -277,102 +277,48 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         tr = person_groups[name]["total_row"]
         roster_row = person_rows_map[name]
 
+        # Capacity refs for this person's to-date Actual / Variance PM.
+        cap_actual = f"{SHEET_CAPACITY}!{todate_actual_cl}{tr}"
+        cap_var = f"{SHEET_CAPACITY}!{todate_var_cl}{tr}"
+
         # Col A: Person name (green cross-sheet ref)
         style_cell(ws, row, 1, font=GREEN_XREF).value = (
             f"={SHEET_CONFIG}!A{roster_row}"
         )
 
-        # Col B: Avg FTE (to date)
-        style_cell(ws, row, 2, font=BLACK_FORMULA, fmt="0.00").value = (
-            f"=IF(current_month=0,0,"
-            f"SUMPRODUCT((COLUMN({SHEET_CAPACITY}!{ms}{tr}:{me}{tr})"
-            f"-COLUMN({SHEET_CAPACITY}!${ms}$1)+1<=current_month)"
-            f"*({SHEET_CAPACITY}!{ms}{tr}:{me}{tr}))"
-            f"/current_month)"
+        # Col B: Avg FTE to date — Actual PM / months_elapsed_hours.
+        # IFERROR guards DIV/0 when hours_actuals_through_month <= 0.
+        style_cell(ws, row, 2, font=GREEN_XREF, fmt="0.00").value = (
+            f"=IFERROR({cap_actual}/months_elapsed_hours,0)"
         )
 
-        # Col C: Avg FTE (remaining)
-        style_cell(ws, row, 3, font=BLACK_FORMULA, fmt="0.00").value = (
-            f"=IF(current_month>={project_params['months']},0,"
-            f"SUMPRODUCT((COLUMN({SHEET_CAPACITY}!{ms}{tr}:{me}{tr})"
-            f"-COLUMN({SHEET_CAPACITY}!${ms}$1)+1>current_month)"
-            f"*({SHEET_CAPACITY}!{ms}{tr}:{me}{tr}))"
-            f"/({project_params['months']}-current_month))"
+        # Col C: Plan Avg FTE to date — (Actual + Variance) / months_elapsed_hours.
+        # Plan = Actual + Variance identity lives on Capacity; reuse here.
+        style_cell(ws, row, 3, font=GREEN_XREF, fmt="0.00").value = (
+            f"=IFERROR(({cap_actual}+{cap_var})/months_elapsed_hours,0)"
         )
 
-        # Col D: Peak Month FTE
-        style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="0.00").value = (
-            f"=MAX({SHEET_CAPACITY}!{ms}{tr}:{me}{tr})"
-        )
-
-        # Col E: Status
-        style_cell(ws, row, 5, font=BLACK_FORMULA).value = (
-            f'=IF(C{row}>{SHEET_CONFIG}!B{roster_row},"OVER",'
-            f'IF(C{row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!B{roster_row},"WATCH","OK"))'
-        )
-
-        # ── Actual-side columns ────────────────────────────────────────
-        # The Capacity Actual-FTE band lives at columns actual_col_start..
-        # actual_col_end on the same ``total_row`` (per person) as the
-        # planned band. Cells may contain "" (empty string) for inactive
-        # months; AVERAGE and MAX skip text automatically.
-        actual_range = f"{SHEET_CAPACITY}!{as_}{tr}:{ae_}{tr}"
-
-        # Col F: Actual Avg FTE (to date) — AVERAGE over slice 1..current_month.
-        # INDEX(range,1,1):INDEX(range,1,current_month) selects the first
-        # current_month columns of the actual-FTE row. IFERROR→0 when
-        # current_month=0 or slice is all text/empty.
-        style_cell(ws, row, 6, font=GREEN_XREF, fmt="0.00").value = (
-            f"=IFERROR(AVERAGE("
-            f"INDEX({actual_range},1,1):"
-            f"INDEX({actual_range},1,MAX(1,current_month))"
-            f"),0)"
-        )
-
-        # Col G: Actual Peak FTE — MAX over full actual-FTE row
-        style_cell(ws, row, 7, font=GREEN_XREF, fmt="0.00").value = (
-            f"=IFERROR(MAX({actual_range}),0)"
-        )
-
-        # Col H: Planned − Actual Variance status
-        # Nested IF on |planned_avg_to_date - actual_avg_to_date| vs
-        # CAPACITY_VARIANCE_FTE_RED (0.2 FTE) → OVER; half that → WATCH; else OK.
-        variance_threshold = CAPACITY_VARIANCE_FTE_RED
-        watch_threshold = CAPACITY_VARIANCE_FTE_RED / 2
-        style_cell(ws, row, 8, font=BLACK_FORMULA).value = (
-            f'=IF(ABS(B{row}-F{row})>{variance_threshold},"OVER",'
-            f'IF(ABS(B{row}-F{row})>{watch_threshold},"WATCH","OK"))'
+        # Col D: Variance to-date % — Variance / Plan. Guard against zero plan.
+        style_cell(ws, row, 4, font=GREEN_XREF, fmt="0.0%").value = (
+            f"=IFERROR({cap_var}/({cap_actual}+{cap_var}),0)"
         )
 
     person_last_row = person_first_row + len(team) - 1
 
-    # -- Conditional formatting: Person Status (col E) + Peak (col D) — per person --
-    # Each person has a different max_fte, so CF must use the correct roster row
-    for pi, member in enumerate(team):
-        row = person_first_row + pi
-        roster_row = person_rows_map[member["name"]]
-        e_cell = f"E{row}:E{row}"
-        d_cell = f"D{row}:D{row}"
+    # -- Conditional formatting: Variance to-date % (col D) — across all person rows --
+    # Red BEFORE amber so red wins at >=20% drift (openpyxl: first rule added
+    # gets highest priority).
+    d_range = f"D{person_first_row}:D{person_last_row}"
+    d_ref = f"D{person_first_row}"
 
-        # Status CF (green/amber/red based on col C vs max_fte)
-        ws.conditional_formatting.add(e_cell, FormulaRule(
-            formula=[f'C{row}<={CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}'],
-            fill=_GREEN_CF_FILL,
-        ))
-        ws.conditional_formatting.add(e_cell, FormulaRule(
-            formula=[f'C{row}>{CAPACITY_AMBER_LOAD}*{SHEET_CONFIG}!$B${roster_row}'],
-            fill=_AMBER_CF_FILL,
-        ))
-        ws.conditional_formatting.add(e_cell, FormulaRule(
-            formula=[f'C{row}>{SHEET_CONFIG}!$B${roster_row}'],
-            fill=_RED_CF_FILL,
-        ))
-
-        # Peak Month CF (red if > max_fte)
-        ws.conditional_formatting.add(d_cell, FormulaRule(
-            formula=[f'D{row}>{SHEET_CONFIG}!$B${roster_row}'],
-            fill=_RED_CF_FILL,
-        ))
+    # Red: |variance| > 20%
+    ws.conditional_formatting.add(d_range, FormulaRule(
+        formula=[f'ABS({d_ref})>0.20'], fill=_RED_CF_FILL,
+    ))
+    # Amber: |variance| > 10% (red wins the >=20% band via priority order)
+    ws.conditional_formatting.add(d_range, FormulaRule(
+        formula=[f'ABS({d_ref})>0.10'], fill=_AMBER_CF_FILL,
+    ))
 
     # ================================================================
     # Section 3: Cumulative LineChart + hidden helper rows

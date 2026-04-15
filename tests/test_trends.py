@@ -593,12 +593,13 @@ def test_cumulative_forecast_helper_row_formulas(trends_ws):
         f"(hidden_rows={hidden_rows})"
     )
 
-    # First-month formula: =SUM('Plan-Forecast'!<col><total_row>)
+    # First-month formula: wrapped in IF(...>hours_actuals_through_month,NA(),
+    # SUM('Plan-Forecast'!<col><total_row>)) for v2 T10 clipping.
     first_cell = trends_ws.cell(forecast_row, MONTH_COL_START).value
     assert isinstance(first_cell, str)
-    assert first_cell.startswith("=SUM('Plan-Forecast'!"), (
-        f"First-month forecast helper formula should start with "
-        f"=SUM('Plan-Forecast'!, got {first_cell!r}"
+    assert "SUM('Plan-Forecast'!" in first_cell, (
+        f"First-month forecast helper formula should reference "
+        f"SUM('Plan-Forecast'!..., got {first_cell!r}"
     )
 
     # Second-month formula: cumulative — prev cell + SUM('Plan-Forecast'!...)
@@ -617,3 +618,167 @@ def test_cumulative_forecast_helper_row_formulas(trends_ws):
     assert "+SUM" in second_cell, (
         f"Expected cumulative shape (prev col + SUM), got {second_cell!r}"
     )
+
+
+# ================================================================
+# v2 T10: Actual / Forecast helper-row clipping past through-month
+# ================================================================
+
+def _find_helper_row_by_probe(ws, substring):
+    """Return first hidden row whose first-month cell contains `substring`."""
+    hidden_rows = sorted(
+        r for r in range(1, ws.max_row + 1)
+        if ws.row_dimensions[r].hidden
+    )
+    for r in hidden_rows:
+        v = ws.cell(r, MONTH_COL_START).value
+        if v is not None and substring in str(v):
+            return r
+    return None
+
+
+def test_actual_helper_row_first_month_clipped(trends_ws):
+    """First-month Actual helper formula references eur_actuals_through_month
+    and NA() — the v2 T10 clipping wrapper.
+    """
+    # The Actual helper row is the hidden row whose first-month formula
+    # contains 'Actuals!' but not 'Plan-Forecast' (distinguishes from forecast
+    # row) and not 'partner_ceiling' (distinguishes from ceiling row).
+    hidden_rows = sorted(
+        r for r in range(1, trends_ws.max_row + 1)
+        if trends_ws.row_dimensions[r].hidden
+    )
+    actual_row = None
+    for r in hidden_rows:
+        v = trends_ws.cell(r, MONTH_COL_START).value
+        if v is None:
+            continue
+        s = str(v)
+        if ("Actuals!" in s and "'Plan-Forecast'" not in s
+                and "partner_ceiling" not in s
+                and "SUMPRODUCT" not in s):
+            actual_row = r
+            break
+    assert actual_row is not None, (
+        f"No hidden helper row with an Actuals! ref found (hidden={hidden_rows})"
+    )
+
+    first_cell = trends_ws.cell(actual_row, MONTH_COL_START).value
+    assert isinstance(first_cell, str)
+    assert "eur_actuals_through_month" in first_cell, (
+        f"First-month Actual formula must reference eur_actuals_through_month, "
+        f"got {first_cell!r}"
+    )
+    assert "NA()" in first_cell, (
+        f"First-month Actual formula must clip with NA(), got {first_cell!r}"
+    )
+    # Literal month index 1 for m_idx=0
+    assert "1>eur_actuals_through_month" in first_cell, (
+        f"First-month Actual formula should test '1>eur_actuals_through_month', "
+        f"got {first_cell!r}"
+    )
+
+
+def test_actual_helper_row_mid_month_clipped(trends_ws):
+    """Actual helper-row formula at m_idx=5 uses literal '6>eur_actuals_through_month'."""
+    hidden_rows = sorted(
+        r for r in range(1, trends_ws.max_row + 1)
+        if trends_ws.row_dimensions[r].hidden
+    )
+    actual_row = None
+    for r in hidden_rows:
+        v = trends_ws.cell(r, MONTH_COL_START).value
+        if v is None:
+            continue
+        s = str(v)
+        if ("Actuals!" in s and "'Plan-Forecast'" not in s
+                and "partner_ceiling" not in s
+                and "SUMPRODUCT" not in s):
+            actual_row = r
+            break
+    assert actual_row is not None
+
+    # m_idx = 5 -> column = MONTH_COL_START + 5, literal month idx = 6.
+    mid_cell = trends_ws.cell(actual_row, MONTH_COL_START + 5).value
+    assert isinstance(mid_cell, str)
+    assert "6>eur_actuals_through_month" in mid_cell, (
+        f"Mid-month (m_idx=5) Actual formula should test "
+        f"'6>eur_actuals_through_month', got {mid_cell!r}"
+    )
+    assert "NA()" in mid_cell
+    # Cumulative shape preserved inside the IF's false-branch.
+    assert "+Actuals!" in mid_cell, (
+        f"Mid-month Actual formula should retain cumulative "
+        f"'<prev>+Actuals!...' shape, got {mid_cell!r}"
+    )
+
+
+def test_forecast_helper_row_clipped_by_hours_through_month(trends_ws):
+    """Forecast helper-row formulas reference hours_actuals_through_month and NA()."""
+    forecast_row = _find_helper_row_by_probe(trends_ws, "'Plan-Forecast'")
+    assert forecast_row is not None
+
+    first_cell = trends_ws.cell(forecast_row, MONTH_COL_START).value
+    assert isinstance(first_cell, str)
+    assert "hours_actuals_through_month" in first_cell, (
+        f"First-month forecast formula must reference "
+        f"hours_actuals_through_month, got {first_cell!r}"
+    )
+    assert "NA()" in first_cell, (
+        f"First-month forecast formula must clip with NA(), got {first_cell!r}"
+    )
+
+    # m_idx=5 → literal '6>hours_actuals_through_month'
+    mid_cell = trends_ws.cell(forecast_row, MONTH_COL_START + 5).value
+    assert isinstance(mid_cell, str)
+    assert "6>hours_actuals_through_month" in mid_cell, (
+        f"Mid-month (m_idx=5) forecast formula should test "
+        f"'6>hours_actuals_through_month', got {mid_cell!r}"
+    )
+    assert "NA()" in mid_cell
+
+
+def test_planned_and_ceiling_helper_rows_unchanged(trends_ws):
+    """Planned + Ceiling helper rows must NOT contain NA() — only Actual and
+    Forecast are clipped by v2 T10.
+    """
+    hidden_rows = sorted(
+        r for r in range(1, trends_ws.max_row + 1)
+        if trends_ws.row_dimensions[r].hidden
+    )
+    # Planned: contains SUMPRODUCT (and not Plan-Forecast/Actuals/partner_ceiling alone)
+    planned_row = None
+    ceiling_row = None
+    for r in hidden_rows:
+        v = trends_ws.cell(r, MONTH_COL_START).value
+        if v is None:
+            continue
+        s = str(v)
+        if "SUMPRODUCT" in s and planned_row is None:
+            planned_row = r
+        elif s.strip() == "=partner_ceiling" and ceiling_row is None:
+            ceiling_row = r
+    assert planned_row is not None, (
+        f"Could not find planned helper row (hidden={hidden_rows})"
+    )
+    assert ceiling_row is not None, (
+        f"Could not find ceiling helper row (hidden={hidden_rows})"
+    )
+
+    # Probe a few month columns on each.
+    for m_idx in (0, 3, 7):
+        c = MONTH_COL_START + m_idx
+        pv = trends_ws.cell(planned_row, c).value
+        cv = trends_ws.cell(ceiling_row, c).value
+        assert pv is None or "NA()" not in str(pv), (
+            f"Planned helper row {planned_row} col {c} unexpectedly clipped: {pv!r}"
+        )
+        assert cv is None or "NA()" not in str(cv), (
+            f"Ceiling helper row {ceiling_row} col {c} unexpectedly clipped: {cv!r}"
+        )
+        assert pv is None or "eur_actuals_through_month" not in str(pv), (
+            f"Planned row must not reference eur_actuals_through_month, got {pv!r}"
+        )
+        assert pv is None or "hours_actuals_through_month" not in str(pv), (
+            f"Planned row must not reference hours_actuals_through_month, got {pv!r}"
+        )

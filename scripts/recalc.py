@@ -140,6 +140,10 @@ def recalc(filename, timeout=30):
     try:
         wb = load_workbook(filename, data_only=True)
 
+        # Hard errors: indicate formula bugs. #N/A is tracked separately
+        # because NA() is an intentional idiom (LineChart series clipping,
+        # lookup sentinels) — Excel itself produces it by design, not as
+        # a failure mode.
         excel_errors = [
             "#VALUE!",
             "#DIV/0!",
@@ -147,9 +151,9 @@ def recalc(filename, timeout=30):
             "#NAME?",
             "#NULL!",
             "#NUM!",
-            "#N/A",
         ]
         error_details = {err: [] for err in excel_errors}
+        na_locations: list[str] = []
         total_errors = 0
 
         for sheet_name in wb.sheetnames:
@@ -157,6 +161,9 @@ def recalc(filename, timeout=30):
             for row in ws.iter_rows():
                 for cell in row:
                     if cell.value is not None and isinstance(cell.value, str):
+                        if "#N/A" in cell.value:
+                            na_locations.append(f"{sheet_name}!{cell.coordinate}")
+                            continue
                         for err in excel_errors:
                             if err in cell.value:
                                 location = f"{sheet_name}!{cell.coordinate}"
@@ -170,14 +177,20 @@ def recalc(filename, timeout=30):
             "status": "success" if total_errors == 0 else "errors_found",
             "total_errors": total_errors,
             "error_summary": {},
+            "na_count": len(na_locations),
         }
 
         for err_type, locations in error_details.items():
             if locations:
                 result["error_summary"][err_type] = {
                     "count": len(locations),
-                    "locations": locations[:20],  
+                    "locations": locations[:20],
                 }
+        if na_locations:
+            result["na_summary"] = {
+                "count": len(na_locations),
+                "locations": na_locations[:20],
+            }
 
         wb_formulas = load_workbook(filename, data_only=False)
         formula_count = 0
@@ -210,7 +223,8 @@ def main():
         print("  - total_errors: Total number of Excel errors found")
         print("  - total_formulas: Number of formulas in the file")
         print("  - error_summary: Breakdown by error type with locations")
-        print("    - #VALUE!, #DIV/0!, #REF!, #NAME?, #NULL!, #NUM!, #N/A")
+        print("    - #VALUE!, #DIV/0!, #REF!, #NAME?, #NULL!, #NUM!")
+        print("  - na_count: #N/A cells (intentional NA() — e.g., chart clipping)")
         sys.exit(1)
 
     filename = sys.argv[1]

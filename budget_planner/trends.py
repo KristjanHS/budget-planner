@@ -421,33 +421,44 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
                 f"+SUMPRODUCT({plan_range},{rate_range})"
             )
 
-        # Helper Row 2: Cumulative actual EUR
+        # Helper Row 2: Cumulative actual EUR — clipped past
+        # `eur_actuals_through_month` so the chart line ends cleanly at the
+        # through-month edge (NA() cells are not plotted by LineChart).
+        # Month index in the formula is the literal integer m_idx + 1
+        # (compile-time constant).
+        month_idx_literal = m_idx + 1
         if m_idx == 0:
             style_cell(ws, helper_row_actual, c,
                        font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"={SHEET_ACTUALS}!{cl}{act_total}"
+                f"=IF({month_idx_literal}>eur_actuals_through_month,NA(),"
+                f"{SHEET_ACTUALS}!{cl}{act_total})"
             )
         else:
             prev_cl = col_letter(c - 1)
             style_cell(ws, helper_row_actual, c,
                        font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"={prev_cl}{helper_row_actual}+{SHEET_ACTUALS}!{cl}{act_total}"
+                f"=IF({month_idx_literal}>eur_actuals_through_month,NA(),"
+                f"{prev_cl}{helper_row_actual}+{SHEET_ACTUALS}!{cl}{act_total})"
             )
 
         # Helper Row 3: Cumulative forecast EUR — sums Plan-Forecast monthly
         # totals cumulatively. Sheet name MUST be single-quoted (hyphen).
+        # Clipped past `hours_actuals_through_month` (forecast tracks the
+        # hours-side through-month cadence, not the EUR one).
         if pf_total_row is not None:
             pf_ref = f"'{SHEET_PLAN_FORECAST}'!{cl}{pf_total_row}"
             if m_idx == 0:
                 style_cell(ws, helper_row_forecast, c,
                            font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                    f"=SUM({pf_ref})"
+                    f"=IF({month_idx_literal}>hours_actuals_through_month,NA(),"
+                    f"SUM({pf_ref}))"
                 )
             else:
                 prev_cl = col_letter(c - 1)
                 style_cell(ws, helper_row_forecast, c,
                            font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                    f"={prev_cl}{helper_row_forecast}+SUM({pf_ref})"
+                    f"=IF({month_idx_literal}>hours_actuals_through_month,NA(),"
+                    f"{prev_cl}{helper_row_forecast}+SUM({pf_ref}))"
                 )
 
         # Helper Row 4: Ceiling line (flat)

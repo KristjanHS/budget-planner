@@ -57,6 +57,7 @@ pytest tests/ -v
 3. **Font color convention is sacred**: Blue = input, Black = formula, Green = cross-sheet ref. Never mix these.
 4. **Inactive month cells must be greyed out and empty.** Auditors flag time logged outside WP active periods.
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
+6. **New architectural invariants** (cross-sheet constraint, trust boundary, derived-metric rule) must be recorded in `docs/design-invariants.md` before merge. Structural facts (rows/columns/freeze panes) don't trigger this — `layout.py` + `docs/internals.md` cover them. Extended rationale in `.claude/rules/dev-workflow.md`.
 
 ## Rules Index (path-gated — auto-loaded when touching `**/*.py`)
 
@@ -65,18 +66,13 @@ pytest tests/ -v
 | `.claude/rules/dev-workflow.md` | Build/test, linting, formatting, testing, invariants (incl. design-invariants.md update-before-merge rule) |
 | `.claude/rules/openpyxl-patterns.md` | openpyxl/LO gotchas (builders, styles, workbook only) |
 
-## Reference Index (tail echo)
+## Reference Index (tail echo — long-conversation recall)
 
-| Trigger | Read |
-|---------|------|
-| Programme cost model / funding rates | `docs/grant-domain.md` |
-| Sheet builders, readers, rebuild, layout | `docs/internals.md` + `budget_planner/layout.py` |
-| Cross-sheet invariants / trust boundaries | `docs/design-invariants.md` |
-| Architecture, formula graph, workflows | `docs/architecture.md` |
-| Directory map (function → file) | `docs/directory-map.md` |
-| Cloud/container env setup | `docs/cloud-env-setup.md` |
-| Code review, /impag, worktrees, MCP tools | `docs/dev-workflow-review.md` |
-| Common data tasks (add WP, team member, actuals) | `docs/common-tasks.md` |
-| Rebuild drops rows / stale Config refs | `docs/plans/archived/2026-04-12-rebuild-shape-drift-design.md` |
-| Debugging against confidential real workbook | `docs/debugging-your-real-file.md` |
-| Recording principles (L1/L2/L3) | `~/.claude/references/recording-principles.md` |
+Most-loaded references when context has drifted:
+- `docs/internals.md` + `budget_planner/layout.py` — sheet builders, readers, rebuild, layout/column offsets.
+- `docs/design-invariants.md` — cross-sheet invariants, trust boundaries, derived-metric rules.
+- `docs/grant-domain.md` — programme cost model, funding rates, PM→EUR chain.
+- `docs/dev-workflow-review.md` — code review, /impag, worktrees, MCP-tool details.
+- `docs/plans/2026-04-14-hours-timelog-v2-plan.md` — active v2 plan (resume at next un-done task).
+
+Full catalogue in the top-of-file Reference Index.

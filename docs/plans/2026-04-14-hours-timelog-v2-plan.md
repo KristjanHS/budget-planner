@@ -322,15 +322,6 @@ Summary table (one row per programme WP):
 - Case-by-case audit of rebuild warnings → should-they-be-fatal? (archived design §3).
 - `docs/plans/2026-04-13-hours-timelog-design.md` still has 2 `_META` prose refs (v1, superseded); scrub only if it becomes load-bearing.
 
-## Cross-session gotchas (canonical — mirrored in memory)
+## Cross-session gotchas
 
-See `memory/project_cross_session_gotchas.md` for runtime-loaded form.
-
-- **`months_elapsed_*` uses `MAX(1, through_month)`, NOT DATEDIF** — through-month cells are integer month indices, not dates. The design doc is stale on this one point; in-code comment is ground truth.
-- **`'Plan-Forecast'` must be single-quoted** in formulas — the hyphen triggers `#NAME?` in LO recalc.
-- **`eur_actuals_through_month` / `hours_actuals_through_month` default to `1`** (integer literal). Reader treats both as optional so legacy minimal-Config fixtures keep parsing.
-- **`_any_nonnull` (not `_any_nonzero`)** in `read_actuals_hours_sheet`: duplicate-key preference favours any row with logged data, including 0.0.
-- **`COLS_PER_YEAR = 5` additions cascade** through `test_integration.py`, `test_e2e.py`, `test_merged_cells.py` — update all three.
-- **`build_config_sheet` None-default fallbacks are dual-caller load-bearing** — the orchestrator passes kwargs but ~15 fixtures call it bare. Don't remove them.
-- **Windowed-plan-sum idiom:** `IF(hours_actuals_through_month<=0,0,SUM($start:INDEX(range,1,hours_actuals_through_month)))` — used on both Actuals-Hours cum-hours col and Capacity TOTAL/EU TOTAL Variance PM. Keep both callsites in sync if the idiom evolves.
-- **Process lesson:** When a CF rule-count assertion needs updating 2+ times during a single task's implementation, stop and question the design — that churn usually means the feature is adding too many rules (T5 4-col block went 113 → 134 → 146 during T6; kaizen reduced back to 121).
+Canonical source: `memory/project_cross_session_gotchas.md` (auto-loaded in every session). Do not duplicate the list here — keep one home.

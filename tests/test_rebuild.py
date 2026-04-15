@@ -63,13 +63,19 @@ class TestActualsPreservation:
 
     def test_actuals_values_preserved(self, init_wb):
         """Modified Actuals EUR values survive rebuild."""
-        # Find the first WP data row in Actuals (row 4 per actuals.py layout)
         wb = load_workbook(init_wb)
         act = wb["Actuals"]
 
-        # Actuals WP rows start at row 4, first month col is C (3)
-        # Find the first active month cell (non-grey, non-empty formula)
-        test_row = 4
+        # Find the first WP data row dynamically (row layout shifted as
+        # As-of headers landed above the section header — hardcoding 4
+        # stopped matching after T7).
+        test_row = None
+        for r in range(1, act.max_row + 1):
+            val = act.cell(r, 1).value
+            if isinstance(val, str) and val.startswith("=Config!A"):
+                test_row = r
+                break
+        assert test_row is not None, "Could not find first WP row in Actuals"
         test_col = 3
         _set_cell(act, test_row, test_col, 5000)
         wb.save(init_wb)

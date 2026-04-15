@@ -12,7 +12,7 @@ from budget_planner.layout import (
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT, TITLE_FONT,
     SECTION_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    CF_AMBER_FILL, CF_RED_FILL, CENTER, style_cell, col_letter,
+    CF_AMBER_FILL, CF_GREY_FILL, CF_RED_FILL, CENTER, style_cell, col_letter,
     write_section_header,
 )
 
@@ -206,17 +206,55 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
 
     # Conditional formatting: red on Forecast EUR < 0.8 * Plan EUR (year columns).
     # Mirrors the variance-style "material underspend" alert.
-    for y in range(num_years):
+    # Gated on hours_actuals_through_month >= end-of-year so partial-coverage
+    # years don't spuriously flag underspend; the grey partial-year rule below
+    # takes care of those.
+    for y, (group_start, span) in enumerate(cal_groups):
         plan_eur_col = YEAR_GROUP_START + y * COLS_PER_YEAR + 1
         fcst_col = YEAR_GROUP_START + y * COLS_PER_YEAR + 3
         plan_eur_col_l = col_letter(plan_eur_col)
         fcst_col_l = col_letter(fcst_col)
         fcst_range = f"{fcst_col_l}{SUMMARY_FIRST_WP_ROW}:{fcst_col_l}{SUMMARY_LAST_WP_ROW}"
+        year_end_pm = group_start + span
         summary.conditional_formatting.add(fcst_range, FormulaRule(
             formula=[
-                f"{fcst_col_l}{SUMMARY_FIRST_WP_ROW}<0.8*{plan_eur_col_l}{SUMMARY_FIRST_WP_ROW}"
+                f"AND(hours_actuals_through_month>={year_end_pm},"
+                f"{fcst_col_l}{SUMMARY_FIRST_WP_ROW}<0.8*{plan_eur_col_l}{SUMMARY_FIRST_WP_ROW})"
             ],
             fill=CF_RED_FILL,
+        ))
+
+    # Conditional formatting: grey on per-year partial-coverage columns.
+    # Act €: year not fully covered by eur_actuals_through_month.
+    # Fcst €: year not fully covered by hours_actuals_through_month.
+    # Var €: stricter — either coverage short of the year end.
+    # Skips PROJECT TOTAL (summarises across years; no single coverage gate).
+    for y, (group_start, span) in enumerate(cal_groups):
+        year_end_pm = group_start + span
+        sc = YEAR_GROUP_START + y * COLS_PER_YEAR
+        act_col_l = col_letter(sc + 2)
+        fcst_col_l = col_letter(sc + 3)
+        var_col_l = col_letter(sc + 4)
+
+        act_range = f"{act_col_l}{SUMMARY_FIRST_WP_ROW}:{act_col_l}{SUMMARY_LAST_WP_ROW}"
+        summary.conditional_formatting.add(act_range, FormulaRule(
+            formula=[f"eur_actuals_through_month<{year_end_pm}"],
+            fill=CF_GREY_FILL,
+        ))
+
+        fcst_range_grey = f"{fcst_col_l}{SUMMARY_FIRST_WP_ROW}:{fcst_col_l}{SUMMARY_LAST_WP_ROW}"
+        summary.conditional_formatting.add(fcst_range_grey, FormulaRule(
+            formula=[f"hours_actuals_through_month<{year_end_pm}"],
+            fill=CF_GREY_FILL,
+        ))
+
+        var_range_grey = f"{var_col_l}{SUMMARY_FIRST_WP_ROW}:{var_col_l}{SUMMARY_LAST_WP_ROW}"
+        summary.conditional_formatting.add(var_range_grey, FormulaRule(
+            formula=[
+                f"MIN(eur_actuals_through_month,hours_actuals_through_month)"
+                f"<{year_end_pm}"
+            ],
+            fill=CF_GREY_FILL,
         ))
 
     # Conditional formatting: red on Forecast EUR < 0.8 * Plan EUR (project total)

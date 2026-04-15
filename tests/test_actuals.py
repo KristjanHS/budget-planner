@@ -195,14 +195,20 @@ def test_actuals_pct_ceiling_formula(actuals_workbook):
 
 
 def test_actuals_breach_formula(actuals_workbook):
-    """First WP row at VAL_COL_BREACH has IF formula."""
+    """First WP row at VAL_COL_BREACH has IF formula with cum-to-date slope.
+
+    Denominator was migrated from ``current_month`` to ``months_elapsed_eur``
+    in T7 (Stage 2) so the slope reflects closed finance months rather than
+    the raw project-month index. See ``test_actuals_breach_todate.py`` for
+    the full invariant.
+    """
     ws = actuals_workbook["Actuals"]
     first_wp_row = _find_first_wp_row(ws)
     assert first_wp_row is not None
     cell = ws.cell(first_wp_row, VAL_COL_BREACH)
     formula = str(cell.value)
     assert "IF" in formula
-    assert "current_month" in formula
+    assert "months_elapsed_eur" in formula
 
 
 def test_actuals_cum_headers(actuals_workbook):

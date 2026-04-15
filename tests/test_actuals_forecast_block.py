@@ -164,7 +164,7 @@ def test_forecast_breach_formula(actuals_ws):
     formula = actuals_ws.cell(first, fcols["breach_forecast"]).value
     assert isinstance(formula, str), formula
     assert formula.startswith("=IF("), formula
-    assert "current_month" in formula, formula
+    assert "months_elapsed_hours" in formula, formula
 
 
 def test_forecast_block_spans_every_wp_row(actuals_ws):

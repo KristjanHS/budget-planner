@@ -90,6 +90,26 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
 
     r = 1
 
+    # -- "As of" header row (row 1, above the section headers) --
+    # Two label/date pairs: one above the Actual EUR block, one above the
+    # Forecast Monitoring block. Through-month cells hold integer month
+    # indices; EDATE(project_start, N-1) turns them into a calendar date
+    # so the header reads "As of: Apr 2026" not "1900-01".
+    _ASOF_DATE_FMT = "MMM YYYY"
+    style_cell(ws, r, 2, value="As of:", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, border=False)
+    style_cell(ws, r, 3,
+               value="=EDATE(project_start, eur_actuals_through_month - 1)",
+               font=GREEN_XREF, fill=LIGHT_BLUE_FILL,
+               fmt=_ASOF_DATE_FMT, border=False)
+    style_cell(ws, r, col_cum_forecast, value="As of:", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, border=False)
+    style_cell(ws, r, col_cum_forecast + 1,
+               value="=EDATE(project_start, hours_actuals_through_month - 1)",
+               font=GREEN_XREF, fill=LIGHT_BLUE_FILL,
+               fmt=_ASOF_DATE_FMT, border=False)
+    r += 1
+
     # -- Section header --
     write_section_header(ws, r, "ACTUAL EUR", merge_end=val_col_breach)
     # Forecast-block section header on the same row, visually distinct
@@ -177,12 +197,14 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
         ceil_l = col_letter(val_col_budget)
         style_cell(ws, row, val_col_pct_ceil, font=BLACK_FORMULA,
                    fmt="0.0%").value = f"={cum_l}{row}/{ceil_l}{row}"
-        # Breach In = months until ceiling exhausted at current rate
+        # Breach In = months until ceiling exhausted at cumulative-to-date
+        # rate. Denominator uses months_elapsed_eur so the slope reflects
+        # spend per closed finance-month, not the raw project-month index.
         style_cell(ws, row, val_col_breach, font=BLACK_FORMULA,
                    fmt="0").value = (
             f'=IF({cum_l}{row}=0,"\u2014",'
             f"({ceil_l}{row}-{cum_l}{row})"
-            f"/({cum_l}{row}/current_month))"
+            f"/({cum_l}{row}/months_elapsed_eur))"
         )
 
         # ── Forecast monitoring block (parallel columns on Plan-Forecast) ──
@@ -214,13 +236,15 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
         ).value = (
             f"={cum_fore_l}{row}/{ceil_l}{row}"
         )
-        # Forecast Breach In
+        # Forecast Breach In — denominator uses months_elapsed_hours so the
+        # forecast-spend slope is anchored to the hours-timelog cadence that
+        # drives the forecast EUR values.
         style_cell(
             ws, row, col_breach_forecast, font=BLACK_FORMULA, fmt="0.0",
         ).value = (
             f'=IF({cum_fore_l}{row}=0,"\u2014",'
             f"({ceil_l}{row}-{cum_fore_l}{row})"
-            f"/({cum_fore_l}{row}/current_month))"
+            f"/({cum_fore_l}{row}/months_elapsed_hours))"
         )
 
     last_wp_row = first_wp_row + num_wps - 1
@@ -262,12 +286,12 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     cum_l = col_letter(val_col_cum)
     style_cell(ws, r, val_col_pct_ceil, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="0.0%").value = f"={cum_l}{r}/partner_ceiling"
-    # TOTAL Breach In
+    # TOTAL Breach In — uses months_elapsed_eur, matching the WP rows.
     style_cell(ws, r, val_col_breach, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="0").value = (
         f'=IF({cum_l}{r}=0,"\u2014",'
         f"(partner_ceiling-{cum_l}{r})"
-        f"/({cum_l}{r}/current_month))"
+        f"/({cum_l}{r}/months_elapsed_eur))"
     )
 
     # -- TOTAL row forecast block (mirrors Actual-EUR TOTAL, targets Plan-Forecast TOTAL row) --
@@ -303,7 +327,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     ).value = (
         f'=IF({cum_fore_total_l}{r}=0,"\u2014",'
         f"(partner_ceiling-{cum_fore_total_l}{r})"
-        f"/({cum_fore_total_l}{r}/current_month))"
+        f"/({cum_fore_total_l}{r}/months_elapsed_hours))"
     )
 
     # -- Conditional formatting: red on negative variance --

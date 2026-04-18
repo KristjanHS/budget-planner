@@ -1,12 +1,34 @@
 """Timelog Plan sheet builder — prescriptive 1.0-FTE WP allocation grid.
 
 A separate allocation surface from the Plan sheet. For each (person, month)
-the sheet prescribes which WP they should log 100% against. The Proposed grid
-is written by the solver and locked; the Assigned grid mirrors Proposed via
-``=<cell>`` formulas and accepts blue-input overrides.
+the sheet prescribes which WP they should log 100% against.
 
-Spec: ``docs/plans/archived/2026-04-18-timelog-plan-design.md`` (§2 sheet layout, §5
-feedback formulas + CF, §6 build/read/rebuild).
+Layout — vertical-stacked bands (one above the other, all on the same column
+range ``D..D+months-1`` for the month grid). Top-to-bottom:
+
+  1. Banner (row 1)
+  2. Traffic lights (row 2)
+  3. blank spacer
+  4. PER-WP SUMMARY band
+     blank spacer
+  5. PROPOSED band (solver-written, locked)
+     blank spacer
+  6. ASSIGNED band (defaults to ``=<Proposed>``; blue-input overrides accepted)
+     blank spacer
+  7. PER-PERSON SUMMARY band
+
+Each data band is wrapped in an Excel row-group (``outline_level=1``) so the
+user can fold away sections not under review. Section-title rows stay at
+level 0 and remain visible when the group collapses.
+
+Col A is Person (cross-ref into Config Team Roster) across all three person-
+indexed bands. Col B is Underload (Pool − Assigned) — always visible in the
+frozen pane so the user can eyeball utilisation while scrolling months.
+Col C is the rate helper (VLOOKUP into ``roster_lookup``) on PROPOSED and
+ASSIGNED bands; on the PER-PERSON SUMMARY band col C is the Assigned count
+metric instead.
+
+Spec: ``docs/plans/2026-04-18-timelog-plan-vertical-layout-design.md``.
 
 Stateless builder — receives all config via kwargs from the orchestrator. Per
 ``.claude/rules/python-refactors.md``: no ``from budget_planner import config``
@@ -30,16 +52,12 @@ from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from budget_planner.layout import (
-    MONTH_COL_START,
     SHEET_CONFIG,
     SHEET_TIMELOG_PLAN,
+    TIMELOG_MONTH_COL_START,
     TIMELOG_RATE_HELPER_COL,
-    build_year_month_headers,
     cell_ref,
     month_range_ref,
-    timelog_assigned_col_end,
-    timelog_assigned_col_start,
-    timelog_summary_col_start,
 )
 from budget_planner.styles import (
     BLACK_FORMULA,
@@ -51,6 +69,7 @@ from budget_planner.styles import (
     GREEN_XREF,
     GREY_FILL,
     HEADER_FONT,
+    LIGHT_BLUE_FILL,
     LIGHT_GREEN_FILL,
     SECTION_FILL,
     SECTION_FONT,
@@ -61,9 +80,36 @@ from budget_planner.styles import (
 )
 from budget_planner.timelog_solver import Person, PersonWPWindow, WP, solve
 
-# Per-person summary block sits to the right of the Assigned grid; columns
-# match the headers in ``_write_person_summary``. Update both together.
-_PERSON_SUMMARY_COLS = 8
+# Section-title strings — exported so the reader can anchor on "ASSIGNED…"
+# via the same literal the builder writes. Update here, not at the callsite.
+SECTION_TITLE_WP_SUMMARY = "PER-WP SUMMARY"
+SECTION_TITLE_PROPOSED = "PROPOSED (solver-written, locked)"
+SECTION_TITLE_ASSIGNED = "ASSIGNED (edit here — default =Proposed)"
+SECTION_TITLE_PERSON_SUMMARY = "PER-PERSON SUMMARY"
+
+# PER-PERSON SUMMARY metric columns live at C..I (7 cols). Col A is Person,
+# col B is Underload — the same layout roles they carry in PROPOSED/ASSIGNED.
+# Dropping the duplicated ``Remaining`` column vs. the prior horizontal layout
+# makes col B (Underload) the single source of truth for Pool − Assigned.
+_PERSON_SUMMARY_METRIC_HEADERS = [
+    "Assigned", "Pool", "Over-pool?",
+    "Switches", "First log", "Last log", "Largest gap",
+]
+_PERSON_SUMMARY_FIRST_METRIC_COL = 3   # col C (Assigned)
+
+# PER-WP SUMMARY metric columns live at A..H (WP code + 7 metrics).
+_WP_SUMMARY_HEADERS = [
+    "WP code", "Ceiling €", "Assigned €", "Overshoot €",
+    "Undershoot €", "Assigned months", "Window months remaining",
+    "Any out-of-window?",
+]
+
+# Font colours for the Underload CF (red < 0, green > 0, black default).
+# Fonts constructed inline here rather than shared in styles.py — they are
+# CF-local and don't follow the blue/black/green cell-convention.
+_UNDERLOAD_RED_FONT = Font(name="Arial", color="C00000", size=10, bold=True)
+_UNDERLOAD_GREEN_FONT = Font(name="Arial", color="006100", size=10)
+
 
 # ---------------------------------------------------------------------------
 # Public builder
@@ -72,7 +118,7 @@ _PERSON_SUMMARY_COLS = 8
 
 def build_timelog_plan_sheet(
     ws: Worksheet,
-    wb: Workbook,
+    wb: Workbook,  # noqa: ARG001 — kept for parity with sibling builders
     *,
     project_params: dict,
     work_packages: list[dict],
@@ -83,7 +129,7 @@ def build_timelog_plan_sheet(
     config_layout: dict,
     assigned_overrides: Mapping[tuple[str, int], str] | None = None,
 ) -> dict:
-    """Build the Timelog Plan sheet.
+    """Build the Timelog Plan sheet with vertical-stacked bands.
 
     Args:
         ws: Worksheet to populate (created by orchestrator, named "Timelog Plan").
@@ -101,8 +147,7 @@ def build_timelog_plan_sheet(
             builder (per-person rate is looked up from roster_lookup via
             the rate helper column); accepted for orchestrator-call parity.
         config_layout: dict returned by build_config_sheet() — must include
-            ``param_rows``, ``wp_first_row``, ``person_rows``,
-            ``roster_first_row``.
+            ``param_rows``, ``wp_first_row``, ``person_rows``.
         assigned_overrides: Optional mapping ``(person_name, month_num)`` →
             WP code. Cells present here are written as BLUE_INPUT literals
             (preserving round-trip user edits); cells absent default to
@@ -111,175 +156,26 @@ def build_timelog_plan_sheet(
 
     Returns:
         Layout dict with keys:
-          sheet, person_first_row, person_last_row, person_rows,
-          proposed_col_start, proposed_col_end,
-          assigned_col_start, assigned_col_end,
-          summary_col_start, wp_summary_first_row, wp_summary_last_row.
+          sheet, month_col_start, month_col_end,
+          proposed_person_first_row, proposed_person_last_row,
+          assigned_person_first_row, assigned_person_last_row,
+          summary_person_first_row, summary_person_last_row,
+          person_rows_by_band (dict band → {name: row}),
+          wp_summary_first_row, wp_summary_last_row.
     """
     project_months: int = project_params["months"]
 
     # ── Tab appearance ──
     ws.sheet_properties.tabColor = "FF8C00"  # orange — distinguishes from existing tabs
 
-    # Resolve column geometry once.
-    proposed_col_start = MONTH_COL_START
-    proposed_col_end = MONTH_COL_START + project_months - 1
-    assigned_col_start = timelog_assigned_col_start(project_months)
-    assigned_col_end = timelog_assigned_col_end(project_months)
-    summary_col_start = timelog_summary_col_start(project_months)
-    summary_col_end = summary_col_start + _PERSON_SUMMARY_COLS - 1
-    canvas_last_col = summary_col_end
+    # ── Column geometry (shared by PROPOSED and ASSIGNED bands) ──
+    month_col_start = TIMELOG_MONTH_COL_START
+    month_col_end = month_col_start + project_months - 1
+    canvas_last_col = month_col_end
 
-    # ── Row 1: title banner (merged across canvas) ──
-    ws.merge_cells(
-        start_row=1, start_column=1, end_row=1, end_column=canvas_last_col
-    )
-    style_cell(
-        ws, 1, 1,
-        value="TIMELOG PLAN — prescriptive 1.0-FTE WP allocations",
-        font=TITLE_FONT, fill=SECTION_FILL, alignment=CENTER, border=False,
-    )
-    # Fill remaining merged-row cells so the banner reads cleanly even when
-    # openpyxl drops styling on merge target cells.
-    for c in range(2, canvas_last_col + 1):
-        style_cell(ws, 1, c, fill=SECTION_FILL, border=False)
-    # Title font on the merged anchor must remain TITLE_FONT colour-overridden:
-    # the SECTION_FILL is dark, so use white text.
-    ws.cell(row=1, column=1).font = Font(
-        name="Arial", bold=True, size=14, color="FFFFFF"
-    )
-
-    # ── Row 2: traffic-light cells ──
-    # Layout: 4 (label, value) pairs across the canvas. Use the first 8 cols
-    # of the canvas for readability.
-    tl_row = 2
-    # Cell positions for the four traffic-light VALUE cells. We compute these
-    # before the WP-summary block exists, so the formulas reference cells we
-    # haven't written yet — that's fine, Excel resolves at recalc.
-    # We'll fill in the actual formulas after we know wp_summary rows.
-    # For now, write labels and reserve value cells.
-    tl_label_cols = [1, 3, 5, 7]
-    tl_value_cols = [2, 4, 6, 8]
-    tl_labels = [
-        "Any undershoot?",
-        "Any out-of-window cell?",
-        "Any over-pool person?",
-        "Total switches",
-    ]
-    for c, lbl in zip(tl_label_cols, tl_labels):
-        style_cell(ws, tl_row, c, value=lbl, font=HEADER_FONT, alignment=CENTER)
-    # Pre-style empty value cells; formulas patched in after summary rows known.
-    for c in tl_value_cols:
-        style_cell(ws, tl_row, c, font=BLACK_FORMULA, alignment=CENTER, fmt="0")
-
-    # Row 3: blank separator
-    # (Nothing to write; openpyxl leaves blank.)
-
-    # ── Rows 4-5: year/month header band ──
-    # build_year_month_headers writes "WP ID"/"WP Name" into A/B of the month
-    # row. Overwrite A with "Person" and clear B (it's our rate helper, not a
-    # month). Year row is also overwritten in cols A/B so they don't carry the
-    # LIGHT_BLUE_FILL "WP ID" suggestion.
-    year_row, month_row, _next_after_headers = build_year_month_headers(
-        ws, 4, project_params, MONTH_COL_START,
-    )
-    # Overwrite col A (year row + month row) — Person column header.
-    style_cell(ws, year_row, 1, value="", font=HEADER_FONT, fill=SECTION_FILL,
-               alignment=CENTER)
-    style_cell(ws, month_row, 1, value="Person", font=HEADER_FONT,
-               fill=SECTION_FILL, alignment=CENTER).font = Font(
-        name="Arial", bold=True, size=10, color="FFFFFF"
-    )
-    # Overwrite col B (rate helper).
-    style_cell(ws, year_row, TIMELOG_RATE_HELPER_COL, value="",
-               font=HEADER_FONT, fill=SECTION_FILL)
-    style_cell(ws, month_row, TIMELOG_RATE_HELPER_COL, value="Rate",
-               font=HEADER_FONT, fill=SECTION_FILL,
-               alignment=CENTER).font = Font(
-        name="Arial", bold=True, size=10, color="FFFFFF"
-    )
-
-    # Now build the Assigned-grid year/month headers as a mirror (so that
-    # the summary block's references to month_headers work for both sides).
-    # We rewrite the Assigned grid cells in the same year_row/month_row.
-    _write_assigned_headers(
-        ws, year_row, month_row, project_params,
-        assigned_col_start, assigned_col_end,
-    )
-
-    # Hidden numeric month-index helper row (1..N) for SUMPRODUCT
-    # out-of-window checks. Sits directly below the month header, hidden via
-    # outline level so it remains inspectable.
-    month_index_row = month_row + 1
-    style_cell(ws, month_index_row, 1, value="(month idx)",
-               font=Font(name="Arial", italic=True, color="808080", size=8),
-               border=False)
-    for mi in range(project_months):
-        # Proposed grid copy
-        c_p = MONTH_COL_START + mi
-        style_cell(ws, month_index_row, c_p, value=mi + 1,
-                   font=Font(name="Arial", color="808080", size=8),
-                   alignment=CENTER, border=False)
-        # Assigned grid copy
-        c_a = assigned_col_start + mi
-        style_cell(ws, month_index_row, c_a, value=mi + 1,
-                   font=Font(name="Arial", color="808080", size=8),
-                   alignment=CENTER, border=False)
-    ws.row_dimensions[month_index_row].outline_level = 1
-    ws.row_dimensions[month_index_row].hidden = True
-
-    # ── Section header row (PROPOSED / ASSIGNED) ──
-    section_row = month_index_row + 1
-    # PROPOSED merge across rate-helper + months
-    ws.merge_cells(
-        start_row=section_row, start_column=1,
-        end_row=section_row, end_column=proposed_col_end,
-    )
-    style_cell(
-        ws, section_row, 1, value="PROPOSED (Python-computed, locked)",
-        font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False,
-    )
-    # ASSIGNED merge across the assigned grid
-    ws.merge_cells(
-        start_row=section_row, start_column=assigned_col_start,
-        end_row=section_row, end_column=assigned_col_end,
-    )
-    style_cell(
-        ws, section_row, assigned_col_start,
-        value="ASSIGNED (edit here — start as =Proposed)",
-        font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False,
-    )
-    # Summary block header
-    ws.merge_cells(
-        start_row=section_row, start_column=summary_col_start,
-        end_row=section_row, end_column=summary_col_end,
-    )
-    style_cell(
-        ws, section_row, summary_col_start,
-        value="PER-PERSON SUMMARY",
-        font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False,
-    )
-
-    # Per-person summary column headers, on the row just below section_row
-    summary_header_row = section_row + 1
-    summary_headers = [
-        "Assigned", "Pool", "Remaining", "Over-pool?",
-        "Switches", "First log", "Last log", "Largest gap",
-    ]
-    assert len(summary_headers) == _PERSON_SUMMARY_COLS
-    for i, hdr in enumerate(summary_headers):
-        style_cell(
-            ws, summary_header_row, summary_col_start + i,
-            value=hdr, font=HEADER_FONT, alignment=CENTER,
-        )
-
-    # Person rows start after the summary header row.
-    person_first_row = summary_header_row + 1
-
-    # ── Build solver inputs and run solver ──
-    # Sort persons (priority asc, name asc). The solver itself sorts by name
-    # within each priority pass; we sort the input list so row order on the
-    # sheet matches the solver's iteration order.
+    # ── Solver input prep ──
+    # Sort persons (priority asc, name asc). Persists the solver's pass order
+    # into the sheet so row order matches solver iteration order.
     sorted_team = sorted(
         team, key=lambda m: (int(m.get("priority", 2)), m["name"])
     )
@@ -302,221 +198,308 @@ def build_timelog_plan_sheet(
         for a in (assignments or [])
     ]
     assigned_map = solve(persons, wps, windows, project_months)
-
-    # Index assignments by person → list of (wp_code, start, end) for the
-    # in-window/out-of-window pre-fill.
     person_windows: dict[str, list[tuple[str, int, int]]] = {}
     for w in windows:
         person_windows.setdefault(w.person_name, []).append(
             (w.wp_code, w.start_month, w.end_month)
         )
-
     override_map: Mapping[tuple[str, int], str] = assigned_overrides or {}
+    num_persons = len(persons)
+    num_wps = len(wps)
 
-    # ── Person rows ──
+    # ── Row layout — pre-computed so forward cross-band refs resolve ──
+    banner_row = 1
+    tl_row = 2
+    # row 3: blank spacer
+
+    wp_summary_title_row = 4
+    wp_summary_header_row = 5
+    wp_summary_first_row = 6
+    wp_summary_last_row = (
+        wp_summary_first_row + num_wps - 1 if num_wps > 0
+        else wp_summary_header_row
+    )
+    proposed_title_row = wp_summary_last_row + 2  # +1 spacer
+
+    proposed_year_row = proposed_title_row + 1
+    proposed_month_row = proposed_year_row + 1
+    proposed_midx_row = proposed_month_row + 1
+    proposed_person_first_row = proposed_midx_row + 1
+    proposed_person_last_row = (
+        proposed_person_first_row + num_persons - 1 if num_persons > 0
+        else proposed_person_first_row - 1
+    )
+    assigned_title_row = (
+        (proposed_person_last_row if num_persons > 0 else proposed_midx_row) + 2
+    )
+
+    assigned_year_row = assigned_title_row + 1
+    assigned_month_row = assigned_year_row + 1
+    assigned_midx_row = assigned_month_row + 1
+    assigned_person_first_row = assigned_midx_row + 1
+    assigned_person_last_row = (
+        assigned_person_first_row + num_persons - 1 if num_persons > 0
+        else assigned_person_first_row - 1
+    )
+    summary_title_row = (
+        (assigned_person_last_row if num_persons > 0 else assigned_midx_row) + 2
+    )
+
+    summary_header_row = summary_title_row + 1
+    summary_person_first_row = summary_header_row + 1
+    summary_person_last_row = (
+        summary_person_first_row + num_persons - 1 if num_persons > 0
+        else summary_person_first_row - 1
+    )
+
+    person_rows_by_band: dict[str, dict[str, int]] = {
+        "proposed": {
+            p.name: proposed_person_first_row + i for i, p in enumerate(persons)
+        },
+        "assigned": {
+            p.name: assigned_person_first_row + i for i, p in enumerate(persons)
+        },
+        "summary": {
+            p.name: summary_person_first_row + i for i, p in enumerate(persons)
+        },
+    }
+
+    # ── Row 1: title banner (merged across canvas) ──
+    ws.merge_cells(
+        start_row=banner_row, start_column=1,
+        end_row=banner_row, end_column=canvas_last_col,
+    )
+    style_cell(
+        ws, banner_row, 1,
+        value="TIMELOG PLAN — prescriptive 1.0-FTE WP allocations",
+        font=TITLE_FONT, fill=SECTION_FILL, alignment=CENTER, border=False,
+    )
+    for c in range(2, canvas_last_col + 1):
+        style_cell(ws, banner_row, c, fill=SECTION_FILL, border=False)
+    ws.cell(row=banner_row, column=1).font = Font(
+        name="Arial", bold=True, size=14, color="FFFFFF"
+    )
+
+    # ── Row 2: traffic-light labels (values patched in after WP rows exist) ──
+    tl_label_cols = [1, 3, 5, 7]
+    tl_value_cols = [2, 4, 6, 8]
+    tl_labels = [
+        "Any undershoot?",
+        "Any out-of-window cell?",
+        "Any over-pool person?",
+        "Total switches",
+    ]
+    for c, lbl in zip(tl_label_cols, tl_labels):
+        style_cell(ws, tl_row, c, value=lbl, font=HEADER_FONT, alignment=CENTER)
+    for c in tl_value_cols:
+        style_cell(ws, tl_row, c, font=BLACK_FORMULA, alignment=CENTER, fmt="0")
+
+    # row 3: blank spacer (no write)
+
+    # ── PER-WP SUMMARY band ──
+    _write_section_title(
+        ws, wp_summary_title_row, SECTION_TITLE_WP_SUMMARY, last_col=8,
+    )
+    for i, hdr in enumerate(_WP_SUMMARY_HEADERS):
+        style_cell(
+            ws, wp_summary_header_row, 1 + i,
+            value=hdr, font=HEADER_FONT, alignment=CENTER,
+        )
+    cfg_wp_first_row = config_layout["wp_first_row"]
+    for i, wp in enumerate(wps):
+        _write_wp_summary_row(
+            ws, wp_summary_first_row + i, wp,
+            cfg_wp_row=cfg_wp_first_row + i,
+            month_col_start=month_col_start,
+            month_col_end=month_col_end,
+            assigned_first_row=assigned_person_first_row,
+            assigned_last_row=assigned_person_last_row,
+            assigned_midx_row=assigned_midx_row,
+        )
+    if num_wps > 0:
+        for r in range(wp_summary_header_row, wp_summary_last_row + 1):
+            ws.row_dimensions[r].outline_level = 1
+
+    # ── PROPOSED band ──
+    _write_section_title(
+        ws, proposed_title_row, SECTION_TITLE_PROPOSED, last_col=canvas_last_col,
+    )
+    _write_band_axis_headers(
+        ws, proposed_year_row, proposed_month_row, project_params, month_col_start,
+    )
+    _write_month_index_row(
+        ws, proposed_midx_row, project_months, month_col_start,
+    )
+    if num_persons > 0:
+        for r in (
+            proposed_year_row, proposed_month_row,
+            proposed_midx_row, *range(proposed_person_first_row, proposed_person_last_row + 1),
+        ):
+            ws.row_dimensions[r].outline_level = 1
+    else:
+        for r in (proposed_year_row, proposed_month_row, proposed_midx_row):
+            ws.row_dimensions[r].outline_level = 1
+
+    # ── ASSIGNED band ──
+    _write_section_title(
+        ws, assigned_title_row, SECTION_TITLE_ASSIGNED, last_col=canvas_last_col,
+    )
+    _write_band_axis_headers(
+        ws, assigned_year_row, assigned_month_row, project_params, month_col_start,
+    )
+    _write_month_index_row(
+        ws, assigned_midx_row, project_months, month_col_start,
+    )
+    if num_persons > 0:
+        for r in (
+            assigned_year_row, assigned_month_row,
+            assigned_midx_row, *range(assigned_person_first_row, assigned_person_last_row + 1),
+        ):
+            ws.row_dimensions[r].outline_level = 1
+    else:
+        for r in (assigned_year_row, assigned_month_row, assigned_midx_row):
+            ws.row_dimensions[r].outline_level = 1
+
+    # ── PER-PERSON SUMMARY band ──
+    _write_section_title(
+        ws, summary_title_row, SECTION_TITLE_PERSON_SUMMARY,
+        last_col=_PERSON_SUMMARY_FIRST_METRIC_COL + len(_PERSON_SUMMARY_METRIC_HEADERS) - 1,
+    )
+    # Col A + B headers (Person + Underload) on the summary-metric header row.
+    style_cell(
+        ws, summary_header_row, 1, value="Person",
+        font=HEADER_FONT, alignment=CENTER,
+    )
+    style_cell(
+        ws, summary_header_row, 2, value="Underload",
+        font=HEADER_FONT, alignment=CENTER,
+    )
+    for i, hdr in enumerate(_PERSON_SUMMARY_METRIC_HEADERS):
+        style_cell(
+            ws, summary_header_row, _PERSON_SUMMARY_FIRST_METRIC_COL + i,
+            value=hdr, font=HEADER_FONT, alignment=CENTER,
+        )
+    if num_persons > 0:
+        for r in range(summary_header_row, summary_person_last_row + 1):
+            ws.row_dimensions[r].outline_level = 1
+
+    # ── Fill person rows in all three bands ──
     cfg_person_rows: dict[str, int] = config_layout.get("person_rows", {})
     months_row_cfg = config_layout["param_rows"]["Project Months"]
     project_months_ref = cell_ref(SHEET_CONFIG, months_row_cfg, 2)
+    rate_helper_letter = get_column_letter(TIMELOG_RATE_HELPER_COL)
 
-    person_rows: dict[str, int] = {}
-    r = person_first_row
-    for person in persons:
+    for i, person in enumerate(persons):
         name = person.name
-        person_rows[name] = r
-
-        # Col A: cross-ref to Config Team Roster row
+        proposed_row = person_rows_by_band["proposed"][name]
+        assigned_row = person_rows_by_band["assigned"][name]
+        summary_row = person_rows_by_band["summary"][name]
         cfg_row = cfg_person_rows.get(name)
-        if cfg_row is not None:
-            style_cell(
-                ws, r, 1, font=GREEN_XREF,
-            ).value = f"={SHEET_CONFIG}!A{cfg_row}"
-        else:
-            # Fallback: literal name (should not happen if orchestrator
-            # passes a config_layout aligned with `team`).
-            style_cell(ws, r, 1, value=name, font=GREEN_XREF)
-
-        # Col B: per-person rate helper — VLOOKUP into roster_lookup col 4.
-        # Single-cell VLOOKUP per row (the safe pattern from openpyxl-patterns
-        # rule on SUMPRODUCT + range lookups).
-        style_cell(
-            ws, r, TIMELOG_RATE_HELPER_COL, font=BLACK_FORMULA, fmt="€#,##0",
-        ).value = f"=VLOOKUP(A{r},roster_lookup,4,FALSE)"
-
-        # Proposed + Assigned cells per month
         person_assignment = assigned_map.get(name, {})
         windows_for_person = person_windows.get(name, [])
+
+        # PROPOSED band: Person xref + Underload + rate helper + month cells.
+        _write_person_col_a(ws, proposed_row, name, cfg_row)
+        _write_underload_cell(
+            ws, proposed_row,
+            summary_row=summary_row,
+            month_col_start=month_col_start,
+            month_col_end=month_col_end,
+        )
+        # Rate helper on PROPOSED: informational/cosmetic (row-aligned with
+        # the ASSIGNED grid consumer, which SUMPRODUCTs against rate_helper_letter
+        # across assigned_person_first_row..assigned_person_last_row — this
+        # PROPOSED-band rate cell is duplicated so the band reads self-contained).
+        _write_rate_helper_cell(ws, proposed_row, rate_helper_letter)
         for mi in range(project_months):
             month_num = mi + 1
-            proposed_col = MONTH_COL_START + mi
-            assigned_col = assigned_col_start + mi
-
+            col = month_col_start + mi
             wp_code = person_assignment.get(month_num)
             in_any_window = any(
                 start <= month_num <= end for (_wp, start, end)
                 in windows_for_person
             )
-            _write_proposed_cell(ws, r, proposed_col, wp_code, in_any_window)
+            _write_proposed_cell(ws, proposed_row, col, wp_code, in_any_window)
+
+        # ASSIGNED band: Person xref + Underload + rate helper + month cells.
+        _write_person_col_a(ws, assigned_row, name, cfg_row)
+        _write_underload_cell(
+            ws, assigned_row,
+            summary_row=summary_row,
+            month_col_start=month_col_start,
+            month_col_end=month_col_end,
+        )
+        _write_rate_helper_cell(ws, assigned_row, rate_helper_letter)
+        for mi in range(project_months):
+            month_num = mi + 1
+            col = month_col_start + mi
+            wp_code = person_assignment.get(month_num)
+            in_any_window = any(
+                start <= month_num <= end for (_wp, start, end)
+                in windows_for_person
+            )
             _write_assigned_cell(
-                ws, r, assigned_col, proposed_col, wp_code, in_any_window,
+                ws, assigned_row, col, proposed_row, wp_code, in_any_window,
                 override=override_map.get((name, month_num)),
             )
 
-        # Per-person summary formulas
-        _write_person_summary(
-            ws, r,
-            assigned_col_start=assigned_col_start,
-            assigned_col_end=assigned_col_end,
-            summary_col_start=summary_col_start,
+        # PER-PERSON SUMMARY band: Person xref + Underload + 7 metric cols.
+        _write_person_col_a(ws, summary_row, name, cfg_row)
+        _write_summary_underload_cell(ws, summary_row)
+        _write_person_summary_metrics(
+            ws, summary_row,
+            assigned_row=assigned_row,
+            month_col_start=month_col_start,
+            month_col_end=month_col_end,
+            month_header_row=assigned_month_row,
             project_months_ref=project_months_ref,
-            month_header_row=month_row,
             cfg_row=cfg_row,
         )
 
-        r += 1
-    person_last_row = r - 1
-
-    # ── Per-WP summary block (below grids) ──
-    wp_summary_section_row = person_last_row + 2
-    ws.merge_cells(
-        start_row=wp_summary_section_row, start_column=1,
-        end_row=wp_summary_section_row, end_column=8,
-    )
-    style_cell(
-        ws, wp_summary_section_row, 1,
-        value="PER-WP SUMMARY", font=SECTION_FONT, fill=SECTION_FILL,
-        alignment=CENTER, border=False,
-    )
-    wp_summary_header_row = wp_summary_section_row + 1
-    wp_summary_headers = [
-        "WP code", "Ceiling €", "Assigned €", "Overshoot €",
-        "Undershoot €", "Assigned months", "Window months remaining",
-        "Any out-of-window?",
-    ]
-    for i, hdr in enumerate(wp_summary_headers):
+    # ── Patch traffic-light formulas (values now that downstream rows exist) ──
+    if num_wps > 0:
+        # 1) Any undershoot? — count WPs where Undershoot € > 0 (col E).
         style_cell(
-            ws, wp_summary_header_row, 1 + i,
-            value=hdr, font=HEADER_FONT, alignment=CENTER,
-        )
-
-    wp_summary_first_row = wp_summary_header_row + 1
-    cfg_wp_first_row = config_layout["wp_first_row"]
-    rate_helper_col_letter = get_column_letter(TIMELOG_RATE_HELPER_COL)
-
-    for i, wp in enumerate(wps):
-        row = wp_summary_first_row + i
-        wp_code = wp.code
-        # Col 1: WP code (literal label — black text).
-        style_cell(ws, row, 1, value=wp_code, font=BLACK_FORMULA,
-                   alignment=CENTER)
-        # Col 2: Ceiling € — green xref to Config!E{wp_row}
-        cfg_wp_row = cfg_wp_first_row + i
-        ceiling_ref = cell_ref(SHEET_CONFIG, cfg_wp_row, 5)
-        style_cell(ws, row, 2, font=GREEN_XREF, fmt="€#,##0",
-                   ).value = f"={ceiling_ref}"
-
-        # Col 3: Assigned € = SUMPRODUCT((assigned_grid="WPx") * person_rates)
-        # Per-WP, summed across all (person, month) cells.
-        assigned_range = _grid_range_ref(
-            assigned_col_start, assigned_col_end,
-            person_first_row, person_last_row,
-        )
-        # Per-person rate column repeated across the same row count.
-        # SUMPRODUCT shape: assigned_range is (rows × months), rate column is
-        # (rows × 1). To make SUMPRODUCT work we sum across months explicitly:
-        # use SUMPRODUCT((assigned="WP")*rate_vector_broadcast) — but Excel
-        # doesn't broadcast. The clean pattern: a per-row sum first.
-        # We instead build a sum of per-row contributions:
-        # = SUMPRODUCT( (assigned="WP")*1 , rate_col_repeated )
-        # Approach: SUMPRODUCT with two same-shaped arrays. We multiply the
-        # COUNTIF-style mask of assigned by the rate column expanded across
-        # months via broadcasting — Excel/LO supports this when one operand
-        # is column-shaped (rows × 1) and the other is rectangular
-        # (rows × months): the column is reused across months automatically.
-        rate_col_range = (
-            f"{rate_helper_col_letter}{person_first_row}"
-            f":{rate_helper_col_letter}{person_last_row}"
-        )
-        # ROUND-wrap EUR leaves so fractional cents from non-integer
-        # PM rates don't accumulate into auditor mismatches downstream
-        # (see openpyxl-patterns.md "EUR/money leaf formulas must wrap…").
-        style_cell(
-            ws, row, 3, font=BLACK_FORMULA, fmt="€#,##0",
+            ws, tl_row, tl_value_cols[0], font=BLACK_FORMULA,
+            alignment=CENTER, fmt="0",
         ).value = (
-            f"=ROUND(SUMPRODUCT(({assigned_range}=\"{wp_code}\")"
-            f"*{rate_col_range}),0)"
+            f'=COUNTIF(E{wp_summary_first_row}:E{wp_summary_last_row},">0")'
         )
-
-        # Col 4: Overshoot € = MAX(0, Assigned - Ceiling) — operands already
-        # ROUND-ed (Assigned via this builder; Ceiling via Config formula).
+        # 2) Any out-of-window cell? — sum across per-WP out-of-window counts (col H).
         style_cell(
-            ws, row, 4, font=BLACK_FORMULA, fmt="€#,##0",
-        ).value = f"=MAX(0,C{row}-B{row})"
+            ws, tl_row, tl_value_cols[1], font=BLACK_FORMULA,
+            alignment=CENTER, fmt="0",
+        ).value = f"=SUM(H{wp_summary_first_row}:H{wp_summary_last_row})"
+    else:
+        # No WPs → no signal; leave the value cells blank but styled.
+        for c in tl_value_cols[:2]:
+            ws.cell(row=tl_row, column=c, value=0)
 
-        # Col 5: Undershoot € = MAX(0, Ceiling - Assigned) — same.
+    if num_persons > 0:
+        # 3) Any over-pool person? — count persons where Over-pool? = TRUE.
+        # Over-pool? lives in col E of the PER-PERSON SUMMARY band.
+        over_pool_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + 2)
         style_cell(
-            ws, row, 5, font=BLACK_FORMULA, fmt="€#,##0",
-        ).value = f"=MAX(0,B{row}-C{row})"
-
-        # Col 6: Assigned months = SUMPRODUCT(1*(assigned_grid="WPx"))
-        style_cell(
-            ws, row, 6, font=BLACK_FORMULA, fmt="0",
-        ).value = f'=SUMPRODUCT(1*({assigned_range}="{wp_code}"))'
-
-        # Col 7: Window months remaining = MAX(0, wp_end - current_month)
-        # current_month named range is created by the Trends stub which the
-        # orchestrator (T6) will run before this builder.
-        style_cell(
-            ws, row, 7, font=BLACK_FORMULA, fmt="0",
-        ).value = f"=MAX(0,{wp.active_end}-current_month)"
-
-        # Col 8: Any out-of-window? = SUMPRODUCT((assigned="WP") *
-        #   ((month_idx<wp_start) + (month_idx>wp_end)))
-        # month_idx_row spans the assigned grid columns.
-        month_idx_range = (
-            f"{get_column_letter(assigned_col_start)}{month_index_row}"
-            f":{get_column_letter(assigned_col_end)}{month_index_row}"
-        )
-        style_cell(
-            ws, row, 8, font=BLACK_FORMULA, fmt="0",
+            ws, tl_row, tl_value_cols[2], font=BLACK_FORMULA,
+            alignment=CENTER, fmt="0",
         ).value = (
-            f'=SUMPRODUCT(({assigned_range}="{wp_code}")*'
-            f"(({month_idx_range}<{wp.active_start})+"
-            f"({month_idx_range}>{wp.active_end})))"
+            f"=COUNTIF({over_pool_letter}{summary_person_first_row}"
+            f":{over_pool_letter}{summary_person_last_row},TRUE)"
         )
+        # 4) Total switches — sum of per-person switch counts (col F of summary).
+        switches_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + 3)
+        style_cell(
+            ws, tl_row, tl_value_cols[3], font=BLACK_FORMULA,
+            alignment=CENTER, fmt="0",
+        ).value = (
+            f"=SUM({switches_letter}{summary_person_first_row}"
+            f":{switches_letter}{summary_person_last_row})"
+        )
+    else:
+        for c in tl_value_cols[2:]:
+            ws.cell(row=tl_row, column=c, value=0)
 
-    wp_summary_last_row = wp_summary_first_row + len(wps) - 1
-
-    # ── Patch traffic-light formulas (now that wp summary rows exist) ──
-    # 1) Any undershoot? — count WPs where Undershoot € > 0
-    style_cell(
-        ws, tl_row, tl_value_cols[0], font=BLACK_FORMULA, alignment=CENTER, fmt="0",
-    ).value = (
-        f"=COUNTIF(E{wp_summary_first_row}:E{wp_summary_last_row},\">0\")"
-    )
-    # 2) Any out-of-window cell? — sum across per-WP out-of-window counts
-    style_cell(
-        ws, tl_row, tl_value_cols[1], font=BLACK_FORMULA, alignment=CENTER, fmt="0",
-    ).value = (
-        f"=SUM(H{wp_summary_first_row}:H{wp_summary_last_row})"
-    )
-    # 3) Any over-pool person? — count persons where Assigned > Pool
-    over_pool_col_letter = get_column_letter(summary_col_start + 3)
-    style_cell(
-        ws, tl_row, tl_value_cols[2], font=BLACK_FORMULA, alignment=CENTER, fmt="0",
-    ).value = (
-        f"=COUNTIF({over_pool_col_letter}{person_first_row}"
-        f":{over_pool_col_letter}{person_last_row},TRUE)"
-    )
-    # 4) Total switches — sum of per-person switch counts
-    switches_col_letter = get_column_letter(summary_col_start + 4)
-    style_cell(
-        ws, tl_row, tl_value_cols[3], font=BLACK_FORMULA, alignment=CENTER, fmt="0",
-    ).value = (
-        f"=SUM({switches_col_letter}{person_first_row}"
-        f":{switches_col_letter}{person_last_row})"
-    )
-
-    # CF on traffic-light cells: red on > 0 for the first three (skip switches).
+    # CF on first three traffic-light value cells: red when > 0.
     for c in tl_value_cols[:3]:
         cell_addr = f"{get_column_letter(c)}{tl_row}"
         ws.conditional_formatting.add(
@@ -526,132 +509,138 @@ def build_timelog_plan_sheet(
 
     # ── CF rules (canvas) — most-critical first ──
     # Per ``openpyxl-patterns.md``: first rule added gets highest priority.
-    proposed_grid_range = _grid_range_ref(
-        proposed_col_start, proposed_col_end,
-        person_first_row, person_last_row,
-    )
-    assigned_grid_range = _grid_range_ref(
-        assigned_col_start, assigned_col_end,
-        person_first_row, person_last_row,
-    )
+    if num_persons > 0 and num_wps > 0:
+        proposed_grid_range = _grid_range_ref(
+            month_col_start, month_col_end,
+            proposed_person_first_row, proposed_person_last_row,
+        )
+        assigned_grid_range = _grid_range_ref(
+            month_col_start, month_col_end,
+            assigned_person_first_row, assigned_person_last_row,
+        )
 
-    # Rule 1 (highest priority): Per-WP cell-level red marker for cells with
-    # the WP code BUT in a column outside the WP's active window. We add one
-    # rule per WP, applied to the union of Proposed + Assigned grids.
-    # The CF formula composes the per-cell idx_ref inline below
-    # (``tl_col_letter$<month_index_row>``), so we don't need to precompute
-    # idx_range strings here.
-    for wp in wps:
-        # Per-grid (proposed and assigned each get their own rule).
-        for grid_range in (proposed_grid_range, assigned_grid_range):
-            # The CF formula is evaluated per cell in the range. Use the
-            # top-left cell of the range as the reference cell — Excel
-            # auto-shifts relative refs.
-            top_left = grid_range.split(":")[0]
-            # Strip the row from top_left to get the column letter; the
-            # idx-row stays absolute.
-            tl_col_letter = "".join(
-                ch for ch in top_left if ch.isalpha()
-            )
-            tl_row_num = "".join(
-                ch for ch in top_left if ch.isdigit()
-            )
-            # Reference into the helper row at the same column (relative col,
-            # absolute row).
-            idx_ref = (
-                f"{tl_col_letter}${month_index_row}"
-            )
-            cell_ref_inline = f"{tl_col_letter}{tl_row_num}"
-            formula = (
-                f'AND({cell_ref_inline}="{wp.code}",'
-                f"OR({idx_ref}<{wp.active_start},{idx_ref}>{wp.active_end}))"
-            )
-            ws.conditional_formatting.add(
-                grid_range,
-                FormulaRule(formula=[formula], fill=CF_RED_FILL),
-            )
+        # Rule 1: per-WP cell-level red for WP code outside its active window.
+        # One rule per WP × (proposed, assigned) grid. Each grid's CF formula
+        # references that grid's own month-idx helper row.
+        for wp in wps:
+            for grid_range, midx_row in (
+                (proposed_grid_range, proposed_midx_row),
+                (assigned_grid_range, assigned_midx_row),
+            ):
+                top_left = grid_range.split(":")[0]
+                tl_col_letter = "".join(ch for ch in top_left if ch.isalpha())
+                tl_row_num = "".join(ch for ch in top_left if ch.isdigit())
+                idx_ref = f"{tl_col_letter}${midx_row}"
+                cell_ref_inline = f"{tl_col_letter}{tl_row_num}"
+                formula = (
+                    f'AND({cell_ref_inline}="{wp.code}",'
+                    f"OR({idx_ref}<{wp.active_start},{idx_ref}>{wp.active_end}))"
+                )
+                ws.conditional_formatting.add(
+                    grid_range,
+                    FormulaRule(formula=[formula], fill=CF_RED_FILL),
+                )
 
-    # Rule 2: pastel fill per WP across both grids.
-    for i, wp in enumerate(wps):
-        pastel = CF_PASTEL_FILLS[i % len(CF_PASTEL_FILLS)]
-        for grid_range in (proposed_grid_range, assigned_grid_range):
-            top_left = grid_range.split(":")[0]
-            tl_col_letter = "".join(ch for ch in top_left if ch.isalpha())
-            tl_row_num = "".join(ch for ch in top_left if ch.isdigit())
-            cell_ref_inline = f"{tl_col_letter}{tl_row_num}"
+        # Rule 2: pastel fill per WP across both grids.
+        for i, wp in enumerate(wps):
+            pastel = CF_PASTEL_FILLS[i % len(CF_PASTEL_FILLS)]
+            for grid_range in (proposed_grid_range, assigned_grid_range):
+                top_left = grid_range.split(":")[0]
+                tl_col_letter = "".join(ch for ch in top_left if ch.isalpha())
+                tl_row_num = "".join(ch for ch in top_left if ch.isdigit())
+                cell_ref_inline = f"{tl_col_letter}{tl_row_num}"
+                ws.conditional_formatting.add(
+                    grid_range,
+                    FormulaRule(
+                        formula=[f'{cell_ref_inline}="{wp.code}"'],
+                        fill=pastel,
+                    ),
+                )
+
+    # Rule 3 (per-person summary CF): Over-pool? = TRUE → red.
+    if num_persons > 0:
+        op_col_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + 2)
+        op_range = (
+            f"{op_col_letter}{summary_person_first_row}"
+            f":{op_col_letter}{summary_person_last_row}"
+        )
+        ws.conditional_formatting.add(
+            op_range,
+            FormulaRule(
+                formula=[f"{op_col_letter}{summary_person_first_row}=TRUE"],
+                fill=CF_RED_FILL,
+            ),
+        )
+
+    # Rule 4 (per-WP summary CF): Undershoot € > 0 → red.
+    if num_wps > 0:
+        us_range = f"E{wp_summary_first_row}:E{wp_summary_last_row}"
+        ws.conditional_formatting.add(
+            us_range,
+            FormulaRule(
+                formula=[f"E{wp_summary_first_row}>0"],
+                fill=CF_RED_FILL,
+            ),
+        )
+        # Rule 5 (per-WP summary CF): Any out-of-window? > 0 → red.
+        oow_range = f"H{wp_summary_first_row}:H{wp_summary_last_row}"
+        ws.conditional_formatting.add(
+            oow_range,
+            FormulaRule(
+                formula=[f"H{wp_summary_first_row}>0"],
+                fill=CF_RED_FILL,
+            ),
+        )
+
+    # Rule 6 (Underload col B font colour per band — red < 0, green > 0).
+    # Default font colour (BLACK_FORMULA) shows through at 0.
+    if num_persons > 0:
+        for first, last in (
+            (proposed_person_first_row, proposed_person_last_row),
+            (assigned_person_first_row, assigned_person_last_row),
+            (summary_person_first_row, summary_person_last_row),
+        ):
+            band_range = f"B{first}:B{last}"
             ws.conditional_formatting.add(
-                grid_range,
+                band_range,
                 FormulaRule(
-                    formula=[f'{cell_ref_inline}="{wp.code}"'],
-                    fill=pastel,
+                    formula=[f"B{first}<0"], font=_UNDERLOAD_RED_FONT,
+                ),
+            )
+            ws.conditional_formatting.add(
+                band_range,
+                FormulaRule(
+                    formula=[f"B{first}>0"], font=_UNDERLOAD_GREEN_FONT,
                 ),
             )
 
-    # Rule 3 (per-person summary CF): Over-pool? = TRUE → red.
-    op_col_letter = get_column_letter(summary_col_start + 3)
-    op_range = (
-        f"{op_col_letter}{person_first_row}:{op_col_letter}{person_last_row}"
-    )
-    ws.conditional_formatting.add(
-        op_range,
-        FormulaRule(
-            formula=[f"{op_col_letter}{person_first_row}=TRUE"],
-            fill=CF_RED_FILL,
-        ),
-    )
+    # ── Freeze panes + column widths + outline ──
+    # Freeze rows 1–2 (banner + traffic lights) and cols A–C (Person + Underload
+    # + Rate helper). Month grid scrolls horizontally; Underload stays visible.
+    ws.freeze_panes = ws.cell(
+        row=3, column=TIMELOG_MONTH_COL_START,
+    ).coordinate  # "D3"
 
-    # Rule 4 (per-WP summary CF): Undershoot € > 0 → red.
-    us_range = (
-        f"E{wp_summary_first_row}:E{wp_summary_last_row}"
-    )
-    ws.conditional_formatting.add(
-        us_range,
-        FormulaRule(
-            formula=[f"E{wp_summary_first_row}>0"],
-            fill=CF_RED_FILL,
-        ),
-    )
-
-    # Rule 5 (per-WP summary CF): Any out-of-window? > 0 → red.
-    oow_range = (
-        f"H{wp_summary_first_row}:H{wp_summary_last_row}"
-    )
-    ws.conditional_formatting.add(
-        oow_range,
-        FormulaRule(
-            formula=[f"H{wp_summary_first_row}>0"],
-            fill=CF_RED_FILL,
-        ),
-    )
-
-    # ── Freeze panes & column widths ──
-    # Freeze rows above the data (banner + traffic light + headers + section)
-    # and the Person column. Freeze pane = top-left of the unfrozen area.
-    ws.freeze_panes = ws.cell(row=person_first_row, column=MONTH_COL_START).coordinate
-    ws.column_dimensions["A"].width = 25
-    # Rate helper col B: narrow + collapsible (outline_level=1).
-    ws.column_dimensions["B"].width = 6
-    ws.column_dimensions["B"].outline_level = 1
-    # Gap columns: narrow.
-    gap1_col_letter = get_column_letter(proposed_col_end + 1)
-    gap2_col_letter = get_column_letter(assigned_col_end + 1)
-    for gap_letter in (gap1_col_letter, gap2_col_letter):
-        ws.column_dimensions[gap_letter].width = 2
-    # Summary cols a touch wider for headers.
-    for i in range(_PERSON_SUMMARY_COLS):
-        col_l = get_column_letter(summary_col_start + i)
-        ws.column_dimensions[col_l].width = 12
+    ws.column_dimensions["A"].width = 25          # Person
+    ws.column_dimensions["B"].width = 10          # Underload
+    ws.column_dimensions["C"].width = 6           # Rate helper
+    ws.column_dimensions["C"].outline_level = 1   # collapsible
+    # Metric cols on PER-PERSON SUMMARY are at D..J — a little wider for headers.
+    for i in range(len(_PERSON_SUMMARY_METRIC_HEADERS)):
+        c_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + i)
+        ws.column_dimensions[c_letter].width = 12
 
     return {
         "sheet": SHEET_TIMELOG_PLAN,
-        "person_first_row": person_first_row,
-        "person_last_row": person_last_row,
-        "person_rows": person_rows,
-        "proposed_col_start": proposed_col_start,
-        "proposed_col_end": proposed_col_end,
-        "assigned_col_start": assigned_col_start,
-        "assigned_col_end": assigned_col_end,
-        "summary_col_start": summary_col_start,
+        "month_col_start": month_col_start,
+        "month_col_end": month_col_end,
+        "proposed_person_first_row": proposed_person_first_row,
+        "proposed_person_last_row": proposed_person_last_row,
+        "assigned_person_first_row": assigned_person_first_row,
+        "assigned_person_last_row": assigned_person_last_row,
+        "summary_person_first_row": summary_person_first_row,
+        "summary_person_last_row": summary_person_last_row,
+        "person_rows_by_band": person_rows_by_band,
         "wp_summary_first_row": wp_summary_first_row,
         "wp_summary_last_row": wp_summary_last_row,
     }
@@ -690,51 +679,186 @@ def _build_wps(
     return wps
 
 
-def _write_assigned_headers(
+def _write_section_title(
+    ws: Worksheet, row: int, title: str, last_col: int,
+) -> None:
+    """Merge cols A..last_col on ``row`` and write ``title`` styled as a section bar."""
+    ws.merge_cells(
+        start_row=row, start_column=1, end_row=row, end_column=last_col,
+    )
+    style_cell(
+        ws, row, 1, value=title, font=SECTION_FONT, fill=SECTION_FILL,
+        alignment=CENTER, border=False,
+    )
+    # Fill rest of the merge so styling reads cleanly if merge target cells
+    # lose styling (openpyxl quirk on re-open).
+    for c in range(2, last_col + 1):
+        style_cell(ws, row, c, fill=SECTION_FILL, border=False)
+
+
+def _write_band_axis_headers(
     ws: Worksheet,
     year_row: int,
     month_row: int,
     project_params: dict,
-    assigned_col_start: int,
-    assigned_col_end: int,
+    month_col_start: int,
 ) -> None:
-    """Write a mirror of the year/month header band over the Assigned grid.
+    """Write the year + month headers for one band (PROPOSED or ASSIGNED).
 
-    The build_year_month_headers helper writes only the Proposed-side band; we
-    duplicate the month labels (and a single combined year cell) over the
-    Assigned grid so first/last-log INDEX/MATCH formulas can reference the
-    right-hand month_header_row directly.
+    Self-contained per band — so collapsing one band still shows the other's
+    axis. Col A/B/C (Person / Underload / Rate) header cells are styled on
+    the month row; the year row has LIGHT_BLUE_FILL across cols A..C.
     """
     project_months = project_params["months"]
     project_start = project_params["start"]
 
-    # Year row: single merged "ASSIGNED" label (cosmetic — Proposed's own
-    # year row already shows the calendar years).
-    ws.merge_cells(
-        start_row=year_row, start_column=assigned_col_start,
-        end_row=year_row, end_column=assigned_col_end,
-    )
-    style_cell(
-        ws, year_row, assigned_col_start,
-        value="(Assigned grid)", font=HEADER_FONT, alignment=CENTER,
-    )
+    # Year row: LIGHT_BLUE_FILL on cols A-C, then calendar-year blocks from
+    # ``month_col_start`` onward.
+    for c in range(1, month_col_start):
+        style_cell(ws, year_row, c, value="", fill=LIGHT_BLUE_FILL)
+    for group_start, span in _calendar_year_groups(project_start, project_months):
+        year_start_col = month_col_start + group_start
+        year_end_col = year_start_col + span - 1
+        cal_date = project_start + relativedelta(months=group_start)
+        year_label = str(cal_date.year)
+        if span > 1:
+            ws.merge_cells(
+                start_row=year_row, start_column=year_start_col,
+                end_row=year_row, end_column=year_end_col,
+            )
+        style_cell(
+            ws, year_row, year_start_col, value=year_label, font=HEADER_FONT,
+            fill=LIGHT_BLUE_FILL, alignment=CENTER,
+        )
+        for c2 in range(year_start_col + 1, year_end_col + 1):
+            style_cell(ws, year_row, c2, fill=LIGHT_BLUE_FILL)
 
-    # Month row mirror.
+    # Month row: "Person" / "Underload" / "Rate" headers in A/B/C, then
+    # ``M1-Jan26``-style per-month labels.
+    style_cell(
+        ws, month_row, 1, value="Person", font=HEADER_FONT,
+        fill=SECTION_FILL, alignment=CENTER,
+    ).font = Font(name="Arial", bold=True, size=10, color="FFFFFF")
+    style_cell(
+        ws, month_row, 2, value="Underload", font=HEADER_FONT,
+        fill=SECTION_FILL, alignment=CENTER,
+    ).font = Font(name="Arial", bold=True, size=10, color="FFFFFF")
+    style_cell(
+        ws, month_row, TIMELOG_RATE_HELPER_COL, value="Rate",
+        font=HEADER_FONT, fill=SECTION_FILL, alignment=CENTER,
+    ).font = Font(name="Arial", bold=True, size=10, color="FFFFFF")
+
     for mi in range(project_months):
-        c = assigned_col_start + mi
+        c = month_col_start + mi
         cal_date = project_start + relativedelta(months=mi)
         mlabel = f"M{mi + 1}-{cal_date.strftime('%b%y')}"
         style_cell(
             ws, month_row, c, value=mlabel,
-            font=Font(name="Arial", size=8), alignment=CENTER,
+            font=Font(name="Arial", size=8),
+            fill=LIGHT_BLUE_FILL, alignment=CENTER,
         )
+
+
+def _calendar_year_groups(project_start, project_months: int):
+    """Yield (group_start_month_index, span) tuples — mirrors layout.py's helper.
+
+    Inlined (small + tightly coupled to the band-axis header writer) rather
+    than imported from layout.py to keep the builder self-contained for this
+    one use site.
+    """
+    m = 0
+    while m < project_months:
+        cal_date = project_start + relativedelta(months=m)
+        months_left_in_year = 12 - cal_date.month + 1
+        span = min(months_left_in_year, project_months - m)
+        yield m, span
+        m += span
+
+
+def _write_month_index_row(
+    ws: Worksheet,
+    row: int,
+    project_months: int,
+    month_col_start: int,
+) -> None:
+    """Write a hidden 1..N month-index helper row for SUMPRODUCT OOW checks."""
+    style_cell(
+        ws, row, 1, value="(month idx)",
+        font=Font(name="Arial", italic=True, color="808080", size=8),
+        border=False,
+    )
+    for mi in range(project_months):
+        c = month_col_start + mi
+        style_cell(
+            ws, row, c, value=mi + 1,
+            font=Font(name="Arial", color="808080", size=8),
+            alignment=CENTER, border=False,
+        )
+    ws.row_dimensions[row].hidden = True
+
+
+def _write_person_col_a(
+    ws: Worksheet, row: int, name: str, cfg_row: int | None,
+) -> None:
+    """Write col A on a person row: cross-ref into Config Team Roster."""
+    if cfg_row is not None:
+        style_cell(ws, row, 1, font=GREEN_XREF).value = f"={SHEET_CONFIG}!A{cfg_row}"
+    else:
+        # Fallback: literal name (should not happen if orchestrator passes a
+        # config_layout aligned with `team`).
+        style_cell(ws, row, 1, value=name, font=GREEN_XREF)
+
+
+def _write_rate_helper_cell(
+    ws: Worksheet, row: int, rate_helper_letter: str,
+) -> None:
+    """Write the per-row VLOOKUP into roster_lookup col 4 (EUR/PM)."""
+    style_cell(
+        ws, row, TIMELOG_RATE_HELPER_COL,
+        font=BLACK_FORMULA, fmt="€#,##0",
+    ).value = f"=VLOOKUP(A{row},roster_lookup,4,FALSE)"
+    # rate_helper_letter is accepted for symmetry with callers that pass the
+    # precomputed letter; unused inside the formula (VLOOKUP writes into the
+    # cell at `row, TIMELOG_RATE_HELPER_COL` directly).
+    _ = rate_helper_letter
+
+
+def _write_underload_cell(
+    ws: Worksheet,
+    row: int,
+    *,
+    summary_row: int,
+    month_col_start: int,
+    month_col_end: int,
+) -> None:
+    """Write col B on a PROPOSED or ASSIGNED person row.
+
+    Formula: ``=$D{summary_row} − COUNTIF(<grid-row-range>, "WP*")``.
+    Forward-references the PER-PERSON SUMMARY band's Pool cell (col D =
+    ``_PERSON_SUMMARY_FIRST_METRIC_COL + 1``). Excel resolves forward refs
+    at recalc — no chain issue.
+    """
+    pool_col_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + 1)  # D
+    grid_range = month_range_ref(row, month_col_start, month_col_end)
+    style_cell(ws, row, 2, font=BLACK_FORMULA, fmt="0").value = (
+        f'=${pool_col_letter}{summary_row}-COUNTIF({grid_range},"WP*")'
+    )
+
+
+def _write_summary_underload_cell(ws: Worksheet, row: int) -> None:
+    """Write col B on a PER-PERSON SUMMARY row: Pool − Assigned (same-row cells)."""
+    assigned_col_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL)      # C
+    pool_col_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + 1)      # D
+    style_cell(ws, row, 2, font=BLACK_FORMULA, fmt="0").value = (
+        f"={pool_col_letter}{row}-{assigned_col_letter}{row}"
+    )
 
 
 def _grid_range_ref(
     col_start: int, col_end: int,
     row_start: int, row_end: int,
 ) -> str:
-    """Return ``"C7:K20"`` for a rectangular range."""
+    """Return ``"D7:AV20"`` for a rectangular range."""
     return (
         f"{get_column_letter(col_start)}{row_start}"
         f":{get_column_letter(col_end)}{row_end}"
@@ -776,7 +900,7 @@ def _write_assigned_cell(
     ws: Worksheet,
     row: int,
     col: int,
-    proposed_col: int,
+    proposed_row: int,
     wp_code: str | None,
     in_any_window: bool,
     *,
@@ -784,13 +908,13 @@ def _write_assigned_cell(
 ) -> None:
     """Write a single Assigned-grid cell.
 
-    Defaults to ``=<Proposed cell>``. Cells outside any person-WP window are
-    pre-greyed (matching Proposed) and unlocked so the user can override.
-    When ``override`` is supplied (round-trip from a prior user edit), the
-    literal value is written as BLUE_INPUT — the fill still follows the
-    in-window/out-of-window shading so an override in a dark cell remains
-    visually flagged.
+    Defaults to ``=<ColLetter>{proposed_row}`` — a cross-band ref into the
+    PROPOSED band's same-column cell for this person. Cells outside any
+    person-WP window are pre-greyed (matching Proposed) and unlocked so the
+    user can override. When ``override`` is supplied (round-trip from a prior
+    user edit), the literal value is written as BLUE_INPUT.
     """
+    col_ltr = get_column_letter(col)
     if override is not None:
         if not in_any_window:
             cell = style_cell(
@@ -805,8 +929,7 @@ def _write_assigned_cell(
         cell.protection = Protection(locked=False)
         return
 
-    proposed_letter = get_column_letter(proposed_col)
-    formula = f"={proposed_letter}{row}"
+    formula = f"={col_ltr}{proposed_row}"
     if wp_code is None and not in_any_window:
         cell = style_cell(
             ws, row, col, value=formula,
@@ -822,104 +945,156 @@ def _write_assigned_cell(
             ws, row, col, value=formula,
             font=BLUE_INPUT, alignment=CENTER,
         )
-    # BLUE_INPUT triggers auto-unlock in style_cell; cell already unlocked.
-    # Keep explicit assignment to make the intent unmistakable.
     cell.protection = Protection(locked=False)
 
 
-def _write_person_summary(
+def _write_wp_summary_row(
+    ws: Worksheet,
+    row: int,
+    wp: WP,
+    *,
+    cfg_wp_row: int,
+    month_col_start: int,
+    month_col_end: int,
+    assigned_first_row: int,
+    assigned_last_row: int,
+    assigned_midx_row: int,
+) -> None:
+    """Fill the 8 per-WP-summary cells on a single WP row (cols A..H)."""
+    wp_code = wp.code
+    rate_helper_letter = get_column_letter(TIMELOG_RATE_HELPER_COL)
+
+    # Col A: WP code (literal).
+    style_cell(ws, row, 1, value=wp_code, font=BLACK_FORMULA, alignment=CENTER)
+
+    # Col B: Ceiling € — green xref to Config!E{wp_row}.
+    ceiling_ref = cell_ref(SHEET_CONFIG, cfg_wp_row, 5)
+    style_cell(ws, row, 2, font=GREEN_XREF, fmt="€#,##0").value = f"={ceiling_ref}"
+
+    # Col C: Assigned € = SUMPRODUCT((assigned="WP") * rate_vector_broadcast).
+    # Rate vector is the ASSIGNED band's col C over the person-row range —
+    # row-aligned with the assigned grid, so SUMPRODUCT broadcasts rate across
+    # months for each person row.
+    assigned_grid_range = _grid_range_ref(
+        month_col_start, month_col_end,
+        assigned_first_row, assigned_last_row,
+    )
+    rate_col_range = (
+        f"{rate_helper_letter}{assigned_first_row}"
+        f":{rate_helper_letter}{assigned_last_row}"
+    )
+    # ROUND-wrap EUR leaves so fractional cents from non-integer PM rates
+    # don't accumulate into auditor mismatches downstream.
+    style_cell(ws, row, 3, font=BLACK_FORMULA, fmt="€#,##0").value = (
+        f"=ROUND(SUMPRODUCT(({assigned_grid_range}=\"{wp_code}\")"
+        f"*{rate_col_range}),0)"
+    )
+
+    # Col D: Overshoot € = MAX(0, Assigned - Ceiling).
+    style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="€#,##0").value = (
+        f"=MAX(0,C{row}-B{row})"
+    )
+    # Col E: Undershoot € = MAX(0, Ceiling - Assigned).
+    style_cell(ws, row, 5, font=BLACK_FORMULA, fmt="€#,##0").value = (
+        f"=MAX(0,B{row}-C{row})"
+    )
+    # Col F: Assigned months = SUMPRODUCT(1*(assigned="WP")).
+    style_cell(ws, row, 6, font=BLACK_FORMULA, fmt="0").value = (
+        f'=SUMPRODUCT(1*({assigned_grid_range}="{wp_code}"))'
+    )
+    # Col G: Window months remaining = MAX(0, wp_end - current_month).
+    style_cell(ws, row, 7, font=BLACK_FORMULA, fmt="0").value = (
+        f"=MAX(0,{wp.active_end}-current_month)"
+    )
+    # Col H: Any out-of-window? = SUMPRODUCT((assigned="WP") * OOW).
+    month_idx_range = (
+        f"{get_column_letter(month_col_start)}{assigned_midx_row}"
+        f":{get_column_letter(month_col_end)}{assigned_midx_row}"
+    )
+    style_cell(ws, row, 8, font=BLACK_FORMULA, fmt="0").value = (
+        f'=SUMPRODUCT(({assigned_grid_range}="{wp_code}")*'
+        f"(({month_idx_range}<{wp.active_start})+"
+        f"({month_idx_range}>{wp.active_end})))"
+    )
+
+
+def _write_person_summary_metrics(
     ws: Worksheet,
     row: int,
     *,
-    assigned_col_start: int,
-    assigned_col_end: int,
-    summary_col_start: int,
-    project_months_ref: str,
+    assigned_row: int,
+    month_col_start: int,
+    month_col_end: int,
     month_header_row: int,
+    project_months_ref: str,
     cfg_row: int | None,
 ) -> None:
-    """Fill the 8 per-person summary cells on a single person row."""
+    """Fill the 7 per-person-summary metric cells on cols C..I.
+
+    All metrics target the ASSIGNED band's row for the same person ({a})
+    since that's the canonical edit surface. Col B (Underload) is written
+    by ``_write_summary_underload_cell``.
+    """
+    c0 = _PERSON_SUMMARY_FIRST_METRIC_COL
+
     assigned_row_range = month_range_ref(
-        row, assigned_col_start, assigned_col_end,
+        assigned_row, month_col_start, month_col_end,
     )
-    # For SUMPRODUCT switch counter, we compare two same-shape ranges offset
-    # by one column.
     assigned_left_range = month_range_ref(
-        row, assigned_col_start, assigned_col_end - 1,
+        assigned_row, month_col_start, month_col_end - 1,
     )
     assigned_right_range = month_range_ref(
-        row, assigned_col_start + 1, assigned_col_end,
+        assigned_row, month_col_start + 1, month_col_end,
     )
-    # Month-headers range on the assigned side (matches assigned_row_range
-    # column-for-column so INDEX returns the correct month label).
     month_headers_range = month_range_ref(
-        month_header_row, assigned_col_start, assigned_col_end,
+        month_header_row, month_col_start, month_col_end,
     )
 
-    # Col 1: Assigned count = COUNTIF(row, "WP*")
-    style_cell(
-        ws, row, summary_col_start, font=BLACK_FORMULA, fmt="0",
-    ).value = f'=COUNTIF({assigned_row_range},"WP*")'
+    # Col C: Assigned = COUNTIF(row, "WP*").
+    style_cell(ws, row, c0, font=BLACK_FORMULA, fmt="0").value = (
+        f'=COUNTIF({assigned_row_range},"WP*")'
+    )
 
-    # Col 2: Pool = ROUND(max_fte * project_months, 0)
-    # max_fte lives at Config!B{cfg_row}; if cfg_row is missing, fall back to 0.
+    # Col D: Pool = ROUND(max_fte * project_months, 0). Green xref.
     if cfg_row is not None:
         max_fte_ref = cell_ref(SHEET_CONFIG, cfg_row, 2)
-        style_cell(
-            ws, row, summary_col_start + 1, font=GREEN_XREF, fmt="0",
-        ).value = f"=ROUND({max_fte_ref}*{project_months_ref},0)"
-    else:
-        style_cell(
-            ws, row, summary_col_start + 1, value=0,
-            font=BLACK_FORMULA, fmt="0",
+        style_cell(ws, row, c0 + 1, font=GREEN_XREF, fmt="0").value = (
+            f"=ROUND({max_fte_ref}*{project_months_ref},0)"
         )
+    else:
+        style_cell(ws, row, c0 + 1, value=0, font=BLACK_FORMULA, fmt="0")
 
-    # Col 3: Remaining = Pool - Assigned
+    # Col E: Over-pool? = Assigned > Pool.
     style_cell(
-        ws, row, summary_col_start + 2, font=BLACK_FORMULA, fmt="0",
-    ).value = (
-        f"={col_letter(summary_col_start + 1)}{row}"
-        f"-{col_letter(summary_col_start)}{row}"
-    )
+        ws, row, c0 + 2, font=BLACK_FORMULA, alignment=CENTER,
+    ).value = f"={col_letter(c0)}{row}>{col_letter(c0 + 1)}{row}"
 
-    # Col 4: Over-pool? = Assigned > Pool
-    style_cell(
-        ws, row, summary_col_start + 3, font=BLACK_FORMULA, alignment=CENTER,
-    ).value = (
-        f"={col_letter(summary_col_start)}{row}"
-        f">{col_letter(summary_col_start + 1)}{row}"
-    )
-
-    # Col 5: Switches = SUMPRODUCT(1*(left <> right))
-    # Counts ALL adjacent diffs including empty<->WP per design Q15a.
-    style_cell(
-        ws, row, summary_col_start + 4, font=BLACK_FORMULA, fmt="0",
-    ).value = (
+    # Col F: Switches = SUMPRODUCT(1*(left <> right)).
+    style_cell(ws, row, c0 + 3, font=BLACK_FORMULA, fmt="0").value = (
         f"=SUMPRODUCT(1*({assigned_left_range}<>{assigned_right_range}))"
     )
 
-    # Col 6: First log = IFERROR(INDEX(headers, MATCH(1, (row<>"")*1, 0)), "")
-    # Use *1 coercion (not the literal TRUE) so the formula works as a
-    # regular (non-CSE) entry in older Excel — MATCH(TRUE, range<>"", 0)
-    # silently requires array-mode entry there.
+    # Col G: First log = IFERROR(INDEX(headers, MATCH(1, (row<>"")*1, 0)), "").
+    # *1 coercion (not literal TRUE) — works as regular (non-CSE) entry in
+    # pre-365 Excel; see openpyxl-patterns.md on silent-CSE MATCH pitfall.
     style_cell(
-        ws, row, summary_col_start + 5, font=BLACK_FORMULA, alignment=CENTER,
+        ws, row, c0 + 4, font=BLACK_FORMULA, alignment=CENTER,
     ).value = (
         f"=IFERROR(INDEX({month_headers_range},"
         f'MATCH(1,({assigned_row_range}<>"")*1,0)),"")'
     )
 
-    # Col 7: Last log = IFERROR(LOOKUP(2, 1/(row<>""), headers), "")
+    # Col H: Last log = IFERROR(LOOKUP(2, 1/(row<>""), headers), "").
     style_cell(
-        ws, row, summary_col_start + 6, font=BLACK_FORMULA, alignment=CENTER,
+        ws, row, c0 + 5, font=BLACK_FORMULA, alignment=CENTER,
     ).value = (
         f"=IFERROR(LOOKUP(2,1/({assigned_row_range}<>\"\"),"
         f'{month_headers_range}),"")'
     )
 
-    # Col 8: Largest gap — placeholder, see module docstring.
+    # Col I: Largest gap — placeholder, see module docstring.
     cell = style_cell(
-        ws, row, summary_col_start + 7, value="",
+        ws, row, c0 + 6, value="",
         font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, alignment=CENTER,
     )
     cell.comment = sized_comment(

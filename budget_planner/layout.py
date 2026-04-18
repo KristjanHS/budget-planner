@@ -46,30 +46,17 @@ SHEET_TIMELOG_PLAN = "Timelog Plan"
 # Column structure: A=ID, B=Name, C onwards = months
 MONTH_COL_START = 3
 
-# ── Timelog Plan column structure ──
+# ── Timelog Plan column structure (vertical-band layout) ──
 # A = Person (cross-ref to Team Roster)
-# B = per-person rate helper (collapsible — outline_level=1; consumed by per-WP
-#     SUMPRODUCT so we can do per-cell VLOOKUP into roster_lookup safely).
-# C..C+months-1 = Proposed grid (locked, written by solver)
-# then GAP column, then Assigned grid (=<Proposed cell> by default)
-# then GAP column, then per-person summary block (8 columns)
-TIMELOG_RATE_HELPER_COL = 2
-TIMELOG_GAP_WIDTH = 1   # blank columns between Proposed and Assigned (and Assigned and summary)
-
-
-def timelog_assigned_col_start(project_months: int) -> int:
-    """First column of the Assigned grid (after Proposed + gap)."""
-    return MONTH_COL_START + project_months + TIMELOG_GAP_WIDTH
-
-
-def timelog_assigned_col_end(project_months: int) -> int:
-    """Last column of the Assigned grid."""
-    return timelog_assigned_col_start(project_months) + project_months - 1
-
-
-def timelog_summary_col_start(project_months: int) -> int:
-    """First column of the per-person summary block (after Assigned + gap)."""
-    return timelog_assigned_col_end(project_months) + TIMELOG_GAP_WIDTH + 1
+# B = Underload metric (Pool − Assigned) — stays visible in frozen pane.
+# C = per-person rate helper in PROPOSED/ASSIGNED bands (collapsible via
+#     outline_level=1; consumed by per-WP SUMPRODUCT via VLOOKUP). In the
+#     PER-PERSON SUMMARY band, col C is Assigned (not a rate helper).
+# D..D+months-1 = month grid — same column range is reused in each band
+#     (PROPOSED, ASSIGNED) because bands are stacked vertically (row-bands),
+#     not placed side-by-side.
+TIMELOG_RATE_HELPER_COL = 3   # col C (one right of standard MONTH_COL_START)
+TIMELOG_MONTH_COL_START = 4   # col D — one right of standard MONTH_COL_START
 
 # ── Section header contract ──
 # Every labelled section on the Config sheet uses: title row, header row,

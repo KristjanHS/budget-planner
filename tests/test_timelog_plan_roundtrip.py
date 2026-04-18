@@ -17,9 +17,10 @@ from openpyxl.cell import Cell
 from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
 from budget_planner.layout import (
     SHEET_TIMELOG_PLAN,
-    timelog_assigned_col_start,
+    TIMELOG_MONTH_COL_START,
 )
 from budget_planner.reader import read_timelog_plan
+from budget_planner.timelog_plan import SECTION_TITLE_ASSIGNED, SECTION_TITLE_PROPOSED
 from budget_planner.workbook import init_workbook, rebuild_workbook
 
 
@@ -31,11 +32,25 @@ def _project_months(wb) -> int:
     raise AssertionError("Project Months row missing from Config")
 
 
-def _person_first_row(ws) -> int:
+def _band_first_person_row(ws, title: str) -> int:
+    """Row of the first person in the band whose title is ``title``.
+
+    Vertical-stacked layout: each band opens with a section-title row in col A,
+    then year, month, month-index rows, then person rows. So first person =
+    title row + 4.
+    """
     for r in range(1, ws.max_row + 1):
-        if ws.cell(r, 1).value == "Person":
+        if ws.cell(r, 1).value == title:
             return r + 4
-    raise AssertionError("'Person' header not found in col A of Timelog Plan")
+    raise AssertionError(f"section title {title!r} not found in col A of Timelog Plan")
+
+
+def _assigned_first_person_row(ws) -> int:
+    return _band_first_person_row(ws, SECTION_TITLE_ASSIGNED)
+
+
+def _proposed_first_person_row(ws) -> int:
+    return _band_first_person_row(ws, SECTION_TITLE_PROPOSED)
 
 
 def _resolve_person_name(ws, row: int) -> str:
@@ -76,9 +91,9 @@ def test_reader_ignores_formula_cells(tmp_path: Path):
     ws = wb[SHEET_TIMELOG_PLAN]
     # Write a literal override on exactly one cell; every other cell stays
     # as its default =<Proposed> formula (bystander check — selectivity).
-    first = _person_first_row(ws)
+    first = _assigned_first_person_row(ws)
     person_name = _resolve_person_name(ws, first)
-    a_start = timelog_assigned_col_start(months)
+    a_start = TIMELOG_MONTH_COL_START
     _set(ws, first, a_start, "WP2")
     wb.save(path)
     wb.close()
@@ -102,11 +117,10 @@ def test_override_survives_rebuild(tmp_path: Path):
     init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
 
     wb = openpyxl.load_workbook(path)
-    months = _project_months(wb)
     ws = wb[SHEET_TIMELOG_PLAN]
-    first = _person_first_row(ws)
+    first = _assigned_first_person_row(ws)
     person_name = _resolve_person_name(ws, first)
-    a_start = timelog_assigned_col_start(months)
+    a_start = TIMELOG_MONTH_COL_START
 
     # Edit column a_start (month 1) on the first person row.
     edit_col = a_start
@@ -119,7 +133,7 @@ def test_override_survives_rebuild(tmp_path: Path):
     rebuild_workbook(input_path=str(path))
     wb2 = openpyxl.load_workbook(path)
     ws2 = wb2[SHEET_TIMELOG_PLAN]
-    first2 = _person_first_row(ws2)
+    first2 = _assigned_first_person_row(ws2)
     # Person row order is (priority asc, name asc) — stable across rebuild
     # when the roster doesn't change, so the first person row holds the
     # same person. Resolve to assert explicitly.
@@ -148,8 +162,8 @@ def test_proposed_grid_regenerates_on_rebuild(tmp_path: Path):
     wb = openpyxl.load_workbook(path)
     months = _project_months(wb)
     ws = wb[SHEET_TIMELOG_PLAN]
-    first = _person_first_row(ws)
-    a_start = timelog_assigned_col_start(months)
+    first = _assigned_first_person_row(ws)
+    a_start = TIMELOG_MONTH_COL_START
     _set(ws, first, a_start, "WP3")
     wb.save(path)
     wb.close()
@@ -158,13 +172,12 @@ def test_proposed_grid_regenerates_on_rebuild(tmp_path: Path):
 
     wb2 = openpyxl.load_workbook(path)
     ws2 = wb2[SHEET_TIMELOG_PLAN]
-    first2 = _person_first_row(ws2)
-    # Proposed grid starts at MONTH_COL_START (col 3). Pull a cell that
-    # the solver placed — WP code literal, not a formula.
-    from budget_planner.layout import MONTH_COL_START
+    # PROPOSED band is a separate row range in the vertical layout — the
+    # solver-written grid lives under its own SECTION_TITLE_PROPOSED anchor.
+    first2 = _proposed_first_person_row(ws2)
     placed_found = False
     for mi in range(months):
-        val = ws2.cell(first2, MONTH_COL_START + mi).value
+        val = ws2.cell(first2, TIMELOG_MONTH_COL_START + mi).value
         if isinstance(val, str) and val.startswith("WP"):
             placed_found = True
             break
@@ -186,11 +199,10 @@ def test_override_orphaned_by_removed_wp_is_dropped(tmp_path: Path, capsys):
     init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
 
     wb = openpyxl.load_workbook(path)
-    months = _project_months(wb)
     ws = wb[SHEET_TIMELOG_PLAN]
-    first = _person_first_row(ws)
+    first = _assigned_first_person_row(ws)
     person_name = _resolve_person_name(ws, first)
-    a_start = timelog_assigned_col_start(months)
+    a_start = TIMELOG_MONTH_COL_START
 
     # Write two overrides: one valid, one with a WP code that does not
     # exist in the WP Budget table.
@@ -207,7 +219,7 @@ def test_override_orphaned_by_removed_wp_is_dropped(tmp_path: Path, capsys):
     # Reopen and verify: bystander survived, orphan reverted to default formula.
     wb2 = openpyxl.load_workbook(path)
     ws2 = wb2[SHEET_TIMELOG_PLAN]
-    first2 = _person_first_row(ws2)
+    first2 = _assigned_first_person_row(ws2)
     assert _resolve_person_name(ws2, first2) == person_name
     assert ws2.cell(first2, a_start).value == "WP2"  # bystander
     zombie = ws2.cell(first2, a_start + 1).value

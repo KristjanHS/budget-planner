@@ -36,9 +36,9 @@ from budget_planner.layout import (
     COL_EXT_START,
     COL_EXT_END,
     COL_EXT_EU,
-    timelog_assigned_col_start,
-    timelog_assigned_col_end,
+    TIMELOG_MONTH_COL_START,
 )
+from budget_planner.timelog_plan import SECTION_TITLE_ASSIGNED
 
 
 def _safe_float(value, default: float) -> float:
@@ -1283,6 +1283,13 @@ def read_timelog_plan(wb, project_months: int) -> dict[tuple[str, int], str]:
     returned — formula cells and blanks are treated as "no override" (they'll
     regenerate as ``=<Proposed>`` on rebuild).
 
+    Anchoring strategy: scan col A for the exact ASSIGNED section-title
+    string (imported from the builder so edits don't drift). The ASSIGNED
+    band layout is ``title, year, month, midx(hidden), persons...``; the
+    first person row is anchor + 4. This is drift-tolerant: adding rows
+    above the band (banner changes, extra traffic lights, PER-WP SUMMARY
+    resize) doesn't break the reader.
+
     Args:
         wb: Workbook (load with ``data_only=False`` so formulas are visible).
         project_months: Project month count — fixes the Assigned-grid column
@@ -1300,19 +1307,21 @@ def read_timelog_plan(wb, project_months: int) -> dict[tuple[str, int], str]:
         return {}
     ws = wb[SHEET_TIMELOG_PLAN]
 
-    # Anchor on the "Person" column header in col A of the month-label row.
-    # Freshly-built sheets place it at row 5; scanning tolerates layout nudges
-    # from future builder edits or manual user insertions above the grid.
-    month_row = _find_header_row(ws, "Person", col=1, required=False)
-    if month_row is None:
+    # Scan col A for the exact ASSIGNED section-title string.
+    assigned_title_row: int | None = None
+    for r in range(1, ws.max_row + 1):
+        val = ws.cell(r, 1).value
+        if isinstance(val, str) and val == SECTION_TITLE_ASSIGNED:
+            assigned_title_row = r
+            break
+    if assigned_title_row is None:
         return {}
 
-    assigned_col_start = timelog_assigned_col_start(project_months)
-    assigned_col_end = timelog_assigned_col_end(project_months)
+    # ASSIGNED band layout relative to the title row:
+    #   +1 year, +2 month, +3 midx (hidden), +4.. persons.
+    person_first_row = assigned_title_row + 4
 
-    # Builder layout: month_row + 1 = hidden (month idx), +2 = PROPOSED/ASSIGNED
-    # section row, +3 = per-person summary header, +4 = first person row.
-    person_first_row = month_row + 4
+    month_col_start = TIMELOG_MONTH_COL_START
 
     config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
 
@@ -1324,8 +1333,10 @@ def read_timelog_plan(wb, project_months: int) -> dict[tuple[str, int], str]:
         col_a_str = str(col_a).strip()
         if not col_a_str:
             break
-        # PER-WP SUMMARY section header follows the person rows; stop there.
-        if col_a_str.upper().startswith("PER-WP") or col_a_str.upper() == "WP CODE":
+        # Next section (PER-PERSON SUMMARY title) follows the person rows —
+        # its title row has "PER-PERSON SUMMARY" in col A. Stop defensively
+        # on any "PER-" prefix.
+        if col_a_str.upper().startswith("PER-"):
             break
 
         # Resolve name: either =Config!A{n} cross-ref or a literal fallback.
@@ -1341,8 +1352,8 @@ def read_timelog_plan(wb, project_months: int) -> dict[tuple[str, int], str]:
         if not name:
             continue
 
-        for mi in range(assigned_col_end - assigned_col_start + 1):
-            col = assigned_col_start + mi
+        for mi in range(project_months):
+            col = month_col_start + mi
             val = ws.cell(r, col).value
             # Formula (=<Proposed cell>) or blank → not an override.
             if val is None:

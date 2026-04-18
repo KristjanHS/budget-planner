@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from dateutil.relativedelta import relativedelta
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Font, Protection
 from openpyxl.utils import get_column_letter
@@ -59,6 +60,10 @@ from budget_planner.styles import (
     style_cell,
 )
 from budget_planner.timelog_solver import Person, PersonWPWindow, WP, solve
+
+# Per-person summary block sits to the right of the Assigned grid; columns
+# match the headers in ``_write_person_summary``. Update both together.
+_PERSON_SUMMARY_COLS = 8
 
 # ---------------------------------------------------------------------------
 # Public builder
@@ -116,7 +121,7 @@ def build_timelog_plan_sheet(
     assigned_col_start = timelog_assigned_col_start(project_months)
     assigned_col_end = timelog_assigned_col_end(project_months)
     summary_col_start = timelog_summary_col_start(project_months)
-    summary_col_end = summary_col_start + 8 - 1  # 8 summary columns
+    summary_col_end = summary_col_start + _PERSON_SUMMARY_COLS - 1
     canvas_last_col = summary_col_end
 
     # ── Row 1: title banner (merged across canvas) ──
@@ -255,6 +260,7 @@ def build_timelog_plan_sheet(
         "Assigned", "Pool", "Remaining", "Over-pool?",
         "Switches", "First log", "Last log", "Largest gap",
     ]
+    assert len(summary_headers) == _PERSON_SUMMARY_COLS
     for i, hdr in enumerate(summary_headers):
         style_cell(
             ws, summary_header_row, summary_col_start + i,
@@ -421,18 +427,23 @@ def build_timelog_plan_sheet(
             f"{rate_helper_col_letter}{person_first_row}"
             f":{rate_helper_col_letter}{person_last_row}"
         )
+        # ROUND-wrap EUR leaves so fractional cents from non-integer
+        # PM rates don't accumulate into auditor mismatches downstream
+        # (see openpyxl-patterns.md "EUR/money leaf formulas must wrap…").
         style_cell(
             ws, row, 3, font=BLACK_FORMULA, fmt="€#,##0",
         ).value = (
-            f'=SUMPRODUCT(({assigned_range}="{wp_code}")*{rate_col_range})'
+            f"=ROUND(SUMPRODUCT(({assigned_range}=\"{wp_code}\")"
+            f"*{rate_col_range}),0)"
         )
 
-        # Col 4: Overshoot € = MAX(0, Assigned - Ceiling)
+        # Col 4: Overshoot € = MAX(0, Assigned - Ceiling) — operands already
+        # ROUND-ed (Assigned via this builder; Ceiling via Config formula).
         style_cell(
             ws, row, 4, font=BLACK_FORMULA, fmt="€#,##0",
         ).value = f"=MAX(0,C{row}-B{row})"
 
-        # Col 5: Undershoot € = MAX(0, Ceiling - Assigned)
+        # Col 5: Undershoot € = MAX(0, Ceiling - Assigned) — same.
         style_cell(
             ws, row, 5, font=BLACK_FORMULA, fmt="€#,##0",
         ).value = f"=MAX(0,B{row}-C{row})"
@@ -518,28 +529,16 @@ def build_timelog_plan_sheet(
     # Rule 1 (highest priority): Per-WP cell-level red marker for cells with
     # the WP code BUT in a column outside the WP's active window. We add one
     # rule per WP, applied to the union of Proposed + Assigned grids.
-    # The CF formula uses the month-index helper row so the column-position
-    # comparison is data-driven and survives row inserts/shifts.
-    proposed_idx_range = (
-        f"{get_column_letter(proposed_col_start)}{month_index_row}"
-        f":{get_column_letter(proposed_col_end)}{month_index_row}"
-    )
-    assigned_idx_range = (
-        f"{get_column_letter(assigned_col_start)}{month_index_row}"
-        f":{get_column_letter(assigned_col_end)}{month_index_row}"
-    )
+    # The CF formula composes the per-cell idx_ref inline below
+    # (``tl_col_letter$<month_index_row>``), so we don't need to precompute
+    # idx_range strings here.
     for wp in wps:
-        # Per-grid (proposed and assigned each get their own rule with their
-        # own month-index helper range).
-        for grid_range, idx_range in (
-            (proposed_grid_range, proposed_idx_range),
-            (assigned_grid_range, assigned_idx_range),
-        ):
+        # Per-grid (proposed and assigned each get their own rule).
+        for grid_range in (proposed_grid_range, assigned_grid_range):
             # The CF formula is evaluated per cell in the range. Use the
             # top-left cell of the range as the reference cell — Excel
             # auto-shifts relative refs.
             top_left = grid_range.split(":")[0]
-            top_idx_letter = idx_range.split(":")[0]
             # Strip the row from top_left to get the column letter; the
             # idx-row stays absolute.
             tl_col_letter = "".join(
@@ -562,9 +561,6 @@ def build_timelog_plan_sheet(
                 grid_range,
                 FormulaRule(formula=[formula], fill=CF_RED_FILL),
             )
-            # idx_range/top_idx_letter computed for symmetry; not directly
-            # used in the formula since we compose idx_ref by hand above.
-            del top_idx_letter
 
     # Rule 2: pastel fill per WP across both grids.
     for i, wp in enumerate(wps):
@@ -633,7 +629,7 @@ def build_timelog_plan_sheet(
     for gap_letter in (gap1_col_letter, gap2_col_letter):
         ws.column_dimensions[gap_letter].width = 2
     # Summary cols a touch wider for headers.
-    for i in range(8):
+    for i in range(_PERSON_SUMMARY_COLS):
         col_l = get_column_letter(summary_col_start + i)
         ws.column_dimensions[col_l].width = 12
 
@@ -700,8 +696,6 @@ def _write_assigned_headers(
     Assigned grid so first/last-log INDEX/MATCH formulas can reference the
     right-hand month_header_row directly.
     """
-    from dateutil.relativedelta import relativedelta
-
     project_months = project_params["months"]
     project_start = project_params["start"]
 
@@ -875,12 +869,15 @@ def _write_person_summary(
         f"=SUMPRODUCT(1*({assigned_left_range}<>{assigned_right_range}))"
     )
 
-    # Col 6: First log = IFERROR(INDEX(headers, MATCH(TRUE, row<>"", 0)), "")
+    # Col 6: First log = IFERROR(INDEX(headers, MATCH(1, (row<>"")*1, 0)), "")
+    # Use *1 coercion (not the literal TRUE) so the formula works as a
+    # regular (non-CSE) entry in older Excel — MATCH(TRUE, range<>"", 0)
+    # silently requires array-mode entry there.
     style_cell(
         ws, row, summary_col_start + 5, font=BLACK_FORMULA, alignment=CENTER,
     ).value = (
         f"=IFERROR(INDEX({month_headers_range},"
-        f'MATCH(TRUE,{assigned_row_range}<>"",0)),"")'
+        f'MATCH(1,({assigned_row_range}<>"")*1,0)),"")'
     )
 
     # Col 7: Last log = IFERROR(LOOKUP(2, 1/(row<>""), headers), "")

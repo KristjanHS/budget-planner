@@ -1,16 +1,12 @@
 """Tests for column grouping by year."""
 import pytest
 from openpyxl import load_workbook, Workbook
-from budget_planner.workbook import init_workbook
 from budget_planner.styles import apply_year_groups, col_letter
 
 
 @pytest.fixture(scope="module")
-def grouping_wb(tmp_path_factory):
-    """Generate one workbook for all grouping tests (module-scoped)."""
-    path = str(tmp_path_factory.mktemp("grouping") / "test.xlsx")
-    init_workbook(output_path=path)
-    wb = load_workbook(path)
+def grouping_wb(fresh_wb_path):
+    wb = load_workbook(fresh_wb_path)
     yield wb
     wb.close()
 

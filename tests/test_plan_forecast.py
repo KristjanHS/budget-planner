@@ -9,9 +9,7 @@ import pytest
 from openpyxl import load_workbook
 from openpyxl.formatting.rule import Rule
 
-from budget_planner.workbook import init_workbook
 from budget_planner.config import (
-    DEMO_CAPACITY_ASSIGNMENTS,
     WORK_PACKAGES,
     WP_SCHEDULE,
     PROJECT_MONTHS,
@@ -29,19 +27,13 @@ from budget_planner.styles import CF_GREY_FILL, GREY_FILL, col_letter
 # ── Fixtures ──
 
 @pytest.fixture(scope="module")
-def assigned_wb(tmp_path_factory):
-    """Workbook with DEMO_CAPACITY_ASSIGNMENTS — every WP has assignees."""
-    out = tmp_path_factory.mktemp("pf_assigned") / "wb.xlsx"
-    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    return load_workbook(str(out), data_only=False)
+def assigned_wb(assigned_wb_path):
+    return load_workbook(assigned_wb_path, data_only=False)
 
 
 @pytest.fixture(scope="module")
-def empty_wb(tmp_path_factory):
-    """Workbook with no assignments — every WP row has zero assignees."""
-    out = tmp_path_factory.mktemp("pf_empty") / "wb.xlsx"
-    init_workbook(str(out))
-    return load_workbook(str(out), data_only=False)
+def empty_wb(fresh_wb_path):
+    return load_workbook(fresh_wb_path, data_only=False)
 
 
 @pytest.fixture(scope="module")

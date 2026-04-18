@@ -2,7 +2,6 @@
 import pytest
 import openpyxl
 
-from budget_planner.workbook import init_workbook
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
     PROJECT_MONTHS, PROJECT_START, MONTH_COL_START,
@@ -13,15 +12,8 @@ from budget_planner.config import (
 # ── Fixtures ──
 
 @pytest.fixture(scope="module")
-def fresh_path(tmp_path_factory):
-    out = tmp_path_factory.mktemp("merge") / "test.xlsx"
-    init_workbook(str(out))
-    return str(out)
-
-
-@pytest.fixture(scope="module")
-def workbook(fresh_path):
-    return openpyxl.load_workbook(fresh_path, data_only=False)
+def workbook(fresh_wb_path):
+    return openpyxl.load_workbook(fresh_wb_path, data_only=False)
 
 
 # ── Helpers ──

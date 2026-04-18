@@ -11,7 +11,6 @@ Covers the Stage 2 / T7 changes in ``budget_planner/actuals.py``:
 import openpyxl
 import pytest
 
-from budget_planner.workbook import init_workbook
 from budget_planner.config import (
     VAL_COL_BREACH,
 )
@@ -19,10 +18,8 @@ from budget_planner.layout import forecast_val_columns
 
 
 @pytest.fixture(scope="module")
-def actuals_ws(tmp_path_factory):
-    out = tmp_path_factory.mktemp("breach_todate") / "wb.xlsx"
-    init_workbook(str(out))
-    wb = openpyxl.load_workbook(str(out), data_only=False)
+def actuals_ws(fresh_wb_path):
+    wb = openpyxl.load_workbook(fresh_wb_path, data_only=False)
     return wb["Actuals"]
 
 

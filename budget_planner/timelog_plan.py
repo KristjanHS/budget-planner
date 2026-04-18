@@ -125,7 +125,7 @@ def build_timelog_plan_sheet(
     wp_schedule: list[dict],
     team: list[dict],
     assignments: list[dict],
-    grade_rates: Mapping[str, float],  # noqa: ARG001 — reserved for future per-grade tinting
+    grade_rates: Mapping[str, float],
     config_layout: dict,
     assigned_overrides: Mapping[tuple[str, int], str] | None = None,
 ) -> dict:
@@ -143,9 +143,9 @@ def build_timelog_plan_sheet(
         assignments: list of person-WP assignment dicts (person, wp,
             total_fte, start, end). Treated as the solver's hard
             (person, wp) → window constraints.
-        grade_rates: dict grade_name → EUR/PM. Currently unused by this
-            builder (per-person rate is looked up from roster_lookup via
-            the rate helper column); accepted for orchestrator-call parity.
+        grade_rates: dict grade_name → EUR/PM. Used by the solver for
+            €-accounting: each Person's ``rate_eur_per_pm`` is resolved
+            from this mapping via the roster's grade.
         config_layout: dict returned by build_config_sheet() — must include
             ``param_rows``, ``wp_first_row``, ``person_rows``.
         assigned_overrides: Optional mapping ``(person_name, month_num)`` →
@@ -184,10 +184,11 @@ def build_timelog_plan_sheet(
             name=m["name"],
             priority=int(m.get("priority", 2)),
             pool=round(float(m["max_fte"]) * project_months),
+            rate_eur_per_pm=int(round(grade_rates[m["grade"]])),
         )
         for m in sorted_team
     ]
-    wps = _build_wps(work_packages, wp_schedule)
+    wps = _build_wps(work_packages, wp_schedule, project_params)
     windows = [
         PersonWPWindow(
             person_name=a["person"],
@@ -653,6 +654,7 @@ def build_timelog_plan_sheet(
 def _build_wps(
     work_packages: list[dict],
     wp_schedule: list[dict],
+    project_params: dict,
 ) -> list[WP]:
     """Convert config WP + schedule rows into solver WP records.
 
@@ -660,7 +662,16 @@ def _build_wps(
     union span (min start, max end) — the solver treats the WP active window
     as contiguous because in-window-but-empty cells are still legal placements;
     the WP SCHEDULE gap remains visible on other sheets (Capacity, Plan).
+
+    ``ceiling_eur`` mirrors the sheet's displayed `Config!E{wp_row}` =
+    ``FTE × Rate``. Per-WP rate is taken from ``wp["rate"]`` when present
+    (post-reader rebuild path); on init the seed WP dicts lack the key, so
+    we fall back to ``project_params["rate"]`` — the same default used by
+    ``config_sheet.py`` to populate the sheet.
     """
+    default_rate = project_params.get("rate", 10000)
+    if not isinstance(default_rate, (int, float)):
+        default_rate = 10000
     wps: list[WP] = []
     for wp in work_packages:
         entries = [s for s in wp_schedule if s["id"] == wp["id"]]
@@ -668,12 +679,15 @@ def _build_wps(
             continue
         active_start = min(int(s["start"]) for s in entries)
         active_end = max(int(s["end"]) for s in entries)
-        ceiling_months = round(float(wp["fte"]))
+        wp_rate = wp.get("rate", default_rate)
+        if not isinstance(wp_rate, (int, float)):
+            wp_rate = default_rate
+        ceiling_eur = int(round(float(wp["fte"]) * float(wp_rate)))
         wps.append(WP(
             code=wp["id"],
             active_start=active_start,
             active_end=active_end,
-            ceiling_months=ceiling_months,
+            ceiling_eur=ceiling_eur,
         ))
     return wps
 

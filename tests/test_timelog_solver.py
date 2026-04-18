@@ -53,12 +53,12 @@ def _assignments(
 
 def test_determinism_identical_inputs():
     persons = [
-        Person("Alice", priority=1, pool=6),
-        Person("Bob", priority=2, pool=6),
+        Person("Alice", priority=1, pool=6, rate_eur_per_pm=1),
+        Person("Bob", priority=2, pool=6, rate_eur_per_pm=1),
     ]
     wps = [
-        WP("WP1", active_start=1, active_end=6, ceiling_months=4),
-        WP("WP2", active_start=3, active_end=8, ceiling_months=4),
+        WP("WP1", active_start=1, active_end=6, ceiling_eur=4),
+        WP("WP2", active_start=3, active_end=8, ceiling_eur=4),
     ]
     windows = [
         PersonWPWindow("Alice", "WP1", 1, 6),
@@ -79,10 +79,10 @@ def test_determinism_identical_inputs():
 def test_earliest_close_wp_filled_first():
     # WP1 closes at month 6, WP2 at month 10. Both want 4 months; one person
     # with pool=6. Greedy should fill WP1 fully before touching WP2.
-    persons = [Person("Alice", priority=1, pool=6)]
+    persons = [Person("Alice", priority=1, pool=6, rate_eur_per_pm=1)]
     wps = [
-        WP("WP2", active_start=1, active_end=10, ceiling_months=4),
-        WP("WP1", active_start=1, active_end=6, ceiling_months=4),
+        WP("WP2", active_start=1, active_end=10, ceiling_eur=4),
+        WP("WP1", active_start=1, active_end=6, ceiling_eur=4),
     ]
     windows = [
         PersonWPWindow("Alice", "WP1", 1, 6),
@@ -104,10 +104,10 @@ def test_priority_tiebreaker_within_wp():
     # pool=3 → neither can fill alone. Priority-1 should be fully exhausted
     # before priority-2 is touched.
     persons = [
-        Person("Bob", priority=2, pool=3),  # lex-first but lower priority
-        Person("Alice", priority=1, pool=3),
+        Person("Bob", priority=2, pool=3, rate_eur_per_pm=1),  # lex-first but lower priority
+        Person("Alice", priority=1, pool=3, rate_eur_per_pm=1),
     ]
-    wps = [WP("WP1", active_start=1, active_end=6, ceiling_months=4)]
+    wps = [WP("WP1", active_start=1, active_end=6, ceiling_eur=4)]
     windows = [
         PersonWPWindow("Alice", "WP1", 1, 6),
         PersonWPWindow("Bob", "WP1", 1, 6),
@@ -127,12 +127,12 @@ def test_priority_tiebreaker_within_wp():
 
 def test_pool_never_exceeded():
     persons = [
-        Person("Alice", priority=1, pool=3),
-        Person("Bob", priority=1, pool=5),
+        Person("Alice", priority=1, pool=3, rate_eur_per_pm=1),
+        Person("Bob", priority=1, pool=5, rate_eur_per_pm=1),
     ]
     wps = [
-        WP("WP1", active_start=1, active_end=8, ceiling_months=6),
-        WP("WP2", active_start=1, active_end=8, ceiling_months=6),
+        WP("WP1", active_start=1, active_end=8, ceiling_eur=6),
+        WP("WP2", active_start=1, active_end=8, ceiling_eur=6),
     ]
     windows = [
         PersonWPWindow("Alice", "WP1", 1, 8),
@@ -154,10 +154,10 @@ def test_pool_never_exceeded():
 
 
 def test_person_wp_window_honoured():
-    persons = [Person("Alice", priority=1, pool=12)]
+    persons = [Person("Alice", priority=1, pool=12, rate_eur_per_pm=1)]
     wps = [
-        WP("WP1", active_start=1, active_end=12, ceiling_months=6),
-        WP("WP2", active_start=1, active_end=12, ceiling_months=6),
+        WP("WP1", active_start=1, active_end=12, ceiling_eur=6),
+        WP("WP2", active_start=1, active_end=12, ceiling_eur=6),
     ]
     windows = [
         # Alice can only do WP1 in months 1-4, WP2 in months 7-10.
@@ -181,9 +181,9 @@ def test_person_wp_window_honoured():
 
 
 def test_wp_window_honoured():
-    persons = [Person("Alice", priority=1, pool=12)]
+    persons = [Person("Alice", priority=1, pool=12, rate_eur_per_pm=1)]
     wps = [
-        WP("WP1", active_start=3, active_end=8, ceiling_months=10),
+        WP("WP1", active_start=3, active_end=8, ceiling_eur=10),
     ]
     windows = [PersonWPWindow("Alice", "WP1", 1, 12)]
     assigned = solve(persons, wps, windows, project_months=12)
@@ -207,8 +207,8 @@ def test_overshoot_tolerated():
     # To force an overshoot, set ceiling=3 and ensure the greedy loop can
     # legitimately land on ceiling+1. The spec says "allow overshoot by one
     # month" — we assert placed ∈ {ceiling, ceiling+1}.
-    persons = [Person("Alice", priority=1, pool=10)]
-    wps = [WP("WP1", active_start=1, active_end=10, ceiling_months=3)]
+    persons = [Person("Alice", priority=1, pool=10, rate_eur_per_pm=1)]
+    wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=3)]
     windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
     assigned = greedy_pass(persons, wps, windows, project_months=10)
     placed = _placed_count(assigned, "WP1")
@@ -226,8 +226,8 @@ def test_overshoot_tolerated():
 
 def test_undershoot_when_capacity_short():
     # WP wants 6 months but only one person with pool=3 can fill it.
-    persons = [Person("Alice", priority=1, pool=3)]
-    wps = [WP("WP1", active_start=1, active_end=8, ceiling_months=6)]
+    persons = [Person("Alice", priority=1, pool=3, rate_eur_per_pm=1)]
+    wps = [WP("WP1", active_start=1, active_end=8, ceiling_eur=6)]
     windows = [PersonWPWindow("Alice", "WP1", 1, 8)]
     assigned = greedy_pass(persons, wps, windows, project_months=8)
     placed = _placed_count(assigned, "WP1")
@@ -245,12 +245,12 @@ def test_switch_reduction_reduces_or_preserves_switches():
     # both eligible for WP1 and WP2, with interleaved assignments that a
     # swap can consolidate.
     persons = [
-        Person("Alice", priority=1, pool=4),
-        Person("Bob", priority=1, pool=4),
+        Person("Alice", priority=1, pool=4, rate_eur_per_pm=1),
+        Person("Bob", priority=1, pool=4, rate_eur_per_pm=1),
     ]
     wps = [
-        WP("WP1", active_start=1, active_end=8, ceiling_months=4),
-        WP("WP2", active_start=1, active_end=8, ceiling_months=4),
+        WP("WP1", active_start=1, active_end=8, ceiling_eur=4),
+        WP("WP2", active_start=1, active_end=8, ceiling_eur=4),
     ]
     windows = [
         PersonWPWindow("Alice", "WP1", 1, 8),
@@ -282,12 +282,12 @@ def test_switch_reduction_actually_reduces_on_interleaved_input():
     # The fixture below has internal switches on BOTH persons so the swap is
     # considered and the result is a strict reduction, not just a no-op.
     persons = [
-        Person("Alice", priority=1, pool=3),
-        Person("Bob", priority=1, pool=3),
+        Person("Alice", priority=1, pool=3, rate_eur_per_pm=1),
+        Person("Bob", priority=1, pool=3, rate_eur_per_pm=1),
     ]
     wps = [
-        WP("WP1", active_start=1, active_end=3, ceiling_months=3),
-        WP("WP2", active_start=1, active_end=3, ceiling_months=3),
+        WP("WP1", active_start=1, active_end=3, ceiling_eur=3),
+        WP("WP2", active_start=1, active_end=3, ceiling_eur=3),
     ]
     windows = [
         PersonWPWindow("Alice", "WP1", 1, 3),
@@ -332,14 +332,14 @@ def test_switch_reduction_actually_reduces_on_interleaved_input():
 
 def test_switch_reduction_preserves_wp_sums():
     persons = [
-        Person("Alice", priority=1, pool=6),
-        Person("Bob", priority=1, pool=6),
-        Person("Carol", priority=2, pool=4),
+        Person("Alice", priority=1, pool=6, rate_eur_per_pm=1),
+        Person("Bob", priority=1, pool=6, rate_eur_per_pm=1),
+        Person("Carol", priority=2, pool=4, rate_eur_per_pm=1),
     ]
     wps = [
-        WP("WP1", active_start=1, active_end=10, ceiling_months=5),
-        WP("WP2", active_start=1, active_end=10, ceiling_months=5),
-        WP("WP3", active_start=1, active_end=10, ceiling_months=4),
+        WP("WP1", active_start=1, active_end=10, ceiling_eur=5),
+        WP("WP2", active_start=1, active_end=10, ceiling_eur=5),
+        WP("WP3", active_start=1, active_end=10, ceiling_eur=4),
     ]
     windows = [
         PersonWPWindow("Alice", "WP1", 1, 10),
@@ -367,10 +367,10 @@ def test_no_person_wp_row_means_excluded():
     # Alice has no row for WP1; even with pool and overlapping active window,
     # she must never be assigned to WP1. Bob is eligible and will fill it.
     persons = [
-        Person("Alice", priority=1, pool=10),
-        Person("Bob", priority=2, pool=10),
+        Person("Alice", priority=1, pool=10, rate_eur_per_pm=1),
+        Person("Bob", priority=2, pool=10, rate_eur_per_pm=1),
     ]
-    wps = [WP("WP1", active_start=1, active_end=8, ceiling_months=4)]
+    wps = [WP("WP1", active_start=1, active_end=8, ceiling_eur=4)]
     windows = [
         # Alice only has a (dangling) row for a non-existent WP — irrelevant.
         PersonWPWindow("Bob", "WP1", 1, 8),
@@ -381,3 +381,31 @@ def test_no_person_wp_row_means_excluded():
         assert code != "WP1", f"Alice got WP1 at month {m} despite no window row"
     # Bob actually filled it.
     assert _placed_count(assigned, "WP1") == 4
+
+
+# ---------------------------------------------------------------------------
+# 12. €-accounting: greedy stops at ceiling_eur with mixed person rates
+# ---------------------------------------------------------------------------
+
+
+def test_greedy_stops_at_eur_ceiling_with_mixed_rates():
+    # Alice rate=2, Bob rate=1; WP wants 5 €. Greedy prefers Alice (prio 1,
+    # lex order). Alice placements: 2 € each; Bob placements: 1 € each.
+    # Expected stop: check-after-place, overshoot ≤ rate-1 = 1 €.
+    persons = [
+        Person("Alice", priority=1, pool=5, rate_eur_per_pm=2),
+        Person("Bob", priority=2, pool=5, rate_eur_per_pm=1),
+    ]
+    wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=5)]
+    windows = [
+        PersonWPWindow("Alice", "WP1", 1, 10),
+        PersonWPWindow("Bob", "WP1", 1, 10),
+    ]
+    assigned = greedy_pass(persons, wps, windows, project_months=10)
+    alice_pm = sum(1 for v in assigned["Alice"].values() if v == "WP1")
+    bob_pm = sum(1 for v in assigned["Bob"].values() if v == "WP1")
+    placed_eur = alice_pm * 2 + bob_pm * 1
+    assert placed_eur >= 5
+    # Overshoot bound = max(rate) - 1 across placing persons.
+    max_rate = max(p.rate_eur_per_pm for p in persons)
+    assert placed_eur <= 5 + (max_rate - 1)

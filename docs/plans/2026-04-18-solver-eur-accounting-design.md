@@ -211,3 +211,12 @@ Steps 1–6 land as one commit (intermediate states fail the test suite). Step 8
 | D4 | Rename `ceiling_months → ceiling_eur` (not add a second field) | Old field has no role under €-accounting; keeping it invites "which target does greedy use?" confusion. |
 | D5 | Test migration via `rate_eur_per_pm=1`, `ceiling_eur=<old months>` — one new test for differential rates | Preserves existing coverage with minimal fixture churn; locks in the one genuinely new behaviour. |
 | D6 | `int(round(grade_rates[grade]))` at the builder boundary | Single well-defined projection from the `Mapping[str, float]` config type to the solver's `int` field. |
+
+## Correction (applied during /impag, 2026-04-18)
+
+Two assumptions in §5 and §6 turned out to be wrong at implementation time; both were resolved inline without changing the design intent:
+
+1. **`wp["rate"]` is not present on init.** §5 claimed "The `rate` key already exists on `work_packages` dicts". True post-`reader.read_workbook_config`, but the seed `WORK_PACKAGES` in `config.py` has only `id`, `name`, `fte`. `_build_wps` now takes `project_params` and falls back to `project_params["rate"]` when the WP dict lacks `rate` — mirroring the existing pattern in `config_sheet.py:102-125`. No change to the sheet-vs-solver ceiling agreement: both paths project through the same `FTE × Rate` formula.
+2. **Not every team-dict fixture carries `grade`.** §6 migration strategy ported `test_timelog_solver.py` fixtures with unit rates, but `tests/test_trends.py::_make_team` (a fixture consumed transitively by the full-workbook build path) omitted `grade`, tripping a `KeyError` inside `build_timelog_plan_sheet`. Fixed by adding `"grade": "Mid"` to the fixture — honest, since `grade` has always been documented as a required field on team dicts.
+
+End-to-end verification confirmed the design intent: on `init --demo`, `Per-WP Summary.Undershoot €` is 0 across WP1–8 (was ~€3 000–€5 000 under PM-accounting on WP7–9) and `€1 200` on WP9 (pool-limited, not ceiling-miss). `Overshoot €` bounded by the placing person's rate on every WP that lands short of one more placement.

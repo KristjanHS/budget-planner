@@ -3,7 +3,8 @@
 Pure-Python, deterministic, no I/O and no openpyxl dependency. Assigns each
 (person, month) cell to exactly one WP code (or None) such that:
 
-- WP totals approach their ceiling_months target (slight overshoot tolerated).
+- WP totals approach their ``ceiling_eur`` target (slight € overshoot
+  tolerated, bounded by the placing person's rate).
 - Each cell stays inside the WP's active window AND inside the person's
   per-(person, WP) window (the PERSON-WP ASSIGNMENTS row).
 - Each person's total assigned months never exceeds their pool.
@@ -16,6 +17,9 @@ Two passes:
    continue-a-run preference).
 2. Switch-reduction local improvement — swap adjacent-month blocks between
    two persons to reduce total switches without breaking any invariant.
+   Under €-accounting, Pass 2 requires rate-equality between the two
+   persons; swaps across rate tiers are skipped to preserve per-WP €
+   totals exactly.
 
 Known shape limitation (design §9 Q16): ``switch_reduction_pass`` considers
 only adjacent-pair swaps — it exchanges ``(p1, m, m+1)`` with
@@ -42,11 +46,15 @@ class Person:
         name: Unique identifier (also used as a deterministic sort key).
         priority: 1, 2, or 3. Lower = filled first within each WP pass.
         pool: Total assignable months = round(max_fte * project_months).
+        rate_eur_per_pm: Integer EUR cost per 1.0-FTE month for this
+            person. Used by the greedy pass for €-accounting and by Pass 2
+            as a swap-eligibility key.
     """
 
     name: str
     priority: int
     pool: int
+    rate_eur_per_pm: int
 
 
 @dataclass(frozen=True)
@@ -57,13 +65,13 @@ class WP:
         code: "WP1", "WP2", ... — also the value written into assigned cells.
         active_start: 1-indexed month in project frame, inclusive.
         active_end: 1-indexed month in project frame, inclusive.
-        ceiling_months: target fill = round(ceiling_eur / person_rate_avg).
+        ceiling_eur: Target fill in integer EUR = ``round(wp.fte × wp.rate)``.
     """
 
     code: str
     active_start: int
     active_end: int
-    ceiling_months: int
+    ceiling_eur: int
 
 
 @dataclass(frozen=True)
@@ -188,9 +196,9 @@ def greedy_pass(
     wp_order = sorted(wps, key=lambda w: (w.active_end, w.code))
 
     for wp in wp_order:
-        placed = 0
+        placed_eur = 0
         for prio in (1, 2, 3):
-            if placed >= wp.ceiling_months:
+            if placed_eur >= wp.ceiling_eur:
                 break
             # Eligible persons at this priority who have a row for this WP.
             candidates_raw = [
@@ -219,7 +227,7 @@ def greedy_pass(
             candidates = sorted(candidates_raw, key=_run_key)
 
             for p in candidates:
-                if placed >= wp.ceiling_months:
+                if placed_eur >= wp.ceiling_eur:
                     break
                 pw = windows_idx[(p.name, wp.code)]
                 lo = max(wp.active_start, pw[0])
@@ -230,11 +238,12 @@ def greedy_pass(
                     if assigned[p.name][m] is None:
                         assigned[p.name][m] = wp.code
                         pool[p.name] -= 1
-                        placed += 1
-                        # Check-after-placing: allows exactly one month of
-                        # overshoot. Break stops further placements for this
-                        # person; outer break then exits the WP pass.
-                        if placed >= wp.ceiling_months:
+                        placed_eur += p.rate_eur_per_pm
+                        # Check-after-placing: last placement may overshoot
+                        # the ceiling by up to ``p.rate_eur_per_pm − 1 €``.
+                        # Break stops further placements for this person;
+                        # outer break then exits the WP pass.
+                        if placed_eur >= wp.ceiling_eur:
                             break
 
     return assigned
@@ -253,7 +262,8 @@ def switch_reduction_pass(
     project_months: int,
 ) -> Assignment:
     """Iteratively swap (p1, m, m+1) <-> (p2, m, m+1) pairs to reduce the
-    total switch count. Preserves per-WP totals (cells move wholesale),
+    total switch count. Preserves per-WP totals in € (only equal-rate
+    persons swap, so moving a cell between them is €-neutral),
     per-person totals (each person keeps their count), and all windows.
 
     Bounded: stops when one full outer pass finds no improving swap. Returns
@@ -261,6 +271,7 @@ def switch_reduction_pass(
     """
     wps_by_code = {w.code: w for w in wps}
     windows_idx = _build_windows_index(person_wp_windows)
+    persons_by_name = {p.name: p for p in persons}
 
     # Work on a deep-ish copy. Inner dicts are month->str|None and need
     # their own copy; the outer dict is rebuilt by comprehension.
@@ -295,6 +306,15 @@ def switch_reduction_pass(
                     continue
                 for p2_name in person_names:
                     if p2_name == p1_name:
+                        continue
+                    # Rate-equality guard: under €-accounting, only swaps
+                    # between persons at the same rate are €-neutral on
+                    # each WP. Cross-tier swaps would shift per-WP € totals
+                    # and break greedy's "placed_eur ≥ ceiling_eur" result.
+                    if (
+                        persons_by_name[p1_name].rate_eur_per_pm
+                        != persons_by_name[p2_name].rate_eur_per_pm
+                    ):
                         continue
                     b1 = state[p2_name][m]
                     b2 = state[p2_name][m + 1]

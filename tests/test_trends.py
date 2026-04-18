@@ -413,7 +413,8 @@ def _make_team(n, work_packages):
     """Generate n synthetic team members, each assigned to WP1."""
     wp_id = work_packages[0]["id"]
     return [
-        {"name": f"Person{i+1}", "max_fte": 1.0, "wps": {wp_id: 1.0}}
+        {"name": f"Person{i+1}", "max_fte": 1.0, "grade": "Mid",
+         "wps": {wp_id: 1.0}}
         for i in range(n)
     ]
 

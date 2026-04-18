@@ -11,6 +11,7 @@ from budget_planner.layout import (
     MONTH_COL_START,
     SHEET_PLAN,
     SHEET_CONFIG,
+    SHEET_TIMELOG_PLAN,
     SECTION_HEADER_LABELS,
     SECTION_HEADER_ROWS,
     COL_WP_FTE,
@@ -35,6 +36,8 @@ from budget_planner.layout import (
     COL_EXT_START,
     COL_EXT_END,
     COL_EXT_EU,
+    timelog_assigned_col_start,
+    timelog_assigned_col_end,
 )
 
 
@@ -1270,6 +1273,91 @@ def read_actuals_hours_sheet(
             hours[name] = per_wp
 
     return hours
+
+
+def read_timelog_plan(wb, project_months: int) -> dict[tuple[str, int], str]:
+    """Read user overrides from the Timelog Plan Assigned grid.
+
+    The Assigned grid starts as ``=<Proposed cell>`` formulas; a literal value
+    in a cell means the user typed an override. Only literal values are
+    returned — formula cells and blanks are treated as "no override" (they'll
+    regenerate as ``=<Proposed>`` on rebuild).
+
+    Args:
+        wb: Workbook (load with ``data_only=False`` so formulas are visible).
+        project_months: Project month count — fixes the Assigned-grid column
+            span. Caller must pass the value read from Config (not config.py
+            seeds), since the sheet's column geometry depends on it.
+
+    Returns:
+        Dict ``{(person_name, month_num_1_indexed): wp_code}`` with one entry
+        per user-typed Assigned-grid cell. Empty dict when the sheet is
+        missing (pre-feature workbook), when no overrides exist, or when the
+        anchor row cannot be located (degraded-but-safe: builder regenerates
+        from Proposed).
+    """
+    if SHEET_TIMELOG_PLAN not in wb.sheetnames:
+        return {}
+    ws = wb[SHEET_TIMELOG_PLAN]
+
+    # Anchor on the "Person" column header in col A of the month-label row.
+    # Freshly-built sheets place it at row 5; scanning tolerates layout nudges
+    # from future builder edits or manual user insertions above the grid.
+    month_row = _find_header_row(ws, "Person", col=1, required=False)
+    if month_row is None:
+        return {}
+
+    assigned_col_start = timelog_assigned_col_start(project_months)
+    assigned_col_end = timelog_assigned_col_end(project_months)
+
+    # Builder layout: month_row + 1 = hidden (month idx), +2 = PROPOSED/ASSIGNED
+    # section row, +3 = per-person summary header, +4 = first person row.
+    person_first_row = month_row + 4
+
+    config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
+
+    overrides: dict[tuple[str, int], str] = {}
+    for r in range(person_first_row, ws.max_row + 1):
+        col_a = ws.cell(r, 1).value
+        if col_a is None:
+            break
+        col_a_str = str(col_a).strip()
+        if not col_a_str:
+            break
+        # PER-WP SUMMARY section header follows the person rows; stop there.
+        if col_a_str.upper().startswith("PER-WP") or col_a_str.upper() == "WP CODE":
+            break
+
+        # Resolve name: either =Config!A{n} cross-ref or a literal fallback.
+        name: str | None = None
+        if col_a_str.startswith("="):
+            m = re.match(rf"={SHEET_CONFIG}!A(\d+)", col_a_str)
+            if m and config_ws is not None:
+                resolved = config_ws.cell(int(m.group(1)), 1).value
+                if resolved:
+                    name = str(resolved).strip()
+        else:
+            name = col_a_str
+        if not name:
+            continue
+
+        for mi in range(assigned_col_end - assigned_col_start + 1):
+            col = assigned_col_start + mi
+            val = ws.cell(r, col).value
+            # Formula (=<Proposed cell>) or blank → not an override.
+            if val is None:
+                continue
+            if isinstance(val, str):
+                s = val.strip()
+                if not s or s.startswith("="):
+                    continue
+                overrides[(name, mi + 1)] = s
+            else:
+                # Defensive: numeric overrides shouldn't happen (cells hold
+                # WP code strings) but preserve rather than silently drop.
+                overrides[(name, mi + 1)] = str(val)
+
+    return overrides
 
 
 def _resolve_plan_ref(cell_value, plan_ws, config_ws=None):

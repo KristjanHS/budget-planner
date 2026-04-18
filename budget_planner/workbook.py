@@ -184,6 +184,7 @@ def _build_all_sheets(
     assignments=None,
     preserved_actuals=None,
     preserved_actuals_hours=None,
+    preserved_timelog_assigned=None,
     reporting_periods=None,
 ):
     """Build all sheets into the workbook.
@@ -298,6 +299,7 @@ def _build_all_sheets(
         assignments=assignments or [],
         grade_rates=grade_rates,
         config_layout=ctx.config_layout,
+        assigned_overrides=preserved_timelog_assigned,
     )
 
     # Stage 6a — Actuals-Hours (hour timelog; depends only on config_layout).
@@ -526,6 +528,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         read_grade_rates,
         read_assignments_from_config,
         read_externals_from_config,
+        read_timelog_plan,
         _find_header_row,
     )
 
@@ -617,6 +620,12 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             project_months=project_params["months"],
         )
 
+    # Preserve Timelog Plan Assigned-grid overrides (user-typed literals).
+    # Missing sheet → empty dict (pre-feature workbook; builder still renders).
+    preserved_timelog_assigned: dict[tuple[str, int], str] = read_timelog_plan(
+        existing_wb, project_params["months"]
+    )
+
     # Calculate current_month from project start and today's date
     from datetime import date
     from dateutil.relativedelta import relativedelta as _rd
@@ -664,6 +673,23 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
                 warnings.append(f"Orphaned Actuals: WP '{wp_id}' removed")
                 del preserved_actuals[wp_id]
 
+    # Prune orphaned Timelog Plan overrides — a person or WP code removed
+    # from config can't round-trip meaningfully.
+    if preserved_timelog_assigned:
+        for key in list(preserved_timelog_assigned.keys()):
+            person, _month = key
+            code = preserved_timelog_assigned[key]
+            if person not in team_names:
+                warnings.append(
+                    f"Orphaned Timelog Plan override: person '{person}' removed from team"
+                )
+                del preserved_timelog_assigned[key]
+            elif code not in wp_ids:
+                warnings.append(
+                    f"Orphaned Timelog Plan override: WP '{code}' removed (was set for {person})"
+                )
+                del preserved_timelog_assigned[key]
+
     # Prune orphaned hours (person or WP removed from config). Externals
     # stay keyed by project name — validate against the external list.
     if preserved_actuals_hours:
@@ -705,6 +731,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         assignments=assignments,
         preserved_actuals=preserved_actuals,
         preserved_actuals_hours=preserved_actuals_hours,
+        preserved_timelog_assigned=preserved_timelog_assigned,
         reporting_periods=reporting_periods,
         grade_rates=grade_rates,
     )

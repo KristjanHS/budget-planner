@@ -81,6 +81,7 @@ def build_timelog_plan_sheet(
     assignments: list[dict],
     grade_rates: Mapping[str, float],  # noqa: ARG001 — reserved for future per-grade tinting
     config_layout: dict,
+    assigned_overrides: Mapping[tuple[str, int], str] | None = None,
 ) -> dict:
     """Build the Timelog Plan sheet.
 
@@ -102,6 +103,11 @@ def build_timelog_plan_sheet(
         config_layout: dict returned by build_config_sheet() — must include
             ``param_rows``, ``wp_first_row``, ``person_rows``,
             ``roster_first_row``.
+        assigned_overrides: Optional mapping ``(person_name, month_num)`` →
+            WP code. Cells present here are written as BLUE_INPUT literals
+            (preserving round-trip user edits); cells absent default to
+            ``=<Proposed cell>`` formulas. Rebuild flow: reader extracts
+            literals from the previous workbook via ``read_timelog_plan``.
 
     Returns:
         Layout dict with keys:
@@ -305,6 +311,8 @@ def build_timelog_plan_sheet(
             (w.wp_code, w.start_month, w.end_month)
         )
 
+    override_map: Mapping[tuple[str, int], str] = assigned_overrides or {}
+
     # ── Person rows ──
     cfg_person_rows: dict[str, int] = config_layout.get("person_rows", {})
     months_row_cfg = config_layout["param_rows"]["Project Months"]
@@ -350,6 +358,7 @@ def build_timelog_plan_sheet(
             _write_proposed_cell(ws, r, proposed_col, wp_code, in_any_window)
             _write_assigned_cell(
                 ws, r, assigned_col, proposed_col, wp_code, in_any_window,
+                override=override_map.get((name, month_num)),
             )
 
         # Per-person summary formulas
@@ -770,12 +779,32 @@ def _write_assigned_cell(
     proposed_col: int,
     wp_code: str | None,
     in_any_window: bool,
+    *,
+    override: str | None = None,
 ) -> None:
     """Write a single Assigned-grid cell.
 
     Defaults to ``=<Proposed cell>``. Cells outside any person-WP window are
     pre-greyed (matching Proposed) and unlocked so the user can override.
+    When ``override`` is supplied (round-trip from a prior user edit), the
+    literal value is written as BLUE_INPUT — the fill still follows the
+    in-window/out-of-window shading so an override in a dark cell remains
+    visually flagged.
     """
+    if override is not None:
+        if not in_any_window:
+            cell = style_cell(
+                ws, row, col, value=override,
+                font=BLUE_INPUT, fill=DARK_GREY_FILL, alignment=CENTER,
+            )
+        else:
+            cell = style_cell(
+                ws, row, col, value=override,
+                font=BLUE_INPUT, alignment=CENTER,
+            )
+        cell.protection = Protection(locked=False)
+        return
+
     proposed_letter = get_column_letter(proposed_col)
     formula = f"={proposed_letter}{row}"
     if wp_code is None and not in_any_window:

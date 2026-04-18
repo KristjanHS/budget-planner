@@ -20,6 +20,7 @@ from budget_planner.layout import (
     COL_SCHED_TYPE,
     COL_ROSTER_FTE,
     COL_ROSTER_GRADE,
+    COL_ROSTER_PRIORITY,
     COL_GRADE_RATE,
     COL_RP_START,
     COL_RP_END,
@@ -459,7 +460,9 @@ def read_team_from_config(ws) -> list[dict]:
         ws: Config worksheet.
 
     Returns:
-        List of dicts with keys 'name', 'max_fte', and 'grade'.
+        List of dicts with keys 'name', 'max_fte', 'grade', and 'priority'.
+        `priority` is an int 1-3 with default 2 when the column is missing
+        or blank (backward-compat with pre-Timelog-Plan workbooks).
     """
     from budget_planner.config import DEFAULT_GRADE
 
@@ -475,6 +478,11 @@ def read_team_from_config(ws) -> list[dict]:
     if grade_hdr and "grade" in str(grade_hdr).lower():
         has_grade_col = True
 
+    has_priority_col = False
+    prio_hdr = ws.cell(person_header, COL_ROSTER_PRIORITY).value
+    if prio_hdr and "priority" in str(prio_hdr).lower():
+        has_priority_col = True
+
     roster: list[dict] = []
     for r, max_fte_parsed in _iter_config_section_rows(
         ws,
@@ -489,11 +497,20 @@ def read_team_from_config(ws) -> list[dict]:
             grade_val = ws.cell(r, COL_ROSTER_GRADE).value
             if grade_val is not None and str(grade_val).strip():
                 grade = str(grade_val).strip()
+        priority = 2
+        if has_priority_col:
+            prio_val = ws.cell(r, COL_ROSTER_PRIORITY).value
+            if prio_val is not None and str(prio_val).strip():
+                try:
+                    priority = int(float(prio_val))
+                except (TypeError, ValueError):
+                    priority = 2
         roster.append(
             {
                 "name": str(name).strip(),
                 "max_fte": max_fte_parsed,
                 "grade": grade,
+                "priority": priority,
             }
         )
 

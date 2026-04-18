@@ -55,7 +55,47 @@ def test_read_team_from_config_names_and_fte(fresh_wb_path):
         # Grade round-trips through Config — the widened roster with a Rate
         # column doesn't affect the reader's per-person grade extraction.
         assert got["grade"] == expected["grade"]
+        # Priority defaults to 2 on a fresh init (neutral).
+        assert got["priority"] == 2
     wb.close()
+
+
+def test_read_team_priority_roundtrip(tmp_path):
+    """User edits Priority → rebuild → priority preserved."""
+    import openpyxl
+    from budget_planner.layout import COL_ROSTER_PRIORITY
+    from budget_planner.workbook import init_workbook, rebuild_workbook
+
+    path = tmp_path / "wb.xlsx"
+    init_workbook(str(path))
+
+    wb = openpyxl.load_workbook(path)
+    cfg = wb["Config"]
+    roster_pre = read_team_from_config(cfg)
+    # Pick the first two team members and set distinct priorities.
+    target_names = [roster_pre[0]["name"], roster_pre[1]["name"]]
+    edits = {target_names[0]: 1, target_names[1]: 3}
+
+    from budget_planner.layout import SECTION_HEADER_LABELS
+    from budget_planner.reader import _find_header_row
+    roster_section = _find_header_row(cfg, SECTION_HEADER_LABELS["team_roster"], required=True)
+    header_row = roster_section + 1
+    for r in range(header_row + 1, header_row + 1 + len(roster_pre)):
+        name = cfg.cell(r, 1).value
+        if name in edits:
+            cfg.cell(row=r, column=COL_ROSTER_PRIORITY, value=edits[name])
+    wb.save(path)
+    wb.close()
+
+    rebuild_workbook(input_path=str(path))
+
+    wb2 = openpyxl.load_workbook(path)
+    roster_post = read_team_from_config(wb2["Config"])
+    wb2.close()
+
+    got = {m["name"]: m["priority"] for m in roster_post}
+    for name, expected in edits.items():
+        assert got[name] == expected, f"{name}: expected priority {expected}, got {got[name]}"
 
 
 # ── read_capacity_sheet (with assignments) ──

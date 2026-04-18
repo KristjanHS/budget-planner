@@ -19,6 +19,7 @@ Always include editor-config dirs (`.codex/`, `.cursor/`, `.vscode/`) in commits
 ## Linting
 Run `pyright` (full project, not just changed files) before committing. Fix all errors.
 Subagents create dead code — verify after each task.
+Pyright import-resolution errors mask downstream type errors. After adding any `# pyright: ignore[reportMissingImports]` suppressions, rerun `uv run pyright` before declaring the project clean — the next error tier is often hidden behind the import failure.
 
 ## Formatting
 Preserve all existing cell formatting (fonts, fills, table styles, column widths) unless the user explicitly asks for a change.
@@ -31,6 +32,7 @@ When a refactor touches both the reader and a builder, the test must exercise th
 ## Docs
 Session-generated audits, analyses, and reports go in `docs/analysis/` (already in `.claudeignore` — keeps them out of auto-loaded context). The `docs/` root is for trigger-indexed reference docs listed in CLAUDE.md. Don't drop one-off session outputs into the reference tier.
 Bucket-migration tasks (moving content out of a sheet/module): before committing, grep the old identifier across `docs/` (including `docs/plans/*.md` — non-archived plan files gate paused-work resumption and will mislead the next implementing agent), `CLAUDE.md`, and `.claude/rules/`. Additive migrations leave stale prose in downstream docs the migrator never opened.
+When a doc row claims a specific font color or formula-vs-input style for a named cell ("blue input", "black formula", "green cross-ref"), grep the builder's actual `style_cell(...)` / `font=...` call to verify. Critical Rule 3 (blue=input, black=formula, green=cross-ref) is load-bearing; mislabelling is worse than silent. Do not generalize from sibling cells — e.g. Config trust-boundary cells being blue does not imply all Config-adjacent scalars are blue.
 
 ## Invariants (extends CLAUDE.md Critical Rules)
 - Rule 6 rationale: new cross-sheet constraints, trust boundaries, and derived-metric rules are specs future agents need in loaded context — not implementation details discoverable from diff reading. Structural facts (rows/columns/freeze panes) stay in `layout.py` + `docs/internals.md`.

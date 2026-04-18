@@ -387,7 +387,6 @@ def build_timelog_plan_sheet(
     cfg_person_rows: dict[str, int] = config_layout.get("person_rows", {})
     months_row_cfg = config_layout["param_rows"]["Project Months"]
     project_months_ref = cell_ref(SHEET_CONFIG, months_row_cfg, 2)
-    rate_helper_letter = get_column_letter(TIMELOG_RATE_HELPER_COL)
 
     for i, person in enumerate(persons):
         name = person.name
@@ -407,10 +406,10 @@ def build_timelog_plan_sheet(
             month_col_end=month_col_end,
         )
         # Rate helper on PROPOSED: informational/cosmetic (row-aligned with
-        # the ASSIGNED grid consumer, which SUMPRODUCTs against rate_helper_letter
-        # across assigned_person_first_row..assigned_person_last_row — this
-        # PROPOSED-band rate cell is duplicated so the band reads self-contained).
-        _write_rate_helper_cell(ws, proposed_row, rate_helper_letter)
+        # the ASSIGNED grid consumer, which SUMPRODUCTs across the ASSIGNED
+        # band's rate column — this PROPOSED-band rate cell is duplicated so
+        # the band reads self-contained).
+        _write_rate_helper_cell(ws, proposed_row)
         for mi in range(project_months):
             month_num = mi + 1
             col = month_col_start + mi
@@ -429,7 +428,7 @@ def build_timelog_plan_sheet(
             month_col_start=month_col_start,
             month_col_end=month_col_end,
         )
-        _write_rate_helper_cell(ws, assigned_row, rate_helper_letter)
+        _write_rate_helper_cell(ws, assigned_row)
         for mi in range(project_months):
             month_num = mi + 1
             col = month_col_start + mi
@@ -809,18 +808,12 @@ def _write_person_col_a(
         style_cell(ws, row, 1, value=name, font=GREEN_XREF)
 
 
-def _write_rate_helper_cell(
-    ws: Worksheet, row: int, rate_helper_letter: str,
-) -> None:
+def _write_rate_helper_cell(ws: Worksheet, row: int) -> None:
     """Write the per-row VLOOKUP into roster_lookup col 4 (EUR/PM)."""
     style_cell(
         ws, row, TIMELOG_RATE_HELPER_COL,
         font=BLACK_FORMULA, fmt="€#,##0",
     ).value = f"=VLOOKUP(A{row},roster_lookup,4,FALSE)"
-    # rate_helper_letter is accepted for symmetry with callers that pass the
-    # precomputed letter; unused inside the formula (VLOOKUP writes into the
-    # cell at `row, TIMELOG_RATE_HELPER_COL` directly).
-    _ = rate_helper_letter
 
 
 def _write_underload_cell(
@@ -913,6 +906,11 @@ def _write_assigned_cell(
     person-WP window are pre-greyed (matching Proposed) and unlocked so the
     user can override. When ``override`` is supplied (round-trip from a prior
     user edit), the literal value is written as BLUE_INPUT.
+
+    Rule 3 carve-out: the default-formula cells are coloured BLUE_INPUT even
+    though they hold formulas, because this band IS the editable input
+    surface — the colour tells the user "you may overwrite this cell." The
+    formula default is a scaffolding default, not a derived value.
     """
     col_ltr = get_column_letter(col)
     if override is not None:

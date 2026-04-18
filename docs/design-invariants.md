@@ -46,6 +46,17 @@ Stage 3 added a Reconciliation section on Trends: three health cells (EUR throug
 
 Stage 4 (T14–T15) will harden rebuild preservation + the shape fingerprint.
 
+## Plan vs Timelog Plan — two allocation surfaces
+
+The workbook hosts two distinct allocation surfaces, both editable, and they may legitimately diverge:
+
+- **Plan / Capacity** records **actual effort** — fractional monthly FTE per (person, WP) reflecting what people *do*. Driven by Config PERSON-WP ASSIGNMENTS + distribution curves.
+- **Timelog Plan** records **timesheet-compliant allocation** — prescriptive whole-month 1.0-FTE WP labels per (person, month) telling the person where to *log*. Driven by the solver (`budget_planner/timelog_solver.py`) and overridable on the Assigned grid.
+
+A person splitting effort 0.6/0.4 across two WPs in a given month may legitimately log 1.0 to one of them that month and 1.0 to the other a different month — the timesheet rule is whole-month, the underlying effort is not. **Do not write cross-sheet formulas that reconcile Plan monthly cells against Timelog Plan monthly cells as if they must agree.** The only shared constraints are the Config inputs both surfaces consume (WP windows, PERSON-WP ASSIGNMENTS windows, Max FTE pool, Ceiling €).
+
+See `docs/plans/2026-04-18-timelog-plan-design.md` §1 for scope.
+
 ## Future invariants (reserved)
 
 Placeholders for invariants that have a home elsewhere today but belong here when the next cross-sheet rule lands. Write them up when the next invariant accretes — don't flesh them out speculatively.
@@ -61,4 +72,7 @@ Placeholders for invariants that have a home elsewhere today but belong here whe
   | `eur_actuals_through_month` | `config_sheet.py` (Config!$B$7, blue input) | `actuals.py` (Breach-In cumulative-slope, As-of), `summary.py`, `trends.py` |
   | `reconciled_through_month` | `config_sheet.py` (Config!$B$11, derived MIN) | `trends.py` (reconciliation health + summary + gap chart) |
   | `months_elapsed_hours` / `months_elapsed_eur` | `config_sheet.py` (derived DATEDIF) | `capacity.py` (per-person avg), `trends.py` (Person Load avg) |
+  | `roster_lookup` | `config_sheet.py` (Team Roster cols A-D: name, Max FTE, grade, rate EUR/PM; Priority column E intentionally excluded so existing VLOOKUP indices stay stable) | `actuals_hours.py` (forecast-EUR leaves VLOOKUP col 4), `config_sheet.py` (Assignments Balance VLOOKUP col 2), `timelog_plan.py` (per-person rate helper VLOOKUP col 4) |
+  | `team_priorities` | `config_sheet.py` (Team Roster Priority col E, blue input, default 2) | `timelog_plan.py` solver fill order (via `reader.read_team_from_config` → `Person.priority`); not read by a formula |
+  | `current_month` | `trends.py` stub (Trends!$B$1, blue input; stub written before Actuals builder runs) | `actuals.py` (Cum. EUR / Breach-In cutoff), `summary.py`, `timelog_plan.py` (per-WP `Window months remaining`) |
 - **Reader/builder round-trip rule**: readers use named ranges (not coordinates); tolerate internal blanks; rebuild must preserve user-authored values on blue input cells.

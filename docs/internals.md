@@ -26,6 +26,7 @@ def build_<sheet>_sheet(ws, wb, ..., *, project_params=None, work_packages=None,
 | plan | config_layout.wp_first_row |
 | capacity | config_layout.person_rows, plan_layout |
 | plan (patch) | capacity_layout.person_groups.wp_rows |
+| timelog_plan | config_layout + Trends-stub `current_month` named range + `team_priorities` / `roster_lookup` named ranges |
 | actuals | plan_layout |
 | summary | plan_layout + actuals_layout |
 | trends | all upstream layouts |
@@ -37,6 +38,8 @@ def build_<sheet>_sheet(ws, wb, ..., *, project_params=None, work_packages=None,
 **Plan** (`plan.py`): Two-phase build. Phase 1 creates structure with empty FTE cells. Phase 2 (`_apply_planned_formulas()`) fills cells with `=SUM(Capacity!...)` after Capacity is built. Has validation columns: Sum, Budget FTE, Variance.
 
 **Capacity** (`capacity.py`): Most complex builder. Creates per-person groups: WP rows (blue input, static values from distribution curves), external project rows, TOTAL (SUM), REMAINING (Max FTE - TOTAL), EU TOTAL (programme WP rows + EU-flagged externals — tracks total EU commitment against the 215-day annual ceiling, distinct from TOTAL). Per-person WP rows are **only the WPs assigned to that person** in Config PERSON-WP ASSIGNMENTS — not every WP. Distribution curve per WP (flat/front-loaded/bell/back-loaded) comes from Config WP SCHEDULE.Type. Right-side raw-monthly band (outline_level=1, default collapsed): Actual-FTE (green cross-ref to Actuals-Hours hour / hours_per_fte_month) + Variance-FTE (Planned - Actual). Always-visible 2-col **TO-DATE** block beyond that: `Actual PM` (WP rows: green ref to Actuals-Hours `cum_hours_col` / hours_per_fte_month; TOTAL/EU TOTAL: SUM of WP Actual cells) + `Variance PM` (only populated on TOTAL + EU TOTAL: windowed plan SUM on same-row planned cells − Actual; red CF < 0). Returns `capacity_layout` with `person_groups` + `todate_col_actual` / `todate_col_var`.
+
+**Timelog Plan** (`timelog_plan.py`): Prescriptive whole-month 1.0-FTE WP allocation grid — separate allocation surface from Plan/Capacity (see `docs/design-invariants.md` § Plan vs Timelog Plan). Twin grids: a **Proposed** grid (left, locked, pastel-filled by CF per WP) written by the solver (`budget_planner/timelog_solver.py`) and an **Assigned** grid (right) that starts as `=<Proposed cell>` formulas and accepts blue-input overrides. Row-2 traffic lights + per-person summary block (Assigned count, Pool, Remaining, Over-pool?, Switches, First log, Last log) + per-WP summary block (Ceiling €, Assigned €, Overshoot €, Undershoot €, Assigned months, Window months remaining, Any out-of-window?). Per-WP `Assigned €` uses a SUMPRODUCT `(assigned_grid="WPk")*person_rate_col` pattern — verified in LO; if Excel returns #VALUE! in a real-file check, swap to per-row helper-column pattern. Reader: `read_timelog_plan` extracts `assigned_overrides` (cells the user typed literal values into, not `=Proposed!...` formulas) so rebuild preserves them.
 
 **Actuals** (`actuals.py`): Similar to Plan but with EUR input cells. Row 1 is an "As of" header pair (label + `=EDATE(project_start, eur_actuals_through_month-1)` green date for the Actual block; same pattern for the Forecast block at the forecast-column offset). Section header on row 2. Extra validation columns: Cum. EUR (SUMPRODUCT up to `current_month`), % Ceiling, Breach In — formula `(ceiling − cum EUR) / (cum EUR / months_elapsed_eur)` (cumulative-slope from project start through `eur_actuals_through_month`; not a per-month slope). Parallel forecast-monitoring block (4 cols, outline_level=1, collapsible, separated from actual-EUR block by a 1-col gutter): Cum Forecast EUR, Forecast Variance, Forecast % Ceiling, Forecast Breach In (denominator `months_elapsed_hours`) — green cross-refs into Plan-Forecast WP rows. CF rules mirror the actual-EUR block. Return dict key `header_row` is `1` (the "As of" row); section header is on row 2.
 
@@ -57,6 +60,8 @@ The authoring UX assigns each sheet a single role — derived views must not wri
 | Config (PERSON-WP ASSIGNMENTS, EXTERNAL COMMITMENTS, WP tables, roster, grade rates, reporting periods) | **Primary planning surface** — all assignment/roster edits land here |
 | Capacity monthly cells | Auto-filled by distribution curves on rebuild; users can override for fine-tuning (overrides lost on next rebuild) |
 | Plan monthly cells | Formula-driven (`=SUM(Capacity!...)`) — **do not edit directly** |
+| Timelog Plan Proposed grid | Solver-written, locked — regenerated every rebuild |
+| Timelog Plan Assigned grid | Starts as `=Proposed`; user overrides become blue-input literals, preserved across rebuild |
 | Actuals monthly cells | Input surface for EUR spend (accountant figures) |
 | Actuals-Hours monthly cells | Input surface for hour timelog (primary hours surface) |
 | Plan-Forecast | Read-only — every cell is a formula aggregating Actuals-Hours leaves |
@@ -66,11 +71,11 @@ The authoring UX assigns each sheet a single role — derived views must not wri
 
 Build order (enforced by `test_build_order_is_stable`) differs from user-facing tab order — some builders are ordered by dependency rather than display position.
 
-**Build order:** Config -> Capacity -> Plan -> patch Plan (fill FTE cells with Capacity SUMs) -> Trends stub (creates `current_month` named range before Actuals reads it) -> Actuals-Hours -> Plan-Forecast -> Actuals -> Summary -> Trends.
+**Build order:** Config -> Capacity -> Plan -> patch Plan (fill FTE cells with Capacity SUMs) -> Trends stub (creates `current_month` named range before Actuals reads it) -> **Timelog Plan** (consumes config_layout + `current_month` + `team_priorities` + `roster_lookup`) -> Actuals-Hours -> Plan-Forecast -> Actuals -> Summary -> Trends.
 
-**Tab order** (set after build via `wb.move_sheet`): Config, Capacity, Plan, Actuals, Actuals-Hours, Plan-Forecast, Trends, Summary.
+**Tab order** (set after build via `wb.move_sheet`): Config, Capacity, Plan, **Timelog Plan**, Actuals, Actuals-Hours, Plan-Forecast, Trends, Summary.
 
-Key build-order rationale: Actuals-Hours must precede Plan-Forecast (forecast-EUR leaves exist before they are SUMmed); Plan-Forecast must precede Actuals (forecast monitoring block green-cross-refs Plan-Forecast); Summary must follow Plan-Forecast (pulls Forecast EUR/year); Trends is populated last so every upstream layout dict (including `helper_row_forecast`) is known.
+Key build-order rationale: Timelog Plan is independent of the forecast chain — it only needs the Config layout and the `current_month` stub, so it slots right after Trends-stub; Actuals-Hours must precede Plan-Forecast (forecast-EUR leaves exist before they are SUMmed); Plan-Forecast must precede Actuals (forecast monitoring block green-cross-refs Plan-Forecast); Summary must follow Plan-Forecast (pulls Forecast EUR/year); Trends is populated last so every upstream layout dict (including `helper_row_forecast`) is known.
 
 ---
 
@@ -148,6 +153,22 @@ blank. See `_iter_named_range_rows` in `reader.py` and shape-drift tests in
 
 ---
 
+## Solvers
+
+Pure algorithmic modules — no openpyxl, no workbook I/O. Called by a builder, return plain-Python data structures the builder writes into cells. Keep solvers strictly deterministic so tests can pin behaviour.
+
+### timelog_solver (`budget_planner/timelog_solver.py`)
+
+Two-pass greedy allocator driving the Timelog Plan Proposed grid. See `docs/plans/2026-04-18-timelog-plan-design.md` §4 for the algorithm spec.
+
+- `greedy_pass(persons, wps, person_wp_windows, project_months)` — fills WPs in earliest-close order; within a WP, priority-1 persons before priority-2 before priority-3; continue-a-run preferred over starting a new run. Check-after-placing allows exactly one month of overshoot (the "buffer for auditor haircut" requirement).
+- `switch_reduction_pass(assigned, ...)` — adjacent-pair local search: swaps `(p1, m, m+1) ↔ (p2, m, m+1)` whenever the swap is legal and strictly reduces the total switch count. **Known shape limitation:** only pair-wise adjacent swaps are considered. Rearrangements that require a 3+ month block swap or a same-month-window 3-person rotation are not found. In practice the greedy pass leaves few such patterns, and the algorithm trades optimality for determinism + bounded runtime.
+- `solve(...)` — composed entry point: `greedy_pass` then `switch_reduction_pass`. Deterministic → reproducible tests in `tests/test_timelog_solver.py`.
+
+No other solvers exist today. If a future builder needs algorithmic assignment (e.g. automatic Capacity distribution beyond the current curve presets), it belongs here as a sibling module, not inside the builder.
+
+---
+
 ## Layout and Styling
 
 `layout.py` and `styles.py` centralize constants that every builder imports.
@@ -200,6 +221,7 @@ Each sheet's tab color is a semantic role marker — don't change without updati
 |-------|-----------|-----|
 | Config | Blue (4472C4) | Single source of truth for all parameters |
 | Capacity | Purple | Primary planning surface (derived from Config assignments) |
+| Timelog Plan | Orange (FF8C00) | Prescriptive 1.0-FTE WP allocation — distinct surface from Plan/Capacity |
 | Actuals | Blue (0000FF) | EUR input from accountant |
 | Actuals-Hours | Red (C00000) | Hours input — distinct to flag as the primary hours surface |
 | Plan-Forecast | Green (00B050) | Read-only aggregation (green = formula-derived) |

@@ -17,8 +17,16 @@ Two passes:
 2. Switch-reduction local improvement — swap adjacent-month blocks between
    two persons to reduce total switches without breaking any invariant.
 
+Known shape limitation (design §9 Q16): ``switch_reduction_pass`` considers
+only adjacent-pair swaps — it exchanges ``(p1, m, m+1)`` with
+``(p2, m, m+1)``. Rearrangements that require a 3+ month block swap, or a
+same-month-window rotation among three persons, are not found. In practice
+greedy leaves few such patterns; the algorithm trades optimality for
+determinism + bounded runtime. A future extension could add a second
+adjacent-pair pass with wider windows or a 3-way rotation primitive.
+
 See ``docs/plans/2026-04-18-timelog-plan-design.md`` §4 for the algorithm
-spec this implements.
+spec this implements and §9 for the decisions log.
 """
 
 from __future__ import annotations

@@ -12,7 +12,9 @@ budget_planner/
   summary.py           # Summary sheet: budget overview + calendar-year aggregation
   actuals.py           # Actuals sheet: EUR per WP per month from accountant
   trends.py            # Trends sheet: burn rate, cumulative chart, person load
-  reader.py            # Layout detection + Config/Capacity/Actuals readers
+  timelog_plan.py      # Timelog Plan sheet: prescriptive 1.0-FTE WP allocation grid (Proposed + Assigned)
+  timelog_solver.py    # Pure two-pass greedy solver driving the Timelog Plan Proposed grid
+  reader.py            # Layout detection + Config/Capacity/Actuals/Timelog Plan readers
   workbook.py          # Orchestrator: init_workbook() + rebuild_workbook() + seed_demo_data() + snapshot/restore
   layout.py            # Centralized layout constants, column structure, calendar year helpers
 tests/
@@ -53,6 +55,10 @@ One bullet per worksheet — what it is, what feeds it, what it feeds. Build ord
 - **Plan** — Compact 1-row header + Planned FTE block. Pure formula mirror of Capacity shaped as WP × month.
   - IN ← Capacity (SUM per WP × month).
   - OUT → Summary (Plan EUR = Plan FTE × rate); Trends (planned cumulative curve).
+
+- **Timelog Plan** — Prescriptive whole-month 1.0-FTE WP allocation grid. Separate surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). Solver writes the Proposed grid (locked); the Assigned grid starts as `=Proposed` and accepts blue-input overrides preserved across rebuild.
+  - IN ← Config (WP budget + WP schedule + PERSON-WP ASSIGNMENTS + Team Roster including `Priority` + grade rates); `current_month` (per-WP window-months-remaining).
+  - OUT → (terminal surface; no downstream sheet consumes it).
 
 - **Actuals** — EUR actuals per WP per month (accountant input) plus a parallel forecast-monitoring block reading Plan-Forecast. CF greys monthly Actual EUR cells past `eur_actuals_through_month` (not-yet-closed months). Tab color: Blue.
   - IN ← user EUR input; Plan-Forecast (forecast block).

@@ -30,19 +30,25 @@ graph TB
   subgraph "Sheet Builders"
     CFG_S["config_sheet.py"] & PLAN["plan.py"] & CAP["capacity.py"]
     ACT["actuals.py"] & SUM["summary.py"] & TRENDS["trends.py"]
+    TLP["timelog_plan.py"]
+  end
+  subgraph "Solvers"
+    TLS["timelog_solver.py"]
   end
   subgraph "Shared Infrastructure"
     LAYOUT["layout.py"] & STYLES["styles.py"]
     CONFIG["config.py"] & READER["reader.py"]
   end
   CLI --> WB
-  WB --> CFG_S & PLAN & CAP & ACT & SUM & TRENDS
+  WB --> CFG_S & PLAN & CAP & ACT & SUM & TRENDS & TLP
   WB -->|"init"| CONFIG
   WB -->|"rebuild"| READER
-  CFG_S & PLAN & CAP & ACT & SUM & TRENDS --> LAYOUT & STYLES
+  CFG_S & PLAN & CAP & ACT & SUM & TRENDS & TLP --> LAYOUT & STYLES
+  TLP -->|"solve"| TLS
   PLAN -->|"SUM refs"| CAP
   SUM -->|"refs"| PLAN & ACT
   TRENDS -->|"refs"| PLAN & ACT & CAP & CFG_S
+  TLP -->|"refs"| CFG_S
 ```
 
 ## Build Order
@@ -56,6 +62,7 @@ sequenceDiagram
   participant PL as plan
   participant CP as capacity
   participant TR as trends (stub)
+  participant TLP as timelog_plan
   participant AC as actuals
   participant SM as summary
   participant T2 as trends (content)
@@ -68,6 +75,8 @@ sequenceDiagram
   WB->>PL: _apply_planned_formulas(capacity_layout)
   Note right of PL: Patches Plan with SUM(Capacity!...)
   WB->>TR: Skeleton: current_month input + named range
+  WB->>TLP: build_timelog_plan_sheet(config_layout, ...)
+  Note right of TLP: Solver writes Proposed grid;<br/>Assigned grid starts as =Proposed
   WB->>AC: build_actuals_sheet(plan_layout)
   Note right of AC: Returns actuals_layout
   WB->>SM: build_summary_sheet(plan_layout, actuals_layout)
@@ -151,7 +160,7 @@ flowchart TD
 
 ## Sheet Responsibilities
 
-User-facing tab order (set in `workbook.py` after build): **Config → Capacity → Plan → Actuals → Actuals-Hours → Plan-Forecast → Trends → Summary**. Note the Cross-Sheet Formula References diagram above omits `Actuals-Hours` and `Plan-Forecast`; those two sheets form a secondary data chain documented here in prose.
+User-facing tab order (set in `workbook.py` after build): **Config → Capacity → Plan → Timelog Plan → Actuals → Actuals-Hours → Plan-Forecast → Trends → Summary**. Note the Cross-Sheet Formula References diagram above omits `Actuals-Hours`, `Plan-Forecast`, and `Timelog Plan`; the first two form a secondary data chain documented here in prose, and Timelog Plan is a terminal surface (Config refs in; nothing out).
 
 ### Config
 Single source of truth for project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, and the grade rate table. Hosts the named ranges `project_start` and `fte_rate`. **Tab color: Blue (4472C4).** Upstream to every other sheet.
@@ -161,6 +170,9 @@ Primary planning surface: per-person monthly FTE allocation across programme WPs
 
 ### Plan
 Compact 1-row header + Planned-FTE block whose cells are `=SUM(Capacity!…)` per WP × month. Downstream consumers: Summary, Trends.
+
+### Timelog Plan
+Prescriptive whole-month 1.0-FTE WP allocation grid — a separate allocation surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). Solver (`budget_planner/timelog_solver.py`) writes the Proposed grid (locked); the Assigned grid starts as `=<Proposed cell>` formulas and accepts blue-input overrides. Consumes `current_month`, `team_priorities`, `roster_lookup`. **Tab color: Orange (FF8C00).** Terminal surface — no downstream sheet consumes it.
 
 ### Actuals
 EUR actuals per WP per month (input from accountant) **plus** a parallel forecast-monitoring block that reads Plan-Forecast. Monthly Actual-EUR cells past `eur_actuals_through_month` are greyed via CF — those months are not closed yet. **Tab color: Blue.**

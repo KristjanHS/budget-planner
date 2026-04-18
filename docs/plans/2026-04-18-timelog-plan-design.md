@@ -195,3 +195,4 @@ Resolved during 2026-04-18 brainstorming:
 | Q14 | Slight overshoot allowed by design | Auditor haircut + partner spillover buffer |
 | Q15a | Switch count includes empty↔WP transitions | "Any break in streak" semantics |
 | Q15b | Undershoot is red (unused budget = real problem); overshoot is neutral | Money left on the table is the concern |
+| Q16 | Pass-2 swap primitive is fixed at adjacent-pair `(p1, m, m+1) ↔ (p2, m, m+1)`; 3+ month block swaps and 3-way same-month-window rotations are not considered | Accepted as a known shape limitation — determinism + bounded runtime > optimality. Documented in `timelog_solver.py` module docstring (Stage 2B, 2026-04-18). |

@@ -259,8 +259,19 @@ def test_switch_reduction_reduces_or_preserves_switches():
         PersonWPWindow("Bob", "WP2", 1, 8),
     ]
     greedy = greedy_pass(persons, wps, windows, project_months=8)
+    # Precondition: the fixture must actually give the swap primitive something
+    # to work with. If greedy already leaves zero switches, this test would
+    # pass trivially (0 ≤ 0) and silently stop exercising switch_reduction_pass
+    # — breaking its load-bearing property assertion. Lock in that the scenario
+    # produces a multi-switch starting state.
+    greedy_switches = _count_switches(greedy)
+    assert greedy_switches >= 2, (
+        f"precondition: greedy fixture should leave ≥2 switches for "
+        f"switch_reduction_pass to act on, got {greedy_switches}"
+    )
+
     after = switch_reduction_pass(greedy, persons, wps, windows, project_months=8)
-    assert _count_switches(after) <= _count_switches(greedy)
+    assert _count_switches(after) <= greedy_switches
 
 
 def test_switch_reduction_actually_reduces_on_interleaved_input():

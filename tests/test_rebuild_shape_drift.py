@@ -193,6 +193,78 @@ def test_hours_actuals_through_month_round_trip(tmp_path: Path):
     wb.close()
 
 
+def test_blank_row_in_project_params_preserves_through_month_values(tmp_path: Path):
+    """User inserts a blank row inside rows 1-11 (Project Parameters band);
+    rebuild must still pick up B7/B8 values via label-prefix scan and restore
+    them to canonical rows.
+
+    The reader is position-independent (scans column A for label prefix), so
+    Excel-side inserts inside the params band should not clobber user values
+    even though openpyxl's ``insert_rows`` does not update single-cell named
+    range targets. The rebuild rewrites rows 1-11 at canonical positions and
+    rebinds named ranges there — drift-heal by reconstruction, not by
+    in-place patching.
+    """
+    path = tmp_path / "wb.xlsx"
+    init_workbook(str(path))
+
+    # ── User edits B7=3, B8=5, then inserts a blank row mid-band ──
+    wb = openpyxl.load_workbook(path)
+    config_ws = wb["Config"]
+    config_ws["B7"] = 3
+    config_ws["B8"] = 5
+    # Insert blank row at row 5 (between EU Annual Ceiling and Hours/FTE Month).
+    # Physically shifts rows 5..11 down by one — the label-prefix reader
+    # should still find everything, but the single-cell named-range targets
+    # (e.g. hours_actuals_through_month = Config!$B$8) now point at a stale
+    # physical row until rebuild rewrites them.
+    config_ws.insert_rows(5, amount=1)
+    wb.save(path)
+    wb.close()
+
+    # ── Rebuild: builder reads via label-prefix, rewrites canonical rows ──
+    rebuild_workbook(str(path))
+
+    wb = openpyxl.load_workbook(path)
+    config_ws = wb["Config"]
+
+    # (a) User values land back at canonical rows B7/B8.
+    assert config_ws["B7"].value == 3, (
+        f"Rebuild clobbered eur_actuals_through_month after mid-params insert: "
+        f"expected 3 at B7, got {config_ws['B7'].value!r}"
+    )
+    assert config_ws["B8"].value == 5, (
+        f"Rebuild clobbered hours_actuals_through_month after mid-params "
+        f"insert: expected 5 at B8, got {config_ws['B8'].value!r}"
+    )
+
+    # (b) Bystander: untouched Hours/FTE Month (B6=143) survives — proves the
+    # preservation is selective, not accidental wholesale preservation from
+    # the pre-insert state.
+    assert config_ws["B6"].value == 143, (
+        f"Hours per FTE Month drifted across shape-drift rebuild: "
+        f"{config_ws['B6'].value!r}"
+    )
+
+    # (c) Named ranges rebind to canonical rows (rebuild healed the drift).
+    expected_targets = {
+        "eur_actuals_through_month": "Config!$B$7",
+        "hours_actuals_through_month": "Config!$B$8",
+        "months_elapsed_hours": "Config!$B$9",
+        "months_elapsed_eur": "Config!$B$10",
+        "reconciled_through_month": "Config!$B$11",
+    }
+    for name, expected in expected_targets.items():
+        assert name in wb.defined_names, (
+            f"Named range {name!r} lost across shape-drift rebuild"
+        )
+        assert wb.defined_names[name].attr_text == expected, (
+            f"Named range {name!r} drifted after shape-drift rebuild: "
+            f"expected {expected!r}, got {wb.defined_names[name].attr_text!r}"
+        )
+    wb.close()
+
+
 def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
     """User inserts a new person row in the middle of Team Roster; rebuild must keep them."""
     path = tmp_path / "wb.xlsx"

@@ -753,4 +753,71 @@ def test_roster_priority_header_has_comment():
     text = cell.comment.text or ""
     # Explain the 1/2/3 semantics and reference the consumer.
     assert "1" in text and "3" in text
+
+
+def test_config_named_range_targets_match_internals_doc():
+    """Docs-drift detector: Config named-range targets in the generated
+    workbook must match the row numbers documented in ``docs/internals.md``
+    (Per-Sheet Notes → Config prose).
+
+    When the builder shifts a param row or ``internals.md`` claims a wrong
+    row, this test fails — forcing either the builder or the doc to resync.
+    The doc is the source of truth that future agents load; a silent skew
+    would mislead them about where each named range points.
+    """
+    import re
+    from pathlib import Path
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    build_config_sheet(ws, wb, _sample_params(), _sample_wps())
+
+    internals_path = Path(__file__).parent.parent / "docs" / "internals.md"
+    text = internals_path.read_text(encoding="utf-8")
+
+    # Scope to the Config per-sheet paragraph so a stray `(B7)` reference in
+    # another sheet's prose can't contaminate the map.
+    config_match = re.search(r"\*\*Config\*\*[^\n]*", text)
+    assert config_match, (
+        "docs/internals.md lost the **Config** per-sheet paragraph — "
+        "update the regex or restore the doc structure"
+    )
+    config_para = config_match.group(0)
+
+    # Expected form: `` `name` (B<row>) `` — matches the prose convention
+    # used for every Config-held named range.
+    pairs = re.findall(r"`([a-z_]+)` \(B(\d+)\)", config_para)
+    assert pairs, (
+        "No named-range → cell mappings parsed from internals.md Config "
+        "paragraph — doc format drifted from the `name` (B<row>) convention"
+    )
+    doc_map = {name: int(row) for name, row in pairs}
+
+    # Minimum coverage — these must all be documented. Fail loud if any of
+    # the load-bearing v2 ranges silently dropped out of the doc.
+    required = {
+        "project_start", "fte_rate",
+        "eur_actuals_through_month", "hours_actuals_through_month",
+        "months_elapsed_hours", "months_elapsed_eur",
+        "reconciled_through_month",
+    }
+    missing = required - doc_map.keys()
+    assert not missing, (
+        f"docs/internals.md Config paragraph is missing named-range rows "
+        f"for {sorted(missing)}"
+    )
+
+    for name, expected_row in doc_map.items():
+        assert name in wb.defined_names, (
+            f"Named range {name!r} documented in internals.md but missing "
+            f"from the workbook"
+        )
+        expected_attr = f"Config!$B${expected_row}"
+        actual = wb.defined_names[name].attr_text
+        assert actual == expected_attr, (
+            f"Named range {name!r}: internals.md says {expected_attr!r}, "
+            f"workbook has {actual!r} — update whichever is wrong"
+        )
     assert "Timelog Plan" in text

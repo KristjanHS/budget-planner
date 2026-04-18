@@ -144,23 +144,24 @@ def test_hours_actuals_through_month_round_trip(tmp_path: Path):
         f"expected 5, got {config_ws['B8'].value!r}"
     )
 
-    # (b) Derived formulas still exact-string match in B9-B11.
-    assert config_ws["B9"].value == "=MAX(1,$B$8)", (
-        f"B9 derived formula drift: {config_ws['B9'].value!r}"
-    )
-    assert config_ws["B10"].value == "=MAX(1,$B$7)", (
+    # (b) Derived formulas still exact-string match in B10-B12 (B9 = Version Stamp).
+    assert config_ws["B10"].value == "=MAX(1,$B$8)", (
         f"B10 derived formula drift: {config_ws['B10'].value!r}"
     )
-    assert config_ws["B11"].value == "=MIN($B$7,$B$8)", (
+    assert config_ws["B11"].value == "=MAX(1,$B$7)", (
         f"B11 derived formula drift: {config_ws['B11'].value!r}"
     )
+    assert config_ws["B12"].value == "=MIN($B$7,$B$8)", (
+        f"B12 derived formula drift: {config_ws['B12'].value!r}"
+    )
 
-    # (c) All four named ranges still point at Config!$B$8..$B$11.
+    # (c) All five named ranges still point at Config!$B$8..$B$12.
     expected_targets = {
         "hours_actuals_through_month": "Config!$B$8",
-        "months_elapsed_hours": "Config!$B$9",
-        "months_elapsed_eur": "Config!$B$10",
-        "reconciled_through_month": "Config!$B$11",
+        "version_stamp": "Config!$B$9",
+        "months_elapsed_hours": "Config!$B$10",
+        "months_elapsed_eur": "Config!$B$11",
+        "reconciled_through_month": "Config!$B$12",
     }
     for name, expected in expected_targets.items():
         assert name in wb.defined_names, (
@@ -184,7 +185,7 @@ def test_hours_actuals_through_month_round_trip(tmp_path: Path):
     )
     # Derived formulas still present (their values would be filled by recalc,
     # but on a freshly rebuilt workbook openpyxl sees the formula string).
-    assert config_ws["B9"].value == "=MAX(1,$B$8)"
+    assert config_ws["B10"].value == "=MAX(1,$B$8)"
     # Bystander: an untouched param row (Hours per FTE Month, B6=143) stays put —
     # proves the preservation is selective, not wholesale.
     assert config_ws["B6"].value == 143, (
@@ -194,14 +195,14 @@ def test_hours_actuals_through_month_round_trip(tmp_path: Path):
 
 
 def test_blank_row_in_project_params_preserves_through_month_values(tmp_path: Path):
-    """User inserts a blank row inside rows 1-11 (Project Parameters band);
+    """User inserts a blank row inside rows 1-12 (Project Parameters band);
     rebuild must still pick up B7/B8 values via label-prefix scan and restore
     them to canonical rows.
 
     The reader is position-independent (scans column A for label prefix), so
     Excel-side inserts inside the params band should not clobber user values
     even though openpyxl's ``insert_rows`` does not update single-cell named
-    range targets. The rebuild rewrites rows 1-11 at canonical positions and
+    range targets. The rebuild rewrites rows 1-12 at canonical positions and
     rebinds named ranges there — drift-heal by reconstruction, not by
     in-place patching.
     """
@@ -250,9 +251,10 @@ def test_blank_row_in_project_params_preserves_through_month_values(tmp_path: Pa
     expected_targets = {
         "eur_actuals_through_month": "Config!$B$7",
         "hours_actuals_through_month": "Config!$B$8",
-        "months_elapsed_hours": "Config!$B$9",
-        "months_elapsed_eur": "Config!$B$10",
-        "reconciled_through_month": "Config!$B$11",
+        "version_stamp": "Config!$B$9",
+        "months_elapsed_hours": "Config!$B$10",
+        "months_elapsed_eur": "Config!$B$11",
+        "reconciled_through_month": "Config!$B$12",
     }
     for name, expected in expected_targets.items():
         assert name in wb.defined_names, (

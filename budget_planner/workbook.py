@@ -24,6 +24,7 @@ Coupling points:
 
 import os
 import shutil
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -57,6 +58,31 @@ from budget_planner.layout import (
 from budget_planner.styles import (
     BLACK_FORMULA, HEADER_FONT, style_cell, apply_year_groups, sized_comment,
 )
+
+
+def _resolve_version_stamp() -> str:
+    """Return a commit identifier for the running checkout.
+
+    Uses ``git describe --always --dirty`` — so a clean commit yields the tag
+    or short SHA, and an uncommitted tree appends ``-dirty`` (an audit-visible
+    signal that the builder ran on in-progress code).
+
+    Falls back to ``"unknown"`` when git is unavailable, the cwd isn't a
+    checkout, or the subprocess fails for any reason.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "describe", "--always", "--dirty"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return "unknown"
+    if result.returncode != 0:
+        return "unknown"
+    return result.stdout.strip() or "unknown"
 
 
 def snapshot_workbook(filepath: str) -> str:
@@ -186,6 +212,7 @@ def _build_all_sheets(
     preserved_actuals_hours=None,
     preserved_timelog_assigned=None,
     reporting_periods=None,
+    version_stamp=None,
 ):
     """Build all sheets into the workbook.
 
@@ -226,6 +253,7 @@ def _build_all_sheets(
         grade_rates=grade_rates,
         assignments=assignments,
         external_commitments=external_commitments,
+        version_stamp=version_stamp,
     )
 
     # Stage 2 — Capacity (consumes config_layout)
@@ -481,6 +509,7 @@ def init_workbook(
         assignments=assignments,
         reporting_periods=reporting_periods,
         grade_rates=grade_rates,
+        version_stamp=_resolve_version_stamp(),
     )
 
     # _apply_protection(wb)  # Temporarily disabled
@@ -734,6 +763,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         preserved_timelog_assigned=preserved_timelog_assigned,
         reporting_periods=reporting_periods,
         grade_rates=grade_rates,
+        version_stamp=_resolve_version_stamp(),
     )
 
     # _apply_protection(wb)  # Temporarily disabled

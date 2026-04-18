@@ -29,6 +29,7 @@ ConfigParamRows = TypedDict("ConfigParamRows", {
     "Hours per FTE Month": int,
     "EUR Actuals Through Month": int,
     "Hours Actuals Through Month": int,
+    "Version Stamp": int,
 })
 
 # ── Sheet name constants ──

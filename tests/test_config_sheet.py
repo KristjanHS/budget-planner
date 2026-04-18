@@ -628,8 +628,9 @@ def test_hours_actuals_through_month_param_and_named_ranges():
 
     Checks structural contracts that consumers in T5+ will depend on:
     - B8 is the blue-input `Hours Actuals Through Month` seed = 1.
-    - Rows 9/10/11 carry the derived label/formula pairs in col A/B.
-    - Four named ranges resolve to Config!$B$8..$B$11.
+    - Row 9 is the `Version Stamp` code-written audit cell.
+    - Rows 10/11/12 carry the derived label/formula pairs in col A/B.
+    - Four named ranges resolve to Config!$B$8 and Config!$B$10..$B$12.
     """
     wb = Workbook()
     ws = wb.active
@@ -637,11 +638,12 @@ def test_hours_actuals_through_month_param_and_named_ranges():
     ws.title = "Config"
     build_config_sheet(ws, wb, _sample_params(), _sample_wps())
 
-    # ── Labels in column A on rows 8-11 ──
+    # ── Labels in column A on rows 8-12 ──
     assert ws.cell(8, 1).value == "Hours Actuals Through Month"
-    assert ws.cell(9, 1).value == "Months Elapsed (Hours)"
-    assert ws.cell(10, 1).value == "Months Elapsed (EUR)"
-    assert ws.cell(11, 1).value == "Reconciled Through Month"
+    assert ws.cell(9, 1).value == "Version Stamp"
+    assert ws.cell(10, 1).value == "Months Elapsed (Hours)"
+    assert ws.cell(11, 1).value == "Months Elapsed (EUR)"
+    assert ws.cell(12, 1).value == "Reconciled Through Month"
 
     # ── Blue input cell: value + font ──
     b8 = ws.cell(8, 2)
@@ -649,10 +651,13 @@ def test_hours_actuals_through_month_param_and_named_ranges():
     assert "0000FF" in str(b8.font.color.rgb).upper()
 
     # ── Derived cells: exact formulas + BLACK_FORMULA font ──
-    assert ws.cell(9, 2).value == "=MAX(1,$B$8)"
-    assert ws.cell(10, 2).value == "=MAX(1,$B$7)"
-    assert ws.cell(11, 2).value == "=MIN($B$7,$B$8)"
-    for r in (9, 10, 11):
+    # Derived formulas still reference $B$7 (EUR) and $B$8 (Hours) — the
+    # Version Stamp insert at row 9 pushed derived rows down but the absolute
+    # refs to the two blue-input through-month cells are unchanged.
+    assert ws.cell(10, 2).value == "=MAX(1,$B$8)"
+    assert ws.cell(11, 2).value == "=MAX(1,$B$7)"
+    assert ws.cell(12, 2).value == "=MIN($B$7,$B$8)"
+    for r in (10, 11, 12):
         rgb = str(ws.cell(r, 2).font.color.rgb).upper()
         assert rgb.endswith("000000"), (
             f"Derived row {r} col B should be BLACK_FORMULA, got {rgb}"
@@ -663,11 +668,11 @@ def test_hours_actuals_through_month_param_and_named_ranges():
     assert "hours_actuals_through_month" in names
     assert names["hours_actuals_through_month"].attr_text == "Config!$B$8"
     assert "months_elapsed_hours" in names
-    assert names["months_elapsed_hours"].attr_text == "Config!$B$9"
+    assert names["months_elapsed_hours"].attr_text == "Config!$B$10"
     assert "months_elapsed_eur" in names
-    assert names["months_elapsed_eur"].attr_text == "Config!$B$10"
+    assert names["months_elapsed_eur"].attr_text == "Config!$B$11"
     assert "reconciled_through_month" in names
-    assert names["reconciled_through_month"].attr_text == "Config!$B$11"
+    assert names["reconciled_through_month"].attr_text == "Config!$B$12"
 
 
 def test_eur_actuals_through_month_constant_and_named_range(tmp_path):
@@ -693,6 +698,52 @@ def test_eur_actuals_through_month_constant_and_named_range(tmp_path):
 
     # Label in col A on the same row
     assert cfg.cell(row=row, column=1).value == "EUR Actuals Through Month"
+
+
+# ── Version stamp (post-v2 follow-up) ──
+
+def test_version_stamp_default_and_named_range():
+    """Default (no version passed) is 'unknown'; named range points at B9."""
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    build_config_sheet(ws, wb, _sample_params(), _sample_wps())
+
+    # Default value is the "unknown" sentinel (not None, not "").
+    # Proves the builder always writes a non-empty string so auditors see
+    # a concrete stamp even when the orchestrator doesn't pass git context
+    # (e.g. build_from_fingerprint on the synthetic-rebuild path).
+    assert ws.cell(9, 1).value == "Version Stamp"
+    assert ws.cell(9, 2).value == "unknown"
+    assert "version_stamp" in wb.defined_names
+    assert wb.defined_names["version_stamp"].attr_text == "Config!$B$9"
+
+
+def test_version_stamp_explicit_value_round_trips():
+    """Explicit value threaded from the orchestrator lands in B9 verbatim."""
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    build_config_sheet(
+        ws, wb, _sample_params(), _sample_wps(),
+        version_stamp="v1.2.3-4-gabcdef1-dirty",
+    )
+    # The value is written as a literal string (not as a formula starting
+    # with "=") — the cell is audit metadata, not a derived formula.
+    assert ws.cell(9, 2).value == "v1.2.3-4-gabcdef1-dirty"
+
+
+def test_resolve_version_stamp_fallback_on_git_failure(monkeypatch):
+    """Resolver returns 'unknown' when the git subprocess can't run."""
+    from budget_planner import workbook as _wb
+
+    def _boom(*args, **kwargs):
+        raise FileNotFoundError("git: not found")
+
+    monkeypatch.setattr(_wb.subprocess, "run", _boom)
+    assert _wb._resolve_version_stamp() == "unknown"
 
 
 # ── Roster Priority column (Task T1 of Timelog Plan) ──

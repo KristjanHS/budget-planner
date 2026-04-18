@@ -618,7 +618,8 @@ def _write_external_section(ws, start_row, external_commitments):
 
 def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
                        team=None, reporting_periods=None, grade_rates=None,
-                       assignments=None, external_commitments=None):
+                       assignments=None, external_commitments=None,
+                       version_stamp=None):
     """Build the Config sheet with project parameters, WP budget/schedule, team roster, and grade rates.
 
     Args:
@@ -681,6 +682,9 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
             "0",
             None,
         ),
+        # Code-written audit receipt — overwritten on every init/rebuild.
+        # Default "unknown" survives when no git context is passed in.
+        ("Version Stamp", version_stamp or "unknown", None, None),
     ]
     # Param rows are driven by the order of param_defs above. The literal
     # TypedDict below mirrors that order; the assertion inside the styling
@@ -696,6 +700,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         "Hours per FTE Month": 6,
         "EUR Actuals Through Month": 7,
         "Hours Actuals Through Month": 8,
+        "Version Stamp": 9,
     }
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
         assert param_rows.get(label) == i, (
@@ -708,6 +713,10 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         if label == "FTE Rate (EUR)":
             # FTE Rate is a formula — styled as BLACK_FORMULA, set after grade table
             style_cell(ws, i, 2, font=BLACK_FORMULA, fmt=fmt, border=False)
+        elif label == "Version Stamp":
+            # Code-written audit receipt — black = do-not-edit, but not a formula
+            # (see label comment below). Overwritten by builder on every rebuild.
+            style_cell(ws, i, 2, value=value, font=BLACK_FORMULA, fmt=fmt, border=False)
         else:
             font = TITLE_FONT if i == 1 else BLUE_INPUT
             style_cell(ws, i, 2, value=value, font=font, fmt=fmt, border=False)
@@ -768,6 +777,13 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
             "(intermediate months blank, cumulative figure dropped into a "
             "later month), the only safe aggregate is cumulative through "
             "this month. Blue = user input."
+        ),
+        param_rows["Version Stamp"]: (
+            "Commit identifier of the code that produced this workbook. "
+            "Written by init/rebuild (git describe --always --dirty with "
+            "fallback to 'unknown'). Maps an older xlsx back to the exact "
+            "builder version for reproducing bugs. Black = do-not-edit "
+            "(overwritten on every rebuild)."
         ),
         derived_first_row: (
             "Derived from Hours Actuals Through Month (=MAX(1,$B$8)). "
@@ -863,6 +879,11 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     wb.defined_names.add(DefinedName(
         "hours_actuals_through_month",
         attr_text=f"{SHEET_CONFIG}!$B${hours_through_row}",
+    ))
+    version_stamp_row = param_rows["Version Stamp"]
+    wb.defined_names.add(DefinedName(
+        "version_stamp",
+        attr_text=f"{SHEET_CONFIG}!$B${version_stamp_row}",
     ))
     # Derived cells — positions follow derived_first_row contract above.
     wb.defined_names.add(DefinedName(

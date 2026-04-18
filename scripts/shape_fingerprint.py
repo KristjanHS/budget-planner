@@ -39,6 +39,10 @@ SAFE_NAMED_RANGES = [
     "eur_actuals_through_month", "hours_actuals_through_month",
     "months_elapsed_hours", "months_elapsed_eur",
     "reconciled_through_month",
+    # Post-v2 version-stamp audit cell on Config. Single-cell named range;
+    # value written fresh by init/rebuild so build_from_fingerprint emits
+    # "unknown" (the default when no git context is passed).
+    "version_stamp",
 ]
 
 _REF_RE = re.compile(r"\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?")

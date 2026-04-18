@@ -97,7 +97,7 @@ Actuals cell =Plan!A6 -> Plan!A6 =Config!A8 -> Config!A8 = "WP1"
 
 | Function | Extracts | Key technique |
 |----------|----------|---------------|
-| `read_config_sheet(ws)` | Project params (rows 1-8 blue inputs + rows 9-11 derived), WP table (rows 12+) | Direct cell reads + named-range map |
+| `read_config_sheet(ws)` | Project params (rows 1-8 blue inputs + row 9 version stamp + rows 10-12 derived), WP table (rows 13+) | Direct cell reads + named-range map |
 | `read_team_from_config(ws)` | Team roster (name + max_fte) | Scans from "TEAM ROSTER" header |
 | `read_capacity_sheet(ws, ...)` | External commitments, per-person monthly FTE | Person header detection by bold + fill `2F5496` |
 | `read_actuals_values(ws, ...)` | EUR per WP per month | Formula chain resolution |

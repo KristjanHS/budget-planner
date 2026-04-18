@@ -116,10 +116,11 @@ def test_hours_actuals_through_month_round_trip(tmp_path: Path):
     """T2: user-edited hours_actuals_through_month survives rebuild.
 
     Covers the full init -> user edit -> rebuild -> reopen flow for the new
-    v2 Config rows (B8 blue input + B9-B11 derived formulas + four named
-    ranges). Also bumps B7 (eur_actuals_through_month) so the MIN in B11 has
-    something non-trivial to resolve. Second rebuild verifies stability
-    (the preserved value survives when it is itself the starting point).
+    v2 Config rows (B8 blue input + B9 version stamp + B10-B12 derived
+    formulas + five named ranges). Also bumps B7 (eur_actuals_through_month)
+    so the MIN in B12 has something non-trivial to resolve. Second rebuild
+    verifies stability (the preserved value survives when it is itself the
+    starting point).
     """
     path = tmp_path / "wb.xlsx"
     init_workbook(str(path))

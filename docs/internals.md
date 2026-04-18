@@ -159,7 +159,7 @@ Pure algorithmic modules — no openpyxl, no workbook I/O. Called by a builder, 
 
 ### timelog_solver (`budget_planner/timelog_solver.py`)
 
-Two-pass greedy allocator driving the Timelog Plan Proposed grid. See `docs/plans/2026-04-18-timelog-plan-design.md` §4 for the algorithm spec.
+Two-pass greedy allocator driving the Timelog Plan Proposed grid. See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §4 for the algorithm spec.
 
 - `greedy_pass(persons, wps, person_wp_windows, project_months)` — fills WPs in earliest-close order; within a WP, priority-1 persons before priority-2 before priority-3; continue-a-run preferred over starting a new run. Check-after-placing allows exactly one month of overshoot (the "buffer for auditor haircut" requirement).
 - `switch_reduction_pass(assigned, ...)` — adjacent-pair local search: swaps `(p1, m, m+1) ↔ (p2, m, m+1)` whenever the swap is legal and strictly reduces the total switch count. **Known shape limitation:** only pair-wise adjacent swaps are considered. Rearrangements that require a 3+ month block swap or a same-month-window 3-person rotation are not found. In practice the greedy pass leaves few such patterns, and the algorithm trades optimality for determinism + bounded runtime.

@@ -55,7 +55,7 @@ The workbook hosts two distinct allocation surfaces, both editable, and they may
 
 A person splitting effort 0.6/0.4 across two WPs in a given month may legitimately log 1.0 to one of them that month and 1.0 to the other a different month — the timesheet rule is whole-month, the underlying effort is not. **Do not write cross-sheet formulas that reconcile Plan monthly cells against Timelog Plan monthly cells as if they must agree.** The only shared constraints are the Config inputs both surfaces consume (WP windows, PERSON-WP ASSIGNMENTS windows, Max FTE pool, Ceiling €).
 
-See `docs/plans/2026-04-18-timelog-plan-design.md` §1 for scope.
+See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §1 for scope.
 
 ## Future invariants (reserved)
 

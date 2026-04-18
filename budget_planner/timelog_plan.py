@@ -5,7 +5,7 @@ the sheet prescribes which WP they should log 100% against. The Proposed grid
 is written by the solver and locked; the Assigned grid mirrors Proposed via
 ``=<cell>`` formulas and accepts blue-input overrides.
 
-Spec: ``docs/plans/2026-04-18-timelog-plan-design.md`` (§2 sheet layout, §5
+Spec: ``docs/plans/archived/2026-04-18-timelog-plan-design.md`` (§2 sheet layout, §5
 feedback formulas + CF, §6 build/read/rebuild).
 
 Stateless builder — receives all config via kwargs from the orchestrator. Per

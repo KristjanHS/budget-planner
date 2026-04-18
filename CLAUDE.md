@@ -20,7 +20,7 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 | Cloud/container env, LO missing | `docs/cloud-env-setup.md` | Pre-flight checks, failure modes |
 | Code review, /impag, worktrees, MCP tools for workbook inspection | `docs/dev-workflow-review.md` (§ MCP Tools for openpyxl-read / mcp-excel) | Grep-cascade checks, planning protocol, worktree sync, MCP usage |
 | Add WP, add team member, add actuals, compare scenarios | `docs/common-tasks.md` | Step-by-step SOPs for common data tasks |
-| Timelog Plan, solver, 1.0-FTE logging allocation, WP fill order, Proposed/Assigned grid | `budget_planner/timelog_plan.py` + `budget_planner/timelog_solver.py` + `docs/plans/2026-04-18-timelog-plan-design.md` | Separate allocation surface from Plan; two-pass greedy solver; Assigned overrides preserved on rebuild |
+| Timelog Plan, solver, 1.0-FTE logging allocation, WP fill order, Proposed/Assigned grid | `budget_planner/timelog_plan.py` + `budget_planner/timelog_solver.py` + `docs/plans/archived/2026-04-18-timelog-plan-design.md` | Separate allocation surface from Plan; two-pass greedy solver; Assigned overrides preserved on rebuild |
 | Rebuild drops rows, stale Config refs | `docs/plans/archived/2026-04-12-rebuild-shape-drift-design.md` | Readers use named ranges; tolerate internal blanks |
 | Debugging against user's confidential workbook | `docs/debugging-your-real-file.md` | Run `make_reproducer.py`; never send the real file |
 | Run commands, generate workbook, compare scenarios, dev setup | `docs/commands.md` | Init, rebuild, snapshot/restore, pytest, recalc |

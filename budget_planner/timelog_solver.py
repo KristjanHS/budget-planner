@@ -25,7 +25,7 @@ greedy leaves few such patterns; the algorithm trades optimality for
 determinism + bounded runtime. A future extension could add a second
 adjacent-pair pass with wider windows or a 3-way rotation primitive.
 
-See ``docs/plans/2026-04-18-timelog-plan-design.md`` §4 for the algorithm
+See ``docs/plans/archived/2026-04-18-timelog-plan-design.md`` §4 for the algorithm
 spec this implements and §9 for the decisions log.
 """
 

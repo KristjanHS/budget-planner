@@ -1,6 +1,6 @@
 """Round-trip tests for Timelog Plan Assigned-grid user overrides.
 
-Covers the contract in ``docs/plans/2026-04-18-timelog-plan-design.md`` §6:
+Covers the contract in ``docs/plans/archived/2026-04-18-timelog-plan-design.md`` §6:
 a user types a WP code into an Assigned-grid cell, saves, and rebuilds — the
 override survives, while cells the user did NOT touch stay as
 ``=<Proposed cell>`` formulas (so a re-run of the solver on a changed roster

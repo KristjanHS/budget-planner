@@ -13,7 +13,7 @@ import re
 import pytest
 from openpyxl import load_workbook
 
-from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS, TEAM, WORK_PACKAGES
+from budget_planner.config import TEAM, WORK_PACKAGES
 from budget_planner.layout import (
     SHEET_TIMELOG_PLAN,
     TIMELOG_MONTH_COL_START,
@@ -26,17 +26,14 @@ from budget_planner.timelog_plan import (
     SECTION_TITLE_PROPOSED,
     SECTION_TITLE_WP_SUMMARY,
 )
-from budget_planner.workbook import init_workbook
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
-def assigned_wb(tmp_path_factory):
-    out = tmp_path_factory.mktemp("tlp_assigned") / "wb.xlsx"
-    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    return load_workbook(str(out), data_only=False)
+def assigned_wb(assigned_wb_path):
+    return load_workbook(assigned_wb_path, data_only=False)
 
 
 @pytest.fixture(scope="module")

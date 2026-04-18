@@ -19,8 +19,7 @@ from __future__ import annotations
 import pytest
 from openpyxl import load_workbook
 
-from budget_planner.workbook import init_workbook
-from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS, WORK_PACKAGES
+from budget_planner.config import WORK_PACKAGES
 from budget_planner.layout import (
     SHEET_ACTUALS,
     forecast_val_columns,
@@ -33,10 +32,8 @@ from budget_planner.styles import col_letter
 # ── Fixtures ──
 
 @pytest.fixture(scope="module")
-def workbook(tmp_path_factory):
-    out = tmp_path_factory.mktemp("actuals_forecast") / "wb.xlsx"
-    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    return load_workbook(str(out), data_only=False)
+def workbook(assigned_wb_path):
+    return load_workbook(assigned_wb_path, data_only=False)
 
 
 @pytest.fixture(scope="module")

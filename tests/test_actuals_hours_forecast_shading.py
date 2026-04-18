@@ -16,8 +16,7 @@ shifts all indices (rule from `openpyxl-patterns.md`).
 import pytest
 from openpyxl import load_workbook
 
-from budget_planner.workbook import init_workbook
-from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS, PROJECT_MONTHS
+from budget_planner.config import PROJECT_MONTHS
 from budget_planner.layout import val_columns
 from budget_planner.styles import CF_GREY_FILL, col_letter
 
@@ -27,10 +26,8 @@ FORECAST_COL_END = FORECAST_COL_START + PROJECT_MONTHS - 1
 
 
 @pytest.fixture(scope="module")
-def hrs(tmp_path_factory):
-    out = tmp_path_factory.mktemp("ah_shade") / "wb.xlsx"
-    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    wb = load_workbook(str(out), data_only=False)
+def hrs(assigned_wb_path):
+    wb = load_workbook(assigned_wb_path, data_only=False)
     return wb["Actuals-Hours"]
 
 

@@ -8,13 +8,11 @@ was added in Task 10 and sources values from the Plan-Forecast sheet.
 import pytest
 import openpyxl
 
-from budget_planner.workbook import init_workbook
 from budget_planner.layout import (
     MONTH_COL_START, _calendar_year_groups,
 )
 from budget_planner.config import (
     NUM_WPS, PROJECT_MONTHS, PROJECT_START,
-    DEMO_CAPACITY_ASSIGNMENTS,
 )
 from budget_planner.styles import col_letter
 
@@ -27,10 +25,8 @@ _TOTAL_GROUP_START = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
 
 
 @pytest.fixture(scope="module")
-def summary_wb(tmp_path_factory):
-    out = tmp_path_factory.mktemp("summary") / "test.xlsx"
-    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    return openpyxl.load_workbook(str(out), data_only=False)
+def summary_wb(assigned_wb_path):
+    return openpyxl.load_workbook(assigned_wb_path, data_only=False)
 
 
 def _find_summary_first_wp_row(ws):

@@ -3,7 +3,6 @@
 import pytest
 from openpyxl import load_workbook
 
-from budget_planner.workbook import init_workbook
 from budget_planner.config import (
     DEMO_CAPACITY_ASSIGNMENTS, EXTERNAL_COMMITMENTS, TEAM,
     PROJECT_MONTHS,
@@ -17,15 +16,8 @@ FORECAST_COL_END = FORECAST_COL_START + PROJECT_MONTHS - 1
 
 
 @pytest.fixture(scope="module")
-def wb_path(tmp_path_factory):
-    out = tmp_path_factory.mktemp("ah") / "wb.xlsx"
-    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    return str(out)
-
-
-@pytest.fixture(scope="module")
-def wb(wb_path):
-    return load_workbook(wb_path, data_only=False)
+def wb(assigned_wb_path):
+    return load_workbook(assigned_wb_path, data_only=False)
 
 
 @pytest.fixture(scope="module")

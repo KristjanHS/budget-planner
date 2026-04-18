@@ -3,7 +3,6 @@
 import pytest
 import openpyxl
 
-from budget_planner.workbook import init_workbook
 from budget_planner.config import (
     TEAM, WORK_PACKAGES, EXTERNAL_COMMITMENTS, DEMO_CAPACITY_ASSIGNMENTS,
     MONTH_COL_START, MONTH_COL_END, PROJECT_MONTHS,
@@ -16,12 +15,8 @@ from budget_planner.capacity import build_capacity_sheet, distribute
 # ── Fixtures ──
 
 @pytest.fixture(scope="module")
-def full_wb(tmp_path_factory):
-    """Generate a workbook with demo assignments and load it for inspection."""
-    out = tmp_path_factory.mktemp("cap") / "test.xlsx"
-    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    wb = openpyxl.load_workbook(str(out), data_only=False)
-    return wb
+def full_wb(assigned_wb_path):
+    return openpyxl.load_workbook(assigned_wb_path, data_only=False)
 
 
 @pytest.fixture(scope="module")

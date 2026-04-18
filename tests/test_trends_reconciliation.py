@@ -7,18 +7,14 @@ import openpyxl
 if TYPE_CHECKING:
     pass
 
-from budget_planner.workbook import init_workbook, seed_demo_data
 from budget_planner.config import NUM_WPS
 
 
 # ── Fixtures ──
 
 @pytest.fixture(scope="module")
-def recon_workbook(tmp_path_factory):
-    out = tmp_path_factory.mktemp("recon") / "test.xlsx"
-    init_workbook(str(out))
-    seed_demo_data(str(out))
-    return openpyxl.load_workbook(str(out), data_only=False)
+def recon_workbook(demo_wb_path):
+    return openpyxl.load_workbook(demo_wb_path, data_only=False)
 
 
 @pytest.fixture(scope="module")

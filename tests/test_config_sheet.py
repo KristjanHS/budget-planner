@@ -693,3 +693,64 @@ def test_eur_actuals_through_month_constant_and_named_range(tmp_path):
 
     # Label in col A on the same row
     assert cfg.cell(row=row, column=1).value == "EUR Actuals Through Month"
+
+
+# ── Roster Priority column (Task T1 of Timelog Plan) ──
+
+def test_roster_priority_header():
+    """Priority column header has label, HEADER_FONT, and LIGHT_BLUE_FILL."""
+    from budget_planner.layout import COL_ROSTER_PRIORITY
+    _wb, ws, layout = _build_with_grades()
+    header_row = layout["roster_header_row"]
+    cell = ws.cell(header_row, COL_ROSTER_PRIORITY)
+    assert cell.value == "Priority"
+    # HEADER_FONT is bold
+    assert cell.font.bold, "Priority header should use HEADER_FONT (bold)"
+    # LIGHT_BLUE_FILL — match by fill fgColor (same fill used on other roster headers)
+    grade_fill_rgb = ws.cell(header_row, 3).fill.fgColor.rgb
+    assert cell.fill.fgColor.rgb == grade_fill_rgb, (
+        "Priority header should share LIGHT_BLUE_FILL with other roster headers"
+    )
+
+
+def test_roster_priority_data_defaults_to_2_blue():
+    """Priority data cells default to 2 with BLUE_INPUT font when unspecified."""
+    from budget_planner.layout import COL_ROSTER_PRIORITY
+    _wb, ws, layout = _build_with_grades()
+    team = _sample_team()
+    first = layout["roster_first_row"]
+    for i in range(len(team)):
+        row = first + i
+        cell = ws.cell(row, COL_ROSTER_PRIORITY)
+        assert cell.value == 2, f"row {row}: expected default priority 2, got {cell.value!r}"
+        rgb = str(cell.font.color.rgb).upper()
+        assert rgb.endswith("0000FF"), (
+            f"row {row}: priority should be BLUE_INPUT, got {rgb}"
+        )
+
+
+def test_team_priorities_named_range():
+    """team_priorities named range resolves to the Priority column of roster rows."""
+    from openpyxl.utils import get_column_letter
+    from budget_planner.layout import COL_ROSTER_PRIORITY
+    wb, _ws, layout = _build_with_grades()
+    assert "team_priorities" in wb.defined_names
+    cl = get_column_letter(COL_ROSTER_PRIORITY)
+    expected = (
+        f"Config!${cl}${layout['roster_first_row']}"
+        f":${cl}${layout['roster_last_row']}"
+    )
+    assert wb.defined_names["team_priorities"].attr_text == expected
+
+
+def test_roster_priority_header_has_comment():
+    """Priority header cell carries an explanatory comment for solver fill order."""
+    from budget_planner.layout import COL_ROSTER_PRIORITY
+    _wb, ws, layout = _build_with_grades()
+    header_row = layout["roster_header_row"]
+    cell = ws.cell(header_row, COL_ROSTER_PRIORITY)
+    assert cell.comment is not None, "Priority header should have a comment"
+    text = cell.comment.text or ""
+    # Explain the 1/2/3 semantics and reference the consumer.
+    assert "1" in text and "3" in text
+    assert "Timelog Plan" in text

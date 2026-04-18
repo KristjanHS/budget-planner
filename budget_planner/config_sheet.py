@@ -13,7 +13,8 @@ from budget_planner.layout import (
     COL_WP_FTE, COL_WP_RATE, COL_WP_CEILING,
     COL_WP_ASSIGNED_PM, COL_WP_VARIANCE, WP_BUDGET_LAST_COL,
     COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE, SCHED_LAST_COL,
-    COL_ROSTER_FTE, COL_ROSTER_GRADE, COL_ROSTER_RATE, ROSTER_LAST_COL,
+    COL_ROSTER_FTE, COL_ROSTER_GRADE, COL_ROSTER_RATE, COL_ROSTER_PRIORITY,
+    ROSTER_LAST_COL,
     COL_GRADE_RATE, GRADE_LAST_COL,
     COL_RP_START, COL_RP_END, RP_LAST_COL,
     COL_ASSIGN_PERSON, COL_ASSIGN_WP, COL_ASSIGN_FTE,
@@ -264,13 +265,14 @@ def _write_roster_section(ws, start_row, team):
     """
     r = start_row
 
-    # Section header — merged A:D
+    # Section header — merged across full section width
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=ROSTER_LAST_COL)
     style_cell(ws, r, 1, value=SECTION_HEADER_LABELS["team_roster"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
     style_cell(ws, r, 2, fill=SECTION_FILL)
     style_cell(ws, r, COL_ROSTER_GRADE, fill=SECTION_FILL)
     style_cell(ws, r, COL_ROSTER_RATE, fill=SECTION_FILL)
+    style_cell(ws, r, COL_ROSTER_PRIORITY, fill=SECTION_FILL)
     r += 1
 
     # Column headers
@@ -283,6 +285,15 @@ def _write_roster_section(ws, start_row, team):
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
     style_cell(ws, r, COL_ROSTER_RATE, "Rate (EUR/PM)", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    priority_header_cell = style_cell(
+        ws, r, COL_ROSTER_PRIORITY, "Priority", font=HEADER_FONT,
+        fill=LIGHT_BLUE_FILL, alignment=CENTER,
+    )
+    priority_header_cell.comment = sized_comment(
+        "Solver fill order: 1=fill first, 3=fill last, 2=neutral default. "
+        "Used by Timelog Plan.",
+        author="Claude",
+    )
     r += 1
 
     # Team member data rows
@@ -299,6 +310,8 @@ def _write_roster_section(ws, start_row, team):
         style_cell(ws, r, COL_ROSTER_RATE,
                    value=f"=VLOOKUP({grade_cl}{r},tbl_GradeRates,2,FALSE)",
                    font=BLACK_FORMULA, fmt="€#,##0")
+        style_cell(ws, r, COL_ROSTER_PRIORITY, member.get("priority", 2),
+                   font=BLUE_INPUT, fmt="0")
         person_rows[member["name"]] = r
         r += 1
     roster_last_row = r - 1
@@ -938,6 +951,16 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     wb.defined_names.add(DefinedName(
         "roster_lookup",
         attr_text=f"{SHEET_CONFIG}!$A${roster_layout['roster_first_row']}:$D${roster_layout['roster_last_row']}",
+    ))
+
+    # Roster Priority column — consumed by the Timelog Plan solver (fill order).
+    priority_cl = get_column_letter(COL_ROSTER_PRIORITY)
+    wb.defined_names.add(DefinedName(
+        "team_priorities",
+        attr_text=(
+            f"{SHEET_CONFIG}!${priority_cl}${roster_layout['roster_first_row']}"
+            f":${priority_cl}${roster_layout['roster_last_row']}"
+        ),
     ))
 
     # Project months named range (single cell) for Balance formula

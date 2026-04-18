@@ -28,6 +28,12 @@ Preserve all existing cell formatting (fonts, fills, table styles, column widths
 Tests must not hardcode config.py seed values (WP names, person names, FTE amounts, start/end months).
 Derive expected values from config imports or from the generated workbook. Tests must pass after user changes data to real values in Excel and runs rebuild.
 When a refactor touches both the reader and a builder, the test must exercise the full round-trip: init → user-edit via openpyxl → `rebuild_workbook` → reopen and assert. A reader-only "does it parse?" assertion is a false green — the builder may still clobber the preserved value.
+Full `pytest tests/ -q` runs ~140s, exceeding Bash's 120s default and triggering auto-backgrounding. Pass `timeout: 300000` up front. If a pytest call auto-backgrounds, wait for the completion notification — do NOT re-issue it in the foreground. Targeted sub-suites (`tests/test_foo.py`) don't need the override.
+
+## Plan hygiene
+Shipped plans left in `docs/plans/` root auto-load into future sessions and masquerade as active work. When `/impag` (or any plan-survey step) finds a plan fully shipped, `git mv` it into `docs/plans/archived/` the same session — don't just note shipped status and move on.
+Before `git mv`: grep the plan path across `budget_planner/**`, `tests/**`, `docs/**`, `CLAUDE.md` and update references to `docs/plans/archived/<filename>.md`. Verify `.claudeignore` names `archived/` (this project's convention, not `archive/`).
+Honor the global "Superseded docs: consume before archive" rule — pull load-bearing content into living docs (`design-invariants.md`, `internals.md`) before archival. Do NOT archive plans marked "approved but not implemented" — those are still active even if dormant.
 
 ## Docs
 Session-generated audits, analyses, and reports go in `docs/analysis/` (already in `.claudeignore` — keeps them out of auto-loaded context). The `docs/` root is for trigger-indexed reference docs listed in CLAUDE.md. Don't drop one-off session outputs into the reference tier.

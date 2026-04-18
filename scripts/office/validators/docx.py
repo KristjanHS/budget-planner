@@ -8,7 +8,7 @@ import tempfile
 import zipfile
 
 import defusedxml.minidom  # pyright: ignore[reportMissingModuleSource]
-import lxml.etree
+import lxml.etree  # pyright: ignore[reportMissingImports]
 
 from .base import BaseSchemaValidator
 

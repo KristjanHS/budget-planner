@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 import defusedxml.minidom  # pyright: ignore[reportMissingModuleSource]
-import lxml.etree
+import lxml.etree  # pyright: ignore[reportMissingImports]
 
 
 class BaseSchemaValidator:
@@ -385,7 +385,7 @@ class BaseSchemaValidator:
             return True
 
     def validate_all_relationship_ids(self):
-        import lxml.etree
+        import lxml.etree  # pyright: ignore[reportMissingImports]
 
         errors = []
 

@@ -60,7 +60,7 @@ class PPTXSchemaValidator(BaseSchemaValidator):
         return all_valid
 
     def validate_uuid_ids(self):
-        import lxml.etree
+        import lxml.etree  # pyright: ignore[reportMissingImports]
 
         errors = []
         uuid_pattern = re.compile(
@@ -102,7 +102,7 @@ class PPTXSchemaValidator(BaseSchemaValidator):
         return len(clean_value) == 32 and all(c.isalnum() for c in clean_value)
 
     def validate_slide_layout_ids(self):
-        import lxml.etree
+        import lxml.etree  # pyright: ignore[reportMissingImports]
 
         errors = []
 
@@ -170,7 +170,7 @@ class PPTXSchemaValidator(BaseSchemaValidator):
             return True
 
     def validate_no_duplicate_slide_layouts(self):
-        import lxml.etree
+        import lxml.etree  # pyright: ignore[reportMissingImports]
 
         errors = []
         slide_rels_files = list(self.unpacked_dir.glob("ppt/slides/_rels/*.xml.rels"))
@@ -208,10 +208,10 @@ class PPTXSchemaValidator(BaseSchemaValidator):
             return True
 
     def validate_notes_slide_references(self):
-        import lxml.etree
+        import lxml.etree  # pyright: ignore[reportMissingImports]
 
         errors = []
-        notes_slide_references = {}  
+        notes_slide_references = {}
 
         slide_rels_files = list(self.unpacked_dir.glob("ppt/slides/_rels/*.xml.rels"))
 

@@ -77,6 +77,7 @@ def main():
         assert path.is_dir(), f"Error: {path} is not a directory or Office file"
         unpacked_dir = path
 
+    validators: list[DOCXSchemaValidator | PPTXSchemaValidator | RedliningValidator]
     match file_extension:
         case ".docx":
             validators = [
@@ -84,7 +85,7 @@ def main():
             ]
             if original_file:
                 validators.append(
-                    RedliningValidator(unpacked_dir, original_file, verbose=args.verbose, author=args.author)  
+                    RedliningValidator(unpacked_dir, original_file, verbose=args.verbose, author=args.author)
                 )
         case ".pptx":
             validators = [

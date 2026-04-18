@@ -505,6 +505,10 @@ def read_team_from_config(ws) -> list[dict]:
                     priority = int(float(prio_val))
                 except (TypeError, ValueError):
                     priority = 2
+                # Clamp to [1, 3] — solver iterates for prio in (1,2,3) and a
+                # priority outside this band would silently exclude the person
+                # from all WP passes without raising.
+                priority = max(1, min(3, priority))
         roster.append(
             {
                 "name": str(name).strip(),

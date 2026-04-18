@@ -264,40 +264,54 @@ def test_switch_reduction_reduces_or_preserves_switches():
 
 
 def test_switch_reduction_actually_reduces_on_interleaved_input():
-    # Hand-built interleaved assignment — pass 2 should find the obvious
-    # consolidating swap. This is a behavioural test, not just a no-op guard.
+    # Hand-built 2-block swap scenario. Solver's swap shape is
+    # (p1, m, m+1) <-> (p2, m, m+1); the outer loop also requires
+    # p1 to have an internal switch at (m, m+1) — an end-block swap where
+    # p1.(m, m+1) is a flat run is skipped by the `a1 == a2` guard.
+    # The fixture below has internal switches on BOTH persons so the swap is
+    # considered and the result is a strict reduction, not just a no-op.
     persons = [
-        Person("Alice", priority=1, pool=2),
-        Person("Bob", priority=1, pool=2),
+        Person("Alice", priority=1, pool=3),
+        Person("Bob", priority=1, pool=3),
     ]
     wps = [
-        WP("WP1", active_start=1, active_end=4, ceiling_months=2),
-        WP("WP2", active_start=1, active_end=4, ceiling_months=2),
+        WP("WP1", active_start=1, active_end=3, ceiling_months=3),
+        WP("WP2", active_start=1, active_end=3, ceiling_months=3),
     ]
     windows = [
-        PersonWPWindow("Alice", "WP1", 1, 4),
-        PersonWPWindow("Alice", "WP2", 1, 4),
-        PersonWPWindow("Bob", "WP1", 1, 4),
-        PersonWPWindow("Bob", "WP2", 1, 4),
+        PersonWPWindow("Alice", "WP1", 1, 3),
+        PersonWPWindow("Alice", "WP2", 1, 3),
+        PersonWPWindow("Bob", "WP1", 1, 3),
+        PersonWPWindow("Bob", "WP2", 1, 3),
     ]
-    # Starting state: Alice = WP1, WP2, None, None
-    #                 Bob   = WP2, WP1, None, None
-    # Switches: Alice has 1 (WP1↔WP2) + 1 (WP2↔None) = 2.
-    #           Bob has 1 (WP2↔WP1) + 1 (WP1↔None) = 2. Total = 4.
-    # After swap of (m=1, m=2) blocks between Alice and Bob:
-    #   Alice = WP2, WP1, None, None → still 2 switches.
-    # The interesting swap is the 2-block swap at (m=1, m+1=2):
-    #   Alice.(1,2) <-> Bob.(1,2) swaps (WP1,WP2) with (WP2,WP1) — no gain.
-    # A single-column swap isn't in our API. So this test just asserts
-    # non-regression; the "reduces on some input" signal comes from the
-    # previous test plus the algorithmic guarantee.
+    # Starting state — fully interleaved, 4 total switches:
+    #   Alice = WP1, WP2, WP1   → 2 switches
+    #   Bob   = WP2, WP1, WP2   → 2 switches
+    # Swap (m=1, m+1=2) between Alice and Bob yields:
+    #   Alice = WP2, WP1, WP1   → 1 switch
+    #   Bob   = WP1, WP2, WP2   → 1 switch
+    # → total 2; per-WP sums (WP1×3, WP2×3) preserved; pools unchanged.
     start: Assignment = {
-        "Alice": {1: "WP1", 2: "WP2", 3: None, 4: None},
-        "Bob": {1: "WP2", 2: "WP1", 3: None, 4: None},
+        "Alice": {1: "WP1", 2: "WP2", 3: "WP1"},
+        "Bob":   {1: "WP2", 2: "WP1", 3: "WP2"},
     }
     before = _count_switches(start)
-    after = switch_reduction_pass(start, persons, wps, windows, project_months=4)
-    assert _count_switches(after) <= before
+    assert before == 4, f"precondition: fixture should start with 4 switches, got {before}"
+
+    after = switch_reduction_pass(start, persons, wps, windows, project_months=3)
+    after_switches = _count_switches(after)
+    assert after_switches < before, (
+        f"switch_reduction_pass should consolidate runs: "
+        f"before={before}, after={after_switches}"
+    )
+
+    # Per-WP totals must be preserved (design §4 invariant).
+    def _wp_sum(assigned: Assignment, wp_code: str) -> int:
+        return sum(
+            1 for p_row in assigned.values() for v in p_row.values() if v == wp_code
+        )
+    assert _wp_sum(after, "WP1") == _wp_sum(start, "WP1")
+    assert _wp_sum(after, "WP2") == _wp_sum(start, "WP2")
 
 
 # ---------------------------------------------------------------------------

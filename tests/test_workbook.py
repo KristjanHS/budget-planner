@@ -195,16 +195,8 @@ class TestConfigAssignments:
     and survive a rebuild round-trip."""
 
     @pytest.fixture(scope="class")
-    def demo_wb_path(self, tmp_path_factory):
-        """Generate a workbook with demo assignments."""
-        from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
-        out = tmp_path_factory.mktemp("wb_assign") / "test_assign.xlsx"
-        init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-        return str(out)
-
-    @pytest.fixture(scope="class")
-    def demo_wb(self, demo_wb_path):
-        return openpyxl.load_workbook(demo_wb_path, data_only=False)
+    def demo_wb(self, assigned_wb_path):
+        return openpyxl.load_workbook(assigned_wb_path, data_only=False)
 
     def test_init_writes_config_assignments(self, demo_wb):
         """Config sheet has a PERSON-WP ASSIGNMENTS section with data."""

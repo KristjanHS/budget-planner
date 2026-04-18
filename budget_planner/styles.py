@@ -27,6 +27,36 @@ CF_RED_FILL = PatternFill(bgColor="FFFFC7CE")
 CF_GREEN_FILL = PatternFill(bgColor="FFE2EFDA")
 CF_GREY_FILL = PatternFill(bgColor="FFD9D9D9")
 
+# Timelog Plan: darker grey for cells outside any person-WP window
+# (out-of-project-window). GREY_FILL is the in-window-but-empty marker.
+DARK_GREY_FILL = PatternFill("solid", fgColor="A6A6A6")
+
+# Timelog Plan: pastel palette cycled across WPs for the canvas background.
+# Cell-formatting variant (fgColor; used if pre-fill is preferred).
+PASTEL_FILLS = [
+    PatternFill("solid", fgColor="DCE6F1"),  # pastel blue
+    PatternFill("solid", fgColor="E2EFDA"),  # pastel green
+    PatternFill("solid", fgColor="FFF2CC"),  # pastel yellow
+    PatternFill("solid", fgColor="FCE4D6"),  # pastel orange
+    PatternFill("solid", fgColor="EDEDED"),  # pastel grey
+    PatternFill("solid", fgColor="E4DFEC"),  # pastel purple
+    PatternFill("solid", fgColor="DAEEF3"),  # pastel cyan
+    PatternFill("solid", fgColor="FCD5B4"),  # pastel salmon
+    PatternFill("solid", fgColor="C6EFCE"),  # pastel mint
+]
+# CF variant (bgColor with explicit FF alpha, per CF_*_FILL convention).
+CF_PASTEL_FILLS = [
+    PatternFill(bgColor="FFDCE6F1"),
+    PatternFill(bgColor="FFE2EFDA"),
+    PatternFill(bgColor="FFFFF2CC"),
+    PatternFill(bgColor="FFFCE4D6"),
+    PatternFill(bgColor="FFEDEDED"),
+    PatternFill(bgColor="FFE4DFEC"),
+    PatternFill(bgColor="FFDAEEF3"),
+    PatternFill(bgColor="FFFCD5B4"),
+    PatternFill(bgColor="FFC6EFCE"),
+]
+
 THIN_BORDER = Border(
     left=Side(style="thin"), right=Side(style="thin"),
     top=Side(style="thin"), bottom=Side(style="thin")

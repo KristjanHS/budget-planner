@@ -40,9 +40,35 @@ SHEET_ACTUALS_HOURS = "Actuals-Hours"
 SHEET_PLAN_FORECAST = "Plan-Forecast"
 SHEET_SUMMARY = "Summary"
 SHEET_TRENDS = "Trends"
+SHEET_TIMELOG_PLAN = "Timelog Plan"
 
 # Column structure: A=ID, B=Name, C onwards = months
 MONTH_COL_START = 3
+
+# ── Timelog Plan column structure ──
+# A = Person (cross-ref to Team Roster)
+# B = per-person rate helper (collapsible — outline_level=1; consumed by per-WP
+#     SUMPRODUCT so we can do per-cell VLOOKUP into roster_lookup safely).
+# C..C+months-1 = Proposed grid (locked, written by solver)
+# then GAP column, then Assigned grid (=<Proposed cell> by default)
+# then GAP column, then per-person summary block (8 columns)
+TIMELOG_RATE_HELPER_COL = 2
+TIMELOG_GAP_WIDTH = 1   # blank columns between Proposed and Assigned (and Assigned and summary)
+
+
+def timelog_assigned_col_start(project_months: int) -> int:
+    """First column of the Assigned grid (after Proposed + gap)."""
+    return MONTH_COL_START + project_months + TIMELOG_GAP_WIDTH
+
+
+def timelog_assigned_col_end(project_months: int) -> int:
+    """Last column of the Assigned grid."""
+    return timelog_assigned_col_start(project_months) + project_months - 1
+
+
+def timelog_summary_col_start(project_months: int) -> int:
+    """First column of the per-person summary block (after Assigned + gap)."""
+    return timelog_assigned_col_end(project_months) + TIMELOG_GAP_WIDTH + 1
 
 # ── Section header contract ──
 # Every labelled section on the Config sheet uses: title row, header row,

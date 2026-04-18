@@ -947,7 +947,9 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
 
     # Roster lookup (4-column: name, max FTE, grade, rate) — col 2 = Max FTE
     # used by the Assignments Balance formula; col 4 = Rate EUR/PM used by the
-    # Actuals-Hours forecast-EUR leaves.
+    # Actuals-Hours forecast-EUR leaves. Priority (col E) is intentionally
+    # excluded — exposed separately via the `team_priorities` range below so
+    # consumers that VLOOKUP into roster_lookup don't collide with the new col.
     wb.defined_names.add(DefinedName(
         "roster_lookup",
         attr_text=f"{SHEET_CONFIG}!$A${roster_layout['roster_first_row']}:$D${roster_layout['roster_last_row']}",

@@ -37,3 +37,11 @@ def test_generator_produces_workbook_matching_fingerprint(tmp_path: Path):
         f"Fresh-init fingerprint missing v2 Config named ranges: "
         f"{sorted(missing)}"
     )
+    # Synthetic side must emit them too — otherwise the set-equality
+    # round-trip above passes while ``build_from_fingerprint`` silently
+    # drops them, leaving the forward guard on ``fp`` alone.
+    missing_synth = v2_names - fp2["named_ranges"].keys()
+    assert not missing_synth, (
+        f"Synthetic-rebuild fingerprint missing v2 Config named ranges: "
+        f"{sorted(missing_synth)}"
+    )

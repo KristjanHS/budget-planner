@@ -753,6 +753,7 @@ def test_roster_priority_header_has_comment():
     text = cell.comment.text or ""
     # Explain the 1/2/3 semantics and reference the consumer.
     assert "1" in text and "3" in text
+    assert "Timelog Plan" in text
 
 
 def test_config_named_range_targets_match_internals_doc():
@@ -778,8 +779,15 @@ def test_config_named_range_targets_match_internals_doc():
     text = internals_path.read_text(encoding="utf-8")
 
     # Scope to the Config per-sheet paragraph so a stray `(B7)` reference in
-    # another sheet's prose can't contaminate the map.
-    config_match = re.search(r"\*\*Config\*\*[^\n]*", text)
+    # another sheet's prose can't contaminate the map. The pattern consumes
+    # through the next blank line or next per-sheet heading (``**Name**``)
+    # so a future word-wrap of the Config paragraph doesn't silently
+    # truncate the capture to just the first line.
+    config_match = re.search(
+        r"\*\*Config\*\*.*?(?=\n\n|\n\*\*[A-Z]|\Z)",
+        text,
+        re.DOTALL,
+    )
     assert config_match, (
         "docs/internals.md lost the **Config** per-sheet paragraph — "
         "update the regex or restore the doc structure"
@@ -820,4 +828,3 @@ def test_config_named_range_targets_match_internals_doc():
             f"Named range {name!r}: internals.md says {expected_attr!r}, "
             f"workbook has {actual!r} — update whichever is wrong"
         )
-    assert "Timelog Plan" in text

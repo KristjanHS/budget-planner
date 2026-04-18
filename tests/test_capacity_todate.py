@@ -9,36 +9,20 @@ on TOTAL + EU TOTAL rows as ``windowed-plan-sum − Actual``.
 import pytest
 import openpyxl
 
-from budget_planner.workbook import init_workbook, seed_demo_data
-from budget_planner.config import (
-    DEMO_CAPACITY_ASSIGNMENTS, PROJECT_MONTHS,
-)
+from budget_planner.config import PROJECT_MONTHS
 from budget_planner.layout import SHEET_ACTUALS_HOURS, val_columns
 from budget_planner.styles import col_letter
 
 
 @pytest.fixture(scope="module")
-def demo_wb(tmp_path_factory):
-    out = tmp_path_factory.mktemp("td") / "test.xlsx"
-    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    seed_demo_data(str(out))
-    return str(out)
-
-
-@pytest.fixture(scope="module")
-def cap_formulas(demo_wb):
-    wb = openpyxl.load_workbook(demo_wb, data_only=False)
+def cap_formulas(demo_wb_path):
+    wb = openpyxl.load_workbook(demo_wb_path, data_only=False)
     return wb["Capacity"]
 
 
 @pytest.fixture(scope="module")
-def cap_values(demo_wb):
-    import subprocess
-    subprocess.run(
-        ["python", "scripts/recalc.py", demo_wb],
-        check=True, capture_output=True,
-    )
-    wb = openpyxl.load_workbook(demo_wb, data_only=True)
+def cap_values(demo_recalc_path):
+    wb = openpyxl.load_workbook(demo_recalc_path, data_only=True)
     return wb["Capacity"]
 
 

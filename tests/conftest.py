@@ -50,3 +50,18 @@ def demo_recalc(demo_wb_path):
     if result.returncode != 0:
         pytest.skip("LibreOffice not available")
     return json.loads(result.stdout)
+
+
+@pytest.fixture(scope="session")
+def demo_recalc_path(demo_wb_path, demo_recalc):
+    """Path to the demo workbook AFTER session recalc ran.
+
+    Depends on demo_recalc to enforce ordering: the recalc subprocess
+    must have mutated demo_wb_path before callers open it with
+    data_only=True. Returns the same path as demo_wb_path, just with
+    a dependency edge that guarantees recalc has run.
+
+    Read-only — consumers MUST NOT save or rebuild.
+    """
+    del demo_recalc
+    return demo_wb_path

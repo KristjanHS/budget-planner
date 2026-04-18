@@ -40,6 +40,7 @@ from budget_planner.actuals import build_actuals_sheet
 from budget_planner.actuals_hours import build_actuals_hours_sheet
 from budget_planner.plan_forecast import build_plan_forecast_sheet
 from budget_planner.summary import build_summary_sheet
+from budget_planner.timelog_plan import build_timelog_plan_sheet
 from budget_planner.trends import build_trends_sheet
 from budget_planner.layout import (
     SHEET_CONFIG,
@@ -48,6 +49,7 @@ from budget_planner.layout import (
     SHEET_ACTUALS,
     SHEET_ACTUALS_HOURS,
     SHEET_PLAN_FORECAST,
+    SHEET_TIMELOG_PLAN,
     SHEET_TRENDS,
     SECTION_HEADER_LABELS,
     cell_ref,
@@ -280,6 +282,24 @@ def _build_all_sheets(
         DefinedName("current_month", attr_text=cell_ref(SHEET_TRENDS, 1, 2))
     )
 
+    # Stage 5b — Timelog Plan (consumes config_layout + Trends-stub
+    # ``current_month`` named range used by per-WP "Window months remaining").
+    # Independent of Actuals/Hours/Forecast — built here so its tab can sit
+    # right after Plan in the user-facing tab order (see move_sheet calls
+    # at the end of this function).
+    timelog_plan_ws = wb.create_sheet(SHEET_TIMELOG_PLAN)
+    build_timelog_plan_sheet(
+        timelog_plan_ws,
+        wb,
+        project_params=project_params,
+        work_packages=work_packages,
+        wp_schedule=wp_schedule,
+        team=team,
+        assignments=assignments or [],
+        grade_rates=grade_rates,
+        config_layout=ctx.config_layout,
+    )
+
     # Stage 6a — Actuals-Hours (hour timelog; depends only on config_layout).
     # Built BEFORE Actuals so Plan-Forecast can consume its layout, and
     # Actuals can then consume Plan-Forecast's layout for the forecast
@@ -365,14 +385,15 @@ def _build_all_sheets(
 
     # Tab order (user-facing) differs from build order.
     # After build the sheetlist is:
-    #   Config, Capacity, Plan, Trends, Actuals-Hours, Plan-Forecast,
-    #   Actuals, Summary
+    #   Config, Capacity, Plan, Trends, Timelog Plan, Actuals-Hours,
+    #   Plan-Forecast, Actuals, Summary
     # Target tab order:
-    #   Config, Capacity, Plan, Actuals, Actuals-Hours, Plan-Forecast,
-    #   Trends, Summary
-    # 1) Push Trends past Actuals-Hours + Plan-Forecast + Actuals (+3).
-    # 2) Hop Actuals leftward two slots so it sits just after Plan (-2).
-    wb.move_sheet(SHEET_TRENDS, offset=3)
+    #   Config, Capacity, Plan, Timelog Plan, Actuals, Actuals-Hours,
+    #   Plan-Forecast, Trends, Summary
+    # 1) Push Trends past Timelog Plan + Actuals-Hours + Plan-Forecast +
+    #    Actuals (+4).
+    # 2) Hop Actuals leftward two slots so it sits just after Timelog Plan (-2).
+    wb.move_sheet(SHEET_TRENDS, offset=4)
     wb.move_sheet(SHEET_ACTUALS, offset=-2)
 
 

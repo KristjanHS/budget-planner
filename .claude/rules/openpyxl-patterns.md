@@ -17,6 +17,7 @@ paths:
 Chart-specific tips → `openpyxl-charts.md` (trends.py only). Reader/header-row tips → `openpyxl-readers.md` (workbook.py, reader.py, config_sheet.py).
 
 `wb.active` can return None — always `assert ws is not None` before use.
+Writing to a cell via `ws.cell(r, c).value = x` trips pyright on the `Cell | MergedCell` union. Use the keyword form `ws.cell(row=r, column=c, value=x)` instead — its return type excludes MergedCell.
 Excel CF priority: first rule added gets lowest priority number = highest priority = wins conflicts. Add the most critical fill first (e.g., red before amber).
 When CF formulas reference external data varying per row (e.g., different WP end months), apply per-row rules — a range-wide rule with absolute refs uses the same value for all rows.
 SUMPRODUCT with mixed text/number arrays returns #VALUE!. `(range)*ISNUMBER(range)` also fails because `text*0` = #VALUE! in LibreOffice. Use individual `IF(ISNUMBER(cell),cell*other,0)` terms instead.

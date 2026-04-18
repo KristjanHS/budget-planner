@@ -63,5 +63,5 @@ def demo_recalc_path(demo_wb_path, demo_recalc):
 
     Read-only — consumers MUST NOT save or rebuild.
     """
-    del demo_recalc
+    del demo_recalc  # consumed for ordering only; ensures recalc ran before return
     return demo_wb_path

@@ -1,0 +1,349 @@
+"""Timelog Plan solver.
+
+Pure-Python, deterministic, no I/O and no openpyxl dependency. Assigns each
+(person, month) cell to exactly one WP code (or None) such that:
+
+- WP totals approach their ceiling_months target (slight overshoot tolerated).
+- Each cell stays inside the WP's active window AND inside the person's
+  per-(person, WP) window (the PERSON-WP ASSIGNMENTS row).
+- Each person's total assigned months never exceeds their pool.
+- Within a WP, priority-1 persons fill before priority-2 before priority-3.
+- Contiguous runs of the same WP are preferred (reduces switch count).
+- Earliest-closing WPs fill first.
+
+Two passes:
+1. Greedy fill (WPs in earliest-close order, priority-ordered candidates,
+   continue-a-run preference).
+2. Switch-reduction local improvement — swap adjacent-month blocks between
+   two persons to reduce total switches without breaking any invariant.
+
+See ``docs/plans/2026-04-18-timelog-plan-design.md`` §4 for the algorithm
+spec this implements.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Person:
+    """A team member eligible for WP allocation.
+
+    Attributes:
+        name: Unique identifier (also used as a deterministic sort key).
+        priority: 1, 2, or 3. Lower = filled first within each WP pass.
+        pool: Total assignable months = round(max_fte * project_months).
+    """
+
+    name: str
+    priority: int
+    pool: int
+
+
+@dataclass(frozen=True)
+class WP:
+    """A work package with an active window and a fill target.
+
+    Attributes:
+        code: "WP1", "WP2", ... — also the value written into assigned cells.
+        active_start: 1-indexed month in project frame, inclusive.
+        active_end: 1-indexed month in project frame, inclusive.
+        ceiling_months: target fill = round(ceiling_eur / person_rate_avg).
+    """
+
+    code: str
+    active_start: int
+    active_end: int
+    ceiling_months: int
+
+
+@dataclass(frozen=True)
+class PersonWPWindow:
+    """A PERSON-WP ASSIGNMENTS row. Hard constraint: (person, wp) can only
+    be placed inside this window (further intersected with WP active window).
+    """
+
+    person_name: str
+    wp_code: str
+    start_month: int
+    end_month: int
+
+
+# Return type alias: assignment[person_name][month_1based] -> wp_code or None.
+Assignment = dict[str, dict[int, str | None]]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_windows_index(
+    person_wp_windows: list[PersonWPWindow],
+) -> dict[tuple[str, str], tuple[int, int]]:
+    """Index PersonWPWindow rows by (person_name, wp_code) -> (start, end).
+
+    If multiple rows exist for the same pair (not expected in practice), the
+    widest enclosing window is used.
+    """
+    idx: dict[tuple[str, str], tuple[int, int]] = {}
+    for w in person_wp_windows:
+        key = (w.person_name, w.wp_code)
+        existing = idx.get(key)
+        if existing is None:
+            idx[key] = (w.start_month, w.end_month)
+        else:
+            idx[key] = (
+                min(existing[0], w.start_month),
+                max(existing[1], w.end_month),
+            )
+    return idx
+
+
+def _empty_assignment(persons: list[Person], project_months: int) -> Assignment:
+    return {
+        p.name: {m: None for m in range(1, project_months + 1)}
+        for p in persons
+    }
+
+
+def _most_recent_wp_before(
+    assigned: Assignment, person_name: str, month: int
+) -> str | None:
+    """Return the WP code assigned to person at the largest month < `month`
+    that has a non-None assignment, or None if no prior placement.
+    """
+    row = assigned[person_name]
+    for prev in range(month - 1, 0, -1):
+        code = row[prev]
+        if code is not None:
+            return code
+    return None
+
+
+def _count_switches(assigned: Assignment) -> int:
+    """Total adjacent-month switches across all persons.
+
+    Counts empty <-> WP transitions too (design §9 Q15a). Within-run cells do
+    not count.
+    """
+    total = 0
+    for row in assigned.values():
+        months = sorted(row.keys())
+        for i in range(len(months) - 1):
+            if row[months[i]] != row[months[i + 1]]:
+                total += 1
+    return total
+
+
+def _cell_legal_for_person(
+    person_name: str,
+    wp_code: str | None,
+    month: int,
+    wps_by_code: dict[str, WP],
+    windows_idx: dict[tuple[str, str], tuple[int, int]],
+) -> bool:
+    """True iff placing `wp_code` at (person, month) respects both the WP
+    active window and the person-WP window. `None` is always legal.
+    """
+    if wp_code is None:
+        return True
+    wp = wps_by_code.get(wp_code)
+    if wp is None:
+        return False
+    if not (wp.active_start <= month <= wp.active_end):
+        return False
+    pw = windows_idx.get((person_name, wp_code))
+    if pw is None:
+        return False
+    return pw[0] <= month <= pw[1]
+
+
+# ---------------------------------------------------------------------------
+# Pass 1: greedy fill
+# ---------------------------------------------------------------------------
+
+
+def greedy_pass(
+    persons: list[Person],
+    wps: list[WP],
+    person_wp_windows: list[PersonWPWindow],
+    project_months: int,
+) -> Assignment:
+    """Run the greedy fill pass. Pure function; does not mutate inputs."""
+    windows_idx = _build_windows_index(person_wp_windows)
+    pool = {p.name: p.pool for p in persons}
+    assigned = _empty_assignment(persons, project_months)
+
+    # WPs in earliest-close order; code as deterministic tiebreaker.
+    wp_order = sorted(wps, key=lambda w: (w.active_end, w.code))
+
+    for wp in wp_order:
+        placed = 0
+        for prio in (1, 2, 3):
+            if placed >= wp.ceiling_months:
+                break
+            # Eligible persons at this priority who have a row for this WP.
+            candidates_raw = [
+                p
+                for p in persons
+                if p.priority == prio
+                and (p.name, wp.code) in windows_idx
+                and pool[p.name] > 0
+            ]
+            if not candidates_raw:
+                continue
+
+            # Sort: continue-a-run first, then name ascending. We recompute
+            # "running" once at the top of the WP pass — the candidate set is
+            # stable enough for this to be a good first-order signal, and it
+            # keeps iteration deterministic.
+            def _run_key(p: Person, wp_code: str = wp.code) -> tuple[int, str]:
+                last = _most_recent_wp_before(
+                    assigned, p.name, project_months + 1
+                )
+                running = 1 if last == wp_code else 0
+                # Python sorts ascending, and we want "running first", so
+                # invert with negation (equivalent to `not running`).
+                return (0 if running else 1, p.name)
+
+            candidates = sorted(candidates_raw, key=_run_key)
+
+            for p in candidates:
+                if placed >= wp.ceiling_months:
+                    break
+                pw = windows_idx[(p.name, wp.code)]
+                lo = max(wp.active_start, pw[0])
+                hi = min(wp.active_end, pw[1])
+                for m in range(lo, hi + 1):
+                    if pool[p.name] <= 0:
+                        break
+                    if assigned[p.name][m] is None:
+                        assigned[p.name][m] = wp.code
+                        pool[p.name] -= 1
+                        placed += 1
+                        # Check-after-placing: allows exactly one month of
+                        # overshoot. Break stops further placements for this
+                        # person; outer break then exits the WP pass.
+                        if placed >= wp.ceiling_months:
+                            break
+
+    return assigned
+
+
+# ---------------------------------------------------------------------------
+# Pass 2: switch-reduction local improvement
+# ---------------------------------------------------------------------------
+
+
+def switch_reduction_pass(
+    assigned: Assignment,
+    persons: list[Person],
+    wps: list[WP],
+    person_wp_windows: list[PersonWPWindow],
+    project_months: int,
+) -> Assignment:
+    """Iteratively swap (p1, m, m+1) <-> (p2, m, m+1) pairs to reduce the
+    total switch count. Preserves per-WP totals (cells move wholesale),
+    per-person totals (each person keeps their count), and all windows.
+
+    Bounded: stops when one full outer pass finds no improving swap. Returns
+    a new Assignment dict; does not mutate the caller's object.
+    """
+    wps_by_code = {w.code: w for w in wps}
+    windows_idx = _build_windows_index(person_wp_windows)
+
+    # Work on a deep-ish copy. Inner dicts are month->str|None and need
+    # their own copy; the outer dict is rebuilt by comprehension.
+    state: Assignment = {
+        name: dict(row) for name, row in assigned.items()
+    }
+    person_names = sorted(state.keys())
+
+    improved = True
+    # Outer loop bound: at most (#switches) improving swaps are possible,
+    # and each strictly decreases the count. So an upper bound equal to the
+    # initial switch count is plenty. In practice the inner search exits
+    # quickly once no improving swap remains.
+    max_outer = _count_switches(state) + 1
+    outer_iterations = 0
+    while improved and outer_iterations < max_outer:
+        improved = False
+        outer_iterations += 1
+        current_switches = _count_switches(state)
+
+        found_swap = False
+        for p1_name in person_names:
+            if found_swap:
+                break
+            for m in range(1, project_months):  # m and m+1 both in [1, N]
+                if found_swap:
+                    break
+                a1 = state[p1_name][m]
+                a2 = state[p1_name][m + 1]
+                if a1 == a2:
+                    # No switch here → swapping cannot reduce at this column.
+                    continue
+                for p2_name in person_names:
+                    if p2_name == p1_name:
+                        continue
+                    b1 = state[p2_name][m]
+                    b2 = state[p2_name][m + 1]
+                    # Identical pair → trivial swap, no change.
+                    if (a1, a2) == (b1, b2):
+                        continue
+                    # Legality: each cell must fit its new owner's windows.
+                    if not _cell_legal_for_person(
+                        p1_name, b1, m, wps_by_code, windows_idx
+                    ):
+                        continue
+                    if not _cell_legal_for_person(
+                        p1_name, b2, m + 1, wps_by_code, windows_idx
+                    ):
+                        continue
+                    if not _cell_legal_for_person(
+                        p2_name, a1, m, wps_by_code, windows_idx
+                    ):
+                        continue
+                    if not _cell_legal_for_person(
+                        p2_name, a2, m + 1, wps_by_code, windows_idx
+                    ):
+                        continue
+
+                    # Apply tentatively, measure switches, revert if not
+                    # strictly better.
+                    state[p1_name][m], state[p2_name][m] = b1, a1
+                    state[p1_name][m + 1], state[p2_name][m + 1] = b2, a2
+                    new_switches = _count_switches(state)
+                    if new_switches < current_switches:
+                        improved = True
+                        found_swap = True
+                        break
+                    # Revert.
+                    state[p1_name][m], state[p2_name][m] = a1, b1
+                    state[p1_name][m + 1], state[p2_name][m + 1] = a2, b2
+
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Composed entry point
+# ---------------------------------------------------------------------------
+
+
+def solve(
+    persons: list[Person],
+    wps: list[WP],
+    person_wp_windows: list[PersonWPWindow],
+    project_months: int,
+) -> Assignment:
+    """Return ``assignment[person_name][month_1based] -> wp_code | None``.
+
+    Deterministic. Pure. See module docstring for the full contract.
+    """
+    assigned = greedy_pass(persons, wps, person_wp_windows, project_months)
+    assigned = switch_reduction_pass(
+        assigned, persons, wps, person_wp_windows, project_months
+    )
+    return assigned

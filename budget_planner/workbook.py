@@ -319,9 +319,9 @@ def _build_all_sheets(
     # right after Plan in the user-facing tab order (see move_sheet calls
     # at the end of this function).
     timelog_plan_ws = wb.create_sheet(SHEET_TIMELOG_PLAN)
-    # NOTE: `preserved_timelog["grid"]` was pruned in `rebuild_workbook` before
-    # reaching here. Phase 1 discards this dict; Phase 2 will consume it when
-    # the resolve_flag gate (flag=FALSE → preserve edits) goes live.
+    # `preserved_timelog["grid"]` was pruned in `rebuild_workbook` before
+    # reaching here. When resolve_flag is False the builder writes it verbatim;
+    # when True the solver runs and the dict is ignored.
     _preserved_grid = (preserved_timelog or {}).get("grid") or None
     _resolve_flag = (preserved_timelog or {}).get("resolve_flag", True)
     build_timelog_plan_sheet(

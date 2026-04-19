@@ -149,12 +149,15 @@ def build_timelog_plan_sheet(
         config_layout: dict returned by build_config_sheet() — must include
             ``param_rows``, ``wp_first_row``, ``person_rows``.
         preserved_grid: Optional mapping ``(person_name, month_num)`` →
-            WP code. Accepted but currently unused by Phase 1 — the solver
-            always runs and overwrites the grid. Phase 2 wires the toggle
-            gate that activates this dict.
-        resolve_flag: Initial value for the resolve-flag toggle cell.
-            Phase 1 always writes TRUE on init; Phase 2 writes the
-            user's preserved value on rebuild.
+            WP code. When ``resolve_flag`` is False, the grid is written
+            from this dict verbatim (user edits preserved). When
+            ``resolve_flag`` is True, the solver runs and this dict is
+            ignored.
+        resolve_flag: Gate for the solver. True → solver runs, grid is
+            re-derived from assignments. False → grid is written from
+            ``preserved_grid``, preserving user edits. On init the caller
+            passes True; on rebuild the caller passes the user's value
+            from the toggle cell.
 
     Returns:
         Layout dict with keys:
@@ -165,7 +168,6 @@ def build_timelog_plan_sheet(
           person_rows_by_band (dict band → {name: row}),
           resolve_flag_cell (coordinate string).
     """
-    del preserved_grid  # Phase 2 will consume; Phase 1 ignores.
     project_months: int = project_params["months"]
 
     # ── Tab appearance ──
@@ -199,7 +201,12 @@ def build_timelog_plan_sheet(
         )
         for a in (assignments or [])
     ]
-    assigned_map = solve(persons, wps, windows, project_months)
+    if resolve_flag:
+        assigned_map = solve(persons, wps, windows, project_months)
+    else:
+        assigned_map = {}
+        for (pname, month_num), wp_code in (preserved_grid or {}).items():
+            assigned_map.setdefault(pname, {})[month_num] = wp_code
     person_windows: dict[str, list[tuple[str, int, int]]] = {}
     for w in windows:
         person_windows.setdefault(w.person_name, []).append(

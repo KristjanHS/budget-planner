@@ -26,3 +26,9 @@ Run pytest — it covers structural validation (sheets, named ranges, formulas, 
 
 ## "Compare budget scenarios"
 Use `--snapshot` to save current state, make changes, compare. Use `--restore` to revert.
+
+## "Change the uniform vacation month"
+Edit the `Vacation Month` blue input on Config (row 7 col B) — three-letter abbreviation (`"Jan"`…`"Dec"`). Run `python -m budget_planner rebuild`. The Pool formula on Timelog Plan PER-PERSON SUMMARY re-derives and the grid re-locks the new month's columns. Default is `"Jul"`.
+
+## "Add a vacation exception for a specific person"
+**Not supported in the current model.** Vacation is uniform across the team via the `vacation_month` scalar. Per-(person, year) overrides are on the roadmap as Option A (see `docs/design-invariants.md` § Timelog Plan vacation-month invariants) — a future Config `Vacation Schedule` table keyed by person × year will layer on additively without moving Timelog Plan cells.

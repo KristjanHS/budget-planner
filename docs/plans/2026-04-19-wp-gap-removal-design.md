@@ -2,7 +2,7 @@
 
 **Status:** Validated via brainstorming 2026-04-19 (Doc B). Ready for single-PR implementation.
 **Scope:** Forbid multi-row WP_SCHEDULE entries entirely. Fold `start`/`end`/`type` into the `WORK_PACKAGES` / Config WP BUDGET table. Delete `_wp_sched_months`; collapse `capacity.py`'s gap-aware filter. Legacy workbooks with multi-row schedules or the two-section Config layout get a hard-fail on rebuild with an explicit migration recipe.
-**Relationship to Doc A (`docs/plans/2026-04-19-timelog-plan-enhancements-design.md`):** Doc A's D5/§5 were written to tolerate this removal — the yearly-budget formula's `_wp_sched_months(wpk.code, wp_schedule)` term collapses to `end - start + 1` with no formula rewrite. Doc B and Doc A are independent; either can ship first. If Doc A ships first, Phase 4's implementation must swap `_wp_sched_months(...)` for `end - start + 1` when Doc B lands (a one-liner diff per WP term).
+**Relationship to Doc A (`docs/plans/archived/2026-04-19-timelog-plan-enhancements-design.md`):** Doc A's D5/§5 were written to tolerate this removal — the yearly-budget formula's `_wp_sched_months(wpk.code, wp_schedule)` term collapses to `end - start + 1` with no formula rewrite. Doc B and Doc A are independent; either can ship first. If Doc A ships first, Phase 4's implementation must swap `_wp_sched_months(...)` for `end - start + 1` when Doc B lands (a one-liner diff per WP term).
 
 ---
 
@@ -351,7 +351,7 @@ The "grey + empty" rendering for out-of-window months is preserved. An assignmen
 
 ## 8. Doc A reconciliation
 
-Doc A (`docs/plans/2026-04-19-timelog-plan-enhancements-design.md`) is pending implementation. Two hooks reference Doc B explicitly:
+Doc A (`docs/plans/archived/2026-04-19-timelog-plan-enhancements-design.md`) shipped 2026-04-19 and is now archived. Two hooks in Doc A reference Doc B explicitly:
 
 1. **D5** (decisions log): "Yearly budget proportion = `active_months_in_year / total_sched_months`, both segment-aware" — consistent with `_wp_sched_months` convention; survives later WP gap removal without formula rewrite.
 2. **§5 note** (line 204): "`total_sched_months_for_wpk` = `_wp_sched_months(wpk.code, wp_schedule)` — respects multi-segment WPs today; if WP gap logic is removed later (Doc B), this collapses to `end - start + 1` with no formula change."

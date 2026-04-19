@@ -24,7 +24,7 @@ at col B (TIMELOG_MONTH_COL_START). The per-person Rate helper lives only
 once, on col H of the PER-PERSON SUMMARY band, and is consumed by the
 PER-WP SUMMARY Assigned-€ SUMPRODUCT via row-aligned vectors.
 
-Spec: ``docs/plans/2026-04-19-timelog-plan-enhancements-design.md`` (builds
+Spec: ``docs/plans/archived/2026-04-19-timelog-plan-enhancements-design.md`` (builds
 on ``docs/plans/archived/2026-04-19-timelog-plan-v2-design.md``).
 
 Stateless builder — receives all config via kwargs from the orchestrator. Per
@@ -1232,8 +1232,8 @@ def _write_person_summary_metrics(
 
     # Col C: Pool = ROUND(max_fte * (project_months − num_vacation_months), 0).
     # Green xref. num_vacation_months is a Config named range (builder-written
-    # literal, Rule 3 carve-out — see `docs/plans/2026-04-19-timelog-plan-
-    # enhancements-design.md` §3.4).
+    # literal, Rule 3 carve-out — see `docs/plans/archived/2026-04-19-timelog-
+    # plan-enhancements-design.md` §3.4).
     if cfg_row is not None:
         max_fte_ref = cell_ref(SHEET_CONFIG, cfg_row, 2)
         style_cell(ws, row, c0 + 1, font=GREEN_XREF, fmt="0").value = (

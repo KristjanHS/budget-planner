@@ -46,6 +46,8 @@ Monthly rates are organisation-specific. They must reflect actual costs, not inf
 
 **WP schedule gaps.** A work package may be active across non-contiguous month ranges (e.g. WP1 runs M8--17 and then M20--26, inactive M18--19). Auditors reject PM logged in inactive months, so the app treats the intersection of an assignment's window and the WP's active months as the only valid distribution target. A person assigned to a gapped WP keeps a single `Total FTE` scalar; the builder redistributes it only over valid months and greys out inactive cells. This keeps `Capacity Sum`, `Config Sig Assigned`, and `Plan Assigned PM` reconciled at the user-entered total with zero PM leaking into gap months.
 
+**Vacation months.** Auditors also reject PM logged during vacation. The workbook encodes a single uniform vacation month via the Config `vacation_month` scalar (default `"Jul"`; named range); the derived `num_vacation_months` literal counts calendar-vacation months inside the project span. On Timelog Plan, vacation-month columns are yellow-locked and empty across every person row — the solver never places a WP code there, and the PER-PERSON SUMMARY Pool reduces to `max_fte × (project_months − num_vacation_months)` so the "Over-pool?" check doesn't false-flag people whose Assigned count sits at the available-month ceiling. Heterogeneous per-(person, year) vacation is deferred (Option A); the scalar path is designed to accept an additive override table later with no cell-relocation on Timelog Plan.
+
 ### 2. Travel & Subsistence
 
 Direct costs for project-related travel: flights, hotels, per diem. Must be justified per trip or trip category.

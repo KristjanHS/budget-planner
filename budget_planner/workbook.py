@@ -795,14 +795,17 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
 
 def seed_demo_data(workbook_path: str) -> str:
-    """Seed Actuals EUR, Actuals-Hours, and through-month Config params.
+    """Seed Actuals EUR and Actuals-Hours, plus the EUR through-month override.
 
     Capacity FTE values are now auto-distributed by the builder via
-    assignments — this function seeds Actuals EUR spend, per-person
-    Actuals-Hours, and sets the two-cadence through-month params on
-    Config (B7 EUR-through, B8 hours-through) to non-default values
-    so the reconciliation visuals (greyed forecast-EUR band,
-    Capacity to-date block) have something to render.
+    assignments — this function seeds Actuals EUR spend and per-person
+    Actuals-Hours so the reconciliation visuals (greyed forecast-EUR
+    band, Capacity to-date block) have something to render. Writes a
+    blue-input override to ``Actuals!$B$1`` at DEMO_CURRENT_MONTH − 3
+    to model the accountant's 3-month finance-close lag (EUR cadence
+    trails hours). Hours through-month is left auto-derived — the
+    row-1 scan on Actuals-Hours naturally returns DEMO_CURRENT_MONTH
+    because hours are seeded through that month.
 
     Args:
         workbook_path: Path to an existing workbook (from init_workbook).
@@ -853,19 +856,14 @@ def seed_demo_data(workbook_path: str) -> str:
                 eur_value = round(monthly_planned * multiplier)
                 act_ws.cell(row, col).value = eur_value
 
-    # ── Seed Config through-month params (non-default) ──
-    # EUR lags 3 months behind hours (finance close cadence).
-    # Hours close at month-end: set to DEMO_CURRENT_MONTH.
-    # EUR through = DEMO_CURRENT_MONTH - 3 (3-month finance lag).
-    config_ws = wb[SHEET_CONFIG]
+    # ── Seed EUR through-month override on Actuals!$B$1 ──
+    # Models a 3-month finance-close lag (EUR cadence trails hours). Hours
+    # through-month resolves via the auto-derived scan on Actuals-Hours;
+    # no override needed because hours are seeded through DEMO_CURRENT_MONTH.
+    # See design doc
+    # ``docs/plans/archived/2026-04-18-config-through-month-cleanup-design.md``.
     hours_through = DEMO_CURRENT_MONTH
-    eur_through = max(1, DEMO_CURRENT_MONTH - 3)
-    for r in range(1, 20):
-        label = config_ws.cell(r, 1).value
-        if label == "EUR Actuals Through Month":
-            style_cell(config_ws, r, 2, eur_through, border=False)
-        elif label == "Hours Actuals Through Month":
-            style_cell(config_ws, r, 2, hours_through, border=False)
+    act_ws.cell(row=1, column=2, value=max(1, DEMO_CURRENT_MONTH - 3))
 
     # ── Seed Actuals-Hours per-person monthly hours ──
     # Reconstruct per-person WP ordering from DEMO_CAPACITY_ASSIGNMENTS

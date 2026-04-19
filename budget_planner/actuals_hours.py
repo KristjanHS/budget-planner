@@ -78,7 +78,7 @@ def _mirror_year_month_headers_to_band(
 
 def _cum_hours_formula(row: int, month_col_start: int, months: int) -> str:
     """Windowed cumulative SUM of this row's hour cells up to
-    ``hours_actuals_through_month`` (Config!B8).
+    ``hours_actuals_through_month`` (`'Actuals-Hours'!$D$1`).
 
     Written on the Capacity-consumed ``cum_hours_col`` as a single helper
     so Capacity can reference one cell per row instead of rebuilding a
@@ -467,8 +467,8 @@ def build_actuals_hours_sheet(
     external_commitments,
     assignments,
     config_first_wp_row,
+    wb,
     preserved: dict[str, dict[str, list[float | None]]] | None = None,
-    wb=None,
     hours_through_override: int | None = None,
 ) -> dict:
     """Build the Actuals-Hours sheet: per-person monthly hour timelog grid.
@@ -568,8 +568,8 @@ def build_actuals_hours_sheet(
                value="Cum hours (to date)", font=HEADER_FONT,
                fill=LIGHT_GREEN_FILL)
     ws.cell(row=month_header_row, column=cum_hours_col).comment = sized_comment(
-        "Cumulative hours on this row through Config!B8 (Hours Actuals "
-        "Through Month). Capacity's to-date Actual PM reads this cell "
+        "Cumulative hours on this row through the `hours_actuals_through_month` "
+        "named range (`'Actuals-Hours'!$D$1`). Capacity's to-date Actual PM reads this cell "
         "divided by hours_per_fte_month."
     )
 
@@ -708,11 +708,10 @@ def build_actuals_hours_sheet(
         "Override in B wins when numeric; otherwise falls through to the "
         "auto scan in C. Do not edit."
     )
-    if wb is not None:
-        wb.defined_names.add(DefinedName(
-            "hours_actuals_through_month",
-            attr_text=f"'{SHEET_ACTUALS_HOURS}'!$D$1",
-        ))
+    wb.defined_names.add(DefinedName(
+        "hours_actuals_through_month",
+        attr_text=f"'{SHEET_ACTUALS_HOURS}'!$D$1",
+    ))
 
     ws.freeze_panes = f"C{first_person_header_row}"
     ws.column_dimensions["B"].width = 25

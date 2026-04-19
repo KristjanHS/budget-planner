@@ -142,7 +142,7 @@ flowchart TD
   CONFIG["Config<br/>WP table, roster,<br/>named ranges"]
   PLAN["Plan<br/>=Config!A/B/C refs<br/>=SUM(Capacity!...) per WP"]
   CAP["Capacity<br/>=Config!A refs (person names)<br/>=Config!B refs (Max FTE)"]
-  ACT["Actuals<br/>=Config!A/B/G refs<br/>uses current_month"]
+  ACT["Actuals<br/>=Config!A/B/G refs<br/>uses current_month<br/>hosts eur_actuals_through_month (D1)"]
   SUM["Summary<br/>=SUM(Plan!...) per year<br/>=SUM(Actuals!...) per year<br/>uses fte_rate, partner_ceiling"]
   TRENDS["Trends<br/>=Config! refs (WP start/end)<br/>=Actuals! cum/ceiling<br/>=Capacity! TOTAL rows<br/>=Plan! FTE for chart"]
 
@@ -163,7 +163,7 @@ flowchart TD
 User-facing tab order (set in `workbook.py` after build): **Config → Capacity → Plan → Timelog Plan → Actuals → Actuals-Hours → Plan-Forecast → Trends → Summary**. Note the Cross-Sheet Formula References diagram above omits `Actuals-Hours`, `Plan-Forecast`, and `Timelog Plan`; the first two form a secondary data chain documented here in prose, and Timelog Plan is a terminal surface (Config refs in; nothing out).
 
 ### Config
-Single source of truth for project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, and the grade rate table. Hosts the named ranges `project_start` and `fte_rate`. **Tab color: Blue (4472C4).** Upstream to every other sheet.
+Single source of truth for project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, and the grade rate table. Hosts the named ranges `project_start` (B2), `fte_rate` (B4), `version_stamp` (B7). The two through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) now live on the Actuals / Actuals-Hours sheets, not Config — see those sheet sections. **Tab color: Blue (4472C4).** Upstream to every other sheet.
 
 ### Capacity
 Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects. Includes a to-date block (Plan/Actual/Variance in PM and %) that reads from Actuals-Hours. Feeds Plan via `SUM(Capacity!…)`.
@@ -175,10 +175,10 @@ Compact 1-row header + Planned-FTE block whose cells are `=SUM(Capacity!…)` pe
 Prescriptive whole-month 1.0-FTE WP allocation grid — a separate allocation surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). Solver (`budget_planner/timelog_solver.py`) writes the Proposed grid (locked); the Assigned grid starts as `=<Proposed cell>` formulas and accepts blue-input overrides. Consumes `current_month`, `team_priorities`, `roster_lookup`. **Tab color: Orange (FF8C00).** Terminal surface — no downstream sheet consumes it.
 
 ### Actuals
-EUR actuals per WP per month (input from accountant) **plus** a parallel forecast-monitoring block that reads Plan-Forecast. Monthly Actual-EUR cells past `eur_actuals_through_month` are greyed via CF — those months are not closed yet. **Tab color: Blue.**
+EUR actuals per WP per month (input from accountant) **plus** a parallel forecast-monitoring block that reads Plan-Forecast. Monthly Actual-EUR cells past `eur_actuals_through_month` are greyed via CF — those months are not closed yet. **Hosts the `eur_actuals_through_month` named range at `$D$1` (row-1 through-month control strip: label / optional blue-input override / auto-derived scan / effective cell).** **Tab color: Blue.**
 
 ### Actuals-Hours
-Per-person monthly hour timelog + sibling forecast-EUR band (`outline_level=1`, collapsible). Sole source of forecast-EUR leaves in the workbook. Consumes named ranges `hours_per_fte_month`, `eu_annual_ceiling_pm`, `roster_lookup`, `eur_actuals_through_month`. **Tab color: Red (C00000).** *Not in the Cross-Sheet diagram:* Data flow OUT → Plan-Forecast (SUM per WP × month) → Actuals forecast block → Capacity to-date band → Summary Forecast EUR/year → Trends Cumulative Forecast.
+Per-person monthly hour timelog + sibling forecast-EUR band (`outline_level=1`, collapsible). Sole source of forecast-EUR leaves in the workbook. Consumes named ranges `hours_per_fte_month`, `eu_annual_ceiling_pm`, `roster_lookup`, `eur_actuals_through_month`. **Hosts the `hours_actuals_through_month` named range at `$D$1` (row-1 through-month control strip — same layout as Actuals; sheet name is single-quoted in the DefinedName because of the hyphen).** **Tab color: Red (C00000).** *Not in the Cross-Sheet diagram:* Data flow OUT → Plan-Forecast (SUM per WP × month) → Actuals forecast block → Capacity to-date band → Summary Forecast EUR/year → Trends Cumulative Forecast.
 
 ### Plan-Forecast
 WP × month forecast-EUR grid aggregating the leaf formulas on Actuals-Hours; mirrors Plan's shape. **Tab color: Green (00B050).** *Not in the Cross-Sheet diagram:* Data flow IN ← Actuals-Hours forecast-EUR leaves; OUT → Actuals forecast monitoring block, Summary Forecast EUR/year, Trends Cumulative Forecast helper row.

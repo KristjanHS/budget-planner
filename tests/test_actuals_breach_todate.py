@@ -149,3 +149,42 @@ def test_row_ordering_is_consistent(actuals_ws):
     assert 3 < month_header - 1 < month_header
     assert month_header + 1 == first_wp
     assert first_wp < total
+
+
+# ── Through-month control strip (Row 1 on Actuals + Actuals-Hours) ──
+
+
+@pytest.fixture(scope="module")
+def actuals_hours_ws_demo(demo_wb_path):
+    """Loaded from demo workbook so per-person programme-WP rows exist — without
+    assignments the auto-derive falls back to `=0`, which masks the
+    SUMPRODUCT scan this test is meant to pin down."""
+    wb = openpyxl.load_workbook(demo_wb_path, data_only=False)
+    return wb["Actuals-Hours"]
+
+
+def test_through_month_strip_formulas_on_actuals(actuals_ws):
+    """C1 auto-derive is a SUMPRODUCT(MAX(...ISNUMBER...)) scan over the WP
+    data block; D1 effective is IF(ISNUMBER(B1),B1,C1). Bug surface: a
+    refactor that narrows the scan range (e.g. includes the TOTAL row) or
+    inverts the IF precedence silently flips `eur_actuals_through_month`
+    to the wrong integer without breaking recalc.
+    """
+    auto = str(actuals_ws.cell(1, 3).value)
+    assert auto.startswith("=SUMPRODUCT("), auto
+    assert "MAX(" in auto and "ISNUMBER(" in auto, auto
+    assert actuals_ws.cell(1, 4).value == "=IF(ISNUMBER(B1),B1,C1)"
+
+
+def test_through_month_strip_formulas_on_actuals_hours(actuals_hours_ws_demo):
+    """Same strip contract as Actuals (label / override / auto / effective)
+    registered against `hours_actuals_through_month`. The auto scan here
+    is MAX(SUMPRODUCT(...), ...) over per-person programme-WP row ranges —
+    externals and subtotal/TOTAL/EU TOTAL rows are excluded, so a
+    regression that swaps in the full-sheet range would over-count.
+    """
+    assert actuals_hours_ws_demo.cell(1, 1).value == "Hours Actuals Through Month:"
+    auto = str(actuals_hours_ws_demo.cell(1, 3).value)
+    assert "SUMPRODUCT(" in auto, auto
+    assert "MAX(" in auto and "ISNUMBER(" in auto, auto
+    assert actuals_hours_ws_demo.cell(1, 4).value == "=IF(ISNUMBER(B1),B1,C1)"

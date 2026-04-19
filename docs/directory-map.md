@@ -44,9 +44,9 @@ scripts/
 
 One bullet per worksheet — what it is, what feeds it, what it feeds. Build order matches `_build_all_sheets` in `workbook.py`. See `docs/architecture.md` for the full cross-sheet formula graph.
 
-- **Config** — Single source of truth: project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, grade rate table.
+- **Config** — Single source of truth: project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, grade rate table. The two through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) now live on the Actuals / Actuals-Hours sheets — Config no longer owns them.
   - IN ← user edits only (blue input cells).
-  - OUT → every other sheet (params, named ranges `project_start` / `fte_rate`, WP list, roster).
+  - OUT → every other sheet (params, named ranges `project_start` / `fte_rate` / `version_stamp`, WP list, roster).
 
 - **Capacity** — Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects. Auto-distributed from Config assignments on init/rebuild; user tunes month-by-month.
   - IN ← Config (assignments, WP list, roster, months); Actuals-Hours (Actual-FTE to-date band).
@@ -60,11 +60,11 @@ One bullet per worksheet — what it is, what feeds it, what it feeds. Build ord
   - IN ← Config (WP budget + WP schedule + PERSON-WP ASSIGNMENTS + Team Roster including `Priority` + grade rates); `current_month` (per-WP window-months-remaining).
   - OUT → (terminal surface; no downstream sheet consumes it).
 
-- **Actuals** — EUR actuals per WP per month (accountant input) plus a parallel forecast-monitoring block reading Plan-Forecast. CF greys monthly Actual EUR cells past `eur_actuals_through_month` (not-yet-closed months). Tab color: Blue.
+- **Actuals** — EUR actuals per WP per month (accountant input) plus a parallel forecast-monitoring block reading Plan-Forecast. CF greys monthly Actual EUR cells past `eur_actuals_through_month` (not-yet-closed months). Hosts the `eur_actuals_through_month` named range at `$D$1` (row-1 through-month control strip: label / blue-input override / auto-derived scan / effective cell). Tab color: Blue.
   - IN ← user EUR input; Plan-Forecast (forecast block).
-  - OUT → Summary (Actual EUR per year); Trends (cumulative actual curve).
+  - OUT → Summary (Actual EUR per year); Trends (cumulative actual curve); every consumer of `eur_actuals_through_month`.
 
-- **Actuals-Hours** — Per-person monthly hour timelog plus a sibling forecast-EUR band (outline_level=1, collapsible). Sole source of forecast-EUR leaves. Tab color: Red (C00000). Consumes named ranges `hours_per_fte_month`, `eu_annual_ceiling_pm`, `roster_lookup`, `eur_actuals_through_month`.
+- **Actuals-Hours** — Per-person monthly hour timelog plus a sibling forecast-EUR band (outline_level=1, collapsible). Sole source of forecast-EUR leaves. Hosts the `hours_actuals_through_month` named range at `$D$1` (row-1 through-month control strip; DefinedName `attr_text` single-quotes the sheet name because of the hyphen). Tab color: Red (C00000). Consumes named ranges `hours_per_fte_month`, `eu_annual_ceiling_pm`, `roster_lookup`, `eur_actuals_through_month`.
   - IN ← user hour input (primary input surface for hours; two-cadence model).
   - OUT → Plan-Forecast (forecast-EUR leaves SUMmed per WP × month); Capacity (Actual-FTE to-date band).
 

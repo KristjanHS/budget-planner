@@ -803,7 +803,8 @@ def build_capacity_sheet(ws, team_layout, *,
                value="TO-DATE",
                font=HEADER_FONT, fill=LIGHT_GREEN_FILL, alignment=CENTER)
     ws.cell(row=band_label_row, column=todate_col_start).comment = sized_comment(
-        "Progress snapshot through Config!B8 (Hours Actuals Through Month). "
+        "Progress snapshot through the `hours_actuals_through_month` "
+        "named range (`'Actuals-Hours'!$D$1`). "
         "Actual PM: logged hours through that month / hours_per_fte_month "
         "(reads from Actuals-Hours cum-hours col). "
         "Variance PM: Plan − Actual on TOTAL + EU TOTAL rows only; red when < 0. "
@@ -947,7 +948,7 @@ def apply_capacity_todate_formulas(
 
     Called after both Capacity and Actuals-Hours sheets have been built,
     so per-person row numbers are known on both sides. The block mirrors
-    the ``hours_actuals_through_month`` window (Config!B8): everything
+    the ``hours_actuals_through_month`` window (`'Actuals-Hours'!$D$1`): everything
     is summed up to that month inclusive.
 
     Per design ``docs/plans/2026-04-14-t5-simplification-design.md``:

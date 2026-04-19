@@ -15,10 +15,11 @@ tasks.
 
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Font
+from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.properties import Outline
 
 from budget_planner.layout import (
-    MONTH_COL_START, SHEET_CONFIG,
+    MONTH_COL_START, SHEET_ACTUALS_HOURS, SHEET_CONFIG,
     build_year_month_headers, month_range_ref,
     month_col_end as _month_col_end, val_columns,
     wp_active_months,
@@ -467,6 +468,8 @@ def build_actuals_hours_sheet(
     assignments,
     config_first_wp_row,
     preserved: dict[str, dict[str, list[float | None]]] | None = None,
+    wb=None,
+    hours_through_override: int | None = None,
 ) -> dict:
     """Build the Actuals-Hours sheet: per-person monthly hour timelog grid.
 
@@ -520,10 +523,13 @@ def build_actuals_hours_sheet(
         outline_pr.summaryRight = True
         outline_pr.summaryBelow = False
 
-    # ── Forecast band top label row (row 1) ──
-    # Merged "FORECAST EUR (from hours)" header sits above the year labels
-    # so the forecast band is visually distinct from the hour inputs.
-    band_label_row = 1
+    # ── Forecast band top label row ──
+    # Row 1 holds the hours through-month control strip (label / override /
+    # auto-derived / effective) — see docs/plans/2026-04-18-config-through-
+    # month-cleanup-design.md. The merged "FORECAST EUR (from hours)"
+    # header shifts down to row 2, keeping its position above the year
+    # labels on row 3.
+    band_label_row = 2
     ws.merge_cells(start_row=band_label_row, start_column=forecast_col_start,
                    end_row=band_label_row, end_column=forecast_col_end)
     style_cell(ws, band_label_row, forecast_col_start,
@@ -639,6 +645,73 @@ def build_actuals_hours_sheet(
                 f"-COLUMN(${fc_start_l}$1)+1>hours_actuals_through_month"
             ],
             fill=CF_GREY_FILL,
+        ))
+
+    # ── Row 1: hours through-month control strip ──
+    # A: label, B: override (blue; blank by default), C: auto-derived scan
+    # of every person's programme-WP rows (excludes externals + per-person
+    # subtotal/TOTAL/EU TOTAL rows), D: effective = override-if-numeric-
+    # else-auto. ``hours_actuals_through_month`` now resolves to the
+    # effective cell on this sheet rather than Config!B8.
+    ms_strip = col_letter(month_col_start)
+    me_strip = col_letter(month_col_end)
+    grant_wp_ranges: list[tuple[int, int]] = []
+    for grp in person_groups.values():
+        grp_wp_rows = grp.get("wp_rows") or {}
+        if not grp_wp_rows:
+            continue
+        sorted_rows = sorted(grp_wp_rows.values())
+        grant_wp_ranges.append((sorted_rows[0], sorted_rows[-1]))
+    if grant_wp_ranges:
+        scan_terms = []
+        for r0, r1 in grant_wp_ranges:
+            rng = f"${ms_strip}${r0}:${me_strip}${r1}"
+            scan_terms.append(
+                f"SUMPRODUCT(MAX((COLUMN({rng})-COLUMN(${ms_strip}$1)+1)"
+                f"*ISNUMBER({rng})))"
+            )
+        auto_formula = f"=MAX({','.join(scan_terms)})"
+    else:
+        auto_formula = "=0"
+
+    style_cell(ws, 1, 1, value="Hours Actuals Through Month:",
+               font=HEADER_FONT, border=False)
+    ws.cell(row=1, column=1).comment = sized_comment(
+        "Trust boundary for hours-side cumulative figures. The effective "
+        "value in column D is what Capacity, Plan-Forecast, and Trends "
+        "consume via the named range `hours_actuals_through_month`. "
+        "Override (B) beats auto-derived (C) only when it holds a number."
+    )
+    style_cell(ws, 1, 2, value=hours_through_override, font=BLUE_INPUT,
+               fmt="0", border=False)
+    ws.cell(row=1, column=2).comment = sized_comment(
+        "Optional override — enter an integer month index (1-based) to "
+        "force a tighter hours trust cutoff than the auto-derived value. "
+        "Leave blank to defer to the auto scan in column C. Blue = user "
+        "input."
+    )
+    style_cell(ws, 1, 3, font=BLACK_FORMULA, fmt="0", border=False).value = (
+        auto_formula
+    )
+    ws.cell(row=1, column=3).comment = sized_comment(
+        "Auto-derived: largest 1-based month index with any numeric hour "
+        "value across every person's programme-WP rows (externals and subtotal/"
+        "TOTAL/EU TOTAL rows are excluded). Returns 0 when no hours have "
+        "been logged yet. Do not edit."
+    )
+    style_cell(ws, 1, 4, font=BLACK_FORMULA, fmt="0", border=False).value = (
+        "=IF(ISNUMBER(B1),B1,C1)"
+    )
+    ws.cell(row=1, column=4).comment = sized_comment(
+        "Effective hours trust cutoff consumed by Capacity, Plan-Forecast, "
+        "and Trends via the named range `hours_actuals_through_month`. "
+        "Override in B wins when numeric; otherwise falls through to the "
+        "auto scan in C. Do not edit."
+    )
+    if wb is not None:
+        wb.defined_names.add(DefinedName(
+            "hours_actuals_through_month",
+            attr_text=f"'{SHEET_ACTUALS_HOURS}'!$D$1",
         ))
 
     ws.freeze_panes = f"C{first_person_header_row}"

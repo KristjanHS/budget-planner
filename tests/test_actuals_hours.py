@@ -267,15 +267,14 @@ def test_forecast_eur_band_columns_are_outline_grouped(hrs):
 
 def test_forecast_eur_header_exists(hrs):
     """A merged band-label cell contains 'FORECAST EUR' above the forecast
-    month columns."""
-    # The band label sits at row 1 starting at FORECAST_COL_START.
-    label = hrs.cell(1, FORECAST_COL_START).value
+    month columns. Row 2 (row 1 now carries the through-month strip)."""
+    label = hrs.cell(2, FORECAST_COL_START).value
     assert isinstance(label, str) and "FORECAST EUR" in label.upper(), (
         f"Expected FORECAST EUR band label, got {label!r}"
     )
     # Merged across the band.
-    top_left = f"{col_letter(FORECAST_COL_START)}1"
-    bottom_right = f"{col_letter(FORECAST_COL_END)}1"
+    top_left = f"{col_letter(FORECAST_COL_START)}2"
+    bottom_right = f"{col_letter(FORECAST_COL_END)}2"
     merged = [str(mr) for mr in hrs.merged_cells.ranges]
     expected = f"{top_left}:{bottom_right}"
     assert expected in merged, (
@@ -391,8 +390,9 @@ def test_actuals_hours_has_only_sum_validation_column(hrs):
     collapsible parallel EUR columns starting at val_col_sum + 2.)
     """
     vcols = val_columns(PROJECT_MONTHS)
-    # Year header row = 2 (row 1 now carries the FORECAST EUR band label).
-    year_row = 2
+    # Year header row = 3 (row 1 = through-month strip, row 2 = band label,
+    # row 3 = year, row 4 = month).
+    year_row = 3
     sum_label = hrs.cell(year_row, vcols["sum"]).value
     budget_label = hrs.cell(year_row, vcols["budget"]).value
     assert sum_label == "Sum"
@@ -406,8 +406,8 @@ CUM_HOURS_COL = FORECAST_COL_END + 2
 
 def test_cum_hours_header_present(hrs):
     """Header row carries the 'Cum hours (to date)' label."""
-    # Month header row = 3 (band=1, year=2, month=3).
-    assert hrs.cell(3, CUM_HOURS_COL).value == "Cum hours (to date)"
+    # Month header row = 4 (strip=1, band=2, year=3, month=4).
+    assert hrs.cell(4, CUM_HOURS_COL).value == "Cum hours (to date)"
 
 
 def test_cum_hours_wp_row_formula_shape(hrs):

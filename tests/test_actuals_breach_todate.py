@@ -1,12 +1,11 @@
-"""T7: Actuals Breach In cumulative-slope + As-of header tests.
+"""Actuals Breach In cumulative-slope + As-of header tests.
 
-Covers the Stage 2 / T7 changes in ``budget_planner/actuals.py``:
-- Actual + Forecast Breach In formulas divide cum by
-  ``months_elapsed_eur`` / ``months_elapsed_hours`` rather than the
-  raw project-month ``current_month``.
-- Two green ``=..._actuals_through_month`` "As of" header cells sit above
-  the Actual-EUR and Forecast Monitoring blocks on row 1, with the
-  section headers + year/month/WP rows all shifted down by one.
+Post 2026-04-18 Config-through-month cleanup:
+- Actual + Forecast Breach In formulas inline ``MAX(1, eur_actuals_through_month)``
+  / ``MAX(1, hours_actuals_through_month)`` (derived ``months_elapsed_*``
+  named ranges were dropped).
+- Row 1 holds the through-month override strip (label / override / auto /
+  effective). The "As of" header row shifted from row 1 to row 2.
 """
 import openpyxl
 import pytest
@@ -49,39 +48,39 @@ def _find_month_header_row(ws):
 # ── Breach In formulas: cumulative-slope denominators ──
 
 
-def test_actual_wp_breach_uses_months_elapsed_eur(actuals_ws):
-    """Per-WP Actual Breach In divides by months_elapsed_eur, not current_month."""
+def test_actual_wp_breach_uses_eur_actuals_through_month(actuals_ws):
+    """Per-WP Actual Breach In inlines MAX(1,eur_actuals_through_month)."""
     row = _find_first_wp_row(actuals_ws)
     formula = str(actuals_ws.cell(row, VAL_COL_BREACH).value)
-    assert "months_elapsed_eur" in formula, formula
+    assert "MAX(1,eur_actuals_through_month)" in formula, formula
     assert "current_month" not in formula, formula
 
 
-def test_forecast_wp_breach_uses_months_elapsed_hours(actuals_ws):
-    """Per-WP Forecast Breach In divides by months_elapsed_hours, not current_month."""
+def test_forecast_wp_breach_uses_hours_actuals_through_month(actuals_ws):
+    """Per-WP Forecast Breach In inlines MAX(1,hours_actuals_through_month)."""
     from budget_planner.config import PROJECT_MONTHS
     fcols = forecast_val_columns(PROJECT_MONTHS)
     row = _find_first_wp_row(actuals_ws)
     formula = str(actuals_ws.cell(row, fcols["breach_forecast"]).value)
-    assert "months_elapsed_hours" in formula, formula
+    assert "MAX(1,hours_actuals_through_month)" in formula, formula
     assert "current_month" not in formula, formula
 
 
-def test_total_actual_breach_uses_months_elapsed_eur(actuals_ws):
-    """TOTAL row Actual Breach In divides by months_elapsed_eur."""
+def test_total_actual_breach_uses_eur_actuals_through_month(actuals_ws):
+    """TOTAL row Actual Breach In inlines MAX(1,eur_actuals_through_month)."""
     row = _find_total_row(actuals_ws)
     formula = str(actuals_ws.cell(row, VAL_COL_BREACH).value)
-    assert "months_elapsed_eur" in formula, formula
+    assert "MAX(1,eur_actuals_through_month)" in formula, formula
     assert "current_month" not in formula, formula
 
 
-def test_total_forecast_breach_uses_months_elapsed_hours(actuals_ws):
-    """TOTAL row Forecast Breach In divides by months_elapsed_hours."""
+def test_total_forecast_breach_uses_hours_actuals_through_month(actuals_ws):
+    """TOTAL row Forecast Breach In inlines MAX(1,hours_actuals_through_month)."""
     from budget_planner.config import PROJECT_MONTHS
     fcols = forecast_val_columns(PROJECT_MONTHS)
     row = _find_total_row(actuals_ws)
     formula = str(actuals_ws.cell(row, fcols["breach_forecast"]).value)
-    assert "months_elapsed_hours" in formula, formula
+    assert "MAX(1,hours_actuals_through_month)" in formula, formula
     assert "current_month" not in formula, formula
 
 
@@ -89,14 +88,15 @@ def test_total_forecast_breach_uses_months_elapsed_hours(actuals_ws):
 
 
 def test_asof_header_actual_block(actuals_ws):
-    """Row 1 col B = 'As of:', col C = green EDATE(project_start, eur_actuals_through_month - 1).
+    """Row 2 col B = 'As of:', col C = green EDATE(project_start, eur_actuals_through_month - 1).
 
-    Through-month cells are integer month indices; EDATE turns them into a
-    calendar date so the header reads "As of: Apr 2026" rather than the
-    Excel serial-date rendering of a small integer.
+    Row 1 now holds the through-month override strip; the "As of" header
+    shifted to row 2. Through-month cells are integer month indices; EDATE
+    turns them into a calendar date so the header reads "As of: Apr 2026"
+    rather than the Excel serial-date rendering of a small integer.
     """
-    assert actuals_ws.cell(1, 2).value == "As of:"
-    date_cell = actuals_ws.cell(1, 3)
+    assert actuals_ws.cell(2, 2).value == "As of:"
+    date_cell = actuals_ws.cell(2, 3)
     formula = str(date_cell.value)
     assert formula.startswith("=EDATE(project_start"), formula
     assert "eur_actuals_through_month" in formula, formula
@@ -106,12 +106,12 @@ def test_asof_header_actual_block(actuals_ws):
 
 
 def test_asof_header_forecast_block(actuals_ws):
-    """Row 1 at col_cum_forecast = 'As of:', next col = green EDATE hours formula."""
+    """Row 2 at col_cum_forecast = 'As of:', next col = green EDATE hours formula."""
     from budget_planner.config import PROJECT_MONTHS
     fcols = forecast_val_columns(PROJECT_MONTHS)
     col_cum_forecast = fcols["cum_forecast"]
-    assert actuals_ws.cell(1, col_cum_forecast).value == "As of:"
-    date_cell = actuals_ws.cell(1, col_cum_forecast + 1)
+    assert actuals_ws.cell(2, col_cum_forecast).value == "As of:"
+    date_cell = actuals_ws.cell(2, col_cum_forecast + 1)
     formula = str(date_cell.value)
     assert formula.startswith("=EDATE(project_start"), formula
     assert "hours_actuals_through_month" in formula, formula
@@ -135,13 +135,17 @@ def test_freeze_panes_matches_first_wp_row(actuals_ws):
 
 
 def test_row_ordering_is_consistent(actuals_ws):
-    """As-of row(1) < section header(2) < year/month rows < first_wp < total."""
+    """Strip(1) < As-of(2) < section header(3) < year/month rows < first_wp < total."""
     month_header = _find_month_header_row(actuals_ws)
     first_wp = _find_first_wp_row(actuals_ws)
     total = _find_total_row(actuals_ws)
-    # Section header "ACTUAL EUR" now on row 2 (shifted down from row 1)
-    assert actuals_ws.cell(2, 1).value == "ACTUAL EUR"
+    # Row 1 is the through-month override strip (A1 label).
+    assert actuals_ws.cell(1, 1).value == "EUR Actuals Through Month:"
+    # As-of row shifted to row 2.
+    assert actuals_ws.cell(2, 2).value == "As of:"
+    # Section header "ACTUAL EUR" now on row 3.
+    assert actuals_ws.cell(3, 1).value == "ACTUAL EUR"
     # Year row sits between section header and month header
-    assert 2 < month_header - 1 < month_header
+    assert 3 < month_header - 1 < month_header
     assert month_header + 1 == first_wp
     assert first_wp < total

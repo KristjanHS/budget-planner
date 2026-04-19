@@ -22,26 +22,25 @@ def test_generator_produces_workbook_matching_fingerprint(tmp_path: Path):
     )
     assert set(fp2["named_ranges"].keys()) == set(fp["named_ranges"].keys())
 
-    # v2 hours-timelog named ranges must actually be captured in the
-    # fingerprint — otherwise widening SAFE_NAMED_RANGES silently adds
-    # ghost entries that neither init nor synth emits, and the set-equality
-    # round-trip above passes on a trivially empty intersection.
-    v2_names = {
+    # Surviving scalar-cell named ranges (post-2026-04-18 through-month
+    # cleanup) must actually be captured in the fingerprint — otherwise
+    # widening SAFE_NAMED_RANGES silently adds ghost entries that neither
+    # init nor synth emits, and the set-equality round-trip above passes
+    # on a trivially empty intersection.
+    surviving_names = {
         "hours_per_fte_month",
         "eur_actuals_through_month", "hours_actuals_through_month",
-        "months_elapsed_hours", "months_elapsed_eur",
-        "reconciled_through_month",
     }
-    missing = v2_names - fp["named_ranges"].keys()
+    missing = surviving_names - fp["named_ranges"].keys()
     assert not missing, (
-        f"Fresh-init fingerprint missing v2 Config named ranges: "
+        f"Fresh-init fingerprint missing surviving scalar named ranges: "
         f"{sorted(missing)}"
     )
     # Synthetic side must emit them too — otherwise the set-equality
     # round-trip above passes while ``build_from_fingerprint`` silently
     # drops them, leaving the forward guard on ``fp`` alone.
-    missing_synth = v2_names - fp2["named_ranges"].keys()
+    missing_synth = surviving_names - fp2["named_ranges"].keys()
     assert not missing_synth, (
-        f"Synthetic-rebuild fingerprint missing v2 Config named ranges: "
-        f"{sorted(missing_synth)}"
+        f"Synthetic-rebuild fingerprint missing surviving scalar named "
+        f"ranges: {sorted(missing_synth)}"
     )

@@ -283,7 +283,9 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     style_cell(ws, recon_health_reconciled_row, 1,
                value="Reconciled through", font=HEADER_FONT)
     style_cell(ws, recon_health_reconciled_row, 2,
-               font=BLACK_FORMULA, fmt="0").value = "=reconciled_through_month"
+               font=BLACK_FORMULA, fmt="0").value = (
+        "=MIN(eur_actuals_through_month,hours_actuals_through_month)"
+    )
 
     # Per-WP reconciliation table header
     recon_table_header_row = recon_section_row + 6
@@ -324,9 +326,9 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
             )
             pf_start_ref = f"'{SHEET_PLAN_FORECAST}'!${ms}${pf_wp_row}"
             style_cell(ws, row, 2, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
-                f"=IF(reconciled_through_month<=0,0,"
+                f"=IF($B${recon_health_reconciled_row}<=0,0,"
                 f"SUM({pf_start_ref}:INDEX({pf_range_full},1,"
-                f"reconciled_through_month)))"
+                f"$B${recon_health_reconciled_row})))"
             )
 
         # Col C: Cumulative Actual EUR through reconciled_through_month.
@@ -335,9 +337,9 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         )
         act_start_ref = f"{SHEET_ACTUALS}!${ms}${actuals_wp_row}"
         style_cell(ws, row, 3, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
-            f"=IF(reconciled_through_month<=0,0,"
+            f"=IF($B${recon_health_reconciled_row}<=0,0,"
             f"SUM({act_start_ref}:INDEX({act_range_full},1,"
-            f"reconciled_through_month)))"
+            f"$B${recon_health_reconciled_row})))"
         )
 
         # Col D: Gap EUR = Actual - Forecast (same-sheet derived → black)
@@ -436,16 +438,16 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
             f"={SHEET_CONFIG}!A{roster_row}"
         )
 
-        # Col B: Avg FTE to date — Actual PM / months_elapsed_hours.
+        # Col B: Avg FTE to date — Actual PM / MAX(1, hours_actuals_through_month).
         # IFERROR guards DIV/0 when hours_actuals_through_month <= 0.
         style_cell(ws, row, 2, font=GREEN_XREF, fmt="0.00").value = (
-            f"=IFERROR({cap_actual}/months_elapsed_hours,0)"
+            f"=IFERROR({cap_actual}/MAX(1,hours_actuals_through_month),0)"
         )
 
-        # Col C: Plan Avg FTE to date — (Actual + Variance) / months_elapsed_hours.
+        # Col C: Plan Avg FTE to date — (Actual + Variance) / MAX(1, hours_actuals_through_month).
         # Plan = Actual + Variance identity lives on Capacity; reuse here.
         style_cell(ws, row, 3, font=GREEN_XREF, fmt="0.00").value = (
-            f"=IFERROR(({cap_actual}+{cap_var})/months_elapsed_hours,0)"
+            f"=IFERROR(({cap_actual}+{cap_var})/MAX(1,hours_actuals_through_month),0)"
         )
 
         # Col D: Variance to-date % — Variance / Plan. Guard against zero plan.

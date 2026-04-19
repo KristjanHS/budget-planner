@@ -671,22 +671,6 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         ("FTE Rate (EUR)", None, "€#,##0", None),  # value set later as formula
         ("EU Annual Ceiling (PM/FTE/year)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
         ("Hours per FTE Month", 143, "0", None),
-        # Through-month params are user-edited integers. On rebuild the reader
-        # surfaces any existing value via project_params; on fresh init it
-        # defaults to 1 (= "only project month 1 is closed"). Hardcoding 1
-        # here would clobber the user's edit across rebuild.
-        (
-            "EUR Actuals Through Month",
-            project_params.get("eur_actuals_through_month", 1),
-            "0",
-            None,
-        ),
-        (
-            "Hours Actuals Through Month",
-            project_params.get("hours_actuals_through_month", 1),
-            "0",
-            None,
-        ),
         # Code-written audit receipt — overwritten on every init/rebuild.
         # Default "unknown" survives when no git context is passed in.
         ("Version Stamp", version_stamp or "unknown", None, None),
@@ -703,9 +687,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         "FTE Rate (EUR)": 4,
         "EU Annual Ceiling (PM/FTE/year)": 5,
         "Hours per FTE Month": 6,
-        "EUR Actuals Through Month": 7,
-        "Hours Actuals Through Month": 8,
-        "Version Stamp": 9,
+        "Version Stamp": 7,
     }
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
         assert param_rows.get(label) == i, (
@@ -726,24 +708,7 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
             font = TITLE_FONT if i == 1 else BLUE_INPUT
             style_cell(ws, i, 2, value=value, font=font, fmt=fmt, border=False)
 
-    # ── Section 1b: Derived parameters (black, formula-driven) ──
-    # These sit directly below the blue-input params. Labels in col A use
-    # HEADER_FONT; formulas in col B use BLACK_FORMULA (same-sheet refs).
-    # Through-month cells hold integer month indices (1 = project month 1),
-    # not dates — so `months_elapsed` IS the through-month, floored at 1 to
-    # keep to-date-rate denominators safe when no report has landed yet.
-    derived_params = [
-        ("Months Elapsed (Hours)", "=MAX(1,$B$8)"),
-        ("Months Elapsed (EUR)", "=MAX(1,$B$7)"),
-        ("Reconciled Through Month", "=MIN($B$7,$B$8)"),
-    ]
-    derived_first_row = len(param_defs) + 1  # first row after the blue-input block
-    for offset, (label, formula) in enumerate(derived_params):
-        r = derived_first_row + offset
-        style_cell(ws, r, 1, value=label, font=HEADER_FONT, border=False)
-        style_cell(ws, r, 2, value=formula, font=BLACK_FORMULA, fmt="0", border=False)
-
-    # ── Label-cell comments for rows A4..A11 ──
+    # ── Label-cell comments for rows A4..A7 ──
     # Each param-row label gets an explanatory comment so the spreadsheet is
     # self-documenting in-tab. Comments are sized to fit their text via
     # ``sized_comment`` (default openpyxl boxes truncate).
@@ -767,22 +732,6 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
             "convert hours logged on Actuals-Hours into person-months on "
             "Capacity and into EUR on Plan-Forecast. Blue = user input."
         ),
-        param_rows["EUR Actuals Through Month"]: (
-            "Latest project month for which WP-level Actual EUR figures "
-            "from finance close are trusted and complete. Integer month "
-            "index, 1-based. Actual EUR typically lags hours by 2–3 months "
-            "(finance-close cadence). Reconciliation and summary views use "
-            "this as the trust boundary for EUR-side cumulative figures. "
-            "Blue = user input."
-        ),
-        param_rows["Hours Actuals Through Month"]: (
-            "Latest project month for which the hours timelog on "
-            "Actuals-Hours is trusted and complete. Integer month index, "
-            "1-based. Because hours are entered skip-and-cumulate "
-            "(intermediate months blank, cumulative figure dropped into a "
-            "later month), the only safe aggregate is cumulative through "
-            "this month. Blue = user input."
-        ),
         param_rows["Version Stamp"]: (
             "Commit identifier of the code that produced this workbook. "
             "Written by init/rebuild (git describe --always --dirty with "
@@ -790,32 +739,14 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
             "builder version for reproducing bugs. Black = do-not-edit "
             "(overwritten on every rebuild)."
         ),
-        derived_first_row: (
-            "Derived from Hours Actuals Through Month (=MAX(1,$B$8)). "
-            "Used as the denominator for to-date rate calculations (Avg "
-            "FTE to date, Utilisation to date). Floored at 1 to keep "
-            "denominators safe when no hours have been reported yet. "
-            "Black = formula."
-        ),
-        derived_first_row + 1: (
-            "Derived from EUR Actuals Through Month (=MAX(1,$B$7)). "
-            "Used by the Breach-In cumulative-slope extrapolation on the "
-            "Actuals sheet. Floored at 1. Black = formula."
-        ),
-        derived_first_row + 2: (
-            "=MIN($B$7,$B$8) — the boundary beyond which a "
-            "Forecast-vs-Actual head-to-head reconciliation cannot be "
-            "trusted. Summary table on Trends and the gap chart use this "
-            "as their cutoff. Black = formula."
-        ),
     }
     for row_num, text in _param_label_comments.items():
         ws.cell(row=row_num, column=1).comment = sized_comment(text)
 
     # ── Section 2: WP Budget ──
-    # Gap row sits AFTER the derived block; budget section starts two rows below
-    # the last derived row to preserve the existing visual separator.
-    budget_section_row = len(param_defs) + len(derived_params) + 2
+    # Gap row sits AFTER the param block; budget section starts two rows below
+    # the last param row to preserve the existing visual separator.
+    budget_section_row = len(param_defs) + 2
     next_row, budget_layout = _write_budget_section(ws, budget_section_row,
                                                     work_packages, project_params)
 
@@ -873,35 +804,16 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     )
     wb.defined_names.add(dn_hours)
 
-    eur_through_row = param_rows["EUR Actuals Through Month"]
-    dn_eur_through = DefinedName(
-        "eur_actuals_through_month",
-        attr_text=f"{SHEET_CONFIG}!$B${eur_through_row}",
-    )
-    wb.defined_names.add(dn_eur_through)
-
-    hours_through_row = param_rows["Hours Actuals Through Month"]
-    wb.defined_names.add(DefinedName(
-        "hours_actuals_through_month",
-        attr_text=f"{SHEET_CONFIG}!$B${hours_through_row}",
-    ))
+    # `eur_actuals_through_month` / `hours_actuals_through_month` are
+    # registered by the Actuals / Actuals-Hours builders against their
+    # per-sheet effective cells — see docs/plans/2026-04-18-config-through-
+    # month-cleanup-design.md. Derived names `months_elapsed_hours`,
+    # `months_elapsed_eur`, and `reconciled_through_month` were dropped; each
+    # callsite now inlines `MAX(1, …)` / `MIN(…, …)` directly.
     version_stamp_row = param_rows["Version Stamp"]
     wb.defined_names.add(DefinedName(
         "version_stamp",
         attr_text=f"{SHEET_CONFIG}!$B${version_stamp_row}",
-    ))
-    # Derived cells — positions follow derived_first_row contract above.
-    wb.defined_names.add(DefinedName(
-        "months_elapsed_hours",
-        attr_text=f"{SHEET_CONFIG}!$B${derived_first_row}",
-    ))
-    wb.defined_names.add(DefinedName(
-        "months_elapsed_eur",
-        attr_text=f"{SHEET_CONFIG}!$B${derived_first_row + 1}",
-    ))
-    wb.defined_names.add(DefinedName(
-        "reconciled_through_month",
-        attr_text=f"{SHEET_CONFIG}!$B${derived_first_row + 2}",
     ))
 
     # Grade table named range (2-column: grade name + rate)

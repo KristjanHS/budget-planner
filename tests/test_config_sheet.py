@@ -623,60 +623,14 @@ def test_hours_per_fte_month_constant_and_named_range(tmp_path):
     assert cfg.cell(row=row, column=1).value == "Hours per FTE Month"
 
 
-def test_hours_actuals_through_month_param_and_named_ranges():
-    """T1: hours_actuals_through_month blue input + three derived named ranges.
+def test_through_month_named_ranges_point_at_actuals_sheets(tmp_path):
+    """Post 2026-04-18 cleanup: both through-month named ranges live on the
+    Actuals / Actuals-Hours sheets (row 1 col D = effective cell), not Config.
 
-    Checks structural contracts that consumers in T5+ will depend on:
-    - B8 is the blue-input `Hours Actuals Through Month` seed = 1.
-    - Row 9 is the `Version Stamp` code-written audit cell.
-    - Rows 10/11/12 carry the derived label/formula pairs in col A/B.
-    - Four named ranges resolve to Config!$B$8 and Config!$B$10..$B$12.
+    Derived helpers (months_elapsed_hours, months_elapsed_eur,
+    reconciled_through_month) were dropped entirely — each callsite inlines
+    MAX(1, ...) / MIN(..., ...) directly.
     """
-    wb = Workbook()
-    ws = wb.active
-    assert ws is not None
-    ws.title = "Config"
-    build_config_sheet(ws, wb, _sample_params(), _sample_wps())
-
-    # ── Labels in column A on rows 8-12 ──
-    assert ws.cell(8, 1).value == "Hours Actuals Through Month"
-    assert ws.cell(9, 1).value == "Version Stamp"
-    assert ws.cell(10, 1).value == "Months Elapsed (Hours)"
-    assert ws.cell(11, 1).value == "Months Elapsed (EUR)"
-    assert ws.cell(12, 1).value == "Reconciled Through Month"
-
-    # ── Blue input cell: value + font ──
-    b8 = ws.cell(8, 2)
-    assert b8.value == 1
-    assert "0000FF" in str(b8.font.color.rgb).upper()
-
-    # ── Derived cells: exact formulas + BLACK_FORMULA font ──
-    # Derived formulas still reference $B$7 (EUR) and $B$8 (Hours) — the
-    # Version Stamp insert at row 9 pushed derived rows down but the absolute
-    # refs to the two blue-input through-month cells are unchanged.
-    assert ws.cell(10, 2).value == "=MAX(1,$B$8)"
-    assert ws.cell(11, 2).value == "=MAX(1,$B$7)"
-    assert ws.cell(12, 2).value == "=MIN($B$7,$B$8)"
-    for r in (10, 11, 12):
-        rgb = str(ws.cell(r, 2).font.color.rgb).upper()
-        assert rgb.endswith("000000"), (
-            f"Derived row {r} col B should be BLACK_FORMULA, got {rgb}"
-        )
-
-    # ── Named ranges point at the right cells ──
-    names = wb.defined_names
-    assert "hours_actuals_through_month" in names
-    assert names["hours_actuals_through_month"].attr_text == "Config!$B$8"
-    assert "months_elapsed_hours" in names
-    assert names["months_elapsed_hours"].attr_text == "Config!$B$10"
-    assert "months_elapsed_eur" in names
-    assert names["months_elapsed_eur"].attr_text == "Config!$B$11"
-    assert "reconciled_through_month" in names
-    assert names["reconciled_through_month"].attr_text == "Config!$B$12"
-
-
-def test_eur_actuals_through_month_constant_and_named_range(tmp_path):
-    """T8: `eur_actuals_through_month` Config param + named range exist."""
     from budget_planner.workbook import init_workbook
     from openpyxl import load_workbook
 
@@ -684,26 +638,26 @@ def test_eur_actuals_through_month_constant_and_named_range(tmp_path):
     init_workbook(str(path))
     wb = load_workbook(str(path))
 
-    assert "eur_actuals_through_month" in wb.defined_names
-    target = wb.defined_names["eur_actuals_through_month"].attr_text
-    assert target.startswith("Config!"), target
-
-    _sheet, cell_ref = target.split("!")
-    cfg = wb["Config"]
-    row = int(cell_ref.replace("$", "").lstrip("B"))
-
-    # Default value is an integer (user bumps it manually as months close)
-    val = cfg.cell(row=row, column=2).value
-    assert isinstance(val, int), f"Expected int default, got {type(val)}: {val!r}"
-
-    # Label in col A on the same row
-    assert cfg.cell(row=row, column=1).value == "EUR Actuals Through Month"
+    names = wb.defined_names
+    assert names["eur_actuals_through_month"].attr_text == "Actuals!$D$1"
+    assert names["hours_actuals_through_month"].attr_text == (
+        "'Actuals-Hours'!$D$1"
+    )
+    # Derived helpers are gone.
+    for dropped in (
+        "months_elapsed_hours",
+        "months_elapsed_eur",
+        "reconciled_through_month",
+    ):
+        assert dropped not in names, (
+            f"{dropped} should be inlined at callsites, not a named range"
+        )
 
 
 # ── Version stamp (post-v2 follow-up) ──
 
 def test_version_stamp_default_and_named_range():
-    """Default (no version passed) is 'unknown'; named range points at B9."""
+    """Default (no version passed) is 'unknown'; named range points at B7."""
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -714,14 +668,14 @@ def test_version_stamp_default_and_named_range():
     # Proves the builder always writes a non-empty string so auditors see
     # a concrete stamp even when the orchestrator doesn't pass git context
     # (e.g. build_from_fingerprint on the synthetic-rebuild path).
-    assert ws.cell(9, 1).value == "Version Stamp"
-    assert ws.cell(9, 2).value == "unknown"
+    assert ws.cell(7, 1).value == "Version Stamp"
+    assert ws.cell(7, 2).value == "unknown"
     assert "version_stamp" in wb.defined_names
-    assert wb.defined_names["version_stamp"].attr_text == "Config!$B$9"
+    assert wb.defined_names["version_stamp"].attr_text == "Config!$B$7"
 
 
 def test_version_stamp_explicit_value_round_trips():
-    """Explicit value threaded from the orchestrator lands in B9 verbatim."""
+    """Explicit value threaded from the orchestrator lands in B7 verbatim."""
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -732,7 +686,7 @@ def test_version_stamp_explicit_value_round_trips():
     )
     # The value is written as a literal string (not as a formula starting
     # with "=") — the cell is audit metadata, not a derived formula.
-    assert ws.cell(9, 2).value == "v1.2.3-4-gabcdef1-dirty"
+    assert ws.cell(7, 2).value == "v1.2.3-4-gabcdef1-dirty"
 
 
 def test_resolve_version_stamp_fallback_on_git_failure(monkeypatch):
@@ -854,13 +808,12 @@ def test_config_named_range_targets_match_internals_doc():
     )
     doc_map = {name: int(row) for name, row in pairs}
 
-    # Minimum coverage — these must all be documented. Fail loud if any of
-    # the load-bearing v2 ranges silently dropped out of the doc.
+    # Minimum coverage — these must all be documented. The through-month
+    # named ranges moved off Config (2026-04-18 cleanup) and are verified
+    # against the Actuals/Actuals-Hours paragraphs elsewhere; the derived
+    # helpers were dropped entirely and are not doc-worthy.
     required = {
         "project_start", "fte_rate",
-        "eur_actuals_through_month", "hours_actuals_through_month",
-        "months_elapsed_hours", "months_elapsed_eur",
-        "reconciled_through_month",
     }
     missing = required - doc_map.keys()
     assert not missing, (

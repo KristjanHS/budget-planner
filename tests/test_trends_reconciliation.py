@@ -66,9 +66,11 @@ def test_health_row_labels_and_formulas(recon_ws):
     assert recon_ws.cell(recon_row + 3, 1).value == "Hours through"
     assert recon_ws.cell(recon_row + 3, 2).value == "=hours_actuals_through_month"
 
-    # +4: Reconciled through
+    # +4: Reconciled through — inlined MIN() local helper (derived name dropped 2026-04-18)
     assert recon_ws.cell(recon_row + 4, 1).value == "Reconciled through"
-    assert recon_ws.cell(recon_row + 4, 2).value == "=reconciled_through_month"
+    assert recon_ws.cell(recon_row + 4, 2).value == (
+        "=MIN(eur_actuals_through_month,hours_actuals_through_month)"
+    )
 
 
 def test_health_cell_fonts(recon_ws):
@@ -138,28 +140,32 @@ def test_recon_wp_row_count_plus_total(recon_ws):
 
 
 def test_recon_col_b_forecast_formula(recon_ws):
-    """Col B: INDEX-window SUM on 'Plan-Forecast' sheet, guarded by reconciled_through_month."""
+    """Col B: INDEX-window SUM on 'Plan-Forecast' sheet, guarded by the
+    local ``Reconciled through`` helper cell ($B$<recon_row+4>)."""
     recon_row = _recon_section_row(recon_ws)
+    reconciled_ref = f"$B${recon_row + 4}"
     first_wp_row = recon_row + 7
     formula = str(recon_ws.cell(first_wp_row, 2).value)
     assert "'Plan-Forecast'!" in formula, (
         f"Col B must reference 'Plan-Forecast'! (single-quoted): {formula!r}"
     )
-    assert "reconciled_through_month" in formula, (
-        f"Col B must guard on reconciled_through_month: {formula!r}"
+    assert reconciled_ref in formula, (
+        f"Col B must guard on {reconciled_ref} (local Reconciled helper): {formula!r}"
     )
     assert "INDEX" in formula, f"Col B must use INDEX window: {formula!r}"
     assert "SUM" in formula, f"Col B must use SUM: {formula!r}"
 
 
 def test_recon_col_c_actual_formula(recon_ws):
-    """Col C: INDEX-window SUM on Actuals, guarded by reconciled_through_month."""
+    """Col C: INDEX-window SUM on Actuals, guarded by the local
+    ``Reconciled through`` helper cell ($B$<recon_row+4>)."""
     recon_row = _recon_section_row(recon_ws)
+    reconciled_ref = f"$B${recon_row + 4}"
     first_wp_row = recon_row + 7
     formula = str(recon_ws.cell(first_wp_row, 3).value)
     assert "Actuals!" in formula, f"Col C must reference Actuals!: {formula!r}"
-    assert "reconciled_through_month" in formula, (
-        f"Col C must guard on reconciled_through_month: {formula!r}"
+    assert reconciled_ref in formula, (
+        f"Col C must guard on {reconciled_ref} (local Reconciled helper): {formula!r}"
     )
     assert "INDEX" in formula
     assert "SUM" in formula

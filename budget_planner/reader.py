@@ -290,25 +290,12 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
         - wp_schedule: list of dicts with keys 'id', 'start', 'end', 'type'
     """
     # Scan column A for known param labels (position-independent).
-    # Through-month params use exact-prefix labels to avoid substring
-    # collision: "EUR Actuals Through Month" must not match "Hours Actuals
-    # Through Month" (both contain "Actuals Through Month"). The substring
-    # match below is `prefix.lower() in label.lower()`, so the key strings
-    # here are the minimal uniquely-identifying prefix of each label.
     _param_map = {
         "Project Title": ("title", None),
         "Project Start": ("start", None),
         "Project Months": ("months", lambda v: int(v or 60)),
         "FTE Rate": ("rate", _parse_fte_rate),
         "EU Annual Ceiling": ("eu_ceiling_pm", lambda v: float(v or 12.0)),
-        "EUR Actuals Through Month": (
-            "eur_actuals_through_month",
-            lambda v: int(v) if isinstance(v, (int, float)) else 1,
-        ),
-        "Hours Actuals Through Month": (
-            "hours_actuals_through_month",
-            lambda v: int(v) if isinstance(v, (int, float)) else 1,
-        ),
     }
     project_params: dict = {}
     matched_keys: set[str] = set()
@@ -322,17 +309,9 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
                 break
         if len(matched_keys) == len(_param_map):
             break
-    # Validate all required params found. The two through-month rows were
-    # introduced in v1/v2 of the hours-timelog feature — older workbooks and
-    # minimal test harnesses may omit them. Tolerate absence with default 1
-    # (matches the builder seed); strict-require everything else.
-    _optional_keys = {"eur_actuals_through_month", "hours_actuals_through_month"}
     for prefix, (key, _) in _param_map.items():
         if key not in project_params:
-            if key in _optional_keys:
-                project_params[key] = 1
-            else:
-                raise ValueError(f"Config sheet missing param row matching '{prefix}'")
+            raise ValueError(f"Config sheet missing param row matching '{prefix}'")
 
     # WP Budget table — find "WP BUDGET" section header
     wp_section = _find_header_row(ws, SECTION_HEADER_LABELS["wp_budget"])
@@ -1034,6 +1013,28 @@ def discover_layout(ws) -> dict:
         "planned_last_wp_row": planned_last_wp_row,
         "planned_total_row": planned_total_row,
     }
+
+
+def read_actuals_override(ws) -> int | None:
+    """Read the user-typed through-month override from row 1, column B.
+
+    Row-1 layout on Actuals / Actuals-Hours:
+        A = label, B = blue-input override, C = black-formula auto-derived,
+        D = effective (IF(ISNUMBER(B),B,C), target of the named range).
+
+    Returns:
+        ``int`` when the user typed a numeric override into B1; ``None`` when
+        the cell is blank, a formula, or any non-numeric value — signalling
+        the builder to fall back to the auto-derived formula in C1.
+    """
+    val = ws.cell(row=1, column=2).value
+    if val is None:
+        return None
+    if isinstance(val, bool):
+        return None
+    if isinstance(val, (int, float)):
+        return int(val)
+    return None
 
 
 def read_actuals_values(

@@ -211,6 +211,8 @@ def _build_all_sheets(
     preserved_actuals=None,
     preserved_actuals_hours=None,
     preserved_timelog_assigned=None,
+    preserved_eur_through_override: int | None = None,
+    preserved_hours_through_override: int | None = None,
     reporting_periods=None,
     version_stamp=None,
 ):
@@ -345,6 +347,8 @@ def _build_all_sheets(
         assignments=assignments,
         config_first_wp_row=ctx.config_layout["wp_first_row"],
         preserved=preserved_actuals_hours,
+        wb=wb,
+        hours_through_override=preserved_hours_through_override,
     )
 
     # Back-patch Capacity to-date block now that Actuals-Hours rows exist.
@@ -378,6 +382,7 @@ def _build_all_sheets(
         wp_schedule=wp_schedule,
         preserved=preserved_actuals,
         plan_forecast_layout=plan_forecast_layout,
+        eur_through_override=preserved_eur_through_override,
     )
 
     # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout,
@@ -553,6 +558,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         read_capacity_sheet,
         read_actuals_values,
         read_actuals_hours_sheet,
+        read_actuals_override,
         read_reporting_periods,
         read_grade_rates,
         read_assignments_from_config,
@@ -635,18 +641,26 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     # Preserve Actuals EUR values (always)
     preserved_actuals = None
+    preserved_eur_through_override: int | None = None
     if SHEET_ACTUALS in existing_wb.sheetnames:
         preserved_actuals = read_actuals_values(
             existing_wb[SHEET_ACTUALS],
             project_params["months"],
         )
+        preserved_eur_through_override = read_actuals_override(
+            existing_wb[SHEET_ACTUALS]
+        )
 
     # Preserve Actuals-Hours blue-input hours across rebuild.
     preserved_actuals_hours: dict[str, dict[str, list[float | None]]] | None = None
+    preserved_hours_through_override: int | None = None
     if SHEET_ACTUALS_HOURS in existing_wb.sheetnames:
         preserved_actuals_hours = read_actuals_hours_sheet(
             existing_wb[SHEET_ACTUALS_HOURS],
             project_months=project_params["months"],
+        )
+        preserved_hours_through_override = read_actuals_override(
+            existing_wb[SHEET_ACTUALS_HOURS]
         )
 
     # Preserve Timelog Plan Assigned-grid overrides (user-typed literals).
@@ -761,6 +775,8 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         preserved_actuals=preserved_actuals,
         preserved_actuals_hours=preserved_actuals_hours,
         preserved_timelog_assigned=preserved_timelog_assigned,
+        preserved_eur_through_override=preserved_eur_through_override,
+        preserved_hours_through_override=preserved_hours_through_override,
         reporting_periods=reporting_periods,
         grade_rates=grade_rates,
         version_stamp=_resolve_version_stamp(),

@@ -219,15 +219,15 @@ def test_person_load_headers_are_four(trends_ws):
 
 
 def test_person_load_avg_to_date_formula(trends_ws):
-    """Col B = Capacity to-date Actual PM / months_elapsed_hours, IFERROR-wrapped."""
+    """Col B = Capacity to-date Actual PM / MAX(1, hours_actuals_through_month), IFERROR-wrapped."""
     header_row = _find_row_containing(trends_ws, 1, "Person")
     assert header_row is not None
     first_person_row = header_row + 1
     cell = trends_ws.cell(first_person_row, 2)
     formula = str(cell.value)
     assert "Capacity!" in formula, f"Col B must reference Capacity sheet: {formula!r}"
-    assert "months_elapsed_hours" in formula, (
-        f"Col B must divide by months_elapsed_hours: {formula!r}"
+    assert "MAX(1,hours_actuals_through_month)" in formula, (
+        f"Col B must divide by MAX(1,hours_actuals_through_month): {formula!r}"
     )
     assert "IFERROR" in formula, (
         f"Col B must wrap division in IFERROR to guard DIV/0: {formula!r}"
@@ -235,15 +235,15 @@ def test_person_load_avg_to_date_formula(trends_ws):
 
 
 def test_person_load_plan_avg_to_date_formula(trends_ws):
-    """Col C = (Capacity Actual + Variance) / months_elapsed_hours, IFERROR-wrapped."""
+    """Col C = (Capacity Actual + Variance) / MAX(1, hours_actuals_through_month), IFERROR-wrapped."""
     header_row = _find_row_containing(trends_ws, 1, "Person")
     assert header_row is not None
     first_person_row = header_row + 1
     cell = trends_ws.cell(first_person_row, 3)
     formula = str(cell.value)
     assert "Capacity!" in formula, f"Col C must reference Capacity: {formula!r}"
-    assert "months_elapsed_hours" in formula, (
-        f"Col C must divide by months_elapsed_hours: {formula!r}"
+    assert "MAX(1,hours_actuals_through_month)" in formula, (
+        f"Col C must divide by MAX(1,hours_actuals_through_month): {formula!r}"
     )
     # Plan = Actual + Variance — both Capacity refs must appear, and a '+' between
     assert formula.count("Capacity!") >= 2, (

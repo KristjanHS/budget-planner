@@ -30,15 +30,13 @@ SAFE_NAMED_RANGES = [
     "sched_wp_ids", "sched_starts", "sched_ends",
     "tbl_GradeRates", "project_start", "fte_rate",
     "eu_annual_ceiling_pm", "partner_ceiling", "current_month",
-    # v2 hours-timelog Config named ranges: the through-month trust
-    # boundary + derived denominators. Cross-sheet formulas on Actuals,
-    # Actuals-Hours, Summary, and Trends consume these — a silent drop
-    # during rebuild would corrupt cumulative-through-a-through-month
-    # semantics everywhere, so the fingerprint guards them explicitly.
+    # v2 hours-timelog named ranges: the through-month trust boundary.
+    # eur_/hours_actuals_through_month point to per-sheet D1 effective cells
+    # on Actuals / Actuals-Hours after the 2026-04-18 Config-through-month
+    # cleanup; derived helpers (months_elapsed_*, reconciled_through_month)
+    # are inlined at callsites and no longer exist as named ranges.
     "hours_per_fte_month",
     "eur_actuals_through_month", "hours_actuals_through_month",
-    "months_elapsed_hours", "months_elapsed_eur",
-    "reconciled_through_month",
     # Post-v2 version-stamp audit cell on Config. Single-cell named range;
     # value written fresh by init/rebuild so build_from_fingerprint emits
     # "unknown" (the default when no git context is passed).

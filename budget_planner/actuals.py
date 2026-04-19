@@ -1,6 +1,7 @@
 """Actuals sheet builder — EUR actuals per WP per month from accountant."""
 
 from openpyxl.formatting.rule import FormulaRule
+from openpyxl.workbook.defined_name import DefinedName
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_ACTUALS, SHEET_CONFIG, SHEET_PLAN_FORECAST,
@@ -15,7 +16,7 @@ from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
     CF_RED_FILL, CF_AMBER_FILL, CF_GREY_FILL,
-    style_cell, col_letter, write_section_header,
+    sized_comment, style_cell, col_letter, write_section_header,
 )
 
 
@@ -25,7 +26,8 @@ _PF_QUOTED = f"'{SHEET_PLAN_FORECAST}'"
 
 def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
                         wp_schedule=None, preserved=None,
-                        plan_forecast_layout=None):
+                        plan_forecast_layout=None,
+                        eur_through_override: int | None = None):
     """Build the Actuals sheet for EUR actuals per WP per month.
 
     Monthly EUR cells are always left empty (blue input) for manual entry
@@ -88,9 +90,15 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     ws = wb.create_sheet(SHEET_ACTUALS)
     ws.sheet_properties.tabColor = "0000FF"
 
-    r = 1
+    # Row 1 holds the EUR through-month control strip (label / override /
+    # auto-derived / effective). The strip formulas depend on
+    # ``first_wp_row``/``last_wp_row``, so we write the placeholder cells
+    # here to claim the row geometry and back-patch formulas + comments
+    # after the WP block has been written. See design doc
+    # ``docs/plans/2026-04-18-config-through-month-cleanup-design.md``.
+    r = 2
 
-    # -- "As of" header row (row 1, above the section headers) --
+    # -- "As of" header row (shifted to row 2 by the through-month strip) --
     # Two label/date pairs: one above the Actual EUR block, one above the
     # Forecast Monitoring block. Through-month cells hold integer month
     # indices; EDATE(project_start, N-1) turns them into a calendar date
@@ -198,13 +206,14 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
         style_cell(ws, row, val_col_pct_ceil, font=BLACK_FORMULA,
                    fmt="0.0%").value = f"={cum_l}{row}/{ceil_l}{row}"
         # Breach In = months until ceiling exhausted at cumulative-to-date
-        # rate. Denominator uses months_elapsed_eur so the slope reflects
-        # spend per closed finance-month, not the raw project-month index.
+        # rate. Denominator inlines MAX(1, eur_actuals_through_month) so the
+        # slope reflects spend per closed finance-month, not the raw
+        # project-month index.
         style_cell(ws, row, val_col_breach, font=BLACK_FORMULA,
                    fmt="0").value = (
             f'=IF({cum_l}{row}=0,"\u2014",'
             f"({ceil_l}{row}-{cum_l}{row})"
-            f"/({cum_l}{row}/months_elapsed_eur))"
+            f"/({cum_l}{row}/MAX(1,eur_actuals_through_month)))"
         )
 
         # ── Forecast monitoring block (parallel columns on Plan-Forecast) ──
@@ -236,15 +245,15 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
         ).value = (
             f"={cum_fore_l}{row}/{ceil_l}{row}"
         )
-        # Forecast Breach In — denominator uses months_elapsed_hours so the
-        # forecast-spend slope is anchored to the hours-timelog cadence that
-        # drives the forecast EUR values.
+        # Forecast Breach In — denominator inlines MAX(1,
+        # hours_actuals_through_month) so the forecast-spend slope is
+        # anchored to the hours-timelog cadence that drives forecast EUR.
         style_cell(
             ws, row, col_breach_forecast, font=BLACK_FORMULA, fmt="0.0",
         ).value = (
             f'=IF({cum_fore_l}{row}=0,"\u2014",'
             f"({ceil_l}{row}-{cum_fore_l}{row})"
-            f"/({cum_fore_l}{row}/months_elapsed_hours))"
+            f"/({cum_fore_l}{row}/MAX(1,hours_actuals_through_month)))"
         )
 
     last_wp_row = first_wp_row + num_wps - 1
@@ -286,12 +295,13 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     cum_l = col_letter(val_col_cum)
     style_cell(ws, r, val_col_pct_ceil, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="0.0%").value = f"={cum_l}{r}/partner_ceiling"
-    # TOTAL Breach In — uses months_elapsed_eur, matching the WP rows.
+    # TOTAL Breach In — inlines MAX(1, eur_actuals_through_month), matching
+    # the WP rows.
     style_cell(ws, r, val_col_breach, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="0").value = (
         f'=IF({cum_l}{r}=0,"\u2014",'
         f"(partner_ceiling-{cum_l}{r})"
-        f"/({cum_l}{r}/months_elapsed_eur))"
+        f"/({cum_l}{r}/MAX(1,eur_actuals_through_month)))"
     )
 
     # -- TOTAL row forecast block (mirrors Actual-EUR TOTAL, targets Plan-Forecast TOTAL row) --
@@ -327,7 +337,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     ).value = (
         f'=IF({cum_fore_total_l}{r}=0,"\u2014",'
         f"(partner_ceiling-{cum_fore_total_l}{r})"
-        f"/({cum_fore_total_l}{r}/months_elapsed_hours))"
+        f"/({cum_fore_total_l}{r}/MAX(1,hours_actuals_through_month)))"
     )
 
     # -- Conditional formatting: red on negative variance --
@@ -415,6 +425,57 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
         ws.sheet_properties.outlinePr = Outline(summaryRight=True)
     else:
         ws.sheet_properties.outlinePr.summaryRight = True
+
+    # ── Row 1: EUR through-month control strip ──
+    # A: label, B: override (blue; blank by default), C: auto-derived scan
+    # of the WP data block (excludes TOTAL), D: effective = override-if-
+    # numeric-else-auto. ``eur_actuals_through_month`` now resolves to the
+    # effective cell on this sheet rather than Config!B7. See design doc
+    # ``docs/plans/2026-04-18-config-through-month-cleanup-design.md``.
+    style_cell(ws, 1, 1, value="EUR Actuals Through Month:",
+               font=HEADER_FONT, border=False)
+    ws.cell(row=1, column=1).comment = sized_comment(
+        "Trust boundary for EUR-side cumulative figures. The effective "
+        "value in column D is what downstream sheets consume via the "
+        "named range `eur_actuals_through_month`. Override (B) beats auto-"
+        "derived (C) only when it holds a number."
+    )
+    style_cell(ws, 1, 2, value=eur_through_override, font=BLUE_INPUT, fmt="0",
+               border=False)
+    ws.cell(row=1, column=2).comment = sized_comment(
+        "Optional override — enter an integer month index (1-based) to "
+        "force a tighter EUR trust cutoff than the auto-derived value. "
+        "Leave blank to defer to the auto scan in column C. Blue = user "
+        "input."
+    )
+    ms_strip = col_letter(month_col_start)
+    me_strip = col_letter(month_col_end)
+    wp_scan_range = (
+        f"${ms_strip}${first_wp_row}:${me_strip}${last_wp_row}"
+    )
+    style_cell(ws, 1, 3, font=BLACK_FORMULA, fmt="0", border=False).value = (
+        f"=SUMPRODUCT(MAX((COLUMN({wp_scan_range})"
+        f"-COLUMN(${ms_strip}$1)+1)"
+        f"*ISNUMBER({wp_scan_range})))"
+    )
+    ws.cell(row=1, column=3).comment = sized_comment(
+        "Auto-derived: largest 1-based month index with any numeric "
+        "value in the WP data block (TOTAL row excluded). Returns 0 "
+        "when no actuals have been logged yet. Do not edit."
+    )
+    style_cell(ws, 1, 4, font=BLACK_FORMULA, fmt="0", border=False).value = (
+        "=IF(ISNUMBER(B1),B1,C1)"
+    )
+    ws.cell(row=1, column=4).comment = sized_comment(
+        "Effective EUR trust cutoff consumed by Actuals, Summary, and "
+        "Trends via the named range `eur_actuals_through_month`. Override "
+        "in B wins when numeric; otherwise falls through to the auto scan "
+        "in C. Do not edit."
+    )
+    wb.defined_names.add(DefinedName(
+        "eur_actuals_through_month",
+        attr_text=f"{SHEET_ACTUALS}!$D$1",
+    ))
 
     # Freeze panes
     ws.freeze_panes = f"C{first_wp_row}"

@@ -112,24 +112,21 @@ def test_blank_row_mid_roster_does_not_truncate_rebuild(tmp_path: Path):
     wb.close()
 
 
-def test_hours_actuals_through_month_round_trip(tmp_path: Path):
-    """T2: user-edited hours_actuals_through_month survives rebuild.
+def test_through_month_overrides_round_trip(tmp_path: Path):
+    """User-typed overrides in Actuals!B1 and Actuals-Hours!B1 survive rebuild.
 
-    Covers the full init -> user edit -> rebuild -> reopen flow for the new
-    v2 Config rows (B8 blue input + B9 version stamp + B10-B12 derived
-    formulas + five named ranges). Also bumps B7 (eur_actuals_through_month)
-    so the MIN in B12 has something non-trivial to resolve. Second rebuild
-    verifies stability (the preserved value survives when it is itself the
-    starting point).
+    Post-2026-04-18 cleanup: through-month control lives on the Actuals /
+    Actuals-Hours sheets (row 1 = label / blue-input override / auto /
+    effective). ``read_actuals_override`` extracts B1 and threads it through
+    ``_build_all_sheets`` → builders — second rebuild stability included.
     """
     path = tmp_path / "wb.xlsx"
     init_workbook(str(path))
 
-    # ── Simulate user edit in Excel: set B7=3 and B8=5 ──
+    # ── User edits row-1 B1 on each Actuals sheet ──
     wb = openpyxl.load_workbook(path)
-    config_ws = wb["Config"]
-    config_ws["B7"] = 3  # eur_actuals_through_month
-    config_ws["B8"] = 5  # hours_actuals_through_month
+    wb["Actuals"]["B1"] = 3
+    wb["Actuals-Hours"]["B1"] = 5
     wb.save(path)
     wb.close()
 
@@ -137,134 +134,32 @@ def test_hours_actuals_through_month_round_trip(tmp_path: Path):
     rebuild_workbook(str(path))
 
     wb = openpyxl.load_workbook(path)
-    config_ws = wb["Config"]
-
-    # (a) User value preserved in B8.
-    assert config_ws["B8"].value == 5, (
-        f"Rebuild clobbered hours_actuals_through_month: "
-        f"expected 5, got {config_ws['B8'].value!r}"
+    assert wb["Actuals"]["B1"].value == 3, (
+        f"Rebuild clobbered eur through-month override: "
+        f"expected 3, got {wb['Actuals']['B1'].value!r}"
+    )
+    assert wb["Actuals-Hours"]["B1"].value == 5, (
+        f"Rebuild clobbered hours through-month override: "
+        f"expected 5, got {wb['Actuals-Hours']['B1'].value!r}"
     )
 
-    # (b) Derived formulas still exact-string match in B10-B12 (B9 = Version Stamp).
-    assert config_ws["B10"].value == "=MAX(1,$B$8)", (
-        f"B10 derived formula drift: {config_ws['B10'].value!r}"
+    # Named ranges still point at the effective cells (D1) on each sheet.
+    assert wb.defined_names["eur_actuals_through_month"].attr_text == (
+        "Actuals!$D$1"
     )
-    assert config_ws["B11"].value == "=MAX(1,$B$7)", (
-        f"B11 derived formula drift: {config_ws['B11'].value!r}"
+    assert wb.defined_names["hours_actuals_through_month"].attr_text == (
+        "'Actuals-Hours'!$D$1"
     )
-    assert config_ws["B12"].value == "=MIN($B$7,$B$8)", (
-        f"B12 derived formula drift: {config_ws['B12'].value!r}"
-    )
-
-    # (c) All five named ranges still point at Config!$B$8..$B$12.
-    expected_targets = {
-        "hours_actuals_through_month": "Config!$B$8",
-        "version_stamp": "Config!$B$9",
-        "months_elapsed_hours": "Config!$B$10",
-        "months_elapsed_eur": "Config!$B$11",
-        "reconciled_through_month": "Config!$B$12",
-    }
-    for name, expected in expected_targets.items():
-        assert name in wb.defined_names, (
-            f"Named range {name!r} lost across rebuild"
-        )
-        assert wb.defined_names[name].attr_text == expected, (
-            f"Named range {name!r} drifted: "
-            f"expected {expected!r}, got {wb.defined_names[name].attr_text!r}"
-        )
-
     wb.close()
 
-    # ── Second rebuild: stability check ──
+    # ── Second rebuild: stability ──
     rebuild_workbook(str(path))
-
     wb = openpyxl.load_workbook(path)
-    config_ws = wb["Config"]
-    assert config_ws["B8"].value == 5, (
-        f"Second rebuild clobbered preserved hours_actuals_through_month: "
-        f"expected 5, got {config_ws['B8'].value!r}"
-    )
-    # Derived formulas still present (their values would be filled by recalc,
-    # but on a freshly rebuilt workbook openpyxl sees the formula string).
-    assert config_ws["B10"].value == "=MAX(1,$B$8)"
-    # Bystander: an untouched param row (Hours per FTE Month, B6=143) stays put —
-    # proves the preservation is selective, not wholesale.
-    assert config_ws["B6"].value == 143, (
-        f"Hours per FTE Month (B6) drifted unexpectedly: {config_ws['B6'].value!r}"
-    )
-    wb.close()
-
-
-def test_blank_row_in_project_params_preserves_through_month_values(tmp_path: Path):
-    """User inserts a blank row inside rows 1-12 (Project Parameters band);
-    rebuild must still pick up B7/B8 values via label-prefix scan and restore
-    them to canonical rows.
-
-    The reader is position-independent (scans column A for label prefix), so
-    Excel-side inserts inside the params band should not clobber user values
-    even though openpyxl's ``insert_rows`` does not update single-cell named
-    range targets. The rebuild rewrites rows 1-12 at canonical positions and
-    rebinds named ranges there — drift-heal by reconstruction, not by
-    in-place patching.
-    """
-    path = tmp_path / "wb.xlsx"
-    init_workbook(str(path))
-
-    # ── User edits B7=3, B8=5, then inserts a blank row mid-band ──
-    wb = openpyxl.load_workbook(path)
-    config_ws = wb["Config"]
-    config_ws["B7"] = 3
-    config_ws["B8"] = 5
-    # Insert blank row at row 5 (between EU Annual Ceiling and Hours/FTE Month).
-    # Physically shifts rows 5..11 down by one — the label-prefix reader
-    # should still find everything, but the single-cell named-range targets
-    # (e.g. hours_actuals_through_month = Config!$B$8) now point at a stale
-    # physical row until rebuild rewrites them.
-    config_ws.insert_rows(5, amount=1)
-    wb.save(path)
-    wb.close()
-
-    # ── Rebuild: builder reads via label-prefix, rewrites canonical rows ──
-    rebuild_workbook(str(path))
-
-    wb = openpyxl.load_workbook(path)
-    config_ws = wb["Config"]
-
-    # (a) User values land back at canonical rows B7/B8.
-    assert config_ws["B7"].value == 3, (
-        f"Rebuild clobbered eur_actuals_through_month after mid-params insert: "
-        f"expected 3 at B7, got {config_ws['B7'].value!r}"
-    )
-    assert config_ws["B8"].value == 5, (
-        f"Rebuild clobbered hours_actuals_through_month after mid-params "
-        f"insert: expected 5 at B8, got {config_ws['B8'].value!r}"
-    )
-
-    # (b) Bystander: untouched Hours/FTE Month (B6=143) survives — proves the
-    # preservation is selective, not accidental wholesale preservation from
-    # the pre-insert state.
-    assert config_ws["B6"].value == 143, (
-        f"Hours per FTE Month drifted across shape-drift rebuild: "
-        f"{config_ws['B6'].value!r}"
-    )
-
-    # (c) Named ranges rebind to canonical rows (rebuild healed the drift).
-    expected_targets = {
-        "eur_actuals_through_month": "Config!$B$7",
-        "hours_actuals_through_month": "Config!$B$8",
-        "version_stamp": "Config!$B$9",
-        "months_elapsed_hours": "Config!$B$10",
-        "months_elapsed_eur": "Config!$B$11",
-        "reconciled_through_month": "Config!$B$12",
-    }
-    for name, expected in expected_targets.items():
-        assert name in wb.defined_names, (
-            f"Named range {name!r} lost across shape-drift rebuild"
-        )
-        assert wb.defined_names[name].attr_text == expected, (
-            f"Named range {name!r} drifted after shape-drift rebuild: "
-            f"expected {expected!r}, got {wb.defined_names[name].attr_text!r}"
-        )
+    assert wb["Actuals"]["B1"].value == 3
+    assert wb["Actuals-Hours"]["B1"].value == 5
+    # Bystander: an untouched Config param (Hours per FTE Month, B6=143) stays
+    # — proves rebuild isn't wholesale-preserving workbook state.
+    assert wb["Config"]["B6"].value == 143
     wb.close()
 
 

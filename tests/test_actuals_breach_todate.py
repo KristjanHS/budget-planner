@@ -179,12 +179,21 @@ def test_through_month_strip_formulas_on_actuals(actuals_ws):
 def test_through_month_strip_formulas_on_actuals_hours(actuals_hours_ws_demo):
     """Same strip contract as Actuals (label / override / auto / effective)
     registered against `hours_actuals_through_month`. The auto scan here
-    is MAX(SUMPRODUCT(...), ...) over per-person programme-WP row ranges —
-    externals and subtotal/TOTAL/EU TOTAL rows are excluded, so a
-    regression that swaps in the full-sheet range would over-count.
+    is `=MAX(SUMPRODUCT(...), ...)` over per-person programme-WP row ranges —
+    externals and subtotal/TOTAL/EU TOTAL rows are excluded.
+
+    The demo fixture has multiple team members with programme-WP assignments,
+    so the formula must contain ≥2 `SUMPRODUCT(` terms. A regression that
+    collapses the scan to a single sheet-wide range (over-counting over
+    subtotal + TOTAL rows) would leave exactly one term and fail this
+    check. Covers IF-precedence inversion too (D1 formula asserted
+    verbatim).
     """
     assert actuals_hours_ws_demo.cell(1, 1).value == "Hours Actuals Through Month:"
     auto = str(actuals_hours_ws_demo.cell(1, 3).value)
-    assert "SUMPRODUCT(" in auto, auto
-    assert "MAX(" in auto and "ISNUMBER(" in auto, auto
+    assert auto.startswith("=MAX(SUMPRODUCT("), auto
+    assert "ISNUMBER(" in auto, auto
+    assert auto.count("SUMPRODUCT(") >= 2, (
+        f"expected per-person SUMPRODUCT terms, got: {auto}"
+    )
     assert actuals_hours_ws_demo.cell(1, 4).value == "=IF(ISNUMBER(B1),B1,C1)"

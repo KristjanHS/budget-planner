@@ -33,7 +33,7 @@ Docs-only stages don't warrant the /impag "full-suite before final commit" run. 
 
 ## Plan hygiene
 Shipped plans left in `docs/plans/` root auto-load into future sessions and masquerade as active work. When `/impag` (or any plan-survey step) finds a plan fully shipped, `git mv` it into `docs/plans/archived/` the same session — don't just note shipped status and move on.
-Before `git mv`: grep the plan path across `budget_planner/**`, `tests/**`, `docs/**`, `CLAUDE.md` and update references to `docs/plans/archived/<filename>.md`. Verify `.claudeignore` names `archived/` (this project's convention, not `archive/`).
+Before `git mv`: grep the plan path across `budget_planner/**`, `tests/**`, `docs/**`, `CLAUDE.md` and update references to `docs/plans/archived/<filename>.md`. Verify `.claudeignore` names `archived/` (this project's convention, not `archive/`). If a sibling plan references the archived one with conditional/status language (`"Doc A pending"`, `"if X ships first"`, `"either can ship first"`), the condition has resolved — resolve sibling status notes and post-archive diff-list section headers to state the realized order concretely, not as a hypothetical. 2026-04-19 Doc A archive left Doc B §8.2 ("Concrete Doc A diffs if Order 2") as an ambiguous "if"-heading until the code-reviewer caught it; the guidance was correct but read as historical rather than pending.
 Honor the global "Superseded docs: consume before archive" rule — pull load-bearing content into living docs (`design-invariants.md`, `internals.md`) before archival. Do NOT archive plans marked "approved but not implemented" — those are still active even if dormant.
 
 ## Docs

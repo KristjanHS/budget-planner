@@ -962,6 +962,9 @@ def _write_person_summary_metrics(
     # Explicit IF(MAX=0, "", …) guard is required — asymmetric to First log's
     # 99999 sentinel because MAX can't naturally produce an out-of-range
     # sentinel (any value > N would dominate valid midx values).
+    # The SUMPRODUCT(MAX(…)) subexpression is evaluated twice (IF test + INDEX
+    # index). LET() would de-duplicate but requires Excel 365 / LO 7.4+; keep
+    # the duplicated form until the project raises its recalc floor.
     last_log_max = (
         f'SUMPRODUCT(MAX(({grid_row_range}<>"")*{month_idx_range}))'
     )

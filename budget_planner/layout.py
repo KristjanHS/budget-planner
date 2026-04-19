@@ -44,17 +44,15 @@ SHEET_TIMELOG_PLAN = "Timelog Plan"
 # Column structure: A=ID, B=Name, C onwards = months
 MONTH_COL_START = 3
 
-# ── Timelog Plan column structure (vertical-band layout) ──
+# ── Timelog Plan column structure (merged-grid layout) ──
 # A = Person (cross-ref to Team Roster)
-# B = Underload metric (Pool − Assigned) — stays visible in frozen pane.
-# C = per-person rate helper in PROPOSED/ASSIGNED bands (collapsible via
-#     outline_level=1; consumed by per-WP SUMPRODUCT via VLOOKUP). In the
-#     PER-PERSON SUMMARY band, col C is Assigned (not a rate helper).
-# D..D+months-1 = month grid — same column range is reused in each band
-#     (PROPOSED, ASSIGNED) because bands are stacked vertically (row-bands),
-#     not placed side-by-side.
-TIMELOG_RATE_HELPER_COL = 3   # col C (one right of standard MONTH_COL_START)
-TIMELOG_MONTH_COL_START = 4   # col D — one right of standard MONTH_COL_START
+# B..B+months-1 = month grid — single editable grid (v2 layout collapsed the
+#     v1 PROPOSED + ASSIGNED twin bands into one). On rebuild, re-solve or
+#     preserve is governed by the `timelog_resolve_flag` toggle cell.
+# PER-PERSON SUMMARY band reuses col A for Person; metrics live at B..I
+# (Assigned, Pool, Over-pool?, Switches, First log, Last log, Largest gap,
+# Rate). Rate is duplicated only once per person — on the summary row.
+TIMELOG_MONTH_COL_START = 2   # col B
 
 # ── Section header contract ──
 # Every labelled section on the Config sheet uses: title row, header row,

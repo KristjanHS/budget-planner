@@ -38,7 +38,7 @@ from budget_planner.layout import (
     COL_EXT_EU,
     TIMELOG_MONTH_COL_START,
 )
-from budget_planner.timelog_plan import SECTION_TITLE_ASSIGNED
+from budget_planner.timelog_plan import SECTION_TITLE_GRID
 
 
 def _safe_float(value, default: float) -> float:
@@ -1276,57 +1276,58 @@ def read_actuals_hours_sheet(
     return hours
 
 
-def read_timelog_plan(wb, project_months: int) -> dict[tuple[str, int], str]:
-    """Read user overrides from the Timelog Plan Assigned grid.
+def read_timelog_plan(wb, project_months: int) -> dict:
+    """Read preserved grid values and resolve-flag from the Timelog Plan sheet.
 
-    The Assigned grid starts as ``=<Proposed cell>`` formulas; a literal value
-    in a cell means the user typed an override. Only literal values are
-    returned — formula cells and blanks are treated as "no override" (they'll
-    regenerate as ``=<Proposed>`` on rebuild).
+    v2 surface: the merged "TIMELOG GRID" band holds literal WP codes (no
+    `=<Proposed>` formulas anymore). All non-empty cells are preserved values —
+    the rebuild either re-solves (resolve_flag TRUE, discards them) or keeps
+    them verbatim (resolve_flag FALSE).
 
-    Anchoring strategy: scan col A for the exact ASSIGNED section-title
-    string (imported from the builder so edits don't drift). The ASSIGNED
-    band layout is ``title, year, month, midx(hidden), persons...``; the
-    first person row is anchor + 4. This is drift-tolerant: adding rows
-    above the band (banner changes, extra traffic lights, PER-WP SUMMARY
-    resize) doesn't break the reader.
+    Anchoring strategy: scan col A for the exact GRID section-title string
+    (imported from the builder so edits don't drift). The band layout is
+    ``title, year, month, midx, persons...``; the first person row is
+    anchor + 4. The resolve flag lives at the `timelog_resolve_flag` named
+    range (defaults TRUE if the name is absent — pre-v2 workbooks).
 
     Args:
         wb: Workbook (load with ``data_only=False`` so formulas are visible).
-        project_months: Project month count — fixes the Assigned-grid column
-            span. Caller must pass the value read from Config (not config.py
-            seeds), since the sheet's column geometry depends on it.
+        project_months: Project month count — fixes the grid column span.
 
     Returns:
-        Dict ``{(person_name, month_num_1_indexed): wp_code}`` with one entry
-        per user-typed Assigned-grid cell. Empty dict when the sheet is
-        missing (pre-feature workbook), when no overrides exist, or when the
-        anchor row cannot be located (degraded-but-safe: builder regenerates
-        from Proposed).
+        Dict with keys:
+          - ``grid``: ``{(person_name, month_num_1_indexed): wp_code}``, one
+            entry per non-empty grid cell.
+          - ``resolve_flag``: bool, read from the named range or True default.
+        Returns ``{"grid": {}, "resolve_flag": True}`` when the sheet is
+        missing or the anchor cannot be located (degraded-but-safe).
     """
+    resolve_flag = _read_resolve_flag(wb)
+    empty: dict = {"grid": {}, "resolve_flag": resolve_flag}
+
     if SHEET_TIMELOG_PLAN not in wb.sheetnames:
-        return {}
+        return empty
     ws = wb[SHEET_TIMELOG_PLAN]
 
-    # Scan col A for the exact ASSIGNED section-title string.
-    assigned_title_row: int | None = None
+    # Scan col A for the exact GRID section-title string.
+    grid_title_row: int | None = None
     for r in range(1, ws.max_row + 1):
         val = ws.cell(r, 1).value
-        if isinstance(val, str) and val == SECTION_TITLE_ASSIGNED:
-            assigned_title_row = r
+        if isinstance(val, str) and val == SECTION_TITLE_GRID:
+            grid_title_row = r
             break
-    if assigned_title_row is None:
-        return {}
+    if grid_title_row is None:
+        return empty
 
-    # ASSIGNED band layout relative to the title row:
-    #   +1 year, +2 month, +3 midx (hidden), +4.. persons.
-    person_first_row = assigned_title_row + 4
+    # GRID band layout relative to the title row:
+    #   +1 year, +2 month, +3 midx, +4.. persons.
+    person_first_row = grid_title_row + 4
 
     month_col_start = TIMELOG_MONTH_COL_START
 
     config_ws = wb[SHEET_CONFIG] if SHEET_CONFIG in wb.sheetnames else None
 
-    overrides: dict[tuple[str, int], str] = {}
+    grid: dict[tuple[str, int], str] = {}
     for r in range(person_first_row, ws.max_row + 1):
         col_a = ws.cell(r, 1).value
         if col_a is None:
@@ -1334,9 +1335,7 @@ def read_timelog_plan(wb, project_months: int) -> dict[tuple[str, int], str]:
         col_a_str = str(col_a).strip()
         if not col_a_str:
             break
-        # Next section (PER-PERSON SUMMARY title) follows the person rows —
-        # its title row has "PER-PERSON SUMMARY" in col A. Stop defensively
-        # on any "PER-" prefix.
+        # PER-PERSON SUMMARY title (or any PER- prefix) ends the grid band.
         if col_a_str.upper().startswith("PER-"):
             break
 
@@ -1356,20 +1355,58 @@ def read_timelog_plan(wb, project_months: int) -> dict[tuple[str, int], str]:
         for mi in range(project_months):
             col = month_col_start + mi
             val = ws.cell(r, col).value
-            # Formula (=<Proposed cell>) or blank → not an override.
             if val is None:
                 continue
             if isinstance(val, str):
                 s = val.strip()
+                # Defensive: formulas shouldn't appear in v2 grid cells,
+                # but skip them if a user pasted one in.
                 if not s or s.startswith("="):
                     continue
-                overrides[(name, mi + 1)] = s
+                grid[(name, mi + 1)] = s
             else:
-                # Defensive: numeric overrides shouldn't happen (cells hold
-                # WP code strings) but preserve rather than silently drop.
-                overrides[(name, mi + 1)] = str(val)
+                # Defensive: numeric shouldn't happen (cells hold WP code
+                # strings) but preserve rather than silently drop.
+                grid[(name, mi + 1)] = str(val)
 
-    return overrides
+    return {"grid": grid, "resolve_flag": resolve_flag}
+
+
+def _read_resolve_flag(wb) -> bool:
+    """Read the ``timelog_resolve_flag`` named-range cell.
+
+    Returns True (re-solve) when the named range is missing or the cell is
+    unparseable — safe default for pre-v2 workbooks and corruption cases.
+    """
+    try:
+        dn = wb.defined_names["timelog_resolve_flag"]
+    except (KeyError, TypeError):
+        return True
+    if dn is None:
+        return True
+    try:
+        destinations = list(dn.destinations)
+    except Exception:
+        return True
+    if not destinations:
+        return True
+    sheet_name, ref = destinations[0]
+    if sheet_name not in wb.sheetnames:
+        return True
+    ws = wb[sheet_name]
+    try:
+        val = ws[ref.replace("$", "")].value
+    except Exception:
+        return True
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        s = val.strip().upper()
+        if s in ("TRUE", "1", "YES"):
+            return True
+        if s in ("FALSE", "0", "NO"):
+            return False
+    return True
 
 
 def _resolve_plan_ref(cell_value, plan_ws, config_ws=None):

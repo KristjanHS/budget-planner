@@ -1,14 +1,18 @@
-"""Round-trip tests for Timelog Plan Assigned-grid user overrides.
+"""Round-trip tests for Timelog Plan v2 merged-grid shape.
 
-Covers the contract in ``docs/plans/archived/2026-04-18-timelog-plan-design.md`` §6:
-a user types a WP code into an Assigned-grid cell, saves, and rebuilds — the
-override survives, while cells the user did NOT touch stay as
-``=<Proposed cell>`` formulas (so a re-run of the solver on a changed roster
-can still move defaults around).
+v2 merges the v1 PROPOSED / ASSIGNED bands into a single editable grid of
+literal WP codes (solver-written on init). The `=<Proposed>` round-trip
+mechanism is gone. The tests here cover:
+
+* solver output survives openpyxl round-trip after init + recalc
+* orphan pruning on rebuild drops stale (person, wp) cells with a bystander
+  surviving — the pruning loop lives in ``workbook.py`` around the
+  ``read_timelog_plan`` call.
 """
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import openpyxl
@@ -20,7 +24,7 @@ from budget_planner.layout import (
     TIMELOG_MONTH_COL_START,
 )
 from budget_planner.reader import read_timelog_plan
-from budget_planner.timelog_plan import SECTION_TITLE_ASSIGNED, SECTION_TITLE_PROPOSED
+from budget_planner.timelog_plan import SECTION_TITLE_GRID
 from budget_planner.workbook import init_workbook, rebuild_workbook
 
 
@@ -32,25 +36,12 @@ def _project_months(wb) -> int:
     raise AssertionError("Project Months row missing from Config")
 
 
-def _band_first_person_row(ws, title: str) -> int:
-    """Row of the first person in the band whose title is ``title``.
-
-    Vertical-stacked layout: each band opens with a section-title row in col A,
-    then year, month, month-index rows, then person rows. So first person =
-    title row + 4.
-    """
+def _grid_first_person_row(ws) -> int:
+    """First person row = grid title row + 4 (title, year, month, month-idx)."""
     for r in range(1, ws.max_row + 1):
-        if ws.cell(r, 1).value == title:
+        if ws.cell(r, 1).value == SECTION_TITLE_GRID:
             return r + 4
-    raise AssertionError(f"section title {title!r} not found in col A of Timelog Plan")
-
-
-def _assigned_first_person_row(ws) -> int:
-    return _band_first_person_row(ws, SECTION_TITLE_ASSIGNED)
-
-
-def _proposed_first_person_row(ws) -> int:
-    return _band_first_person_row(ws, SECTION_TITLE_PROPOSED)
+    raise AssertionError(f"{SECTION_TITLE_GRID!r} not found in col A")
 
 
 def _resolve_person_name(ws, row: int) -> str:
@@ -69,161 +60,113 @@ def _set(ws, row: int, col: int, value) -> None:
     cell.value = value
 
 
-# ── Reader-only sanity ──────────────────────────────────────────────────────
+def _recalc(path: Path) -> None:
+    subprocess.run(
+        ["python", "scripts/recalc.py", str(path)],
+        check=True, capture_output=True,
+    )
 
 
-def test_reader_empty_on_fresh_workbook(tmp_path: Path):
-    """No user typed anything → every Assigned cell is a formula default → {}."""
+# ── Init + recalc round-trip ────────────────────────────────────────────────
+
+
+def test_init_solver_output_preserved(tmp_path: Path):
+    """Init → recalc → reread: grid holds solver-placed WP codes as literals.
+
+    Bystander: at least one non-empty grid cell and at least one row anchored
+    to Config via ``=Config!A{r}`` (person col-A cross-ref).
+    """
     path = tmp_path / "wb.xlsx"
     init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    wb = openpyxl.load_workbook(path)
-    months = _project_months(wb)
-    assert read_timelog_plan(wb, months) == {}
-    wb.close()
+    _recalc(path)
 
-
-def test_reader_ignores_formula_cells(tmp_path: Path):
-    """=<Proposed> formulas must never be returned as overrides."""
-    path = tmp_path / "wb.xlsx"
-    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
     wb = openpyxl.load_workbook(path)
-    months = _project_months(wb)
     ws = wb[SHEET_TIMELOG_PLAN]
-    # Write a literal override on exactly one cell; every other cell stays
-    # as its default =<Proposed> formula (bystander check — selectivity).
-    first = _assigned_first_person_row(ws)
-    person_name = _resolve_person_name(ws, first)
-    a_start = TIMELOG_MONTH_COL_START
-    _set(ws, first, a_start, "WP2")
-    wb.save(path)
+    months = _project_months(wb)
+    first = _grid_first_person_row(ws)
+
+    # Every non-empty cell in the merged grid is a literal WP code (not a formula).
+    placed = 0
+    for r in range(first, ws.max_row + 1):
+        a = ws.cell(r, 1).value
+        if a is None or (isinstance(a, str) and a.strip() == ""):
+            break  # end of grid block
+        for mi in range(months):
+            v = ws.cell(r, TIMELOG_MONTH_COL_START + mi).value
+            if v is None or (isinstance(v, str) and v.strip() == ""):
+                continue
+            assert isinstance(v, str) and not v.startswith("="), (
+                f"grid cell at ({r},{TIMELOG_MONTH_COL_START + mi}) "
+                f"should be a literal WP code, got {v!r}"
+            )
+            assert v.startswith("WP"), f"expected WP code, got {v!r}"
+            placed += 1
+    assert placed > 0, "solver placed no WP codes in the merged grid"
     wb.close()
 
-    wb2 = openpyxl.load_workbook(path)
-    overrides = read_timelog_plan(wb2, months)
-    wb2.close()
-    assert overrides == {(person_name, 1): "WP2"}
+
+# ── Orphan pruning on rebuild ───────────────────────────────────────────────
 
 
-# ── Full round-trip: init → edit → rebuild → preserved ─────────────────────
+def test_orphan_wp_dropped_with_bystander(tmp_path: Path, capsys):
+    """Rebuild drops a grid cell whose WP code no longer exists in the roster.
 
-
-def test_override_survives_rebuild(tmp_path: Path):
-    """User-typed WP code in Assigned grid survives a rebuild.
-
-    Bystander check: a sibling cell left untouched remains a formula (i.e.
-    the builder didn't clobber every cell with a literal on round-trip).
+    Bystander: a valid WP-code cell on the same row must survive the rebuild.
     """
     path = tmp_path / "wb.xlsx"
     init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
 
     wb = openpyxl.load_workbook(path)
     ws = wb[SHEET_TIMELOG_PLAN]
-    first = _assigned_first_person_row(ws)
+    first = _grid_first_person_row(ws)
     person_name = _resolve_person_name(ws, first)
-    a_start = TIMELOG_MONTH_COL_START
+    m_start = TIMELOG_MONTH_COL_START
 
-    # Edit column a_start (month 1) on the first person row.
-    edit_col = a_start
-    edit_value = "WP2"
-    _set(ws, first, edit_col, edit_value)
-    wb.save(path)
-    wb.close()
-
-    # Rebuild and reopen.
-    rebuild_workbook(input_path=str(path))
-    wb2 = openpyxl.load_workbook(path)
-    ws2 = wb2[SHEET_TIMELOG_PLAN]
-    first2 = _assigned_first_person_row(ws2)
-    # Person row order is (priority asc, name asc) — stable across rebuild
-    # when the roster doesn't change, so the first person row holds the
-    # same person. Resolve to assert explicitly.
-    assert _resolve_person_name(ws2, first2) == person_name
-
-    got = ws2.cell(first2, edit_col).value
-    assert got == edit_value, (
-        f"override lost on rebuild: expected {edit_value!r}, got {got!r}"
-    )
-
-    # Bystander — neighbouring cell should still be a formula default.
-    neighbour = ws2.cell(first2, edit_col + 1).value
-    assert isinstance(neighbour, str) and neighbour.startswith("="), (
-        f"neighbour cell should be =<Proposed> default, got {neighbour!r}"
-    )
-    wb2.close()
-
-
-def test_proposed_grid_regenerates_on_rebuild(tmp_path: Path):
-    """Proposed grid is solver-written — a user typing into Assigned must not
-    bleed through into Proposed. After a rebuild, Proposed cells still hold
-    literal WP codes (solver output), not formula artifacts of the edit."""
-    path = tmp_path / "wb.xlsx"
-    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-
-    wb = openpyxl.load_workbook(path)
-    months = _project_months(wb)
-    ws = wb[SHEET_TIMELOG_PLAN]
-    first = _assigned_first_person_row(ws)
-    a_start = TIMELOG_MONTH_COL_START
-    _set(ws, first, a_start, "WP3")
-    wb.save(path)
-    wb.close()
-
-    rebuild_workbook(input_path=str(path))
-
-    wb2 = openpyxl.load_workbook(path)
-    ws2 = wb2[SHEET_TIMELOG_PLAN]
-    # PROPOSED band is a separate row range in the vertical layout — the
-    # solver-written grid lives under its own SECTION_TITLE_PROPOSED anchor.
-    first2 = _proposed_first_person_row(ws2)
-    placed_found = False
-    for mi in range(months):
-        val = ws2.cell(first2, TIMELOG_MONTH_COL_START + mi).value
-        if isinstance(val, str) and val.startswith("WP"):
-            placed_found = True
-            break
-    assert placed_found, "Proposed row had no solver-placed WP cell after rebuild"
-    wb2.close()
-
-
-# ── Orphan pruning ──────────────────────────────────────────────────────────
-
-
-def test_override_orphaned_by_removed_wp_is_dropped(tmp_path: Path, capsys):
-    """Overriding with a WP code the user later deletes from Config must drop
-    the stale cell with a warning — parallel to the Actuals/Hours orphan
-    pruning already in rebuild.
-
-    Bystander: a sibling override with a valid WP code must survive.
-    """
-    path = tmp_path / "wb.xlsx"
-    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-
-    wb = openpyxl.load_workbook(path)
-    ws = wb[SHEET_TIMELOG_PLAN]
-    first = _assigned_first_person_row(ws)
-    person_name = _resolve_person_name(ws, first)
-    a_start = TIMELOG_MONTH_COL_START
-
-    # Write two overrides: one valid, one with a WP code that does not
-    # exist in the WP Budget table.
-    _set(ws, first, a_start, "WP2")           # valid — bystander
-    _set(ws, first, a_start + 1, "WP_ZOMBIE")  # orphan
+    # Stamp a known-valid WP code (bystander) and a zombie code on the same row.
+    _set(ws, first, m_start, "WP2")           # bystander (real WP)
+    _set(ws, first, m_start + 1, "WP_ZOMBIE")  # orphan
     wb.save(path)
     wb.close()
 
     rebuild_workbook(input_path=str(path))
     captured = capsys.readouterr()
-    assert "Orphaned Timelog Plan override" in captured.out, captured.out
+    assert "Orphaned Timelog Plan cell" in captured.out, captured.out
     assert "WP_ZOMBIE" in captured.out
 
-    # Reopen and verify: bystander survived, orphan reverted to default formula.
     wb2 = openpyxl.load_workbook(path)
     ws2 = wb2[SHEET_TIMELOG_PLAN]
-    first2 = _assigned_first_person_row(ws2)
+    first2 = _grid_first_person_row(ws2)
     assert _resolve_person_name(ws2, first2) == person_name
-    assert ws2.cell(first2, a_start).value == "WP2"  # bystander
-    zombie = ws2.cell(first2, a_start + 1).value
-    assert isinstance(zombie, str) and zombie.startswith("="), (
-        f"orphan cell should revert to default formula, got {zombie!r}"
+    # Bystander survives.
+    assert ws2.cell(first2, m_start).value == "WP2"
+    # Orphan has been cleared / re-solved; must not carry the zombie value forward.
+    orphan_val = ws2.cell(first2, m_start + 1).value
+    assert orphan_val != "WP_ZOMBIE", (
+        f"orphan cell still carries zombie code: {orphan_val!r}"
     )
     wb2.close()
+
+
+# ── Reader shape contract ──────────────────────────────────────────────────
+
+
+def test_reader_returns_grid_and_flag(tmp_path: Path):
+    """v2 reader returns {'grid': {(person, month): wp_code}, 'resolve_flag': bool}."""
+    path = tmp_path / "wb.xlsx"
+    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
+    wb = openpyxl.load_workbook(path)
+    months = _project_months(wb)
+    out = read_timelog_plan(wb, months)
+    assert set(out.keys()) == {"grid", "resolve_flag"}, out.keys()
+    assert isinstance(out["grid"], dict)
+    assert isinstance(out["resolve_flag"], bool)
+    # Fresh init: flag defaults to TRUE (named range writes literal True).
+    assert out["resolve_flag"] is True
+    # Grid has ≥1 solver-placed cell keyed by (person, 1-indexed month).
+    assert len(out["grid"]) > 0, "solver placed no cells in merged grid"
+    for key, val in out["grid"].items():
+        person, month = key
+        assert isinstance(person, str) and person
+        assert isinstance(month, int) and 1 <= month <= months
+        assert isinstance(val, str) and val.startswith("WP"), val
+    wb.close()

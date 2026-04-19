@@ -366,11 +366,13 @@ Two orderings possible:
 
 **No coupling:** neither order blocks the other. Doc A's D5 was written precisely to decouple. Recommendation: whichever is ready first ships first. Doc B's diff is wider; Doc A's is deeper on Timelog Plan specifically. A code-review capacity argument favours Order 1 (smaller Doc A diff against a cleaner schema), but it's a preference, not a requirement.
 
-### 8.2 Concrete Doc A diffs if Order 2
+### 8.2 Concrete Doc A diffs to apply when Doc B lands (Order 2 = realized)
 
-- §5 line 204: delete the hedge, state `total_sched_months = wp["end"] - wp["start"] + 1`.
-- §6 Phase 4: test name `test_yearly_budget_multi_segment_wp` → delete (scenario gone). The single-WP-single-year test remains.
-- §5 formula spec: the term formula stays identical; only the build-time helper call changes from `_wp_sched_months(wpk.code, wp_schedule)` to `int(wpk["end"]) - int(wpk["start"]) + 1`.
+Doc A shipped first, so the Doc B implementation MUST apply these edits in its own PR — they are pending, not historical. (Doc A is archived — do NOT edit the archived plan text; these instructions apply to the shipped code and tests that Doc A produced.)
+
+- **Code:** in `budget_planner/timelog_plan.py` `_write_yearly_rows()`, swap the `_wp_sched_months(wp.code, wp_schedule)` call for `int(wp["end"]) - int(wp["start"]) + 1`. The term-sum formula structure is unchanged — only the build-time proportion denominator source changes.
+- **Tests:** delete `tests/test_timelog_plan.py::test_yearly_budget_multi_segment_wp` (the multi-segment scenario becomes impossible). `test_yearly_budget_single_wp_single_year` remains.
+- **Helper:** remove `_wp_sched_months` from `timelog_plan.py` once this is its only remaining caller (check with `grep -n _wp_sched_months budget_planner/**/*.py`).
 
 ---
 

@@ -1111,8 +1111,14 @@ def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
         if isinstance(v, (int, float)):
             year_sum += float(v)
     assert isinstance(col_c, (int, float)), f"col C not numeric: {col_c!r}"
-    # Yearly budget uses un-ROUND'd term sums; fp tolerance of 1 EUR suffices
-    # since terms mathematically sum to the ceiling grand total.
+    # Yearly budget uses un-ROUND'd term sums — per design §5 the formula is
+    # `=Σ prop_ky × Config!E{wp_row}` with no outer ROUND. In real arithmetic
+    # Σ_y prop_ky = 1 for every WP, so Σ year cells = Σ ceilings = col C
+    # EXACTLY; fp rounding errors are the only drift source. ±1 EUR tolerance
+    # covers float64 noise and does NOT cover per-cell leaf-rounding.
+    # If the formula is later changed to wrap each cell in `ROUND(..., 0)`
+    # (e.g. to align with the Yearly total € convention), bump this tolerance
+    # to `len(groups)` EUR to accommodate ±0.5 EUR per year.
     assert abs(year_sum - float(col_c)) <= 1.0, (
         f"Yearly budget: col C {col_c} vs year-sum {year_sum}"
     )

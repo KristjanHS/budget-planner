@@ -46,7 +46,15 @@ def _set(ws, row: int, col: int, value) -> None:
 
 
 def _pick_editable_cell(ws, months: int) -> tuple[int, int, str | None]:
-    """Return (row, col, solver_value) of the first non-empty grid cell."""
+    """Return (row, col, solver_value) of the first non-empty grid cell.
+
+    Vacation-month cells are always empty strings (design-invariants
+    § Timelog Plan vacation-month invariants), so the ``v.strip()`` filter
+    implicitly excludes them — the picker cannot hand back a vacation cell
+    while the solver's vacation-skip invariant holds. If that invariant
+    ever regresses, ``test_solver_never_places_wp_in_vacation_cell`` fires
+    first, so explicit vac-month filtering here would be redundant.
+    """
     first = _grid_first_person_row(ws)
     for mi in range(months):
         col = TIMELOG_MONTH_COL_START + mi

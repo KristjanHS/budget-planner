@@ -145,7 +145,7 @@ def test_tab_colour_orange(tlp):
 
 
 def test_layout_col_shift(tlp, assigned_wb):
-    """M1 starts at col B (was D in v1); Rate is last col (I) of PER-PERSON SUMMARY."""
+    """M1 starts at col B (was D in v1); Rate is last col (H) of PER-PERSON SUMMARY."""
     assert TIMELOG_MONTH_COL_START == 2
 
     # Merged-grid month header row = grid title + 2 (title, year, month).
@@ -154,11 +154,11 @@ def test_layout_col_shift(tlp, assigned_wb):
     m1_letter = tlp.cell(month_row, TIMELOG_MONTH_COL_START).column_letter
     assert m1_letter == "B"
 
-    # Rate is at PER-PERSON SUMMARY col I.
+    # Rate is at PER-PERSON SUMMARY col H (shifted left one after Largest gap drop).
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_PERSON_SUMMARY) + 1
-    assert tlp.cell(hdr_row, 9).value == "Rate"
+    assert tlp.cell(hdr_row, 8).value == "Rate"
     first_person = _summary_person_first_row(tlp)
-    rate_val = str(tlp.cell(first_person, 9).value or "")
+    rate_val = str(tlp.cell(first_person, 8).value or "")
     assert rate_val.startswith("=VLOOKUP(") and "roster_lookup" in rate_val, rate_val
 
 
@@ -441,10 +441,52 @@ def test_person_summary_headers_v2(tlp):
     assert tlp.cell(hdr_row, 1).value == "Person"
     expected = [
         "Assigned", "Pool", "Over-pool?", "Switches",
-        "First log", "Last log", "Largest gap", "Rate",
+        "First log", "Last log", "Rate",
     ]
     got = [tlp.cell(hdr_row, 2 + i).value for i in range(len(expected))]
     assert got == expected, got
+
+
+def test_person_summary_shape(tlp):
+    """PER-PERSON SUMMARY is 8 cols (Person + 7 metrics); no Largest gap header."""
+    hdr_row = _find_section_title_row(tlp, SECTION_TITLE_PERSON_SUMMARY) + 1
+    headers = [tlp.cell(hdr_row, c).value for c in range(1, 10)]
+    # Cols 1..8 are populated; col 9 must be blank/None (was 9-col v2).
+    assert headers[0] == "Person"
+    assert all(headers[i] is not None and headers[i] != "" for i in range(8)), headers
+    assert headers[8] in (None, ""), (
+        f"PER-PERSON SUMMARY col 9 should be empty after Largest gap drop, got {headers[8]!r}"
+    )
+    # "Largest gap" must not appear anywhere in the header row.
+    assert "Largest gap" not in headers, headers
+
+
+def test_rate_col_h(tlp, assigned_wb):
+    """Rate lands at PER-PERSON SUMMARY col H; Assigned € SUMPRODUCT references col-H range."""
+    # Rate formula at col H on the first person row.
+    first_person = _summary_person_first_row(tlp)
+    rate_val = str(tlp.cell(first_person, 8).value or "")
+    assert rate_val.startswith("=VLOOKUP(") and "roster_lookup" in rate_val, rate_val
+
+    # PER-WP SUMMARY Assigned € SUMPRODUCT (col C on first WP row) must reference
+    # the col-H range for its rate vector, not col I.
+    wp_first = _wp_summary_first_row(tlp)
+    assigned_eur = str(tlp.cell(wp_first, 3).value or "")
+    assert assigned_eur.startswith("=ROUND(SUMPRODUCT("), assigned_eur
+    # Rate-vector segment must be anchored at col H on the summary-person rows.
+    summary_last_row = first_person
+    for r in _iter_person_rows(tlp, first_person):
+        summary_last_row = r
+    expected_fragment = f"H{first_person}:H{summary_last_row}"
+    assert expected_fragment in assigned_eur, (
+        f"expected rate-vector range {expected_fragment!r} in Assigned € formula, "
+        f"got {assigned_eur!r}"
+    )
+    # Anti-assertion: the v2 col-I range must be gone.
+    stale_fragment = f"I{first_person}:I{summary_last_row}"
+    assert stale_fragment not in assigned_eur, (
+        f"Assigned € still references stale col-I rate vector: {assigned_eur!r}"
+    )
 
 
 def test_first_log_formula_uses_sumproduct_min(tlp):

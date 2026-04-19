@@ -49,9 +49,9 @@ MONTH_COL_START = 3
 # B..B+months-1 = month grid — single editable grid (v2 layout collapsed the
 #     v1 PROPOSED + ASSIGNED twin bands into one). On rebuild, re-solve or
 #     preserve is governed by the `timelog_resolve_flag` toggle cell.
-# PER-PERSON SUMMARY band reuses col A for Person; metrics live at B..I
-# (Assigned, Pool, Over-pool?, Switches, First log, Last log, Largest gap,
-# Rate). Rate is duplicated only once per person — on the summary row.
+# PER-PERSON SUMMARY band reuses col A for Person; metrics live at B..H
+# (Assigned, Pool, Over-pool?, Switches, First log, Last log, Rate). Rate is
+# duplicated only once per person — on the summary row.
 TIMELOG_MONTH_COL_START = 2   # col B
 
 # ── Section header contract ──

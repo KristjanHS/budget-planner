@@ -3,7 +3,7 @@
 A separate allocation surface from the Plan sheet. For each (person, month)
 the sheet prescribes which WP they should log 100% against.
 
-Layout (v2, 2026-04-19 — supersedes v1's PROPOSED + ASSIGNED twin bands):
+Layout (v2 + 2026-04-19 enhancements — supersedes v1's PROPOSED + ASSIGNED twin bands):
 
   1. Banner (row 1)
   2. Traffic lights + resolve-flag toggle (row 2)
@@ -12,7 +12,7 @@ Layout (v2, 2026-04-19 — supersedes v1's PROPOSED + ASSIGNED twin bands):
      blank spacer
   5. TIMELOG GRID — single editable band, literal WP codes + empty strings
      blank spacer
-  6. PER-PERSON SUMMARY band (9 cols: Person + 7 metrics + Rate)
+  6. PER-PERSON SUMMARY band (8 cols: Person + 6 metrics + Rate)
 
 Each data band is wrapped in an Excel row-group (``outline_level=1``) so the
 user can fold away sections not under review. Section-title rows stay at
@@ -21,19 +21,15 @@ level 0 and remain visible when the group collapses.
 Col A is Person (cross-ref into Config Team Roster) across the grid and the
 PER-PERSON SUMMARY band. No per-row metric column — the merged grid starts
 at col B (TIMELOG_MONTH_COL_START). The per-person Rate helper lives only
-once, on col I of the PER-PERSON SUMMARY band, and is consumed by the
+once, on col H of the PER-PERSON SUMMARY band, and is consumed by the
 PER-WP SUMMARY Assigned-€ SUMPRODUCT via row-aligned vectors.
 
-Spec: ``docs/plans/archived/2026-04-19-timelog-plan-v2-design.md``.
+Spec: ``docs/plans/2026-04-19-timelog-plan-enhancements-design.md`` (builds
+on ``docs/plans/archived/2026-04-19-timelog-plan-v2-design.md``).
 
 Stateless builder — receives all config via kwargs from the orchestrator. Per
 ``.claude/rules/python-refactors.md``: no ``from budget_planner import config``
 fallback inside this builder; the orchestrator owns the lazy-load.
-
-Known deferred work (flagged in design §9 follow-ups):
-- Per-person ``Largest gap`` summary column is a placeholder ``""`` cell with
-  a comment. Implementing it cleanly needs a hidden streak-length helper row
-  and a MAX over it; deferred until there's a concrete user need.
 """
 
 from __future__ import annotations
@@ -68,7 +64,6 @@ from budget_planner.styles import (
     GREY_FILL,
     HEADER_FONT,
     LIGHT_BLUE_FILL,
-    LIGHT_GREEN_FILL,
     SECTION_FILL,
     SECTION_FONT,
     TITLE_FONT,
@@ -84,18 +79,18 @@ SECTION_TITLE_WP_SUMMARY = "PER-WP SUMMARY"
 SECTION_TITLE_GRID = "TIMELOG GRID (edit freely — toggle re-solve at J2)"
 SECTION_TITLE_PERSON_SUMMARY = "PER-PERSON SUMMARY"
 
-# PER-PERSON SUMMARY layout: col A = Person, cols B..I = 8 metric cols.
-# Metric headers start at col B. Rate is the last metric (col I) — single
+# PER-PERSON SUMMARY layout: col A = Person, cols B..H = 7 metric cols.
+# Metric headers start at col B. Rate is the last metric (col H) — single
 # source of the per-person rate, consumed by PER-WP Assigned-€ SUMPRODUCT.
 _PERSON_SUMMARY_METRIC_HEADERS = [
     "Assigned", "Pool", "Over-pool?",
-    "Switches", "First log", "Last log", "Largest gap",
+    "Switches", "First log", "Last log",
     "Rate",
 ]
 _PERSON_SUMMARY_FIRST_METRIC_COL = 2   # col B (Assigned)
 _PERSON_SUMMARY_RATE_COL = (
     _PERSON_SUMMARY_FIRST_METRIC_COL + len(_PERSON_SUMMARY_METRIC_HEADERS) - 1
-)  # col I
+)  # col H
 
 # PER-WP SUMMARY metric columns live at A..H (WP code + 7 metrics).
 # Phase 3 appends dynamic "Y{yyyy} €" cols right of col H — one per calendar
@@ -586,7 +581,7 @@ def build_timelog_plan_sheet(
     ).coordinate  # "B3"
 
     ws.column_dimensions["A"].width = 25          # Person
-    # PER-PERSON SUMMARY metric cols: B..I. Slightly wider than default.
+    # PER-PERSON SUMMARY metric cols: B..H. Slightly wider than default.
     for i in range(len(_PERSON_SUMMARY_METRIC_HEADERS)):
         c_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + i)
         ws.column_dimensions[c_letter].width = 12
@@ -894,7 +889,7 @@ def _write_wp_summary_row(
     style_cell(ws, row, 2, font=GREEN_XREF, fmt="€#,##0").value = f"={ceiling_ref}"
 
     # Col C: Assigned € = ROUND(SUMPRODUCT((grid="WP") * rate_vector), 0).
-    # Rate vector is the PER-PERSON SUMMARY's col I over the person-row range;
+    # Rate vector is the PER-PERSON SUMMARY's col H over the person-row range;
     # grid rows match one-to-one with summary rows (same sort order).
     if has_persons:
         style_cell(ws, row, 3, font=BLACK_FORMULA, fmt="€#,##0").value = (
@@ -951,6 +946,8 @@ def _write_wp_summary_row(
         style_cell(ws, row, 8, value=0, font=BLACK_FORMULA, fmt="0")
 
     # Cols I..: Y{yyyy} € — EUR placed by the solver in this WP × year slice.
+    # (Still col I on PER-WP SUMMARY — this band has 8 base cols A..H; year
+    # cols start at col I. Independent of the PER-PERSON SUMMARY Rate col.)
     # Overlap with the WP's active window is checked at build time; non-
     # overlap cells are blank. Rounded per the programme leaf-rounding rule.
     for i, spec in enumerate(year_specs):
@@ -984,10 +981,10 @@ def _write_person_summary_metrics(
     project_months_ref: str,
     cfg_row: int | None,
 ) -> None:
-    """Fill the 8 per-person-summary metric cells on cols B..I.
+    """Fill the 7 per-person-summary metric cells on cols B..H.
 
     All metrics target the merged grid's row for the same person — that's
-    the canonical edit surface. Cols B..H are metrics; col I is Rate.
+    the canonical edit surface. Cols B..G are metrics; col H is Rate.
     """
     c0 = _PERSON_SUMMARY_FIRST_METRIC_COL
 
@@ -1058,19 +1055,8 @@ def _write_person_summary_metrics(
         f"INDEX({month_headers_range},{last_log_max})),\"\")"
     )
 
-    # Col H: Largest gap — placeholder, see module docstring.
-    cell = style_cell(
-        ws, row, c0 + 6, value="",
-        font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, alignment=CENTER,
-    )
-    cell.comment = sized_comment(
-        "Largest gap calc deferred — see solver design Q follow-ups "
-        "(needs hidden streak-length helper row + MAX). Placeholder cell.",
-        author="Claude",
-    )
-
-    # Col I: Rate — single-source VLOOKUP into roster_lookup. Consumed by
+    # Col H: Rate — single-source VLOOKUP into roster_lookup. Consumed by
     # PER-WP SUMMARY Assigned-€ SUMPRODUCT as the rate vector.
-    style_cell(ws, row, c0 + 7, font=BLACK_FORMULA, fmt="€#,##0").value = (
+    style_cell(ws, row, c0 + 6, font=BLACK_FORMULA, fmt="€#,##0").value = (
         f"=VLOOKUP(A{row},roster_lookup,4,FALSE)"
     )

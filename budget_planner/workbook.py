@@ -424,18 +424,15 @@ def _build_all_sheets(
         if _name in wb.sheetnames:
             del wb[_name]
 
-    # Tab order (user-facing) differs from build order.
-    # After build the sheetlist is:
-    #   Config, Capacity, Plan, Trends, Timelog Plan, Actuals-Hours,
-    #   Plan-Forecast, Actuals, Summary
-    # Target tab order:
-    #   Config, Capacity, Plan, Timelog Plan, Actuals, Actuals-Hours,
-    #   Plan-Forecast, Trends, Summary
-    # 1) Push Trends past Timelog Plan + Actuals-Hours + Plan-Forecast +
-    #    Actuals (+4).
-    # 2) Hop Actuals leftward two slots so it sits just after Timelog Plan (-2).
-    wb.move_sheet(SHEET_TRENDS, offset=4)
-    wb.move_sheet(SHEET_ACTUALS, offset=-2)
+    # Tab order (user-facing) differs from build order. Target positions:
+    #   0: Config, 1: Timelog Plan, 2: Actuals-Hours  (the frequently-edited
+    #   tabs sit up-front). Remaining sheets keep their relative build order.
+    # Idempotent: computed offsets collapse to 0 when already in place.
+    for target_idx, name in enumerate(
+        [SHEET_TIMELOG_PLAN, SHEET_ACTUALS_HOURS], start=1,
+    ):
+        if name in wb.sheetnames:
+            wb.move_sheet(name, offset=target_idx - wb.sheetnames.index(name))
 
 
 def _apply_protection(wb):

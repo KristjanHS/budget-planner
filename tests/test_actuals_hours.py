@@ -55,15 +55,12 @@ def _find_person_header_row(ws, person_name):
     )
 
 
-# ── Existence + tab order ──
+# ── Existence ──
+# Tab position covered by tests/test_tab_order.py (Actuals-Hours = position 3).
+
 
 def test_actuals_hours_sheet_exists(wb):
     assert "Actuals-Hours" in wb.sheetnames
-
-
-def test_actuals_hours_tab_order_after_actuals(wb):
-    names = wb.sheetnames
-    assert names.index("Actuals-Hours") == names.index("Actuals") + 1
 
 
 # ── Structure: person groups match team size ──

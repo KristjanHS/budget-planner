@@ -41,16 +41,13 @@ def pf(assigned_wb):
     return assigned_wb[SHEET_PLAN_FORECAST]
 
 
-# ── Existence + tab order ──
+# ── Existence ──
+# Adjacency to Actuals-Hours was a pre-v2 invariant; Phase 4 moved
+# Actuals-Hours to position 3, so Plan-Forecast no longer sits next to it.
+
 
 def test_plan_forecast_sheet_exists(assigned_wb):
     assert SHEET_PLAN_FORECAST in assigned_wb.sheetnames
-
-
-def test_plan_forecast_tab_order(assigned_wb):
-    """Plan-Forecast must sit immediately after Actuals-Hours."""
-    names = assigned_wb.sheetnames
-    assert names.index(SHEET_PLAN_FORECAST) == names.index("Actuals-Hours") + 1
 
 
 # ── Shape ──

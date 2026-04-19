@@ -336,7 +336,12 @@ def test_wp_summary_rows_match_work_packages(tlp, assigned_wb):
         v = tlp.cell(r, 1).value
         if v is None or str(v).strip() == "":
             break
-        sheet_codes.append(str(v).strip())
+        s = str(v).strip()
+        # Phase-4 "Yearly total €" / "Yearly budget €" rows sit directly below
+        # the last WP row (no spacer, same outline group) — stop before them.
+        if s.lower().startswith("yearly "):
+            break
+        sheet_codes.append(s)
     assert sheet_codes == [wp["id"] for wp in wps]
 
 
@@ -1013,3 +1018,195 @@ def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
         "no non-vacation month had any assigned persons — bystander gate vacuous"
     )
     wb.close()
+
+
+# ── Yearly total € / Yearly budget € rows (Phase 4 enhancement) ─────────────
+
+
+def _yearly_rows(tlp) -> tuple[int, int]:
+    """Return (yearly_total_row, yearly_budget_row) — two rows directly beneath
+    the last WP row in PER-WP SUMMARY (no spacer, same outline group)."""
+    first = _wp_summary_first_row(tlp)
+    # Walk past WP rows until we hit the first "Yearly " label.
+    r = first
+    while r <= tlp.max_row:
+        v = tlp.cell(r, 1).value
+        if v is None:
+            raise AssertionError("no Yearly rows found in PER-WP SUMMARY")
+        s = str(v).strip()
+        if s.lower().startswith("yearly "):
+            break
+        r += 1
+    return r, r + 1
+
+
+def test_yearly_rows_present(tlp):
+    """Both rows exist directly below the last WP row with expected labels."""
+    y_total, y_budget = _yearly_rows(tlp)
+    assert tlp.cell(y_total, 1).value == "Yearly total €"
+    assert tlp.cell(y_budget, 1).value == "Yearly budget €"
+
+    # Outline level: rows must be in the PER-WP SUMMARY outline group (level 1).
+    assert tlp.row_dimensions[y_total].outline_level == 1
+    assert tlp.row_dimensions[y_budget].outline_level == 1
+
+
+def test_yearly_total_col_c_formula(tlp, assigned_wb):
+    """Yearly total € col C cross-check = SUM of WP Assigned € col (C)."""
+    wps, _sched = _read_wps_and_schedule(assigned_wb)
+    y_total, _ = _yearly_rows(tlp)
+    first = _wp_summary_first_row(tlp)
+    last = first + len(wps) - 1
+    v = str(tlp.cell(y_total, 3).value or "")
+    assert v == f"=SUM(C{first}:C{last})", v
+
+
+def test_yearly_budget_col_c_formula(tlp, assigned_wb):
+    """Yearly budget € col C cross-check = SUM of WP Ceiling € col (B)."""
+    wps, _sched = _read_wps_and_schedule(assigned_wb)
+    _, y_budget = _yearly_rows(tlp)
+    first = _wp_summary_first_row(tlp)
+    last = first + len(wps) - 1
+    v = str(tlp.cell(y_budget, 3).value or "")
+    assert v == f"=SUM(B{first}:B{last})", v
+
+
+def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
+    """Col C value equals row-sum of year cells (within leaf-rounding tolerance)."""
+    wb = load_workbook(recalced_assigned_path, data_only=True)
+    ws = wb[SHEET_TIMELOG_PLAN]
+    params, _wps, _sched = _read_config(wb)
+    groups = _expected_year_groups(params["start"], params["months"])
+    y_total, _ = _yearly_rows(ws)
+    base_cols = 8
+
+    col_c = ws.cell(y_total, 3).value
+    year_sum = 0.0
+    for yi in range(len(groups)):
+        v = ws.cell(y_total, base_cols + 1 + yi).value
+        if isinstance(v, (int, float)):
+            year_sum += float(v)
+    assert isinstance(col_c, (int, float)), f"col C not numeric: {col_c!r}"
+    # Tolerance: ±N EUR (each year cell independently rounded by sub-formula).
+    assert abs(year_sum - float(col_c)) <= len(groups), (
+        f"Yearly total: col C {col_c} vs year-sum {year_sum} "
+        f"(tolerance ±{len(groups)})"
+    )
+    wb.close()
+
+
+def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
+    """Col C value equals row-sum of year cells (within fp tolerance)."""
+    wb = load_workbook(recalced_assigned_path, data_only=True)
+    ws = wb[SHEET_TIMELOG_PLAN]
+    params, _wps, _sched = _read_config(wb)
+    groups = _expected_year_groups(params["start"], params["months"])
+    _, y_budget = _yearly_rows(ws)
+    base_cols = 8
+
+    col_c = ws.cell(y_budget, 3).value
+    year_sum = 0.0
+    for yi in range(len(groups)):
+        v = ws.cell(y_budget, base_cols + 1 + yi).value
+        if isinstance(v, (int, float)):
+            year_sum += float(v)
+    assert isinstance(col_c, (int, float)), f"col C not numeric: {col_c!r}"
+    # Yearly budget uses un-ROUND'd term sums; fp tolerance of 1 EUR suffices
+    # since terms mathematically sum to the ceiling grand total.
+    assert abs(year_sum - float(col_c)) <= 1.0, (
+        f"Yearly budget: col C {col_c} vs year-sum {year_sum}"
+    )
+    wb.close()
+
+
+def test_yearly_budget_single_wp_single_year(tlp, assigned_wb):
+    """For any WP whose active window lies inside one calendar year, that year's
+    Yearly budget term = 1.0 × Config!E{wp_row}."""
+    params, wps, sched = _read_wps_and_schedule_and_params(assigned_wb)
+    groups = _expected_year_groups(params["start"], params["months"])
+    _, y_budget = _yearly_rows(tlp)
+    base_cols = 8
+
+    # Find a WP fully contained in one year (existence, not every-row).
+    candidates = []
+    for wi, wp in enumerate(wps):
+        active_start, active_end = _wp_active_window(wp["id"], sched)
+        for yi, (_yr, fm, lm) in enumerate(groups):
+            if fm <= active_start and active_end <= lm:
+                candidates.append((wi, wp, yi, fm, lm))
+                break
+    if not candidates:
+        pytest.skip("no WP fully contained in a single calendar year in fixture")
+
+    wi, wp, yi, _fm, _lm = candidates[0]
+    cfg_row = _config_wp_row(assigned_wb, wp["id"])
+    formula = str(tlp.cell(y_budget, base_cols + 1 + yi).value or "")
+    # Term should contain "1.0*Config!$E${cfg_row}" exactly once (cell_ref uses
+    # absolute refs). Other WP terms may coexist in the same year's formula.
+    expected_term = f"1.0*Config!$E${cfg_row}"
+    assert expected_term in formula, (
+        f"WP {wp['id']} fully in year idx {yi}: expected {expected_term!r} "
+        f"in yearly budget formula, got {formula!r}"
+    )
+
+
+def test_yearly_budget_multi_segment_wp(tlp, assigned_wb):
+    """For a multi-segment WP, per-year proportion uses total_sched_months that
+    sums active segments (gap months excluded)."""
+    params, wps, sched = _read_wps_and_schedule_and_params(assigned_wb)
+    groups = _expected_year_groups(params["start"], params["months"])
+    _, y_budget = _yearly_rows(tlp)
+    base_cols = 8
+
+    # Find a multi-segment WP.
+    multi_wi: int | None = None
+    multi_wp = None
+    for wi, wp in enumerate(wps):
+        segs = [s for s in sched if s["id"] == wp["id"]]
+        if len(segs) >= 2:
+            multi_wi = wi
+            multi_wp = wp
+            break
+    if multi_wi is None or multi_wp is None:
+        pytest.skip("no multi-segment WP in fixture — multi-segment path untested")
+
+    segs = [s for s in sched if s["id"] == multi_wp["id"]]
+    total_sched_months = sum(int(s["end"]) - int(s["start"]) + 1 for s in segs)
+    # Build the WP's set of active months (1-indexed project months).
+    active: set[int] = set()
+    for s in segs:
+        active.update(range(int(s["start"]), int(s["end"]) + 1))
+
+    cfg_row = _config_wp_row(assigned_wb, multi_wp["id"])
+
+    # For every year the WP overlaps, derive the expected prop and check the
+    # term appears in the year's yearly-budget formula.
+    checked = 0
+    for yi, (_yr, fm, lm) in enumerate(groups):
+        months_in_year = sum(1 for m in active if fm <= m <= lm)
+        if months_in_year <= 0:
+            continue
+        expected_prop = months_in_year / total_sched_months
+        formula = str(tlp.cell(y_budget, base_cols + 1 + yi).value or "")
+        expected_term = f"{expected_prop}*Config!$E${cfg_row}"
+        assert expected_term in formula, (
+            f"WP {multi_wp['id']} year idx {yi}: expected {expected_term!r} "
+            f"in formula, got {formula!r}"
+        )
+        checked += 1
+    assert checked > 0, f"WP {multi_wp['id']} had no year-overlaps"
+
+
+def _read_wps_and_schedule_and_params(wb):
+    from budget_planner.reader import read_config_sheet
+    params, wps, sched = read_config_sheet(wb["Config"])
+    return params, wps, sched
+
+
+def _config_wp_row(wb, wp_id: str) -> int:
+    """Return the 1-indexed row on Config where this WP's row lives."""
+    cfg = wb["Config"]
+    for r in range(1, cfg.max_row + 1):
+        if str(cfg.cell(r, 1).value or "").strip() == wp_id:
+            return r
+    raise AssertionError(f"WP {wp_id!r} not found on Config sheet")

@@ -234,8 +234,16 @@ def build_timelog_plan_sheet(
         wp_summary_first_row + num_wps - 1 if num_wps > 0
         else wp_summary_header_row
     )
+    # Yearly total € / Yearly budget € rows sit directly below the last WP row
+    # (no spacer, same outline group). Only emitted when there are WP rows.
+    yearly_total_row = wp_summary_last_row + 1 if num_wps > 0 else None
+    yearly_budget_row = wp_summary_last_row + 2 if num_wps > 0 else None
+    wp_summary_band_end_row = (
+        yearly_budget_row if yearly_budget_row is not None
+        else wp_summary_last_row
+    )
 
-    grid_title_row = wp_summary_last_row + 2  # +1 spacer
+    grid_title_row = wp_summary_band_end_row + 2  # +1 spacer
 
     grid_year_row = grid_title_row + 1
     grid_month_row = grid_year_row + 1
@@ -364,7 +372,19 @@ def build_timelog_plan_sheet(
             grid_person_last_row=grid_person_last_row,
         )
     if num_wps > 0:
-        for r in range(wp_summary_header_row, wp_summary_last_row + 1):
+        assert yearly_total_row is not None and yearly_budget_row is not None
+        _write_yearly_rows(
+            ws,
+            yearly_total_row=yearly_total_row,
+            yearly_budget_row=yearly_budget_row,
+            wp_summary_first_row=wp_summary_first_row,
+            wp_summary_last_row=wp_summary_last_row,
+            wps=wps,
+            wp_schedule=wp_schedule,
+            year_specs=year_specs,
+            cfg_wp_first_row=cfg_wp_first_row,
+        )
+        for r in range(wp_summary_header_row, wp_summary_band_end_row + 1):
             ws.row_dimensions[r].outline_level = 1
 
     # ── TIMELOG GRID band ──
@@ -922,6 +942,100 @@ def _write_grid_cell(
             font=BLUE_INPUT, fill=DARK_GREY_FILL, alignment=CENTER,
         )
     cell.protection = Protection(locked=False)
+
+
+def _write_yearly_rows(
+    ws: Worksheet,
+    *,
+    yearly_total_row: int,
+    yearly_budget_row: int,
+    wp_summary_first_row: int,
+    wp_summary_last_row: int,
+    wps: list[WP],
+    wp_schedule: list[dict],
+    year_specs: list["_YearColSpec"],
+    cfg_wp_first_row: int,
+) -> None:
+    """Write the Yearly total € and Yearly budget € rows under PER-WP SUMMARY.
+
+    - Col A: row label (HEADER_FONT).
+    - Col C: cross-check sum — total Assigned € (yearly_total_row) or total
+      Ceiling € (yearly_budget_row) across all WPs. Divergence from the row's
+      per-year sum flags formula drift.
+    - Cols B, D-H: intentionally blank.
+    - Per-year cols (I…):
+      * yearly_total_row: =SUM(<year_col>{W1}:<year_col>{Wn}) — stacks the
+        per-WP Y{yyyy} € cells for that year.
+      * yearly_budget_row: build-time term-sum ``Σ prop_ky × Config!E{wp_row}``
+        where ``prop_ky = months_of_wpk_in_year_y / total_sched_months_for_wpk``
+        for WPs overlapping year y, zero-term WPs omitted (design §5 D16).
+        Formula stays live to Config FTE/rate changes; rebuild re-derives the
+        proportions when the WP schedule changes.
+    """
+    style_cell(
+        ws, yearly_total_row, 1, value="Yearly total €",
+        font=HEADER_FONT, alignment=CENTER,
+    )
+    style_cell(
+        ws, yearly_budget_row, 1, value="Yearly budget €",
+        font=HEADER_FONT, alignment=CENTER,
+    )
+
+    # Col C cross-checks.
+    style_cell(
+        ws, yearly_total_row, 3, font=BLACK_FORMULA, fmt="€#,##0",
+    ).value = f"=SUM(C{wp_summary_first_row}:C{wp_summary_last_row})"
+    style_cell(
+        ws, yearly_budget_row, 3, font=BLACK_FORMULA, fmt="€#,##0",
+    ).value = f"=SUM(B{wp_summary_first_row}:B{wp_summary_last_row})"
+
+    # Precompute per-WP schedule-month sets for build-time overlap math.
+    wp_month_sets: list[set[int]] = []
+    wp_sched_totals: list[int] = []
+    for wp in wps:
+        ms: set[int] = set()
+        for s in wp_schedule:
+            if s["id"] == wp.code:
+                ms.update(range(int(s["start"]), int(s["end"]) + 1))
+        wp_month_sets.append(ms)
+        wp_sched_totals.append(len(ms))
+
+    for yi, spec in enumerate(year_specs):
+        col = _WP_SUMMARY_BASE_LAST_COL + 1 + yi
+        col_letter_str = get_column_letter(col)
+
+        # Yearly total €: stack the per-WP year-col cells.
+        style_cell(
+            ws, yearly_total_row, col, font=BLACK_FORMULA, fmt="€#,##0",
+        ).value = (
+            f"=SUM({col_letter_str}{wp_summary_first_row}"
+            f":{col_letter_str}{wp_summary_last_row})"
+        )
+
+        # Yearly budget €: build-time term-sum with literal proportions.
+        terms: list[str] = []
+        for wi, wp in enumerate(wps):
+            total_months = wp_sched_totals[wi]
+            if total_months <= 0:
+                continue
+            months_in_year = sum(
+                1 for m in wp_month_sets[wi]
+                if spec.first_month <= m <= spec.last_month
+            )
+            if months_in_year <= 0:
+                continue
+            prop = months_in_year / total_months
+            ceiling_ref = cell_ref(SHEET_CONFIG, cfg_wp_first_row + wi, 5)
+            terms.append(f"{prop}*{ceiling_ref}")
+        if terms:
+            style_cell(
+                ws, yearly_budget_row, col, font=BLACK_FORMULA, fmt="€#,##0",
+            ).value = "=" + "+".join(terms)
+        else:
+            style_cell(
+                ws, yearly_budget_row, col, value="",
+                font=BLACK_FORMULA, fmt="€#,##0",
+            )
 
 
 def _write_monthly_total_row(

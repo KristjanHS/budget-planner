@@ -236,7 +236,12 @@ def test_vacation_preserved_under_resolve_flag_false(tmp_path: Path):
     checked = 0
     while r <= ws2.max_row:
         col_a = ws2.cell(r, 1).value
-        if col_a is None or str(col_a).strip() == "" or str(col_a).upper().startswith("PER-"):
+        col_a_str = str(col_a or "").strip()
+        if (
+            col_a is None or not col_a_str
+            or col_a_str.upper().startswith("PER-")
+            or col_a_str.lower().startswith("monthly total")
+        ):
             break
         for month_num in vac_months:
             vc = ws2.cell(r, TIMELOG_MONTH_COL_START + month_num - 1)

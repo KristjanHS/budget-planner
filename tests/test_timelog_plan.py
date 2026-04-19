@@ -111,7 +111,11 @@ def _wp_summary_first_row(ws) -> int:
 
 
 def _iter_person_rows(ws, first_row: int):
-    """Yield rows from ``first_row`` until next section title / blank."""
+    """Yield rows from ``first_row`` until next section title / blank / total row.
+
+    Stops at PER- section titles, blank col A, and the "Monthly total €" label
+    (phase-3 row that sits directly under the grid in the same outline group).
+    """
     r = first_row
     while r <= ws.max_row:
         v = ws.cell(r, 1).value
@@ -119,6 +123,8 @@ def _iter_person_rows(ws, first_row: int):
             return
         s = str(v).strip()
         if not s or s.upper().startswith("PER-"):
+            return
+        if s.lower().startswith("monthly total"):
             return
         yield r
         r += 1
@@ -878,3 +884,132 @@ def test_solver_never_places_wp_in_vacation_cell(assigned_wb, tlp):
             if v not in (None, ""):
                 violations.append((r, month_num, v))
     assert not violations, f"solver placed codes in vacation cells: {violations}"
+
+
+# ── Monthly total € row (Phase 3 enhancement) ───────────────────────────────
+
+
+def _monthly_total_row(ws) -> int:
+    """Grid band layout: title, year, month, midx, persons…, monthly total."""
+    grid_rows = list(_iter_person_rows(ws, _grid_person_first_row(ws)))
+    assert grid_rows, "no person rows — monthly total row placement undefined"
+    return grid_rows[-1] + 1
+
+
+def test_monthly_total_row_present(tlp, assigned_wb):
+    """Monthly total € row sits directly under the last person row with
+    SUMPRODUCT formulas per month col."""
+    months = _project_months(assigned_wb)
+    m_start = TIMELOG_MONTH_COL_START
+    m_end = m_start + months - 1
+
+    total_row = _monthly_total_row(tlp)
+    assert tlp.cell(total_row, 1).value == "Monthly total €"
+
+    # Every month col must carry a ROUND(SUMPRODUCT(…)) formula.
+    checked = 0
+    for c in range(m_start, m_end + 1):
+        v = str(tlp.cell(total_row, c).value or "")
+        assert v.startswith("=ROUND(SUMPRODUCT("), (
+            f"col {c}: expected ROUND(SUMPRODUCT(…), got {v!r}"
+        )
+        assert '<>""' in v, v
+        checked += 1
+    assert checked == months
+
+
+def test_monthly_total_row_vacation_fill(tlp, assigned_wb):
+    """July cells on the Monthly total € row carry VACATION_FILL; non-vacation
+    month cells on the same row do NOT (bystander for selectivity)."""
+    from budget_planner.styles import VACATION_FILL
+    params, _wps, _sched = _read_config(assigned_wb)
+    vac_months = _vacation_project_months(params["start"], params["months"], 7)
+    assert vac_months, "fixture has no July months — fill tier untestable"
+
+    m_start = TIMELOG_MONTH_COL_START
+    total_row = _monthly_total_row(tlp)
+    expected_fill_rgb = (VACATION_FILL.fgColor.rgb or "").upper()
+
+    checked_vac = 0
+    checked_nonvac = 0
+    for mi in range(params["months"]):
+        month_num = mi + 1
+        cell = tlp.cell(total_row, m_start + mi)
+        rgb = (
+            (cell.fill.fgColor.rgb or "").upper()
+            if cell.fill and cell.fill.fgColor else ""
+        )
+        if month_num in vac_months:
+            assert rgb == expected_fill_rgb, (
+                f"total-row col {m_start + mi} (month {month_num}): "
+                f"expected VACATION_FILL {expected_fill_rgb}, got {rgb}"
+            )
+            checked_vac += 1
+        else:
+            assert rgb != expected_fill_rgb, (
+                f"total-row col {m_start + mi} (month {month_num}): "
+                "non-vacation cell incorrectly carries VACATION_FILL"
+            )
+            checked_nonvac += 1
+    assert checked_vac > 0 and checked_nonvac > 0
+
+
+def test_monthly_total_vacation_zero(recalced_assigned_path):
+    """Every vacation-month cell on the Monthly total € row recalcs to 0."""
+    wb = load_workbook(recalced_assigned_path, data_only=True)
+    ws = wb[SHEET_TIMELOG_PLAN]
+    params, _wps, _sched = _read_config(wb)
+    vac_months = _vacation_project_months(params["start"], params["months"], 7)
+    assert vac_months, "no July months — vacation cell total untested"
+    m_start = TIMELOG_MONTH_COL_START
+    total_row = _monthly_total_row(ws)
+
+    for month_num in vac_months:
+        v = ws.cell(total_row, m_start + month_num - 1).value
+        assert v in (0, 0.0), (
+            f"vacation month {month_num} total expected 0, got {v!r}"
+        )
+    wb.close()
+
+
+def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
+    """For each non-vacation month with ≥1 assigned person, the Monthly total €
+    cell equals the sum of those persons' Rate values."""
+    wb = load_workbook(recalced_assigned_path, data_only=True)
+    ws = wb[SHEET_TIMELOG_PLAN]
+    params, _wps, _sched = _read_config(wb)
+    vac_months = _vacation_project_months(params["start"], params["months"], 7)
+    m_start = TIMELOG_MONTH_COL_START
+    m_end = m_start + params["months"] - 1
+    total_row = _monthly_total_row(ws)
+
+    # Map each grid row → Rate value from PER-PERSON SUMMARY col H.
+    grid_rows = list(_iter_person_rows(ws, _grid_person_first_row(ws)))
+    summary_rows = list(_iter_person_rows(ws, _summary_person_first_row(ws)))
+    assert len(grid_rows) == len(summary_rows)
+    grid_rate: dict[int, float] = {}
+    for g_row, s_row in zip(grid_rows, summary_rows):
+        rate = ws.cell(s_row, 8).value
+        if isinstance(rate, (int, float)):
+            grid_rate[g_row] = float(rate)
+
+    checked = 0
+    for c in range(m_start, m_end + 1):
+        month_num = c - m_start + 1
+        if month_num in vac_months:
+            continue
+        expected = 0.0
+        for g_row, rate in grid_rate.items():
+            v = ws.cell(g_row, c).value
+            if v not in (None, ""):
+                expected += rate
+        got = ws.cell(total_row, c).value
+        assert got == round(expected), (
+            f"month {month_num} (col {c}): expected {round(expected)}, got {got!r}"
+        )
+        if expected > 0:
+            checked += 1
+    assert checked > 0, (
+        "no non-vacation month had any assigned persons — bystander gate vacuous"
+    )
+    wb.close()

@@ -245,9 +245,12 @@ def build_timelog_plan_sheet(
         grid_person_first_row + num_persons - 1 if num_persons > 0
         else grid_person_first_row - 1
     )
+    # Monthly total € row sits directly under the last person row (no spacer,
+    # same outline group). Only emitted when there are person rows.
+    grid_total_row = grid_person_last_row + 1 if num_persons > 0 else None
 
     summary_title_row = (
-        (grid_person_last_row if num_persons > 0 else grid_midx_row) + 2
+        (grid_total_row if grid_total_row is not None else grid_midx_row) + 2
     )
     summary_header_row = summary_title_row + 1
     summary_person_first_row = summary_header_row + 1
@@ -375,10 +378,12 @@ def build_timelog_plan_sheet(
         ws, grid_midx_row, project_months, month_col_start,
     )
     if num_persons > 0:
+        assert grid_total_row is not None
         for r in (
             grid_year_row, grid_month_row,
             grid_midx_row,
             *range(grid_person_first_row, grid_person_last_row + 1),
+            grid_total_row,
         ):
             ws.row_dimensions[r].outline_level = 1
     else:
@@ -448,6 +453,19 @@ def build_timelog_plan_sheet(
             month_idx_row=grid_midx_row,
             project_months_ref=project_months_ref,
             cfg_row=cfg_row,
+        )
+
+    # ── Monthly total € row (under TIMELOG GRID, same outline group) ──
+    if grid_total_row is not None:
+        _write_monthly_total_row(
+            ws, row=grid_total_row,
+            month_col_start=month_col_start,
+            month_col_end=month_col_end,
+            grid_person_first_row=grid_person_first_row,
+            grid_person_last_row=grid_person_last_row,
+            summary_person_first_row=summary_person_first_row,
+            summary_person_last_row=summary_person_last_row,
+            vacation_months_project=vacation_months_project,
         )
 
     # ── Patch traffic-light formulas (downstream rows now exist) ──
@@ -904,6 +922,53 @@ def _write_grid_cell(
             font=BLUE_INPUT, fill=DARK_GREY_FILL, alignment=CENTER,
         )
     cell.protection = Protection(locked=False)
+
+
+def _write_monthly_total_row(
+    ws: Worksheet,
+    *,
+    row: int,
+    month_col_start: int,
+    month_col_end: int,
+    grid_person_first_row: int,
+    grid_person_last_row: int,
+    summary_person_first_row: int,
+    summary_person_last_row: int,
+    vacation_months_project: frozenset[int],
+) -> None:
+    """Write the Monthly total € row under the TIMELOG GRID.
+
+    Each month cell: ``=ROUND(SUMPRODUCT((col<>"")*rate_vector),0)``. Non-empty
+    grid cells (WP codes) contribute their person's rate; empty cells (incl.
+    vacation) contribute 0. Vacation-month cells additionally carry
+    VACATION_FILL for visual column continuity (formula still evaluates to 0).
+    """
+    style_cell(
+        ws, row, 1, value="Monthly total €",
+        font=HEADER_FONT, alignment=CENTER,
+    )
+    rate_col_letter = get_column_letter(_PERSON_SUMMARY_RATE_COL)
+    rate_range = (
+        f"{rate_col_letter}{summary_person_first_row}"
+        f":{rate_col_letter}{summary_person_last_row}"
+    )
+    for mi in range(month_col_end - month_col_start + 1):
+        month_num = mi + 1
+        col = month_col_start + mi
+        col_letter_str = get_column_letter(col)
+        grid_col_range = (
+            f"{col_letter_str}{grid_person_first_row}"
+            f":{col_letter_str}{grid_person_last_row}"
+        )
+        is_vacation = month_num in vacation_months_project
+        cell = style_cell(
+            ws, row, col,
+            font=BLACK_FORMULA, alignment=CENTER, fmt="€#,##0",
+            fill=VACATION_FILL if is_vacation else None,
+        )
+        cell.value = (
+            f'=ROUND(SUMPRODUCT(({grid_col_range}<>"")*{rate_range}),0)'
+        )
 
 
 def _write_wp_summary_row(

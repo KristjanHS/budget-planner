@@ -1344,7 +1344,11 @@ def read_timelog_plan(wb, project_months: int) -> dict:
         if not col_a_str:
             break
         # PER-PERSON SUMMARY title (or any PER- prefix) ends the grid band.
+        # "Monthly total €" label (phase-3 enhancement) also ends the band —
+        # its cells hold formulas, not preserved literals.
         if col_a_str.upper().startswith("PER-"):
+            break
+        if col_a_str.lower().startswith("monthly total"):
             break
 
         # Resolve name: either =Config!A{n} cross-ref or a literal fallback.

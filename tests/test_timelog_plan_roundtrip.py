@@ -89,7 +89,12 @@ def test_init_solver_output_preserved(tmp_path: Path):
     placed = 0
     for r in range(first, ws.max_row + 1):
         a = ws.cell(r, 1).value
-        if a is None or (isinstance(a, str) and a.strip() == ""):
+        a_str = str(a or "").strip()
+        if (
+            a is None or not a_str
+            or a_str.lower().startswith("monthly total")
+            or a_str.upper().startswith("PER-")
+        ):
             break  # end of grid block
         for mi in range(months):
             v = ws.cell(r, TIMELOG_MONTH_COL_START + mi).value

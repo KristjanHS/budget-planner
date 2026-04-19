@@ -95,7 +95,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     # ``first_wp_row``/``last_wp_row``, so we write the placeholder cells
     # here to claim the row geometry and back-patch formulas + comments
     # after the WP block has been written. See design doc
-    # ``docs/plans/2026-04-18-config-through-month-cleanup-design.md``.
+    # ``docs/plans/archived/2026-04-18-config-through-month-cleanup-design.md``.
     r = 2
 
     # -- "As of" header row (shifted to row 2 by the through-month strip) --
@@ -431,7 +431,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     # of the WP data block (excludes TOTAL), D: effective = override-if-
     # numeric-else-auto. ``eur_actuals_through_month`` now resolves to the
     # effective cell on this sheet rather than Config!B7. See design doc
-    # ``docs/plans/2026-04-18-config-through-month-cleanup-design.md``.
+    # ``docs/plans/archived/2026-04-18-config-through-month-cleanup-design.md``.
     style_cell(ws, 1, 1, value="EUR Actuals Through Month:",
                font=HEADER_FONT, border=False)
     ws.cell(row=1, column=1).comment = sized_comment(

@@ -82,7 +82,7 @@ def _cum_hours_formula(row: int, month_col_start: int, months: int) -> str:
 
     Written on the Capacity-consumed ``cum_hours_col`` as a single helper
     so Capacity can reference one cell per row instead of rebuilding a
-    cross-sheet SUM+INDEX (see ``docs/plans/2026-04-14-t5-simplification-design.md``).
+    cross-sheet SUM+INDEX (see ``docs/plans/archived/2026-04-14-t5-simplification-design.md``).
     """
     start_cl = col_letter(month_col_start)
     end_cl = col_letter(month_col_start + months - 1)

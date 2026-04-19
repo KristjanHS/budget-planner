@@ -58,7 +58,7 @@ class TestCapacityConditionalFormatting:
         To-date block (kaizen simplification 2026-04-14 — 2 cols only):
           - 2 per person (Variance PM red < 0 on TOTAL + EU TOTAL only).
             Variance-% CF and util/ceil CF dropped per design doc
-            ``docs/plans/2026-04-14-t5-simplification-design.md``.
+            ``docs/plans/archived/2026-04-14-t5-simplification-design.md``.
         """
         from budget_planner.config import EXTERNAL_COMMITMENTS
         ws = workbook["Capacity"]

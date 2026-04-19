@@ -277,7 +277,7 @@ On every sheet with monthly data (Capacity, Plan, Actuals, Actuals-Hours, Plan-F
 - EU TOTAL per calendar year: **amber** when annual sum approaches `eu_annual_ceiling_pm`, **red** when exceeds (215-day ceiling)
 - Raw-monthly Variance-FTE band: **red** when `|variance| > CAPACITY_VARIANCE_FTE_RED`
 - Raw-monthly Actual-TOTAL utilisation vs Config Max FTE: amber/red same thresholds as planned TOTAL
-- To-date block `Variance PM` (TOTAL + EU TOTAL only): **red** when `< 0`. Per `docs/plans/2026-04-14-t5-simplification-design.md` the block was reduced to 2 cols — the prior per-WP Variance-% and to-date util/ceil CF rules were dropped as duplicates of planned-side signals.
+- To-date block `Variance PM` (TOTAL + EU TOTAL only): **red** when `< 0`. Per `docs/plans/archived/2026-04-14-t5-simplification-design.md` the block was reduced to 2 cols — the prior per-WP Variance-% and to-date util/ceil CF rules were dropped as duplicates of planned-side signals.
 
 ### Actuals Sheet
 - Negative variance: **red**

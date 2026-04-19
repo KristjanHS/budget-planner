@@ -740,7 +740,7 @@ def build_capacity_sheet(ws, team_layout, *,
     # To-date block: 2 always-visible summary columns at the far right.
     # Sits outside the raw-monthly outline group so auditors always see
     # Actual/Variance-to-date even when the monthly bands are collapsed.
-    # See docs/plans/2026-04-14-t5-simplification-design.md — the 4-col
+    # See docs/plans/archived/2026-04-14-t5-simplification-design.md — the 4-col
     # (+ util + ceil) layout was dropped because util/ceil duplicate the
     # planned-side CF signals already on this sheet.
     todate_col_start = variance_col_end + 2  # 1-col gutter after Variance
@@ -951,7 +951,7 @@ def apply_capacity_todate_formulas(
     the ``hours_actuals_through_month`` window (`'Actuals-Hours'!$D$1`): everything
     is summed up to that month inclusive.
 
-    Per design ``docs/plans/2026-04-14-t5-simplification-design.md``:
+    Per design ``docs/plans/archived/2026-04-14-t5-simplification-design.md``:
       * WP row: Actual PM reads the Actuals-Hours cum-hours helper col
         divided by hours_per_fte_month (green cross-sheet ref).
         Variance PM is blank + grey — only meaningful at person-level.

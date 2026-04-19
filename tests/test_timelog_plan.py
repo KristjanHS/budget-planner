@@ -716,3 +716,165 @@ def test_year_cols_sum_matches_assigned(recalced_assigned_path):
 def _read_config(wb):
     from budget_planner.reader import read_config_sheet
     return read_config_sheet(wb["Config"])
+
+
+# ── Vacation-month model (Phase 2 enhancements) ─────────────────────────────
+
+
+def _vacation_project_months(project_start, project_months: int, vac_cal_month: int) -> set[int]:
+    """Return 1-indexed project months whose calendar month == vac_cal_month."""
+    from dateutil.relativedelta import relativedelta
+    out: set[int] = set()
+    for i in range(project_months):
+        d = project_start + relativedelta(months=i)
+        if d.month == vac_cal_month:
+            out.add(i + 1)
+    return out
+
+
+def test_vacation_config_scalar(assigned_wb):
+    """`vacation_month` named range resolves to Config!$B$<row>, default 'Jul'."""
+    assert "vacation_month" in assigned_wb.defined_names
+    dn = assigned_wb.defined_names["vacation_month"]
+    dests = list(dn.destinations)
+    assert len(dests) == 1
+    sheet, ref = dests[0]
+    assert sheet == "Config"
+    cfg = assigned_wb["Config"]
+    val = cfg[ref.replace("$", "")].value
+    # Default fixture builds with default project params → vacation = "Jul".
+    assert val == "Jul", f"expected default vacation_month 'Jul', got {val!r}"
+
+
+def test_num_vacation_months_literal(assigned_wb):
+    """`num_vacation_months` Config literal matches count of July months in span."""
+    assert "num_vacation_months" in assigned_wb.defined_names
+    params, _wps, _sched = _read_config(assigned_wb)
+    dn = assigned_wb.defined_names["num_vacation_months"]
+    dests = list(dn.destinations)
+    assert len(dests) == 1
+    _sheet, ref = dests[0]
+    cfg = assigned_wb["Config"]
+    val = cfg[ref.replace("$", "")].value
+    expected = len(_vacation_project_months(params["start"], params["months"], 7))
+    assert val == expected, (
+        f"num_vacation_months: expected {expected}, got {val!r}"
+    )
+
+
+def test_vacation_cells_locked(assigned_wb, tlp):
+    """Every July cell across person rows is '', has VACATION_FILL, locked=True."""
+    from budget_planner.styles import VACATION_FILL
+    params, _wps, _sched = _read_config(assigned_wb)
+    m_start = TIMELOG_MONTH_COL_START
+    vac_months = _vacation_project_months(params["start"], params["months"], 7)
+    expected_fill_rgb = (VACATION_FILL.fgColor.rgb or "").upper()
+
+    grid_rows = list(_iter_person_rows(tlp, _grid_person_first_row(tlp)))
+    assert grid_rows, "no person rows in grid"
+    assert vac_months, "fixture span has no July months — vacation tier untested"
+
+    checked_vac = 0
+    checked_nonvac = 0
+    for r in grid_rows:
+        for month_num in vac_months:
+            col = m_start + month_num - 1
+            cell = tlp.cell(r, col)
+            assert cell.value in (None, ""), (
+                f"row {r} col {col} (month {month_num}): vacation cell "
+                f"must be empty, got {cell.value!r}"
+            )
+            rgb = (cell.fill.fgColor.rgb or "").upper() if cell.fill and cell.fill.fgColor else ""
+            assert rgb == expected_fill_rgb, (
+                f"row {r} col {col}: expected VACATION_FILL {expected_fill_rgb}, got {rgb}"
+            )
+            assert cell.protection.locked is True, (
+                f"row {r} col {col}: vacation cell must be locked=True"
+            )
+            checked_vac += 1
+        # Bystander: at least one non-vacation in-window cell on the same row
+        # must NOT have VACATION_FILL — proves the fill is vacation-specific.
+        for mi in range(params["months"]):
+            month_num = mi + 1
+            if month_num in vac_months:
+                continue
+            cell = tlp.cell(r, m_start + mi)
+            rgb = (cell.fill.fgColor.rgb or "").upper() if cell.fill and cell.fill.fgColor else ""
+            if rgb == expected_fill_rgb:
+                pytest.fail(
+                    f"row {r} col {m_start + mi} (month {month_num}): "
+                    "non-vacation cell incorrectly carries VACATION_FILL"
+                )
+            checked_nonvac += 1
+            break
+    assert checked_vac > 0 and checked_nonvac > 0
+
+
+def test_pool_formula_accounts_for_vacation(tlp):
+    """Pool formula on PER-PERSON SUMMARY col C references num_vacation_months."""
+    first = _summary_person_first_row(tlp)
+    pool_val = str(tlp.cell(first, 3).value or "")
+    assert pool_val.startswith("=ROUND("), pool_val
+    assert "num_vacation_months" in pool_val, (
+        f"Pool formula must subtract num_vacation_months, got {pool_val!r}"
+    )
+    # Anti-assertion: the pre-enhancement form (plain multiply) is gone.
+    assert "project_months,0)" not in pool_val or "-num_vacation_months" in pool_val
+
+
+def test_pool_value_after_recalc(recalced_assigned_path):
+    """Recalced Pool = round(max_fte × (project_months − num_vacation_months))."""
+    wb = load_workbook(recalced_assigned_path, data_only=True)
+    ws = wb[SHEET_TIMELOG_PLAN]
+    cfg = wb["Config"]
+    params, _wps, _sched = _read_config(wb)
+    num_vac = len(_vacation_project_months(params["start"], params["months"], 7))
+    available_months = params["months"] - num_vac
+
+    # Walk roster → max_fte, then match PER-PERSON SUMMARY row.
+    team = _read_team(wb)
+    name_to_fte = {m["name"]: float(m["max_fte"]) for m in team}
+
+    summary_rows = list(_iter_person_rows(ws, _summary_person_first_row(ws)))
+    assert summary_rows, "no summary rows"
+
+    cfg_ws = cfg  # silence pyright
+    checked = 0
+    for r in summary_rows:
+        col_a = ws.cell(r, 1).value
+        # Resolve cross-ref to the Config person name.
+        name: str | None = None
+        if isinstance(col_a, str) and col_a.startswith("="):
+            import re as _re
+            m = _re.match(r"=Config!A(\d+)", col_a)
+            if m:
+                name = str(cfg_ws.cell(int(m.group(1)), 1).value or "")
+        else:
+            name = str(col_a or "")
+        if not name or name not in name_to_fte:
+            continue
+        expected = round(name_to_fte[name] * available_months)
+        actual = ws.cell(r, 3).value
+        assert actual == expected, (
+            f"Pool for {name!r}: expected {expected}, got {actual!r} "
+            f"(max_fte={name_to_fte[name]}, available={available_months})"
+        )
+        checked += 1
+    assert checked > 0, "no pool cells validated — recalc didn't populate"
+    wb.close()
+
+
+def test_solver_never_places_wp_in_vacation_cell(assigned_wb, tlp):
+    """TIMELOG GRID: no WP code lands in any July cell across all person rows."""
+    params, _wps, _sched = _read_config(assigned_wb)
+    vac_months = _vacation_project_months(params["start"], params["months"], 7)
+    assert vac_months, "no July months in span — vacation suppression untested"
+    m_start = TIMELOG_MONTH_COL_START
+
+    violations: list[tuple[int, int, object]] = []
+    for r in _iter_person_rows(tlp, _grid_person_first_row(tlp)):
+        for month_num in vac_months:
+            v = tlp.cell(r, m_start + month_num - 1).value
+            if v not in (None, ""):
+                violations.append((r, month_num, v))
+    assert not violations, f"solver placed codes in vacation cells: {violations}"

@@ -657,7 +657,11 @@ def test_through_month_named_ranges_point_at_actuals_sheets(tmp_path):
 # ── Version stamp (post-v2 follow-up) ──
 
 def test_version_stamp_default_and_named_range():
-    """Default (no version passed) is 'unknown'; named range points at B7."""
+    """Default (no version passed) is 'unknown'; named range points at B9.
+
+    Row shifted from B7 to B9 in the 2026-04-19 Timelog Plan enhancements
+    (Vacation Month + Num Vacation Months rows inserted before Version Stamp).
+    """
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -668,14 +672,14 @@ def test_version_stamp_default_and_named_range():
     # Proves the builder always writes a non-empty string so auditors see
     # a concrete stamp even when the orchestrator doesn't pass git context
     # (e.g. build_from_fingerprint on the synthetic-rebuild path).
-    assert ws.cell(7, 1).value == "Version Stamp"
-    assert ws.cell(7, 2).value == "unknown"
+    assert ws.cell(9, 1).value == "Version Stamp"
+    assert ws.cell(9, 2).value == "unknown"
     assert "version_stamp" in wb.defined_names
-    assert wb.defined_names["version_stamp"].attr_text == "Config!$B$7"
+    assert wb.defined_names["version_stamp"].attr_text == "Config!$B$9"
 
 
 def test_version_stamp_explicit_value_round_trips():
-    """Explicit value threaded from the orchestrator lands in B7 verbatim."""
+    """Explicit value threaded from the orchestrator lands in B9 verbatim."""
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -686,7 +690,7 @@ def test_version_stamp_explicit_value_round_trips():
     )
     # The value is written as a literal string (not as a formula starting
     # with "=") — the cell is audit metadata, not a derived formula.
-    assert ws.cell(7, 2).value == "v1.2.3-4-gabcdef1-dirty"
+    assert ws.cell(9, 2).value == "v1.2.3-4-gabcdef1-dirty"
 
 
 def test_resolve_version_stamp_fallback_on_git_failure(monkeypatch):

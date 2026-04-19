@@ -149,6 +149,9 @@ def default_project_params():
         "months": PROJECT_MONTHS,
         "rate": DEFAULT_RATE,
         "eu_ceiling_pm": EU_ANNUAL_CEILING_PM,
+        # Uniform vacation month: 7 = July. Matches the programme enhancement doc
+        # default; readers fall back to 7 when the Config scalar is missing.
+        "vacation_month_num": 7,
     }
 
 

@@ -409,3 +409,71 @@ def test_greedy_stops_at_eur_ceiling_with_mixed_rates():
     # Overshoot bound = max(rate) - 1 across placing persons.
     max_rate = max(p.rate_eur_per_pm for p in persons)
     assert placed_eur <= 5 + (max_rate - 1)
+
+
+# ---------------------------------------------------------------------------
+# 13. Vacation months (2026-04-19 enhancements)
+# ---------------------------------------------------------------------------
+
+
+def test_solver_skips_vacation():
+    """Greedy never places a WP in any month inside a Person.vacation_months set."""
+    # WP wants every month filled; all months in window. Alice has months 3 and 7
+    # as vacation — solver must skip both, placing at most 8 cells (10 - 2).
+    persons = [
+        Person(
+            "Alice", priority=1, pool=10, rate_eur_per_pm=1,
+            vacation_months=frozenset({3, 7}),
+        ),
+    ]
+    wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=10)]
+    windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
+    assigned = solve(persons, wps, windows, project_months=10)
+    placed_months = {m for m, code in assigned["Alice"].items() if code == "WP1"}
+    # Vacation months must never appear.
+    assert 3 not in placed_months
+    assert 7 not in placed_months
+    # Bystander: non-vacation months are placed (solver didn't skip everything).
+    assert len(placed_months) >= 1
+    assert placed_months.issubset({1, 2, 4, 5, 6, 8, 9, 10})
+
+
+def test_switch_reduction_respects_vacation():
+    """Switch-reduction pass won't swap a cell into or out of a vacation month."""
+    persons = [
+        Person(
+            "Alice", priority=1, pool=4, rate_eur_per_pm=1,
+            vacation_months=frozenset({4}),
+        ),
+        Person(
+            "Bob", priority=1, pool=4, rate_eur_per_pm=1,
+            vacation_months=frozenset({4}),
+        ),
+    ]
+    wps = [
+        WP("WP1", active_start=1, active_end=5, ceiling_eur=4),
+        WP("WP2", active_start=1, active_end=5, ceiling_eur=4),
+    ]
+    windows = [
+        PersonWPWindow("Alice", "WP1", 1, 5),
+        PersonWPWindow("Alice", "WP2", 1, 5),
+        PersonWPWindow("Bob", "WP1", 1, 5),
+        PersonWPWindow("Bob", "WP2", 1, 5),
+    ]
+    # Pre-seed an assignment that would tempt the pass to swap across month 4.
+    pre_assigned: Assignment = {
+        "Alice": {1: "WP1", 2: "WP2", 3: "WP1", 4: None, 5: "WP2"},
+        "Bob":   {1: "WP2", 2: "WP1", 3: "WP2", 4: None, 5: "WP1"},
+    }
+    out = switch_reduction_pass(
+        pre_assigned, persons, wps, windows, project_months=5,
+    )
+    assert out["Alice"][4] is None, "vacation month must stay empty for Alice"
+    assert out["Bob"][4] is None, "vacation month must stay empty for Bob"
+
+
+def test_vacation_months_default_empty():
+    """Person instantiated without vacation_months has an empty frozenset default
+    so existing callers (and legacy tests) don't need to pass the field."""
+    p = Person("Alice", priority=1, pool=1, rate_eur_per_pm=1)
+    assert p.vacation_months == frozenset()

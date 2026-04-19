@@ -27,6 +27,8 @@ ConfigParamRows = TypedDict("ConfigParamRows", {
     "FTE Rate (EUR)": int,
     "EU Annual Ceiling (PM/FTE/year)": int,
     "Hours per FTE Month": int,
+    "Vacation Month": int,
+    "Num Vacation Months": int,
     "Version Stamp": int,
 })
 

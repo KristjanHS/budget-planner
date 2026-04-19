@@ -41,6 +41,32 @@ from budget_planner.styles import (
 )
 
 
+_MONTH_ABBREVS = (
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+
+def _month_num_to_abbrev(m: int) -> str:
+    """Convert 1-indexed calendar month to a three-letter abbreviation."""
+    return _MONTH_ABBREVS[m - 1]
+
+
+def _count_vacation_months_in_span(vac_month_num: int, project_start, project_months: int) -> int:
+    """Count calendar-vacation months (e.g. every July) inside the project span.
+
+    ``vac_month_num`` is a 1-indexed calendar month (1..12). ``project_start``
+    is a datetime; ``project_months`` is the inclusive span from month 1.
+    """
+    from dateutil.relativedelta import relativedelta
+    count = 0
+    for i in range(project_months):
+        d = project_start + relativedelta(months=i)
+        if d.month == vac_month_num:
+            count += 1
+    return count
+
+
 def _apply_header_comments(ws, header_row: int, comments: dict[int, str]) -> None:
     """Attach explanatory comments to header cells. Keys are 1-based column numbers."""
     for col, text in comments.items():
@@ -663,7 +689,18 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     if external_commitments is None:
         external_commitments = []
 
-    # ── Section 1: Project Parameters (rows 1-5) ──
+    # ── Section 1: Project Parameters ──
+    # Vacation month: "Jul" (str abbreviation) is blue-input; Num Vacation
+    # Months is a builder-written literal (Rule 3 carve-out, version_stamp
+    # precedent) = count of calendar-vacation-months falling inside the
+    # [project_start, project_start + months − 1] window.
+    vacation_month_num = int(project_params.get("vacation_month_num", 7))
+    vacation_month_str = _month_num_to_abbrev(vacation_month_num)
+    num_vacation_months = _count_vacation_months_in_span(
+        vacation_month_num,
+        project_params["start"],
+        int(project_params["months"]),
+    )
     param_defs = [
         ("Project Title", project_params["title"], None, None),
         ("Project Start", project_params["start"], "MMM YYYY", None),
@@ -671,6 +708,8 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         ("FTE Rate (EUR)", None, "€#,##0", None),  # value set later as formula
         ("EU Annual Ceiling (PM/FTE/year)", project_params.get("eu_ceiling_pm", 12.0), "0.00", None),
         ("Hours per FTE Month", 143, "0", None),
+        ("Vacation Month", vacation_month_str, None, None),
+        ("Num Vacation Months", num_vacation_months, "0", None),
         # Code-written audit receipt — overwritten on every init/rebuild.
         # Default "unknown" survives when no git context is passed in.
         ("Version Stamp", version_stamp or "unknown", None, None),
@@ -687,7 +726,9 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         "FTE Rate (EUR)": 4,
         "EU Annual Ceiling (PM/FTE/year)": 5,
         "Hours per FTE Month": 6,
-        "Version Stamp": 7,
+        "Vacation Month": 7,
+        "Num Vacation Months": 8,
+        "Version Stamp": 9,
     }
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
         assert param_rows.get(label) == i, (
@@ -700,9 +741,11 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         if label == "FTE Rate (EUR)":
             # FTE Rate is a formula — styled as BLACK_FORMULA, set after grade table
             style_cell(ws, i, 2, font=BLACK_FORMULA, fmt=fmt, border=False)
-        elif label == "Version Stamp":
-            # Code-written audit receipt — black = do-not-edit, but not a formula
-            # (see label comment below). Overwritten by builder on every rebuild.
+        elif label in ("Version Stamp", "Num Vacation Months"):
+            # Code-written literal (Rule 3 carve-out). Black = do-not-edit.
+            # Version Stamp is audit metadata; Num Vacation Months is a
+            # build-time derivation from vacation_month + start + months.
+            # Both are overwritten by the builder on every rebuild.
             style_cell(ws, i, 2, value=value, font=BLACK_FORMULA, fmt=fmt, border=False)
         else:
             font = TITLE_FONT if i == 1 else BLUE_INPUT
@@ -731,6 +774,20 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
             "full-time effort. EU/programme defaults to 143 h/month. Used to "
             "convert hours logged on Actuals-Hours into person-months on "
             "Capacity and into EUR on Plan-Forecast. Blue = user input."
+        ),
+        param_rows["Vacation Month"]: (
+            "Calendar month nobody logs to the project (vacation). "
+            "Three-letter English abbreviation: Jan, Feb, Mar, Apr, May, "
+            "Jun, Jul, Aug, Sep, Oct, Nov, Dec. Default 'Jul'. Uniform "
+            "across all team members — see enhancement design doc for "
+            "the per-(person, year) forward-compat path. Blue = user input."
+        ),
+        param_rows["Num Vacation Months"]: (
+            "Count of calendar-vacation months falling inside the project "
+            "span. Recomputed on rebuild from Vacation Month + Project "
+            "Start + Project Months. Referenced by the Timelog Plan Pool "
+            "formula: Pool = max_fte × (Project Months − Num Vacation "
+            "Months). Black = do-not-edit (overwritten on every rebuild)."
         ),
         param_rows["Version Stamp"]: (
             "Commit identifier of the code that produced this workbook. "
@@ -814,6 +871,17 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     wb.defined_names.add(DefinedName(
         "version_stamp",
         attr_text=f"{SHEET_CONFIG}!$B${version_stamp_row}",
+    ))
+
+    vacation_month_row = param_rows["Vacation Month"]
+    wb.defined_names.add(DefinedName(
+        "vacation_month",
+        attr_text=f"{SHEET_CONFIG}!$B${vacation_month_row}",
+    ))
+    num_vacation_months_row = param_rows["Num Vacation Months"]
+    wb.defined_names.add(DefinedName(
+        "num_vacation_months",
+        attr_text=f"{SHEET_CONFIG}!$B${num_vacation_months_row}",
     ))
 
     # Grade table named range (2-column: grade name + rate)

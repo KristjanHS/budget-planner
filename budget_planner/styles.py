@@ -31,6 +31,11 @@ CF_GREY_FILL = PatternFill(bgColor="FFD9D9D9")
 # (out-of-project-window). GREY_FILL is the in-window-but-empty marker.
 DARK_GREY_FILL = PatternFill("solid", fgColor="A6A6A6")
 
+# Timelog Plan: pale yellow for vacation-month grid cells. Distinct tier —
+# direct fill (no CF), locked cells, always empty. See
+# `docs/plans/2026-04-19-timelog-plan-enhancements-design.md` §3.4.
+VACATION_FILL = PatternFill("solid", fgColor="FFF2CC")
+
 # Timelog Plan: pastel palette cycled across WPs for the canvas background.
 # Cell-formatting variant (fgColor; used if pre-fill is preferred).
 PASTEL_FILLS = [

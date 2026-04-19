@@ -283,8 +283,10 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
     Returns:
         Tuple of (project_params, work_packages, wp_schedule) where:
         - project_params: dict with keys 'title', 'start', 'months', 'rate',
-          'eu_ceiling_pm'. ``rate`` is a numeric fallback only — the builder
-          always regenerates B4 from the live grade/roster layout.
+          'eu_ceiling_pm', 'vacation_month_num'. ``rate`` is a numeric
+          fallback only — the builder always regenerates B4 from the live
+          grade/roster layout. ``vacation_month_num`` is the 1-indexed
+          calendar month nobody logs to the project (default 7 = July).
         - work_packages: list of dicts with keys 'id', 'name', 'fte', 'rate',
           'rate_raw'
         - wp_schedule: list of dicts with keys 'id', 'start', 'end', 'type'
@@ -296,6 +298,9 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
         "Project Months": ("months", lambda v: int(v or 60)),
         "FTE Rate": ("rate", _parse_fte_rate),
         "EU Annual Ceiling": ("eu_ceiling_pm", lambda v: float(v or 12.0)),
+        # "Vacation Month" is optional — missing on pre-enhancements workbooks.
+        # One-shot migration: reader resolves via named range first (below),
+        # then falls back to default 7 (July).
     }
     project_params: dict = {}
     matched_keys: set[str] = set()
@@ -312,6 +317,9 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
     for prefix, (key, _) in _param_map.items():
         if key not in project_params:
             raise ValueError(f"Config sheet missing param row matching '{prefix}'")
+
+    # Vacation month — resolve via named range (preferred) or default to July.
+    project_params["vacation_month_num"] = _read_vacation_month_num(ws)
 
     # WP Budget table — find "WP BUDGET" section header
     wp_section = _find_header_row(ws, SECTION_HEADER_LABELS["wp_budget"])
@@ -1370,6 +1378,50 @@ def read_timelog_plan(wb, project_months: int) -> dict:
                 grid[(name, mi + 1)] = str(val)
 
     return {"grid": grid, "resolve_flag": resolve_flag}
+
+
+_MONTH_ABBREV_TO_NUM = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _read_vacation_month_num(ws) -> int:
+    """Resolve the ``vacation_month`` named range to a 1-indexed month int.
+
+    Defaults to 7 (July) when the named range is missing, the cell is blank,
+    or the value is unparseable — this is the one-shot migration for
+    pre-enhancement workbooks.
+    """
+    wb = ws.parent
+    if wb is None:
+        return 7
+    try:
+        dn = wb.defined_names["vacation_month"]
+    except (KeyError, TypeError):
+        return 7
+    if dn is None:
+        return 7
+    try:
+        destinations = list(dn.destinations)
+    except Exception:
+        return 7
+    if not destinations:
+        return 7
+    sheet_name, ref = destinations[0]
+    if sheet_name not in wb.sheetnames:
+        return 7
+    try:
+        val = wb[sheet_name][ref.replace("$", "")].value
+    except Exception:
+        return 7
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        m = int(val)
+        return m if 1 <= m <= 12 else 7
+    if isinstance(val, str):
+        s = val.strip().lower()[:3]
+        return _MONTH_ABBREV_TO_NUM.get(s, 7)
+    return 7
 
 
 def _read_resolve_flag(wb) -> bool:

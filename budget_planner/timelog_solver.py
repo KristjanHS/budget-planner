@@ -49,12 +49,18 @@ class Person:
         rate_eur_per_pm: Integer EUR cost per 1.0-FTE month for this
             person. Used by the greedy pass for €-accounting and by Pass 2
             as a swap-eligibility key.
+        vacation_months: Project-1-indexed month numbers this person must not
+            be assigned to (vacation). Default empty. For the current uniform-
+            July model this is identical across every Person; the per-person
+            field is what keeps the solver contract stable when a future
+            design ships per-(person, year) overrides.
     """
 
     name: str
     priority: int
     pool: int
     rate_eur_per_pm: int
+    vacation_months: frozenset[int] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -190,6 +196,7 @@ def greedy_pass(
     """Run the greedy fill pass. Pure function; does not mutate inputs."""
     windows_idx = _build_windows_index(person_wp_windows)
     pool = {p.name: p.pool for p in persons}
+    vacations = {p.name: p.vacation_months for p in persons}
     assigned = _empty_assignment(persons, project_months)
 
     # WPs in earliest-close order; code as deterministic tiebreaker.
@@ -235,6 +242,9 @@ def greedy_pass(
                 for m in range(lo, hi + 1):
                     if pool[p.name] <= 0:
                         break
+                    if m in vacations[p.name]:
+                        # Vacation month for this person — never placed.
+                        continue
                     if assigned[p.name][m] is None:
                         assigned[p.name][m] = wp.code
                         pool[p.name] -= 1
@@ -314,6 +324,18 @@ def switch_reduction_pass(
                     if (
                         persons_by_name[p1_name].rate_eur_per_pm
                         != persons_by_name[p2_name].rate_eur_per_pm
+                    ):
+                        continue
+                    # Vacation guard: swap eligibility requires neither m nor
+                    # m+1 to fall in either person's vacation set. For the
+                    # uniform-July model this is symmetric; the per-person
+                    # check is what keeps the contract stable once a future
+                    # design ships per-(person, year) overrides.
+                    vac1 = persons_by_name[p1_name].vacation_months
+                    vac2 = persons_by_name[p2_name].vacation_months
+                    if (
+                        m in vac1 or m + 1 in vac1
+                        or m in vac2 or m + 1 in vac2
                     ):
                         continue
                     b1 = state[p2_name][m]

@@ -33,7 +33,7 @@ def build_<sheet>_sheet(ws, wb, ..., *, project_params=None, work_packages=None,
 
 ### Per-Sheet Notes
 
-**Config** (`config_sheet.py`): Rows 1-6 blue-input project params (Title, Start, Months, FTE Rate, EU Ceiling, Hours/FTE Month), then row 7 black-formula-styled `Version Stamp` (code-written audit cell overwritten on every init/rebuild via `_resolve_version_stamp()` in `workbook.py` — `git describe --always --dirty`, fallback `"unknown"`), then WP table (`tbl_WorkPackages`), then Team Roster section. Creates named ranges `project_start` (B2), `fte_rate` (B4), `version_stamp` (B7). The through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) are registered by the Actuals / Actuals-Hours builders against their own Row 1 override strips, not Config — see the per-sheet paragraphs below. Returns `config_layout` with `wp_first_row`, `wp_last_row`, `person_rows`.
+**Config** (`config_sheet.py`): Rows 1-6 blue-input project params (Title, Start, Months, FTE Rate, EU Ceiling, Hours/FTE Month); row 7 `Vacation Month` blue-input string abbreviation (default `"Jul"`); row 8 `Num Vacation Months` black-formula-styled builder-written literal (count of calendar-vacation months in the project span — Rule 3 carve-out, same pattern as Version Stamp); row 9 black-formula-styled `Version Stamp` (code-written audit cell overwritten on every init/rebuild via `_resolve_version_stamp()` in `workbook.py` — `git describe --always --dirty`, fallback `"unknown"`), then WP table (`tbl_WorkPackages`), then Team Roster section. Creates named ranges `project_start` (B2), `fte_rate` (B4), `vacation_month` (B7), `num_vacation_months` (B8), `version_stamp` (B9). The through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) are registered by the Actuals / Actuals-Hours builders against their own Row 1 override strips, not Config — see the per-sheet paragraphs below. Returns `config_layout` with `wp_first_row`, `wp_last_row`, `person_rows`.
 
 **Plan** (`plan.py`): Two-phase build. Phase 1 creates structure with empty FTE cells. Phase 2 (`_apply_planned_formulas()`) fills cells with `=SUM(Capacity!...)` after Capacity is built. Has validation columns: Sum, Budget FTE, Variance.
 
@@ -96,7 +96,7 @@ Actuals cell =Plan!A6 -> Plan!A6 =Config!A8 -> Config!A8 = "WP1"
 
 | Function | Extracts | Key technique |
 |----------|----------|---------------|
-| `read_config_sheet(ws)` | Project params (rows 1-6 blue inputs + row 7 version stamp), WP table (rows 8+). Through-month values are read from the Actuals / Actuals-Hours sheets, not Config. | Direct cell reads + named-range map |
+| `read_config_sheet(ws)` | Project params (rows 1-6 blue inputs, row 7 vacation month, row 8 derived num vacation months, row 9 version stamp), WP table (rows 10+). Through-month values are read from the Actuals / Actuals-Hours sheets, not Config. | Direct cell reads + named-range map |
 | `read_actuals_override(ws)` | Optional integer at row 1 col B (blue through-month override; shared signature — caller passes either the Actuals or Actuals-Hours worksheet); returns `None` when blank/non-numeric so the effective cell falls through to the auto-derived scan in C1 | Typed cell read |
 | `read_team_from_config(ws)` | Team roster (name + max_fte) | Scans from "TEAM ROSTER" header |
 | `read_capacity_sheet(ws, ...)` | External commitments, per-person monthly FTE | Person header detection by bold + fill `2F5496` |

@@ -67,6 +67,7 @@ from budget_planner.styles import (
     SECTION_FILL,
     SECTION_FONT,
     TITLE_FONT,
+    VACATION_FILL,
     col_letter,
     sized_comment,
     style_cell,
@@ -166,6 +167,11 @@ def build_timelog_plan_sheet(
           resolve_flag_cell (coordinate string).
     """
     project_months: int = project_params["months"]
+    project_start = project_params["start"]
+    vacation_month_num = int(project_params.get("vacation_month_num", 7))
+    vacation_months_project = _vacation_months_in_span(
+        vacation_month_num, project_start, project_months,
+    )
 
     # ── Tab appearance ──
     ws.sheet_properties.tabColor = "FF8C00"  # orange — distinguishes from existing tabs
@@ -183,8 +189,12 @@ def build_timelog_plan_sheet(
         Person(
             name=m["name"],
             priority=int(m.get("priority", 2)),
-            pool=round(float(m["max_fte"]) * project_months),
+            pool=round(
+                float(m["max_fte"])
+                * (project_months - len(vacation_months_project))
+            ),
             rate_eur_per_pm=int(round(grade_rates[m["grade"]])),
+            vacation_months=vacation_months_project,
         )
         for m in sorted_team
     ]
@@ -411,12 +421,21 @@ def build_timelog_plan_sheet(
         for mi in range(project_months):
             month_num = mi + 1
             col = month_col_start + mi
-            wp_code = person_assignment.get(month_num)
+            is_vacation = month_num in vacation_months_project
+            # Defensive: if a preserved-grid cell lands inside a vacation
+            # month (pre-enhancement workbook migrating forward), drop the
+            # WP code — vacation cells are always empty + locked.
+            wp_code = (
+                None if is_vacation else person_assignment.get(month_num)
+            )
             in_any_window = any(
                 start <= month_num <= end for (_wp, start, end)
                 in windows_for_person
             )
-            _write_grid_cell(ws, grid_row, col, wp_code, in_any_window)
+            _write_grid_cell(
+                ws, grid_row, col, wp_code, in_any_window,
+                is_vacation=is_vacation,
+            )
 
         # PER-PERSON SUMMARY: Person xref + 8 metric cols.
         _write_person_col_a(ws, summary_row, name, cfg_row)
@@ -823,12 +842,29 @@ def _grid_range_ref(
     )
 
 
+def _vacation_months_in_span(
+    vac_month_num: int, project_start, project_months: int,
+) -> frozenset[int]:
+    """Return project-1-indexed month numbers whose calendar month == vac_month_num.
+
+    E.g. project_start = Nov 2026, project_months = 14, vac_month_num = 7 →
+    {9} (every July inside the span).
+    """
+    out: set[int] = set()
+    for i in range(project_months):
+        d = project_start + relativedelta(months=i)
+        if d.month == vac_month_num:
+            out.add(i + 1)
+    return frozenset(out)
+
+
 def _write_grid_cell(
     ws: Worksheet,
     row: int,
     col: int,
     wp_code: str | None,
     in_any_window: bool,
+    is_vacation: bool = False,
 ) -> None:
     """Write a single merged-grid cell.
 
@@ -837,9 +873,21 @@ def _write_grid_cell(
     but-empty cells carry GREY_FILL. All cells are unlocked and BLUE_INPUT —
     this band IS the edit surface.
 
+    Vacation-month cells are an exception: always empty string, VACATION_FILL
+    (pale yellow), Protection(locked=True), default font (not BLUE_INPUT).
+    Solver never places WP codes there; on rebuild with resolve_flag=FALSE,
+    any preserved WP code in a vacation cell is discarded (one-shot migration).
+
     Rule 3 carve-out: cells hold literal strings (WP codes), not formulas,
     but styled BLUE_INPUT because the user types here.
     """
+    if is_vacation:
+        cell = style_cell(
+            ws, row, col, value="",
+            fill=VACATION_FILL, alignment=CENTER,
+        )
+        cell.protection = Protection(locked=True)
+        return
     if wp_code is not None:
         cell = style_cell(
             ws, row, col, value=wp_code,
@@ -1003,11 +1051,14 @@ def _write_person_summary_metrics(
         f'=COUNTIF({grid_row_range},"WP*")'
     )
 
-    # Col C: Pool = ROUND(max_fte * project_months, 0). Green xref.
+    # Col C: Pool = ROUND(max_fte * (project_months − num_vacation_months), 0).
+    # Green xref. num_vacation_months is a Config named range (builder-written
+    # literal, Rule 3 carve-out — see `docs/plans/2026-04-19-timelog-plan-
+    # enhancements-design.md` §3.4).
     if cfg_row is not None:
         max_fte_ref = cell_ref(SHEET_CONFIG, cfg_row, 2)
         style_cell(ws, row, c0 + 1, font=GREEN_XREF, fmt="0").value = (
-            f"=ROUND({max_fte_ref}*{project_months_ref},0)"
+            f"=ROUND({max_fte_ref}*({project_months_ref}-num_vacation_months),0)"
         )
     else:
         style_cell(ws, row, c0 + 1, value=0, font=BLACK_FORMULA, fmt="0")

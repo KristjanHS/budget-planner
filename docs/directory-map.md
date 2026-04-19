@@ -35,6 +35,8 @@ tests/
   test_styles.py       # style_cell() unlocked param (for when protection is re-enabled)
   test_trends.py       # Trends sheet: burn rate, chart, person load, CF
   test_e2e.py          # End-to-end generation + LibreOffice recalc
+  test_timelog_resolve_flag.py  # Timelog Plan resolve_flag toggle: TRUE wipes edits, FALSE preserves, missing defaults TRUE
+  test_tab_order.py    # Tab positions 1-3: Config, Timelog Plan, Actuals-Hours
 scripts/
   recalc.py            # LibreOffice recalculation script
   office/              # LibreOffice helpers

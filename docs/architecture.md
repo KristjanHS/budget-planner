@@ -76,7 +76,7 @@ sequenceDiagram
   Note right of PL: Patches Plan with SUM(Capacity!...)
   WB->>TR: Skeleton: current_month input + named range
   WB->>TLP: build_timelog_plan_sheet(config_layout, ...)
-  Note right of TLP: Solver writes Proposed grid;<br/>Assigned grid starts as =Proposed
+  Note right of TLP: Solver writes merged grid on init;<br/>rebuild gated by timelog_resolve_flag
   WB->>AC: build_actuals_sheet(plan_layout)
   Note right of AC: Returns actuals_layout
   WB->>SM: build_summary_sheet(plan_layout, actuals_layout)

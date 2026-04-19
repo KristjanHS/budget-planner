@@ -314,10 +314,10 @@ def _build_all_sheets(
     )
 
     # Stage 5b — Timelog Plan (consumes config_layout + Trends-stub
-    # ``current_month`` named range used by per-WP "Window months remaining").
-    # Independent of Actuals/Hours/Forecast — built here so its tab can sit
-    # right after Plan in the user-facing tab order (see move_sheet calls
-    # at the end of this function).
+    # ``current_month`` named range used by per-WP "Burn rate needed" wallclock
+    # denominator). Independent of Actuals/Hours/Forecast — built here so its
+    # tab can sit right after Config in the user-facing tab order (see
+    # move_sheet calls at the end of this function).
     timelog_plan_ws = wb.create_sheet(SHEET_TIMELOG_PLAN)
     # `preserved_timelog["grid"]` was pruned in `rebuild_workbook` before
     # reaching here. When resolve_flag is False the builder writes it verbatim;

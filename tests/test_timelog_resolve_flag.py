@@ -83,6 +83,20 @@ def test_flag_true_wipes_edits(tmp_path: Path):
     ws3 = wb3[SHEET_TIMELOG_PLAN]
     # Solver re-ran → edit must not survive.
     assert ws3.cell(row, col).value != "WP0_EDIT"
+    # Bystander: rebuild must have produced a real grid — at least one solver-
+    # placed WP code on the same row. Without this the test passes even if the
+    # rebuilt grid is entirely empty (edit removed because nothing was written).
+    row_cells = [
+        ws3.cell(row, TIMELOG_MONTH_COL_START + mi).value
+        for mi in range(months)
+    ]
+    solver_placed = [
+        v for v in row_cells
+        if isinstance(v, str) and v.strip() and v != "WP0_EDIT"
+    ]
+    assert len(solver_placed) >= 1, (
+        f"flag=TRUE should re-run solver; row {row} has no solver output: {row_cells!r}"
+    )
     wb3.close()
 
 

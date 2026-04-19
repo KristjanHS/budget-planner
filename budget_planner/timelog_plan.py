@@ -8,7 +8,7 @@ Layout (v2, 2026-04-19 — supersedes v1's PROPOSED + ASSIGNED twin bands):
   1. Banner (row 1)
   2. Traffic lights + resolve-flag toggle (row 2)
   3. blank spacer
-  4. PER-WP SUMMARY band (8 base cols; year-col extension in Phase 3)
+  4. PER-WP SUMMARY band (8 base cols + one EUR col per calendar year)
      blank spacer
   5. TIMELOG GRID — single editable band, literal WP codes + empty strings
      blank spacer

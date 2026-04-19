@@ -560,3 +560,117 @@ def test_last_log_last_non_empty_recalc(recalced_assigned_path):
     # Extra bystander: project_last_header is defined (sanity).
     assert project_last_header is not None
     wb.close()
+
+
+# ── PER-WP SUMMARY: year cols (Phase 3) ─────────────────────────────────────
+
+
+def _expected_year_groups(project_start, project_months: int) -> list[tuple[int, int, int]]:
+    """Mirror of _calendar_year_groups: (year, first_month, last_month) 1-indexed."""
+    from dateutil.relativedelta import relativedelta
+    out: list[tuple[int, int, int]] = []
+    m = 0
+    while m < project_months:
+        cal_date = project_start + relativedelta(months=m)
+        months_left_in_year = 12 - cal_date.month + 1
+        span = min(months_left_in_year, project_months - m)
+        out.append((cal_date.year, m + 1, m + span))
+        m += span
+    return out
+
+
+def test_year_cols_count_and_headers(tlp, assigned_wb):
+    """Year col count = distinct calendar years spanned; headers = Y{yyyy} €."""
+    params, _wps, _sched = _read_config(assigned_wb)
+    months = params["months"]
+    groups = _expected_year_groups(params["start"], months)
+
+    hdr_row = _find_section_title_row(tlp, SECTION_TITLE_WP_SUMMARY) + 1
+    base_cols = 8  # cols A..H hold the base metrics
+    for i, (year, _fm, _lm) in enumerate(groups):
+        got = tlp.cell(hdr_row, base_cols + 1 + i).value
+        assert got == f"Y{year} €", f"col {base_cols + 1 + i}: {got!r}"
+    # No stray header past the last year col.
+    trailing = tlp.cell(hdr_row, base_cols + len(groups) + 1).value
+    assert trailing in (None, ""), f"unexpected header past year cols: {trailing!r}"
+
+
+def _wp_active_window(wp_id: str, wp_schedule: list[dict]) -> tuple[int, int]:
+    """Derive (active_start, active_end) from the schedule — multi-segment aware."""
+    segs = [s for s in wp_schedule if s["id"] == wp_id]
+    assert segs, f"no schedule rows for WP {wp_id!r}"
+    return min(int(s["start"]) for s in segs), max(int(s["end"]) for s in segs)
+
+
+def test_year_cols_overlap_blanks(tlp, assigned_wb):
+    """Cells where WP's active window doesn't overlap the year are literal ``""``."""
+    params, wps, sched = _read_config(assigned_wb)
+    groups = _expected_year_groups(params["start"], params["months"])
+    first = _wp_summary_first_row(tlp)
+    base_cols = 8
+
+    checked_nonoverlap = 0
+    checked_overlap = 0
+    for wi, wp in enumerate(wps):
+        active_start, active_end = _wp_active_window(wp["id"], sched)
+        for yi, (_year, fm, lm) in enumerate(groups):
+            col = base_cols + 1 + yi
+            val = tlp.cell(first + wi, col).value
+            overlaps = fm <= active_end and lm >= active_start
+            if overlaps:
+                assert isinstance(val, str) and val.startswith("="), (
+                    f"WP {wp['id']} year {groups[yi][0]}: expected formula, got {val!r}"
+                )
+                checked_overlap += 1
+            else:
+                assert val in ("", None), (
+                    f"WP {wp['id']} year {groups[yi][0]}: expected blank, got {val!r}"
+                )
+                checked_nonoverlap += 1
+    # Bystander: ensure we actually exercised both branches.
+    assert checked_overlap > 0
+    # A non-overlap bystander is only possible if some WP doesn't span every
+    # year. In the demo fixture WPs are staggered, so expect ≥1 non-overlap.
+    assert checked_nonoverlap > 0, (
+        "no non-overlap year cells in fixture — selectivity test is vacuous"
+    )
+
+
+def test_year_cols_sum_matches_assigned(recalced_assigned_path):
+    """Sum across year cols on each WP row ≈ that WP's Assigned €.
+
+    Each year cell is independently ROUND'd per the EUR leaf-rounding rule,
+    so the sum of rounded-per-year can differ from the rounded-overall
+    Assigned € by at most one EUR per year (round-half-even). We allow a
+    tolerance of ``num_years`` EUR.
+    """
+    wb = load_workbook(recalced_assigned_path, data_only=True)
+    ws = wb[SHEET_TIMELOG_PLAN]
+    params, wps, _sched = _read_config(wb)
+    groups = _expected_year_groups(params["start"], params["months"])
+    first = _wp_summary_first_row(ws)
+    base_cols = 8
+    tolerance = len(groups)
+
+    checked = 0
+    for wi, wp in enumerate(wps):
+        assigned_eur = ws.cell(first + wi, 3).value
+        if not isinstance(assigned_eur, (int, float)):
+            continue
+        year_sum = 0.0
+        for yi in range(len(groups)):
+            v = ws.cell(first + wi, base_cols + 1 + yi).value
+            if isinstance(v, (int, float)):
+                year_sum += float(v)
+        assert abs(year_sum - float(assigned_eur)) <= tolerance, (
+            f"WP {wp['id']}: sum of year cols {year_sum} vs Assigned € "
+            f"{assigned_eur} (tolerance ±{tolerance})"
+        )
+        checked += 1
+    assert checked > 0, "no numeric Assigned € values — recalc didn't populate"
+    wb.close()
+
+
+def _read_config(wb):
+    from budget_planner.reader import read_config_sheet
+    return read_config_sheet(wb["Config"])

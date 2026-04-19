@@ -39,6 +39,7 @@ Known deferred work (flagged in design §9 follow-ups):
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from dateutil.relativedelta import relativedelta
 from openpyxl.formatting.rule import FormulaRule
@@ -97,13 +98,14 @@ _PERSON_SUMMARY_RATE_COL = (
 )  # col I
 
 # PER-WP SUMMARY metric columns live at A..H (WP code + 7 metrics).
-# Phase 3 will append per-year EUR cols right of col H.
-_WP_SUMMARY_HEADERS = [
+# Phase 3 appends dynamic "Y{yyyy} €" cols right of col H — one per calendar
+# year spanned by the project. See `_year_col_specs`.
+_WP_SUMMARY_BASE_HEADERS = [
     "WP code", "Ceiling €", "Assigned €", "Buffer €",
     "Assigned months", "WP sched months", "Burn rate needed",
     "Any out-of-window?",
 ]
-_WP_SUMMARY_LAST_COL = len(_WP_SUMMARY_HEADERS)  # 8
+_WP_SUMMARY_BASE_LAST_COL = len(_WP_SUMMARY_BASE_HEADERS)  # 8
 
 # Toggle cell coordinates on row 2. Pair (label col, value col) = (9, 10).
 _TOGGLE_LABEL_COL = 9
@@ -311,11 +313,18 @@ def build_timelog_plan_sheet(
     # row 3: blank spacer (no write)
 
     # ── PER-WP SUMMARY band ──
+    year_specs = _year_col_specs(
+        project_params["start"], project_months, month_col_start,
+    )
+    wp_summary_last_col = _WP_SUMMARY_BASE_LAST_COL + len(year_specs)
     _write_section_title(
         ws, wp_summary_title_row, SECTION_TITLE_WP_SUMMARY,
-        last_col=_WP_SUMMARY_LAST_COL,
+        last_col=wp_summary_last_col,
     )
-    for i, hdr in enumerate(_WP_SUMMARY_HEADERS):
+    wp_summary_headers = _WP_SUMMARY_BASE_HEADERS + [
+        f"Y{spec.year} €" for spec in year_specs
+    ]
+    for i, hdr in enumerate(wp_summary_headers):
         style_cell(
             ws, wp_summary_header_row, 1 + i,
             value=hdr, font=HEADER_FONT, alignment=CENTER,
@@ -342,6 +351,9 @@ def build_timelog_plan_sheet(
             rate_col_range=rate_col_range,
             midx_range=midx_range,
             has_persons=num_persons > 0,
+            year_specs=year_specs,
+            grid_person_first_row=grid_person_first_row,
+            grid_person_last_row=grid_person_last_row,
         )
     if num_wps > 0:
         for r in range(wp_summary_header_row, wp_summary_last_row + 1):
@@ -738,6 +750,41 @@ def _calendar_year_groups(project_start, project_months: int):
         m += span
 
 
+@dataclass(frozen=True)
+class _YearColSpec:
+    """One calendar-year column on PER-WP SUMMARY.
+
+    ``year`` is the calendar year (e.g. 2026). ``first_month`` / ``last_month``
+    are 1-indexed month positions within the project timeline — used both to
+    build the grid subrange reference and to check overlap against each WP's
+    active window at build time.
+    """
+    year: int
+    first_month: int
+    last_month: int
+    col_start: int
+    col_end: int
+
+
+def _year_col_specs(
+    project_start, project_months: int, month_col_start: int,
+) -> list[_YearColSpec]:
+    """Compute the dynamic Y{yyyy} € column specs for PER-WP SUMMARY."""
+    specs: list[_YearColSpec] = []
+    for group_start, span in _calendar_year_groups(project_start, project_months):
+        cal_date = project_start + relativedelta(months=group_start)
+        specs.append(
+            _YearColSpec(
+                year=cal_date.year,
+                first_month=group_start + 1,
+                last_month=group_start + span,
+                col_start=month_col_start + group_start,
+                col_end=month_col_start + group_start + span - 1,
+            )
+        )
+    return specs
+
+
 def _write_month_index_row(
     ws: Worksheet,
     row: int,
@@ -827,8 +874,16 @@ def _write_wp_summary_row(
     rate_col_range: str,
     midx_range: str,
     has_persons: bool,
+    year_specs: list["_YearColSpec"],
+    grid_person_first_row: int,
+    grid_person_last_row: int,
 ) -> None:
-    """Fill the 8 per-WP-summary cells on a single WP row (cols A..H)."""
+    """Fill the per-WP-summary cells on a single WP row.
+
+    Cols A..H are the 8 base metrics; cols I.. hold one ``Y{yyyy} €`` column
+    per calendar year spanned by the project. Year cells where the WP's
+    active window does not overlap the year are blank (build-time check).
+    """
     wp_code = wp.code
 
     # Col A: WP code (literal).
@@ -894,6 +949,27 @@ def _write_wp_summary_row(
         )
     else:
         style_cell(ws, row, 8, value=0, font=BLACK_FORMULA, fmt="0")
+
+    # Cols I..: Y{yyyy} € — EUR placed by the solver in this WP × year slice.
+    # Overlap with the WP's active window is checked at build time; non-
+    # overlap cells are blank. Rounded per the programme leaf-rounding rule.
+    for i, spec in enumerate(year_specs):
+        col = _WP_SUMMARY_BASE_LAST_COL + 1 + i
+        overlaps = (
+            spec.first_month <= wp.active_end
+            and spec.last_month >= wp.active_start
+        )
+        if has_persons and overlaps:
+            year_subrange = _grid_range_ref(
+                spec.col_start, spec.col_end,
+                grid_person_first_row, grid_person_last_row,
+            )
+            style_cell(ws, row, col, font=BLACK_FORMULA, fmt="€#,##0").value = (
+                f'=ROUND(SUMPRODUCT(({year_subrange}="{wp_code}")'
+                f"*{rate_col_range}),0)"
+            )
+        else:
+            style_cell(ws, row, col, value="", font=BLACK_FORMULA, fmt="€#,##0")
 
 
 def _write_person_summary_metrics(

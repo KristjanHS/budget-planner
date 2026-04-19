@@ -538,6 +538,11 @@ def _write_assignments_section(ws, start_row, assignments):
         )
         ws.conditional_formatting.add(f"{bal_cl}{row_idx}", yellow_rule)
 
+    last_col_letter = get_column_letter(ASSIGN_LAST_COL)
+    ws.auto_filter.ref = (
+        f"A{assign_header_row}:{last_col_letter}{assign_last_row}"
+    )
+
     next_row = r
     layout = {
         "assign_header_row": assign_header_row,

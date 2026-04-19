@@ -24,7 +24,7 @@ at col B (TIMELOG_MONTH_COL_START). The per-person Rate helper lives only
 once, on col I of the PER-PERSON SUMMARY band, and is consumed by the
 PER-WP SUMMARY Assigned-€ SUMPRODUCT via row-aligned vectors.
 
-Spec: ``docs/plans/2026-04-19-timelog-plan-v2-design.md``.
+Spec: ``docs/plans/archived/2026-04-19-timelog-plan-v2-design.md``.
 
 Stateless builder — receives all config via kwargs from the orchestrator. Per
 ``.claude/rules/python-refactors.md``: no ``from budget_planner import config``

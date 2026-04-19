@@ -160,7 +160,7 @@ flowchart TD
 
 ## Sheet Responsibilities
 
-User-facing tab order (set in `workbook.py` after build): **Config → Capacity → Plan → Timelog Plan → Actuals → Actuals-Hours → Plan-Forecast → Trends → Summary**. Note the Cross-Sheet Formula References diagram above omits `Actuals-Hours`, `Plan-Forecast`, and `Timelog Plan`; the first two form a secondary data chain documented here in prose, and Timelog Plan is a terminal surface (Config refs in; nothing out).
+User-facing tab order (set in `workbook.py` after build): **Config → Timelog Plan → Actuals-Hours → Capacity → Plan → Actuals → Plan-Forecast → Trends → Summary**. Positions 1-3 hold the frequently-edited tabs (Config + Timelog Plan + Actuals-Hours) so the user can reach them without scrolling (2026-04-19 v2 redesign). Note the Cross-Sheet Formula References diagram above omits `Actuals-Hours`, `Plan-Forecast`, and `Timelog Plan`; the first two form a secondary data chain documented here in prose, and Timelog Plan is a terminal surface (Config refs in; nothing out).
 
 ### Config
 Single source of truth for project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, and the grade rate table. Hosts the named ranges `project_start` (B2), `fte_rate` (B4), `version_stamp` (B7). The two through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) now live on the Actuals / Actuals-Hours sheets, not Config — see those sheet sections. **Tab color: Blue (4472C4).** Upstream to every other sheet.
@@ -172,7 +172,7 @@ Primary planning surface: per-person monthly FTE allocation across programme WPs
 Compact 1-row header + Planned-FTE block whose cells are `=SUM(Capacity!…)` per WP × month. Downstream consumers: Summary, Trends.
 
 ### Timelog Plan
-Prescriptive whole-month 1.0-FTE WP allocation grid — a separate allocation surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). Solver (`budget_planner/timelog_solver.py`) writes the Proposed grid (locked); the Assigned grid starts as `=<Proposed cell>` formulas and accepts blue-input overrides. Consumes `current_month`, `team_priorities`, `roster_lookup`. **Tab color: Orange (FF8C00).** Terminal surface — no downstream sheet consumes it.
+Prescriptive whole-month 1.0-FTE WP allocation grid — a separate allocation surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). v2 layout (2026-04-19): single merged editable grid holding literal WP codes, flanked by PER-WP SUMMARY (with per-year EUR columns `Y{yyyy} €`) and PER-PERSON SUMMARY bands. Row 2 carries the `timelog_resolve_flag` toggle (cols 9-10) gating whether rebuild re-runs the solver. Consumes `current_month`, `team_priorities`, `roster_lookup`. **Tab color: Orange (FF8C00).** Terminal surface — no downstream sheet consumes it.
 
 ### Actuals
 EUR actuals per WP per month (input from accountant) **plus** a parallel forecast-monitoring block that reads Plan-Forecast. Monthly Actual-EUR cells past `eur_actuals_through_month` are greyed via CF — those months are not closed yet. **Hosts the `eur_actuals_through_month` named range at `$D$1` (row-1 through-month control strip: label / optional blue-input override / auto-derived scan / effective cell).** **Tab color: Blue.**

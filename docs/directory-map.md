@@ -12,8 +12,8 @@ budget_planner/
   summary.py           # Summary sheet: budget overview + calendar-year aggregation
   actuals.py           # Actuals sheet: EUR per WP per month from accountant
   trends.py            # Trends sheet: burn rate, cumulative chart, person load
-  timelog_plan.py      # Timelog Plan sheet: vertical-stacked bands (WP summary / Proposed / Assigned / Person summary)
-  timelog_solver.py    # Pure two-pass greedy solver driving the Timelog Plan Proposed grid
+  timelog_plan.py      # Timelog Plan sheet: PER-WP summary (+ per-year EUR) / merged editable grid / PER-PERSON summary
+  timelog_solver.py    # Pure two-pass greedy solver; drives the merged grid on init + when timelog_resolve_flag=TRUE
   reader.py            # Layout detection + Config/Capacity/Actuals/Timelog Plan readers
   workbook.py          # Orchestrator: init_workbook() + rebuild_workbook() + seed_demo_data() + snapshot/restore
   layout.py            # Centralized layout constants, column structure, calendar year helpers
@@ -56,7 +56,7 @@ One bullet per worksheet — what it is, what feeds it, what it feeds. Build ord
   - IN ← Capacity (SUM per WP × month).
   - OUT → Summary (Plan EUR = Plan FTE × rate); Trends (planned cumulative curve).
 
-- **Timelog Plan** — Prescriptive whole-month 1.0-FTE WP allocation grid. Separate surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). Vertical-stacked band layout (PER-WP SUMMARY / PROPOSED / ASSIGNED / PER-PERSON SUMMARY — all share the month-column range D..D+months-1, each band collapsible via `outline_level=1`). Solver writes the Proposed band (locked); the Assigned band starts as `=Proposed` and accepts blue-input overrides preserved across rebuild.
+- **Timelog Plan** — Prescriptive whole-month 1.0-FTE WP allocation grid. Separate surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). v2 layout (2026-04-19): **single merged editable grid** holding literal WP codes (solver-written on init), flanked by PER-WP SUMMARY (Ceiling / Assigned / Buffer / WP sched months / Burn rate / per-year EUR cols `Y{yyyy} €`) and PER-PERSON SUMMARY (Assigned / Pool / Switches / First log / Last log / Rate). Row 2 carries the `timelog_resolve_flag` toggle (cols 9-10) — TRUE = rebuild re-solves + overwrites, FALSE = rebuild preserves the grid verbatim.
   - IN ← Config (WP budget + WP schedule + PERSON-WP ASSIGNMENTS + Team Roster including `Priority` + grade rates); `current_month` (per-WP window-months-remaining).
   - OUT → (terminal surface; no downstream sheet consumes it).
 

@@ -51,11 +51,24 @@ Stage 4 (T14–T15) will harden rebuild preservation + the shape fingerprint.
 The workbook hosts two distinct allocation surfaces, both editable, and they may legitimately diverge:
 
 - **Plan / Capacity** records **actual effort** — fractional monthly FTE per (person, WP) reflecting what people *do*. Driven by Config PERSON-WP ASSIGNMENTS + distribution curves.
-- **Timelog Plan** records **timesheet-compliant allocation** — prescriptive whole-month 1.0-FTE WP labels per (person, month) telling the person where to *log*. Driven by the solver (`budget_planner/timelog_solver.py`) and overridable on the Assigned grid.
+- **Timelog Plan** records **timesheet-compliant allocation** — prescriptive whole-month 1.0-FTE WP labels per (person, month) telling the person where to *log*. Single merged editable grid (v2, 2026-04-19) holding literal WP codes; no formulas per cell. Initial content comes from the solver (`budget_planner/timelog_solver.py`); rebuild behaviour is governed by the `timelog_resolve_flag` toggle (see below).
 
 A person splitting effort 0.6/0.4 across two WPs in a given month may legitimately log 1.0 to one of them that month and 1.0 to the other a different month — the timesheet rule is whole-month, the underlying effort is not. **Do not write cross-sheet formulas that reconcile Plan monthly cells against Timelog Plan monthly cells as if they must agree.** The only shared constraints are the Config inputs both surfaces consume (WP windows, PERSON-WP ASSIGNMENTS windows, Max FTE pool, Ceiling €).
 
-See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §1 for scope.
+See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §1 for v1 scope and `docs/plans/archived/2026-04-19-timelog-plan-v2-design.md` for the merged-grid + toggle redesign.
+
+### Timelog Plan merged grid = literal values; toggle governs re-solve
+
+The Timelog Plan merged grid holds **literal WP codes** (or empty cells), never formulas — user edits and solver output share one surface. The toggle cell at row 2 col 10 (named range `timelog_resolve_flag`) controls rebuild:
+
+- `TRUE` (default on init): rebuild re-runs the solver and overwrites the grid unconditionally. User edits are wiped — this is by design ("re-solve often").
+- `FALSE`: rebuild preserves the grid verbatim from the prior workbook; no solver run. Cells for persons/months no longer in scope are dropped; new persons/months get empty cells (user flips to TRUE + rebuilds to populate).
+
+No auto-reset: once the user sets FALSE, it stays FALSE until explicitly flipped. Readers that encounter a pre-v2 workbook (no toggle cell) default to TRUE — one-shot migration, no separate script.
+
+### Banned: `MATCH(1, arr, 0)` / `LOOKUP(2, 1/arr, …)` — use `SUMPRODUCT(MIN/MAX(…))`
+
+Formulas that pick the first/last non-empty index via `MATCH(1, (arr<>"")*1, 0)` or `LOOKUP(2, 1/(arr<>""), headers)` depend on CSE array coercion that **openpyxl-written workbooks do not carry**, so LibreOffice recalc returns `""` or the wrong extreme silently (v1 Timelog Plan's First log / Last log shipped with this bug — diagnosed and fixed in v2, commit 7d8c399). Use `SUMPRODUCT(MIN((arr<>"")*COL(...)))` / `SUMPRODUCT(MAX(...))` instead — SUMPRODUCT forces array context natively and survives the openpyxl→LO round-trip.
 
 ## Future invariants (reserved)
 
@@ -73,4 +86,5 @@ Placeholders for invariants that have a home elsewhere today but belong here whe
   | `roster_lookup` | `config_sheet.py` (Team Roster cols A-D: name, Max FTE, grade, rate EUR/PM; Priority column E intentionally excluded so existing VLOOKUP indices stay stable) | `actuals_hours.py` (forecast-EUR leaves VLOOKUP col 4), `config_sheet.py` (Assignments Balance VLOOKUP col 2), `timelog_plan.py` (per-person rate helper VLOOKUP col 4) |
   | `team_priorities` | `config_sheet.py` (Team Roster Priority col E, blue input, default 2) | `timelog_plan.py` solver fill order — priority flows in via `reader.read_team_from_config` (header scan of the Priority column, not via name resolution). The named range is reserved for future Excel-formula consumers. |
   | `current_month` | `workbook.py` Stage 5 Trends stub (Trends!$B$1, **black formula** — `=MAX(1,MIN(Config!B3, ...))`; user may overwrite with a static number to freeze). Stub written before Actuals builder runs. | `actuals.py` (Cum. EUR / Breach-In cutoff), `timelog_plan.py` (per-WP `Window months remaining`) |
+  | `timelog_resolve_flag` | `timelog_plan.py` (Timelog Plan row 2, col 10; TRUE/FALSE blue input, default TRUE on init, no auto-reset) | `reader.read_timelog_plan` → `workbook.py` orchestrator gates whether `solve(...)` runs on rebuild (see "Timelog Plan merged grid" above) |
 - **Reader/builder round-trip rule**: readers use named ranges (not coordinates); tolerate internal blanks; rebuild must preserve user-authored values on blue input cells.

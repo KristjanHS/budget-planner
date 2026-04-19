@@ -182,6 +182,82 @@ def _first_person_name(wb) -> str:
     return str(v).strip()
 
 
+def test_vacation_preserved_under_resolve_flag_false(tmp_path: Path):
+    """resolve_flag=FALSE + a non-vacation edit: vacation cells stay locked-yellow,
+    preserved edit survives. Guards the interaction between grid preservation and
+    the vacation fill tier — without this test a future preserve-path regression
+    that writes BLUE_INPUT/unlocked over vacation cells would slip through."""
+    from dateutil.relativedelta import relativedelta
+    from budget_planner.reader import read_config_sheet
+    from budget_planner.styles import VACATION_FILL
+
+    path = tmp_path / "wb.xlsx"
+    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
+
+    wb = openpyxl.load_workbook(path)
+    ws = wb[SHEET_TIMELOG_PLAN]
+    months = _project_months(wb)
+    params, _w, _s = read_config_sheet(wb["Config"])
+    project_start = params["start"]
+    vac_month_num = int(params.get("vacation_month_num", 7))
+
+    # Project-1-indexed months falling in the vacation calendar month.
+    vac_months = {
+        i + 1
+        for i in range(months)
+        if (project_start + relativedelta(months=i)).month == vac_month_num
+    }
+    assert vac_months, "fixture span has no vacation months — test vacuous"
+
+    row, col, solver_value = _pick_editable_cell(ws, months)
+    # Ensure the edit cell is NOT a vacation month (the edit must be preserve-
+    # eligible; vacation cells are always reset to empty+locked).
+    assert (col - TIMELOG_MONTH_COL_START + 1) not in vac_months, (
+        "fixture edit-target cell happens to be a vacation month — adjust picker"
+    )
+    edit_value = "WP2" if solver_value != "WP2" else "WP1"
+    _set(ws, row, col, edit_value)
+    _set_resolve_flag(wb, False)
+    wb.save(path)
+    wb.close()
+
+    rebuild_workbook(input_path=str(path))
+
+    wb2 = openpyxl.load_workbook(path)
+    ws2 = wb2[SHEET_TIMELOG_PLAN]
+    # Target edit preserved (proves preserve path ran, not a vacuous pass).
+    assert ws2.cell(row, col).value == edit_value, (
+        f"preserved edit lost: expected {edit_value!r}, got {ws2.cell(row, col).value!r}"
+    )
+
+    expected_fill_rgb = (VACATION_FILL.fgColor.rgb or "").upper()
+    # Walk every person row's vacation cells and assert the full contract.
+    r = _grid_first_person_row(ws2)
+    checked = 0
+    while r <= ws2.max_row:
+        col_a = ws2.cell(r, 1).value
+        if col_a is None or str(col_a).strip() == "" or str(col_a).upper().startswith("PER-"):
+            break
+        for month_num in vac_months:
+            vc = ws2.cell(r, TIMELOG_MONTH_COL_START + month_num - 1)
+            assert vc.value in (None, ""), (
+                f"row {r} vacation month {month_num}: expected empty after rebuild, got {vc.value!r}"
+            )
+            rgb = (vc.fill.fgColor.rgb or "").upper() if vc.fill and vc.fill.fgColor else ""
+            assert rgb == expected_fill_rgb, (
+                f"row {r} vacation month {month_num}: expected VACATION_FILL {expected_fill_rgb}, got {rgb}"
+            )
+            assert vc.protection.locked is True, (
+                f"row {r} vacation month {month_num}: must be locked=True"
+            )
+            checked += 1
+        r += 1
+    assert checked >= len(vac_months), (
+        "no person rows scanned for vacation-cell preservation"
+    )
+    wb2.close()
+
+
 def _set_resolve_flag(wb, value: bool) -> None:
     """Flip the timelog_resolve_flag toggle cell to True/False."""
     dn = wb.defined_names["timelog_resolve_flag"]

@@ -470,6 +470,22 @@ def test_switch_reduction_respects_vacation():
     )
     assert out["Alice"][4] is None, "vacation month must stay empty for Alice"
     assert out["Bob"][4] is None, "vacation month must stay empty for Bob"
+    # Bystander: the swap pass IS allowed to rearrange cells within a rate tier
+    # on non-vacation months, but the per-WP total across (person × month) is
+    # €-neutral — i.e. the multiset of codes across non-vacation months must be
+    # preserved. A broken guard that cleared all cells would make the vacation
+    # assertions pass vacuously; this bystander catches that.
+    from collections import Counter
+    non_vac_months = [1, 2, 3, 5]
+    pre_codes = Counter(
+        pre_assigned[p][m] for p in ("Alice", "Bob") for m in non_vac_months
+    )
+    post_codes = Counter(
+        out[p][m] for p in ("Alice", "Bob") for m in non_vac_months
+    )
+    assert pre_codes == post_codes, (
+        f"non-vacation code multiset changed: pre={pre_codes}, post={post_codes}"
+    )
 
 
 def test_vacation_months_default_empty():

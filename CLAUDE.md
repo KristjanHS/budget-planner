@@ -35,6 +35,25 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
 6. **New architectural invariants** (cross-sheet constraint, trust boundary, derived-metric rule) must be recorded in `docs/design-invariants.md` before merge. Rationale + scope carve-out in `.claude/rules/dev-workflow.md`.
 
+## Large Files (prefer Grep / `offset`+`limit`)
+
+Files ≥800 lines — a full Read is ~8K+ tokens. Use Grep for specific symbols; Read with `offset`/`limit` for ranges.
+
+| File | Lines |
+|------|-------|
+| `budget_planner/reader.py` | 1494 |
+| `budget_planner/timelog_plan.py` | 1292 |
+| `tests/test_timelog_plan.py` | 1218 |
+| `budget_planner/capacity.py` | 1066 |
+| `budget_planner/config_sheet.py` | 1031 |
+| `budget_planner/workbook.py` | 935 |
+| `tests/test_config_sheet.py` | 838 |
+| `tests/test_reader_new.py` | 824 |
+| `tests/test_trends.py` | 817 |
+| `tests/test_rebuild_e2e.py` | 804 |
+
+Line counts drift; re-check with `wc -l` if a number feels wrong. Archived plans in `docs/plans/archived/` are not listed — treat all of them as large by default.
+
 ## Rules Index (path-gated — auto-loaded when touching matching files)
 
 | Rule file | Triggers on | Key content |

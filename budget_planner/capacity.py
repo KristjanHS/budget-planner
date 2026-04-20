@@ -185,8 +185,9 @@ def _write_person_grid(
         style_cell(ws, r, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
         # Distribute across the intersection of the assignment window with
-        # the WP's active months — WP SCHEDULE may have gaps, and FTE must
-        # not be allocated to inactive months (auditors flag that).
+        # the WP's active months — each WP has a single [start, end] range
+        # on WP BUDGET, and FTE must not be allocated to months outside it
+        # (auditors flag that).
         asgn_start = asgn["start"]
         asgn_end = asgn["end"]
         wp_active = wp_active_map.get(wp_id, frozenset())

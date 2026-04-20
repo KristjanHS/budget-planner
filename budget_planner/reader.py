@@ -370,8 +370,14 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
         start_val = ws.cell(r, COL_WP_START).value
         end_val = ws.cell(r, COL_WP_END).value
         type_val = ws.cell(r, COL_WP_TYPE).value
-        start_int = int(start_val) if start_val is not None else 1
-        end_int = int(end_val) if end_val is not None else 1
+        if start_val is None or end_val is None:
+            raise ValueError(
+                f"WP '{id_str}' is missing Start or End (cols H/I of WP "
+                f"BUDGET). Populate both — blank cells are not a valid "
+                f"placeholder under the single-range schema."
+            )
+        start_int = int(start_val)
+        end_int = int(end_val)
         type_str = str(type_val).strip() if type_val else "flat"
         if not (1 <= start_int <= end_int):
             raise ValueError(

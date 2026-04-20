@@ -3,7 +3,7 @@ import pytest
 import openpyxl
 
 from budget_planner.config import (
-    WORK_PACKAGES, WP_SCHEDULE, NUM_WPS, MONTH_COL_START,
+    WORK_PACKAGES, NUM_WPS, MONTH_COL_START,
     VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
     VAL_COL_CUM, VAL_COL_PCT_CEIL, VAL_COL_BREACH,
 )
@@ -49,7 +49,7 @@ def test_actuals_demo_values_seeded(actuals_workbook):
             break
     assert first_wp_row is not None
     wp = WORK_PACKAGES[0]  # WP1: active from M1, multiplier 1.0
-    wp_start, wp_end = wp_month_bounds(wp["id"], WP_SCHEDULE)
+    wp_start, wp_end = wp_month_bounds(wp["id"], WORK_PACKAGES)
     row = first_wp_row
     # Active month within demo range should have a positive value
     c = MONTH_COL_START + wp_start - 1
@@ -73,9 +73,9 @@ def test_actuals_inactive_months_empty(actuals_workbook):
     # Find any WP with start > 1 -- months before start should be inactive
     late_idx = next(
         i for i, w in enumerate(WORK_PACKAGES)
-        if wp_month_bounds(w["id"], WP_SCHEDULE)[0] > 1
+        if wp_month_bounds(w["id"], WORK_PACKAGES)[0] > 1
     )
-    late_start = wp_month_bounds(WORK_PACKAGES[late_idx]["id"], WP_SCHEDULE)[0]
+    late_start = wp_month_bounds(WORK_PACKAGES[late_idx]["id"], WORK_PACKAGES)[0]
     row = first_wp_row + late_idx
     for m in range(late_start - 1):
         c = MONTH_COL_START + m

@@ -133,7 +133,7 @@ class BuildContext:
 
 
 def _validate_config(
-    project_params, work_packages, team, external_commitments, *, wp_schedule=None
+    project_params, work_packages, team, external_commitments
 ):
     """Validate extracted config data.
 
@@ -154,15 +154,14 @@ def _validate_config(
     if not team:
         errors.append("Team roster is empty")
 
-    # Duplicate WP IDs in budget table (schedule section may repeat the same ID)
+    # Duplicate WP IDs in budget table — each WP must appear exactly once.
     seen_ids: set[str] = set()
     for wp in work_packages:
         if wp["id"] in seen_ids:
             errors.append(
                 f"Duplicate WP ID in WP BUDGET table: {wp['id']}. "
-                "Use one row per ID there; for multiple active periods use "
-                "WP SCHEDULE (same ID, different Start/End), or split into "
-                "distinct IDs (e.g. WP4a, WP4b)."
+                "Each WP must appear exactly once. If you need separable "
+                "phases, split into distinct IDs (e.g. WP4a, WP4b)."
             )
         seen_ids.add(wp["id"])
 
@@ -178,22 +177,12 @@ def _validate_config(
     for wp in work_packages:
         if wp["fte"] <= 0:
             warnings.append(f"WP {wp['id']}: FTE budget is {wp['fte']} (expected > 0)")
-
-    # Schedule validation
-    if wp_schedule is not None:
-        sched_wp_ids = {entry["id"] for entry in wp_schedule}
-        for entry in wp_schedule:
-            if entry["id"] not in seen_ids:
-                errors.append(
-                    f"Schedule entry for '{entry['id']}' has no matching WP in budget table"
-                )
-            if entry["start"] > entry["end"]:
-                warnings.append(
-                    f"Schedule {entry['id']}: start ({entry['start']}) > end ({entry['end']})"
-                )
-        for wp in work_packages:
-            if wp["id"] not in sched_wp_ids:
-                warnings.append(f"WP {wp['id']} has no schedule entry")
+        start = wp.get("start")
+        end = wp.get("end")
+        if start is not None and end is not None and start > end:
+            warnings.append(
+                f"WP {wp['id']}: start ({start}) > end ({end})"
+            )
 
     return errors, warnings
 
@@ -206,7 +195,6 @@ def _build_all_sheets(
     external_commitments,
     *,
     grade_rates,
-    wp_schedule=None,
     assignments=None,
     preserved_actuals=None,
     preserved_actuals_hours=None,
@@ -235,9 +223,6 @@ def _build_all_sheets(
     # Single fallback point: downstream builders (esp. build_summary_sheet)
     # require non-None data. The orchestrator owns the lazy-load so
     # individual builders can stay strict.
-    if wp_schedule is None:
-        from budget_planner.config import WP_SCHEDULE
-        wp_schedule = WP_SCHEDULE
     if reporting_periods is None:
         from budget_planner.config import REPORTING_PERIODS
         reporting_periods = REPORTING_PERIODS
@@ -249,7 +234,6 @@ def _build_all_sheets(
         wb,
         project_params,
         work_packages,
-        wp_schedule=wp_schedule,
         team=team,
         reporting_periods=reporting_periods,
         grade_rates=grade_rates,
@@ -265,7 +249,6 @@ def _build_all_sheets(
         ctx.config_layout,
         project_params=project_params,
         work_packages=work_packages,
-        wp_schedule=wp_schedule,
         team=team,
         external_commitments=external_commitments,
         assignments=assignments,
@@ -279,7 +262,6 @@ def _build_all_sheets(
         wb,
         project_params=project_params,
         work_packages=work_packages,
-        wp_schedule=wp_schedule,
         config_layout=ctx.config_layout,
     )
 
@@ -291,7 +273,6 @@ def _build_all_sheets(
         ctx.capacity_layout,
         work_packages=work_packages,
         project_params=project_params,
-        wp_schedule=wp_schedule,
     )
 
     # Stage 5 — Trends stub: create the ``current_month`` named range so that
@@ -324,12 +305,12 @@ def _build_all_sheets(
     # when True the solver runs and the dict is ignored.
     _preserved_grid = (preserved_timelog or {}).get("grid") or None
     _resolve_flag = (preserved_timelog or {}).get("resolve_flag", True)
+    assert ctx.config_layout is not None
     build_timelog_plan_sheet(
         timelog_plan_ws,
         wb,
         project_params=project_params,
         work_packages=work_packages,
-        wp_schedule=wp_schedule,
         team=team,
         assignments=assignments or [],
         grade_rates=grade_rates,
@@ -347,7 +328,6 @@ def _build_all_sheets(
         actuals_hours_ws,
         project_params=project_params,
         work_packages=work_packages,
-        wp_schedule=wp_schedule,
         team=team,
         external_commitments=external_commitments,
         assignments=assignments,
@@ -372,7 +352,6 @@ def _build_all_sheets(
         plan_forecast_ws,
         project_params=project_params,
         work_packages=work_packages,
-        wp_schedule=wp_schedule,
         assignments=assignments,
         config_first_wp_row=ctx.config_layout["wp_first_row"],
         actuals_hours_layout=actuals_hours_layout,
@@ -385,7 +364,6 @@ def _build_all_sheets(
         ctx.plan_layout,
         project_params=project_params,
         work_packages=work_packages,
-        wp_schedule=wp_schedule,
         preserved=preserved_actuals,
         plan_forecast_layout=plan_forecast_layout,
         eur_through_override=preserved_eur_through_override,
@@ -412,7 +390,6 @@ def _build_all_sheets(
         ctx.config_layout,
         project_params=project_params,
         work_packages=work_packages,
-        wp_schedule=wp_schedule,
         team=team,
         reporting_periods=reporting_periods,
         plan_forecast_layout=plan_forecast_layout,
@@ -498,7 +475,6 @@ def init_workbook(
         "eu_ceiling_pm": config.EU_ANNUAL_CEILING_PM,
     }
     work_packages = config.WORK_PACKAGES
-    wp_schedule = config.WP_SCHEDULE
     team = config.TEAM
     external_commitments = config.EXTERNAL_COMMITMENTS
     reporting_periods = config.REPORTING_PERIODS
@@ -513,7 +489,6 @@ def init_workbook(
         work_packages,
         team,
         external_commitments,
-        wp_schedule=wp_schedule,
         assignments=assignments,
         reporting_periods=reporting_periods,
         grade_rates=grade_rates,
@@ -591,7 +566,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             "Workbook has no Config sheet. "
             "Run 'python -m budget_planner init' to create a fresh workbook first."
         )
-    project_params, work_packages, wp_schedule = read_config_sheet(
+    project_params, work_packages = read_config_sheet(
         existing_wb[SHEET_CONFIG]
     )
 
@@ -692,7 +667,6 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         work_packages,
         team,
         external_commitments,
-        wp_schedule=wp_schedule,
     )
 
     # Check for orphaned data
@@ -775,7 +749,6 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
         work_packages,
         team,
         external_commitments,
-        wp_schedule=wp_schedule,
         assignments=assignments,
         preserved_actuals=preserved_actuals,
         preserved_actuals_hours=preserved_actuals_hours,
@@ -825,7 +798,6 @@ def seed_demo_data(workbook_path: str) -> str:
         DEMO_CAPACITY_ASSIGNMENTS,
         TEAM,
         WORK_PACKAGES,
-        WP_SCHEDULE,
     )
     from budget_planner.layout import MONTH_COL_START, wp_month_bounds
 
@@ -853,7 +825,7 @@ def seed_demo_data(workbook_path: str) -> str:
             row = first_wp_row + i
             wp_rate = config_ws.cell(wp_budget_row + i, 4).value or 6500
             multiplier = DEMO_ACTUALS_MULTIPLIERS[i % len(DEMO_ACTUALS_MULTIPLIERS)]
-            wp_start, wp_end = wp_month_bounds(wp["id"], WP_SCHEDULE)
+            wp_start, wp_end = wp_month_bounds(wp["id"], WORK_PACKAGES)
             active_months = wp_end - wp_start + 1
             monthly_planned = (wp["fte"] / active_months) * wp_rate
             for m_idx in range(wp_start - 1, min(wp_end, DEMO_CURRENT_MONTH)):
@@ -888,7 +860,7 @@ def seed_demo_data(workbook_path: str) -> str:
     team_names = {m["name"] for m in TEAM}
     wp_index = {w["id"]: i for i, w in enumerate(WORK_PACKAGES)}
     wp_active_set = {
-        w["id"]: _wp_active_months(w["id"], WP_SCHEDULE)
+        w["id"]: _wp_active_months(w["id"], WORK_PACKAGES)
         for w in WORK_PACKAGES
     }
 
@@ -910,7 +882,7 @@ def seed_demo_data(workbook_path: str) -> str:
                 if wp_id not in wp_index:
                     continue
                 row = header_row + 1 + i
-                wp_start, wp_end = wp_month_bounds(wp_id, WP_SCHEDULE)
+                wp_start, wp_end = wp_month_bounds(wp_id, WORK_PACKAGES)
                 a_start = max(wp_start, asgn["start"])
                 a_end = min(wp_end, asgn["end"])
                 active_months = a_end - a_start + 1

@@ -11,7 +11,6 @@ from openpyxl.formatting.rule import Rule
 
 from budget_planner.config import (
     WORK_PACKAGES,
-    WP_SCHEDULE,
     PROJECT_MONTHS,
 )
 from budget_planner.layout import (
@@ -99,7 +98,7 @@ def test_plan_forecast_cell_sums_actuals_hours_leaves(pf):
     assert wp_id == "WP3"
 
     # Pick first active month in WP3
-    active = sorted(wp_active_months(wp_id, WP_SCHEDULE))
+    active = sorted(wp_active_months(wp_id, WORK_PACKAGES))
     month_num = active[0]  # M1
     m_idx = month_num - 1
     col = MONTH_COL_START + m_idx
@@ -129,7 +128,7 @@ def test_plan_forecast_wp_with_no_assignees_is_zero(empty_wb):
     pf = empty_wb[SHEET_PLAN_FORECAST]
     wp_idx = 0  # WP1
     wp_id = WORK_PACKAGES[wp_idx]["id"]
-    active = wp_active_months(wp_id, WP_SCHEDULE)
+    active = wp_active_months(wp_id, WORK_PACKAGES)
     row = _find_wp_row(pf, wp_idx)
 
     # Pick an active month — formula must be =0 (explicit, not SUM of nothing)
@@ -142,12 +141,12 @@ def test_plan_forecast_inactive_months_grey(pf):
     """WP4 starts M2 (demo schedule has WP4 at M2, WP2 is M1-M6).
 
     Pick a WP whose schedule start > 1 so there is an inactive month at M1.
-    WP4 (idx=3) starts at M2 per WP_SCHEDULE.
+    WP4 (idx=3) starts at M2 per WORK_PACKAGES.
     """
     wp_idx = 3  # WP4 — schedule starts M2
     wp_id = WORK_PACKAGES[wp_idx]["id"]
     assert wp_id == "WP4"
-    active = wp_active_months(wp_id, WP_SCHEDULE)
+    active = wp_active_months(wp_id, WORK_PACKAGES)
     assert 1 not in active  # M1 is inactive for WP4
 
     row = _find_wp_row(pf, wp_idx)

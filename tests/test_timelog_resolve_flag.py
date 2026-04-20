@@ -205,7 +205,7 @@ def test_vacation_preserved_under_resolve_flag_false(tmp_path: Path):
     wb = openpyxl.load_workbook(path)
     ws = wb[SHEET_TIMELOG_PLAN]
     months = _project_months(wb)
-    params, _w, _s = read_config_sheet(wb["Config"])
+    params, _w = read_config_sheet(wb["Config"])
     project_start = params["start"]
     vac_month_num = int(params.get("vacation_month_num", 7))
 

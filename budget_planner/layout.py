@@ -63,7 +63,6 @@ SECTION_HEADER_ROWS = 2
 
 SECTION_HEADER_LABELS = {
     "wp_budget": "WP BUDGET",
-    "wp_schedule": "WP SCHEDULE",
     "team_roster": "TEAM ROSTER",
     "rate_by_grade": "RATE BY GRADE",
     "reporting_periods": "REPORTING PERIODS",
@@ -82,13 +81,10 @@ COL_WP_RATE = 4
 COL_WP_CEILING = 5
 COL_WP_ASSIGNED_PM = 6  # SUMIFS formula: total assigned PM per WP
 COL_WP_VARIANCE = 7     # FTE Budget - Assigned PM
-WP_BUDGET_LAST_COL = 7  # for table ref / section header merge
-
-# WP Schedule section (Config sheet)
-COL_SCHED_START = 2
-COL_SCHED_END = 3
-COL_SCHED_TYPE = 4
-SCHED_LAST_COL = 4
+COL_WP_START = 8        # project-month start (blue input, 1-indexed)
+COL_WP_END = 9          # project-month end (blue input, 1-indexed)
+COL_WP_TYPE = 10        # distribution curve (blue input, data-validation list)
+WP_BUDGET_LAST_COL = 10  # for table ref / section header merge
 
 # Team Roster section (Config sheet)
 COL_ROSTER_FTE = 2
@@ -219,21 +215,23 @@ def forecast_val_columns(project_months: int) -> dict[str, int]:
     }
 
 
-def wp_active_months(wp_id: str, schedule: list[dict]) -> frozenset[int]:
-    """Return frozenset of active month numbers for a WP from its schedule entries."""
-    return frozenset(
-        m
-        for entry in schedule if entry["id"] == wp_id
-        for m in range(entry["start"], entry["end"] + 1)
-    )
+def wp_active_months(wp_id: str, work_packages: list[dict]) -> frozenset[int]:
+    """Return frozenset of active month numbers for a WP.
+
+    Single-range schema: exactly one entry per id in work_packages.
+    """
+    for wp in work_packages:
+        if wp["id"] == wp_id:
+            return frozenset(range(wp["start"], wp["end"] + 1))
+    return frozenset()
 
 
-def wp_month_bounds(wp_id: str, schedule: list[dict]) -> tuple[int, int]:
-    """Return (min_start, max_end) across all schedule entries for a WP."""
-    entries = [e for e in schedule if e["id"] == wp_id]
-    if not entries:
-        return (1, 1)
-    return (min(e["start"] for e in entries), max(e["end"] for e in entries))
+def wp_month_bounds(wp_id: str, work_packages: list[dict]) -> tuple[int, int]:
+    """Return (start, end) for a WP. Single-range schema: one entry per id."""
+    for wp in work_packages:
+        if wp["id"] == wp_id:
+            return (int(wp["start"]), int(wp["end"]))
+    return (1, 1)
 
 
 def _calendar_year_groups(project_start, project_months):

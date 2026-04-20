@@ -381,7 +381,7 @@ class TestFormulaRateRoundTrip:
         # Overwrite the first WP's rate cell with a formula
         wb = load_workbook(path)
         cfg = wb["Config"]
-        _, original_wps, _ = read_config_sheet(cfg)
+        _, original_wps = read_config_sheet(cfg)
         # Find the WP Budget first data row by locating "WP BUDGET" header
         wp_header_row = _find_row_by_label(cfg, "WP BUDGET")
         first_wp_row = wp_header_row + 2  # header + column-headers row
@@ -392,7 +392,7 @@ class TestFormulaRateRoundTrip:
 
         # Re-read: rate_raw should preserve formula, rate should fall back to default
         wb = load_workbook(path)
-        _, wps_after, _ = read_config_sheet(wb["Config"])
+        _, wps_after = read_config_sheet(wb["Config"])
         wb.close()
 
         assert len(wps_after) == len(original_wps)
@@ -465,7 +465,7 @@ class TestFormulaRateRoundTrip:
         wb.close()
 
         wb = load_workbook(path)
-        _, wps_after, _ = read_config_sheet(wb["Config"])
+        _, wps_after = read_config_sheet(wb["Config"])
         wb.close()
 
         assert wps_after[0]["rate"] == pytest.approx(7500.0)

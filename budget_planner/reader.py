@@ -16,9 +16,9 @@ from budget_planner.layout import (
     SECTION_HEADER_ROWS,
     COL_WP_FTE,
     COL_WP_RATE,
-    COL_SCHED_START,
-    COL_SCHED_END,
-    COL_SCHED_TYPE,
+    COL_WP_START,
+    COL_WP_END,
+    COL_WP_TYPE,
     COL_ROSTER_FTE,
     COL_ROSTER_GRADE,
     COL_ROSTER_PRIORITY,
@@ -277,20 +277,40 @@ def _iter_config_section_rows(
         r += 1
 
 
-def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
-    """Read Config sheet -> (project_params, work_packages, wp_schedule).
+def read_config_sheet(ws) -> tuple[dict, list[dict]]:
+    """Read Config sheet -> (project_params, work_packages).
 
     Returns:
-        Tuple of (project_params, work_packages, wp_schedule) where:
+        Tuple of (project_params, work_packages) where:
         - project_params: dict with keys 'title', 'start', 'months', 'rate',
           'eu_ceiling_pm', 'vacation_month_num'. ``rate`` is a numeric
           fallback only — the builder always regenerates B4 from the live
           grade/roster layout. ``vacation_month_num`` is the 1-indexed
           calendar month nobody logs to the project (default 7 = July).
         - work_packages: list of dicts with keys 'id', 'name', 'fte', 'rate',
-          'rate_raw'
-        - wp_schedule: list of dicts with keys 'id', 'start', 'end', 'type'
+          'rate_raw', 'start', 'end', 'type' (single contiguous schedule range)
+
+    Raises:
+        ValueError: If the Config sheet has the legacy two-section layout
+            (a separate "WP SCHEDULE" section), a duplicate WP id, or a WP
+            with an invalid start/end range or type.
     """
+    # Legacy layout detection — forbid the pre-merge two-section Config.
+    # Multi-segment WP schedules are no longer supported; migration requires
+    # collapsing each WP to a single (Start, End) range in WP BUDGET.
+    for r in range(1, ws.max_row + 1):
+        val = ws.cell(row=r, column=1).value
+        if isinstance(val, str) and val.strip() == "WP SCHEDULE":
+            raise ValueError(
+                f"Legacy Config layout detected: 'WP SCHEDULE' section found at "
+                f"row {r}. Multi-segment WP schedules are no longer supported.\n"
+                f"Migration: delete the WP SCHEDULE section from the Config "
+                f"sheet; add 'Start', 'End', 'Type' columns to the WP BUDGET "
+                f"section (cols H, I, J) and populate one row per WP. Any WP "
+                f"that previously had multiple active ranges must be collapsed "
+                f"to a single (start, end) pair."
+            )
+
     # Scan column A for known param labels (position-independent).
     _param_map = {
         "Project Title": ("title", None),
@@ -321,9 +341,13 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
     # Vacation month — resolve via named range (preferred) or default to July.
     project_params["vacation_month_num"] = _read_vacation_month_num(ws)
 
-    # WP Budget table — find "WP BUDGET" section header
+    # WP Budget table — find "WP BUDGET" section header. Under the single-range
+    # schema, each row carries id/name/fte/rate AND start/end/type (cols H/I/J).
     wp_section = _find_header_row(ws, SECTION_HEADER_LABELS["wp_budget"])
     work_packages: list[dict] = []
+    seen_ids: set[str] = set()
+    valid_types = {"flat", "front-loaded", "bell", "back-loaded"}
+    project_months = int(project_params.get("months") or 0)
     r = _data_row_after(wp_section)
     while r <= ws.max_row:
         wp_id = ws.cell(r, 1).value
@@ -334,9 +358,39 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
         if col_b and str(col_b).upper() == "TOTAL":
             break
         rate_cell = ws.cell(r, COL_WP_RATE).value
+        id_str = str(wp_id).strip()
+        if id_str in seen_ids:
+            raise ValueError(
+                f"Duplicate WP id '{id_str}' in WP BUDGET section. "
+                f"Multi-segment schedules are no longer supported — each WP "
+                f"must appear exactly once. Collapse to a single (Start, End) "
+                f"range."
+            )
+        seen_ids.add(id_str)
+        start_val = ws.cell(r, COL_WP_START).value
+        end_val = ws.cell(r, COL_WP_END).value
+        type_val = ws.cell(r, COL_WP_TYPE).value
+        start_int = int(start_val) if start_val is not None else 1
+        end_int = int(end_val) if end_val is not None else 1
+        type_str = str(type_val).strip() if type_val else "flat"
+        if not (1 <= start_int <= end_int):
+            raise ValueError(
+                f"WP '{id_str}' has invalid schedule range: Start={start_int}, "
+                f"End={end_int}. Required: 1 <= Start <= End."
+            )
+        if project_months and end_int > project_months:
+            raise ValueError(
+                f"WP '{id_str}' End={end_int} exceeds project_months="
+                f"{project_months}. Shorten the WP or extend the project."
+            )
+        if type_str not in valid_types:
+            raise ValueError(
+                f"WP '{id_str}' has invalid Type {type_str!r}. "
+                f"Must be one of: {sorted(valid_types)}."
+            )
         work_packages.append(
             {
-                "id": str(wp_id),
+                "id": id_str,
                 "name": str(col_b or ""),
                 "fte": float(ws.cell(r, COL_WP_FTE).value or 0),
                 # ``rate`` is the numeric coercion for downstream consumers (falls
@@ -345,32 +399,14 @@ def read_config_sheet(ws) -> tuple[dict, list[dict], list[dict]]:
                 # writers can restore the user's formula on round-trip.
                 "rate": _safe_float(rate_cell, 6500),
                 "rate_raw": rate_cell,
+                "start": start_int,
+                "end": end_int,
+                "type": type_str,
             }
         )
         r += 1
 
-    # WP Schedule table — find "WP SCHEDULE" section header (optional)
-    sched_section = _find_header_row(
-        ws, SECTION_HEADER_LABELS["wp_schedule"], required=False
-    )
-    wp_schedule: list[dict] = []
-    if sched_section is not None:
-        r = _data_row_after(sched_section)
-        while r <= ws.max_row:
-            sched_id = ws.cell(r, 1).value
-            if sched_id is None or str(sched_id).strip() == "":
-                break
-            wp_schedule.append(
-                {
-                    "id": str(sched_id),
-                    "start": int(ws.cell(r, COL_SCHED_START).value or 1),
-                    "end": int(ws.cell(r, COL_SCHED_END).value or 1),
-                    "type": str(ws.cell(r, COL_SCHED_TYPE).value or "flat"),
-                }
-            )
-            r += 1
-
-    return project_params, work_packages, wp_schedule
+    return project_params, work_packages
 
 
 def read_plan_config(ws, layout) -> list[dict]:

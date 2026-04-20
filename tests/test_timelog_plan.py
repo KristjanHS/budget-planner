@@ -82,10 +82,10 @@ def _read_team(wb) -> list[dict]:
     return read_team_from_config(wb["Config"])
 
 
-def _read_wps_and_schedule(wb) -> tuple[list[dict], list[dict]]:
+def _read_wps(wb) -> list[dict]:
     from budget_planner.reader import read_config_sheet
-    _params, wps, sched = read_config_sheet(wb["Config"])
-    return wps, sched
+    _params, wps = read_config_sheet(wb["Config"])
+    return wps
 
 
 def _find_section_title_row(ws, title: str) -> int:
@@ -329,7 +329,7 @@ def test_wp_summary_headers_v2(tlp):
 
 
 def test_wp_summary_rows_match_work_packages(tlp, assigned_wb):
-    wps, _sched = _read_wps_and_schedule(assigned_wb)
+    wps = _read_wps(assigned_wb)
     first = _wp_summary_first_row(tlp)
     sheet_codes = []
     for r in range(first, first + len(wps) + 5):
@@ -350,7 +350,7 @@ def test_wp_summary_rows_match_work_packages(tlp, assigned_wb):
 
 def test_buffer_signed(tlp, assigned_wb):
     """Buffer € at col D = C − B (Assigned − Ceiling). CF red<0 / green>0."""
-    wps, _sched = _read_wps_and_schedule(assigned_wb)
+    wps = _read_wps(assigned_wb)
     first = _wp_summary_first_row(tlp)
     for i, _wp in enumerate(wps):
         r = first + i
@@ -382,37 +382,12 @@ def test_buffer_signed(tlp, assigned_wb):
     assert green_hits >= 1, f"expected a green Buffer€>0 CF rule, found {green_hits}"
 
 
-# ── PER-WP SUMMARY: WP sched months literal ─────────────────────────────────
-
-
-def test_wp_sched_months_literal(tlp, assigned_wb):
-    """Col F = literal int = sum of active-segment lengths (multi-segment WPs respected)."""
-    wps, sched = _read_wps_and_schedule(assigned_wb)
-    first = _wp_summary_first_row(tlp)
-    for i, wp in enumerate(wps):
-        r = first + i
-        code = wp["id"]
-        expected = sum(
-            s["end"] - s["start"] + 1
-            for s in sched
-            if s["id"] == code
-        )
-        got = tlp.cell(r, 6).value
-        assert got == expected, f"{code} sched months: expected {expected}, got {got}"
-
-    # Bystander: the total across all WPs should match the schedule total,
-    # proving the formula isn't always returning the same value.
-    sheet_total = sum(tlp.cell(first + i, 6).value for i in range(len(wps)))
-    sched_total = sum(s["end"] - s["start"] + 1 for s in sched)
-    assert sheet_total == sched_total
-
-
 # ── PER-WP SUMMARY: Burn rate ───────────────────────────────────────────────
 
 
 def test_burn_rate_conditional(tlp, assigned_wb):
     """Col G formula: IF(AND(D<0, wallclock>0), -D/wallclock, ""). CF red on excess."""
-    wps, _sched = _read_wps_and_schedule(assigned_wb)
+    wps = _read_wps(assigned_wb)
     first = _wp_summary_first_row(tlp)
     last = first + len(wps) - 1
     for i, _wp in enumerate(wps):
@@ -634,7 +609,7 @@ def _expected_year_groups(project_start, project_months: int) -> list[tuple[int,
 
 def test_year_cols_count_and_headers(tlp, assigned_wb):
     """Year col count = distinct calendar years spanned; headers = Y{yyyy} €."""
-    params, _wps, _sched = _read_config(assigned_wb)
+    params, _wps = _read_config(assigned_wb)
     months = params["months"]
     groups = _expected_year_groups(params["start"], months)
 
@@ -648,16 +623,9 @@ def test_year_cols_count_and_headers(tlp, assigned_wb):
     assert trailing in (None, ""), f"unexpected header past year cols: {trailing!r}"
 
 
-def _wp_active_window(wp_id: str, wp_schedule: list[dict]) -> tuple[int, int]:
-    """Derive (active_start, active_end) from the schedule — multi-segment aware."""
-    segs = [s for s in wp_schedule if s["id"] == wp_id]
-    assert segs, f"no schedule rows for WP {wp_id!r}"
-    return min(int(s["start"]) for s in segs), max(int(s["end"]) for s in segs)
-
-
 def test_year_cols_overlap_blanks(tlp, assigned_wb):
     """Cells where WP's active window doesn't overlap the year are literal ``""``."""
-    params, wps, sched = _read_config(assigned_wb)
+    params, wps = _read_config(assigned_wb)
     groups = _expected_year_groups(params["start"], params["months"])
     first = _wp_summary_first_row(tlp)
     base_cols = 8
@@ -665,7 +633,7 @@ def test_year_cols_overlap_blanks(tlp, assigned_wb):
     checked_nonoverlap = 0
     checked_overlap = 0
     for wi, wp in enumerate(wps):
-        active_start, active_end = _wp_active_window(wp["id"], sched)
+        active_start, active_end = int(wp["start"]), int(wp["end"])
         for yi, (_year, fm, lm) in enumerate(groups):
             col = base_cols + 1 + yi
             val = tlp.cell(first + wi, col).value
@@ -699,7 +667,7 @@ def test_year_cols_sum_matches_assigned(recalced_assigned_path):
     """
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
-    params, wps, _sched = _read_config(wb)
+    params, wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     first = _wp_summary_first_row(ws)
     base_cols = 8
@@ -760,7 +728,7 @@ def test_vacation_config_scalar(assigned_wb):
 def test_num_vacation_months_literal(assigned_wb):
     """`num_vacation_months` Config literal matches count of July months in span."""
     assert "num_vacation_months" in assigned_wb.defined_names
-    params, _wps, _sched = _read_config(assigned_wb)
+    params, _wps = _read_config(assigned_wb)
     dn = assigned_wb.defined_names["num_vacation_months"]
     dests = list(dn.destinations)
     assert len(dests) == 1
@@ -776,7 +744,7 @@ def test_num_vacation_months_literal(assigned_wb):
 def test_vacation_cells_locked(assigned_wb, tlp):
     """Every July cell across person rows is '', has VACATION_FILL, locked=True."""
     from budget_planner.styles import VACATION_FILL
-    params, _wps, _sched = _read_config(assigned_wb)
+    params, _wps = _read_config(assigned_wb)
     m_start = TIMELOG_MONTH_COL_START
     vac_months = _vacation_project_months(params["start"], params["months"], 7)
     expected_fill_rgb = (VACATION_FILL.fgColor.rgb or "").upper()
@@ -838,7 +806,7 @@ def test_pool_value_after_recalc(recalced_assigned_path):
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
     cfg = wb["Config"]
-    params, _wps, _sched = _read_config(wb)
+    params, _wps = _read_config(wb)
     num_vac = len(_vacation_project_months(params["start"], params["months"], 7))
     available_months = params["months"] - num_vac
 
@@ -877,7 +845,7 @@ def test_pool_value_after_recalc(recalced_assigned_path):
 
 def test_solver_never_places_wp_in_vacation_cell(assigned_wb, tlp):
     """TIMELOG GRID: no WP code lands in any July cell across all person rows."""
-    params, _wps, _sched = _read_config(assigned_wb)
+    params, _wps = _read_config(assigned_wb)
     vac_months = _vacation_project_months(params["start"], params["months"], 7)
     assert vac_months, "no July months in span — vacation suppression untested"
     m_start = TIMELOG_MONTH_COL_START
@@ -927,7 +895,7 @@ def test_monthly_total_row_vacation_fill(tlp, assigned_wb):
     """July cells on the Monthly total € row carry VACATION_FILL; non-vacation
     month cells on the same row do NOT (bystander for selectivity)."""
     from budget_planner.styles import VACATION_FILL
-    params, _wps, _sched = _read_config(assigned_wb)
+    params, _wps = _read_config(assigned_wb)
     vac_months = _vacation_project_months(params["start"], params["months"], 7)
     assert vac_months, "fixture has no July months — fill tier untestable"
 
@@ -963,7 +931,7 @@ def test_monthly_total_vacation_zero(recalced_assigned_path):
     """Every vacation-month cell on the Monthly total € row recalcs to 0."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
-    params, _wps, _sched = _read_config(wb)
+    params, _wps = _read_config(wb)
     vac_months = _vacation_project_months(params["start"], params["months"], 7)
     assert vac_months, "no July months — vacation cell total untested"
     m_start = TIMELOG_MONTH_COL_START
@@ -982,7 +950,7 @@ def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
     cell equals the sum of those persons' Rate values."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
-    params, _wps, _sched = _read_config(wb)
+    params, _wps = _read_config(wb)
     vac_months = _vacation_project_months(params["start"], params["months"], 7)
     m_start = TIMELOG_MONTH_COL_START
     m_end = m_start + params["months"] - 1
@@ -1053,7 +1021,7 @@ def test_yearly_rows_present(tlp):
 
 def test_yearly_total_col_c_formula(tlp, assigned_wb):
     """Yearly total € col C cross-check = SUM of WP Assigned € col (C)."""
-    wps, _sched = _read_wps_and_schedule(assigned_wb)
+    wps = _read_wps(assigned_wb)
     y_total, _ = _yearly_rows(tlp)
     first = _wp_summary_first_row(tlp)
     last = first + len(wps) - 1
@@ -1063,7 +1031,7 @@ def test_yearly_total_col_c_formula(tlp, assigned_wb):
 
 def test_yearly_budget_col_c_formula(tlp, assigned_wb):
     """Yearly budget € col C cross-check = SUM of WP Ceiling € col (B)."""
-    wps, _sched = _read_wps_and_schedule(assigned_wb)
+    wps = _read_wps(assigned_wb)
     _, y_budget = _yearly_rows(tlp)
     first = _wp_summary_first_row(tlp)
     last = first + len(wps) - 1
@@ -1075,7 +1043,7 @@ def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
     """Col C value equals row-sum of year cells (within leaf-rounding tolerance)."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
-    params, _wps, _sched = _read_config(wb)
+    params, _wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     y_total, _ = _yearly_rows(ws)
     base_cols = 8
@@ -1099,7 +1067,7 @@ def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
     """Col C value equals row-sum of year cells (within fp tolerance)."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
-    params, _wps, _sched = _read_config(wb)
+    params, _wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     _, y_budget = _yearly_rows(ws)
     base_cols = 8
@@ -1128,7 +1096,7 @@ def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
 def test_yearly_budget_single_wp_single_year(tlp, assigned_wb):
     """For any WP whose active window lies inside one calendar year, that year's
     Yearly budget term = 1.0 × Config!E{wp_row}."""
-    params, wps, sched = _read_wps_and_schedule_and_params(assigned_wb)
+    params, wps = _read_wps_and_schedule_and_params(assigned_wb)
     groups = _expected_year_groups(params["start"], params["months"])
     _, y_budget = _yearly_rows(tlp)
     base_cols = 8
@@ -1136,7 +1104,7 @@ def test_yearly_budget_single_wp_single_year(tlp, assigned_wb):
     # Find a WP fully contained in one year (existence, not every-row).
     candidates = []
     for wi, wp in enumerate(wps):
-        active_start, active_end = _wp_active_window(wp["id"], sched)
+        active_start, active_end = int(wp["start"]), int(wp["end"])
         for yi, (_yr, fm, lm) in enumerate(groups):
             if fm <= active_start and active_end <= lm:
                 candidates.append((wi, wp, yi, fm, lm))
@@ -1156,57 +1124,10 @@ def test_yearly_budget_single_wp_single_year(tlp, assigned_wb):
     )
 
 
-def test_yearly_budget_multi_segment_wp(tlp, assigned_wb):
-    """For a multi-segment WP, per-year proportion uses total_sched_months that
-    sums active segments (gap months excluded)."""
-    params, wps, sched = _read_wps_and_schedule_and_params(assigned_wb)
-    groups = _expected_year_groups(params["start"], params["months"])
-    _, y_budget = _yearly_rows(tlp)
-    base_cols = 8
-
-    # Find a multi-segment WP.
-    multi_wi: int | None = None
-    multi_wp = None
-    for wi, wp in enumerate(wps):
-        segs = [s for s in sched if s["id"] == wp["id"]]
-        if len(segs) >= 2:
-            multi_wi = wi
-            multi_wp = wp
-            break
-    if multi_wi is None or multi_wp is None:
-        pytest.skip("no multi-segment WP in fixture — multi-segment path untested")
-
-    segs = [s for s in sched if s["id"] == multi_wp["id"]]
-    total_sched_months = sum(int(s["end"]) - int(s["start"]) + 1 for s in segs)
-    # Build the WP's set of active months (1-indexed project months).
-    active: set[int] = set()
-    for s in segs:
-        active.update(range(int(s["start"]), int(s["end"]) + 1))
-
-    cfg_row = _config_wp_row(assigned_wb, multi_wp["id"])
-
-    # For every year the WP overlaps, derive the expected prop and check the
-    # term appears in the year's yearly-budget formula.
-    checked = 0
-    for yi, (_yr, fm, lm) in enumerate(groups):
-        months_in_year = sum(1 for m in active if fm <= m <= lm)
-        if months_in_year <= 0:
-            continue
-        expected_prop = months_in_year / total_sched_months
-        formula = str(tlp.cell(y_budget, base_cols + 1 + yi).value or "")
-        expected_term = f"{expected_prop}*Config!$E${cfg_row}"
-        assert expected_term in formula, (
-            f"WP {multi_wp['id']} year idx {yi}: expected {expected_term!r} "
-            f"in formula, got {formula!r}"
-        )
-        checked += 1
-    assert checked > 0, f"WP {multi_wp['id']} had no year-overlaps"
-
-
 def _read_wps_and_schedule_and_params(wb):
     from budget_planner.reader import read_config_sheet
-    params, wps, sched = read_config_sheet(wb["Config"])
-    return params, wps, sched
+    params, wps = read_config_sheet(wb["Config"])
+    return params, wps
 
 
 def _config_wp_row(wb, wp_id: str) -> int:

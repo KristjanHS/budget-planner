@@ -25,7 +25,7 @@ _PF_QUOTED = f"'{SHEET_PLAN_FORECAST}'"
 
 
 def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
-                        wp_schedule=None, preserved=None,
+                        preserved=None,
                         plan_forecast_layout=None,
                         eur_through_override: int | None = None):
     """Build the Actuals sheet for EUR actuals per WP per month.
@@ -49,14 +49,12 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
             "build_actuals_sheet requires plan_forecast_layout — "
             "build Plan-Forecast before Actuals."
         )
-    if project_params is None or work_packages is None or wp_schedule is None:
+    if project_params is None or work_packages is None:
         from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
-        if wp_schedule is None:
-            wp_schedule = config.WP_SCHEDULE
 
     month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
@@ -161,7 +159,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
         if preserved and wp["id"] in preserved:
             preserved_values = preserved[wp["id"]]
 
-        active = wp_active_months(wp["id"], wp_schedule)
+        active = wp_active_months(wp["id"], work_packages)
         for m_idx in range(project_params["months"]):
             c = month_col_start + m_idx
             month_num = m_idx + 1

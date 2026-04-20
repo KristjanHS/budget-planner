@@ -105,15 +105,20 @@ def test_burn_rate_wp_id_refs_plan(trends_ws):
 
 
 def test_burn_rate_time_elapsed_formula(trends_ws):
-    """Col C has formula referencing current_month for % Time Elapsed."""
+    """Col C has formula referencing current_month for % Time Elapsed.
+
+    Under the single-range schema the formula uses direct Config!H{row} /
+    Config!I{row} refs (WP BUDGET Start/End cols) instead of MINIFS/MAXIFS
+    over a separate schedule table.
+    """
     header_row = _find_row_containing(trends_ws, 1, "WP ID")
     assert header_row is not None
     first_wp_row = header_row + 1
     cell = trends_ws.cell(first_wp_row, 3)
     formula = str(cell.value)
     assert "current_month" in formula
-    assert "_xlfn.MINIFS" in formula
-    assert "sched_starts" in formula
+    assert "Config!H" in formula  # WP start col ref
+    assert "Config!I" in formula  # WP end col ref
 
 
 def test_burn_rate_budget_eur_formula(trends_ws):

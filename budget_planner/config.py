@@ -24,42 +24,35 @@ DEFAULT_RP_LENGTH = 6                   # Months per reporting period (programme
 GRADE_RATES = {"Senior": 12500, "Mid": 10000, "Junior": 7500}
 DEFAULT_GRADE = "Mid"
 
-# ── WORK PACKAGES (Budget) ──
-# Each WP dict must have: id, name, fte (total person-months)
-# Schedule (start/end/type) is in WP_SCHEDULE below
+# ── WORK PACKAGES ──
+# Each WP dict has: id, name, fte (total person-months), start (1-indexed
+# project month), end (1-indexed project month), type (distribution curve:
+# "flat", "front-loaded", "bell", "back-loaded"). Optional per-WP rate override.
+# Invariant: exactly one entry per WP id; 1 <= start <= end <= PROJECT_MONTHS.
+# Multi-segment schedules are not supported — every WP has a single contiguous
+# active range. The funder audits that no time is logged outside this range.
+# NOTE: WP3 seed was historically split M1-M3 + M5-M7 (demo "mid-WP gap");
+# collapsed to M1-M7 for the single-range schema.
 
 WORK_PACKAGES = [
-    {"id": "WP1", "name": "Project Management",              "fte": 4.0},
-    {"id": "WP2", "name": "Requirements and concept",     "fte": 6.0},
-    {"id": "WP3", "name": "Research and analysis", "fte": 6.0},
-    {"id": "WP4", "name": "Architecture design",             "fte": 12.0},
-    {"id": "WP5", "name": "Component design",               "fte": 6.0},
-    {"id": "WP6", "name": "Subsystem design",  "fte": 3.0},
-    {"id": "WP7", "name": "Software development",         "fte": 3.0},
-    {"id": "WP8", "name": "Prototyping",        "fte": 3.0},
-    {"id": "WP9", "name": "Validation and demo",       "fte": 3.0},
-]
-
-# ── WP SCHEDULE ──
-# Each entry: id (WP ID, can repeat for multiple ranges), start (month 1-based),
-# end (month 1-based), type (distribution curve: "flat", "front-loaded", "bell", "back-loaded")
-# The funder audits that no time is logged outside a WP's active period
-
-WP_SCHEDULE = [
-    {"id": "WP1", "start": 1,  "end": 14, "type": "flat"},
-    {"id": "WP2", "start": 1,  "end": 6, "type": "front-loaded"},
-    # WP3 has a mid-WP gap (M4) — e.g. research pause between phases.
-    # Demonstrates gap-aware distribution: Alice and Dave are assigned across
-    # both phases; the Capacity builder greys out the gap months and
-    # distributes their Total FTE only across the valid months.
-    {"id": "WP3", "start": 1,  "end": 3, "type": "front-loaded"},
-    {"id": "WP3", "start": 5, "end": 7, "type": "front-loaded"},
-    {"id": "WP4", "start": 2,  "end": 11, "type": "bell"},
-    {"id": "WP5", "start": 4, "end": 13, "type": "bell"},
-    {"id": "WP6", "start": 4, "end": 13, "type": "bell"},
-    {"id": "WP7", "start": 6, "end": 14, "type": "bell"},
-    {"id": "WP8", "start": 10, "end": 14, "type": "back-loaded"},
-    {"id": "WP9", "start": 12, "end": 14, "type": "back-loaded"},
+    {"id": "WP1", "name": "Project Management",              "fte": 4.0,
+     "start":  1, "end": 14, "type": "flat"},
+    {"id": "WP2", "name": "Requirements and concept",     "fte":  6.0,
+     "start":  1, "end": 18, "type": "front-loaded"},
+    {"id": "WP3", "name": "Research and analysis", "fte": 6.0,
+     "start":  1, "end": 7, "type": "front-loaded"},
+    {"id": "WP4", "name": "Architecture design",             "fte": 12.0,
+     "start":  2, "end": 11, "type": "bell"},
+    {"id": "WP5", "name": "Component design",               "fte": 6.0,
+     "start": 4, "end": 13, "type": "bell"},
+    {"id": "WP6", "name": "Subsystem design",  "fte": 3.0,
+     "start": 4, "end": 13, "type": "bell"},
+    {"id": "WP7", "name": "Software development",         "fte": 3.0,
+     "start": 6, "end": 14, "type": "bell"},
+    {"id": "WP8", "name": "Prototyping",        "fte":  3.0,
+     "start": 10, "end": 14, "type": "back-loaded"},
+    {"id": "WP9", "name": "Validation and demo",       "fte":  3.0,
+     "start": 12, "end": 14, "type": "back-loaded"},
 ]
 
 # ── TEAM ──

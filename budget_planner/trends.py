@@ -11,9 +11,11 @@ from budget_planner.layout import (
     MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS, SHEET_CAPACITY,
     SHEET_PLAN_FORECAST,
     TREND_OK_BAND, TREND_OVER_THRESHOLD, TREND_WATCH_THRESHOLD, TREND_SLOW_THRESHOLD,
+    COL_WP_START, COL_WP_END,
     month_col_end as _month_col_end, val_columns,
     wp_month_bounds,
 )
+from openpyxl.utils import get_column_letter
 from budget_planner.styles import (
     BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
     LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
@@ -29,7 +31,7 @@ from budget_planner.styles import CF_RED_FILL as _RED_CF_FILL
 
 
 def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout, *,
-                       project_params, work_packages, wp_schedule,
+                       project_params, work_packages,
                        team, reporting_periods,
                        plan_forecast_layout=None):
     """Build the Trends sheet: WP burn rate, cumulative chart, person load.
@@ -41,11 +43,12 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         capacity_layout: Capacity layout dict (person_groups with total_row per person).
         team_layout: Team layout dict (person_rows mapping name->row).
         project_params: Dict with keys title, start, months, rate.
-        work_packages: List of WP dicts.
-        wp_schedule: WP schedule entries.
+        work_packages: List of WP dicts with single-range 'start'/'end'/'type'.
         team: List of team member dicts.
         reporting_periods: Reporting period entries.
     """
+    wp_start_col_letter = get_column_letter(COL_WP_START)
+    wp_end_col_letter = get_column_letter(COL_WP_END)
     month_col_start = MONTH_COL_START
     num_wps = len(work_packages)
     month_col_end = _month_col_end(project_params["months"])
@@ -92,10 +95,10 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         # Col B: WP Name (green cross-sheet ref)
         style_cell(ws, row, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
-        # WP start/end via MINIFS/MAXIFS on schedule named ranges
-        # Use _xlfn prefix for LibreOffice compatibility
-        wp_start = f"_xlfn.MINIFS(sched_starts,sched_wp_ids,{SHEET_CONFIG}!A{config_row})"
-        wp_end = f"_xlfn.MAXIFS(sched_ends,sched_wp_ids,{SHEET_CONFIG}!A{config_row})"
+        # WP start/end: direct cell refs into WP BUDGET cols H/I under the
+        # single-range schema (one row per WP, no MINIFS/MAXIFS indirection).
+        wp_start = f"{SHEET_CONFIG}!{wp_start_col_letter}{config_row}"
+        wp_end = f"{SHEET_CONFIG}!{wp_end_col_letter}{config_row}"
 
         # Col C: % Time Elapsed
         time_formula = (
@@ -188,7 +191,7 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     for i in range(num_wps):
         row = first_wp_data_row + i
         wp_id = work_packages[i]["id"]
-        _, wp_end_val = wp_month_bounds(wp_id, wp_schedule)
+        _, wp_end_val = wp_month_bounds(wp_id, work_packages)
         g_cell = f"G{row}:G{row}"
         g_ref = f"G{row}"
         # Green first: exhaustion >= wp_end

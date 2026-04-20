@@ -462,7 +462,6 @@ def build_actuals_hours_sheet(
     *,
     project_params,
     work_packages,
-    wp_schedule,
     team,
     external_commitments,
     assignments,
@@ -476,8 +475,8 @@ def build_actuals_hours_sheet(
     Args:
         ws: The Actuals-Hours worksheet to populate.
         project_params: dict with 'title', 'start', 'months', 'rate'.
-        work_packages: list of WP dicts.
-        wp_schedule: list of WP schedule entries (for active-month greying).
+        work_packages: list of WP dicts with single-range schedule fields
+            ('start', 'end', 'type') for active-month greying.
         team: list of team member dicts.
         external_commitments: list of external commitment dicts.
         assignments: list of person-WP assignment dicts (drives which WP
@@ -584,7 +583,7 @@ def build_actuals_hours_sheet(
         per_person_assignments.setdefault(entry["person"], []).append(entry)
 
     wp_active_map: dict[str, frozenset[int]] = {
-        wp["id"]: wp_active_months(wp["id"], wp_schedule)
+        wp["id"]: wp_active_months(wp["id"], work_packages)
         for wp in work_packages
     }
 

@@ -7,7 +7,7 @@ Edit the `tbl_WorkPackages` table on the Config sheet in Excel. Run `python -m b
 Edit the TEAM ROSTER section on the Config sheet (Person + Max FTE blue cells). Run `python -m budget_planner rebuild` + pytest.
 
 ## "Add a new work package"
-Add a row to `tbl_WorkPackages` on the Config sheet in Excel. Run `python -m budget_planner rebuild` + pytest.
+Add a row to `tbl_WorkPackages` on the Config sheet in Excel. One row per WP — populate id/name/FTE/rate plus Start/End/Type (cols H/I/J, blue inputs; Type from `{flat, front-loaded, bell, back-loaded}`). Run `python -m budget_planner rebuild` + pytest.
 
 ## "Add a team member"
 Add a row to the TEAM ROSTER section on the Config sheet. Run `python -m budget_planner rebuild` + pytest.

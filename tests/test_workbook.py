@@ -5,7 +5,7 @@ import pytest
 import openpyxl
 
 from budget_planner.reader import discover_layout
-from budget_planner.config import WORK_PACKAGES, WP_SCHEDULE, NUM_WPS, MONTH_COL_START, PROJECT_MONTHS
+from budget_planner.config import WORK_PACKAGES, NUM_WPS, MONTH_COL_START, PROJECT_MONTHS
 from budget_planner.layout import wp_month_bounds
 from budget_planner.workbook import init_workbook
 
@@ -84,7 +84,7 @@ def _wp_indices_with_inactive_months():
     """Find WP indices that have inactive months (start > 1 or end < PROJECT_MONTHS)."""
     result = []
     for i, wp in enumerate(WORK_PACKAGES):
-        start, end = wp_month_bounds(wp["id"], WP_SCHEDULE)
+        start, end = wp_month_bounds(wp["id"], WORK_PACKAGES)
         if start > 1 or end < PROJECT_MONTHS:
             result.append(i)
         if len(result) >= 3:
@@ -96,7 +96,7 @@ def _wp_indices_with_inactive_months():
 def test_inactive_months_empty(workbook, layout, wp_idx):
     plan = workbook["Plan"]
     wp = WORK_PACKAGES[wp_idx]
-    start, end = wp_month_bounds(wp["id"], WP_SCHEDULE)
+    start, end = wp_month_bounds(wp["id"], WORK_PACKAGES)
     row = layout["planned_first_wp_row"] + wp_idx
     for m in range(PROJECT_MONTHS):
         month_num = m + 1

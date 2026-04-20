@@ -158,11 +158,10 @@ class TestValidation:
         assert any("Unknown" in e for e in errors)
 
     def test_wp_start_gt_end_warning(self):
-        wps = [{"id": "WP1", "name": "Bad", "fte": 1}]
-        sched = [{"id": "WP1", "start": 10, "end": 5, "type": "flat"}]
+        wps = [{"id": "WP1", "name": "Bad", "fte": 1,
+                "start": 10, "end": 5, "type": "flat"}]
         _, warnings = _validate_config(
-            self._params(), wps, self._team(), [],
-            wp_schedule=sched)
+            self._params(), wps, self._team(), [])
         assert any("start" in w.lower() for w in warnings)
 
 

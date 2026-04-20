@@ -11,8 +11,8 @@ from budget_planner.layout import (
     SHEET_CONFIG,
     SECTION_HEADER_LABELS,
     COL_WP_FTE, COL_WP_RATE, COL_WP_CEILING,
-    COL_WP_ASSIGNED_PM, COL_WP_VARIANCE, WP_BUDGET_LAST_COL,
-    COL_SCHED_START, COL_SCHED_END, COL_SCHED_TYPE, SCHED_LAST_COL,
+    COL_WP_ASSIGNED_PM, COL_WP_VARIANCE,
+    COL_WP_START, COL_WP_END, COL_WP_TYPE, WP_BUDGET_LAST_COL,
     COL_ROSTER_FTE, COL_ROSTER_GRADE, COL_ROSTER_RATE, COL_ROSTER_PRIORITY,
     ROSTER_LAST_COL,
     COL_GRADE_RATE, GRADE_LAST_COL,
@@ -93,7 +93,7 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
     # Column headers
     budget_headers = [
         "WP ID", "WP Name", "FTE Budget", "Rate (€/PM)", "Ceiling (€)",
-        "Assigned PM", "Variance",
+        "Assigned PM", "Variance", "Start", "End", "Type",
     ]
     for col, hdr in enumerate(budget_headers, start=1):
         style_cell(ws, budget_header_row, col, value=hdr,
@@ -121,6 +121,19 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
             "FTE Budget − Assigned PM. Positive = budget remains unassigned. "
             "Zero = fully committed. Yellow highlight if |variance| > 0.01 "
             "(not fully staffed or over-committed)."
+        ),
+        COL_WP_START: (
+            "First project month (1-indexed) this WP is active. Single "
+            "contiguous range — multi-segment schedules are not supported. "
+            "Blue = user input."
+        ),
+        COL_WP_END: (
+            "Last project month (1-indexed) this WP is active, inclusive. "
+            "Blue = user input."
+        ),
+        COL_WP_TYPE: (
+            "Distribution curve for the Capacity sheet: flat, front-loaded, "
+            "bell, or back-loaded. Blue = user input."
         ),
     })
 
@@ -163,6 +176,37 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
         apm_cl = get_column_letter(COL_WP_ASSIGNED_PM)
         style_cell(ws, row_idx, COL_WP_VARIANCE, font=BLACK_FORMULA, fmt="0.00",
                    border=False).value = f"={fte_cl_g}{row_idx}-{apm_cl}{row_idx}"
+        # Cols H/I/J: Start, End, Type — single-range WP schedule (blue input)
+        style_cell(ws, row_idx, COL_WP_START, value=int(wp["start"]),
+                   font=BLUE_INPUT, fmt="0", border=False)
+        style_cell(ws, row_idx, COL_WP_END, value=int(wp["end"]),
+                   font=BLUE_INPUT, fmt="0", border=False)
+        style_cell(ws, row_idx, COL_WP_TYPE, value=wp.get("type", "flat"),
+                   font=BLUE_INPUT, border=False)
+
+    # Data validation: Type dropdown
+    dv_type = DataValidation(
+        type="list",
+        formula1='"flat,front-loaded,bell,back-loaded"',
+        allow_blank=False,
+    )
+    dv_type.error = "Please select a valid distribution type"
+    dv_type.errorTitle = "Invalid Type"
+    type_col = get_column_letter(COL_WP_TYPE)
+    dv_type.sqref = f"{type_col}{budget_first_data_row}:{type_col}{budget_last_data_row}"
+    ws.add_data_validation(dv_type)
+
+    # CF: yellow fill on Start/End row when Start > End (schedule inconsistency)
+    start_cl = get_column_letter(COL_WP_START)
+    end_cl = get_column_letter(COL_WP_END)
+    for row_idx in range(budget_first_data_row, budget_last_data_row + 1):
+        rule = FormulaRule(
+            formula=[f"${start_cl}{row_idx}>${end_cl}{row_idx}"],
+            fill=CF_YELLOW_FILL,
+        )
+        ws.conditional_formatting.add(
+            f"{start_cl}{row_idx}:{end_cl}{row_idx}", rule
+        )
 
     # CF: yellow fill on Variance column when ABS(value) > 0.01
     var_cl = get_column_letter(COL_WP_VARIANCE)
@@ -215,69 +259,6 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
         "wp_first_row": budget_first_data_row,
         "wp_last_row": budget_last_data_row,
         "wp_total_row": budget_total_row,
-    }
-    return next_row, layout
-
-
-def _write_schedule_section(ws, start_row, wp_schedule):
-    """Write the WP SCHEDULE section (section header, column headers, data rows, validation, CF).
-
-    Returns:
-        (next_row, layout_dict) where next_row is the first row after the last data row,
-        and layout_dict has keys: sched_header_row, sched_first_row, sched_last_row.
-    """
-    sched_section_row = start_row
-    sched_header_row = sched_section_row + 1
-    sched_first_data_row = sched_header_row + 1
-
-    # Section header — merged A:D
-    ws.merge_cells(start_row=sched_section_row, start_column=1,
-                   end_row=sched_section_row, end_column=SCHED_LAST_COL)
-    style_cell(ws, sched_section_row, 1, value=SECTION_HEADER_LABELS["wp_schedule"],
-               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
-
-    # Column headers
-    sched_headers = ["WP ID", "Start", "End", "Type"]
-    for col, hdr in enumerate(sched_headers, start=1):
-        style_cell(ws, sched_header_row, col, value=hdr,
-                   font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
-
-    # Schedule data rows
-    sched_last_data_row = sched_first_data_row + len(wp_schedule) - 1
-    for row_idx, entry in enumerate(wp_schedule, start=sched_first_data_row):
-        style_cell(ws, row_idx, 1, value=entry["id"], font=BLUE_INPUT, border=False)
-        style_cell(ws, row_idx, COL_SCHED_START, value=entry["start"],
-                   font=BLUE_INPUT, fmt="0", border=False)
-        style_cell(ws, row_idx, COL_SCHED_END, value=entry["end"],
-                   font=BLUE_INPUT, fmt="0", border=False)
-        style_cell(ws, row_idx, COL_SCHED_TYPE, value=entry["type"],
-                   font=BLUE_INPUT, border=False)
-
-    # Data validation dropdown on Type column
-    dv_type = DataValidation(
-        type="list",
-        formula1='"flat,front-loaded,bell,back-loaded"',
-        allow_blank=False,
-    )
-    dv_type.error = "Please select a valid distribution type"
-    dv_type.errorTitle = "Invalid Type"
-    type_col = get_column_letter(COL_SCHED_TYPE)
-    dv_type.sqref = f"{type_col}{sched_first_data_row}:{type_col}{sched_last_data_row}"
-    ws.add_data_validation(dv_type)
-
-    # Conditional formatting: yellow fill if Start > End (per row)
-    for row_idx in range(sched_first_data_row, sched_last_data_row + 1):
-        rule = FormulaRule(
-            formula=[f"$B{row_idx}>$C{row_idx}"],
-            fill=CF_YELLOW_FILL,
-        )
-        ws.conditional_formatting.add(f"A{row_idx}:D{row_idx}", rule)
-
-    next_row = sched_last_data_row + 1
-    layout = {
-        "sched_header_row": sched_header_row,
-        "sched_first_row": sched_first_data_row,
-        "sched_last_row": sched_last_data_row,
     }
     return next_row, layout
 
@@ -468,12 +449,12 @@ def _write_assignments_section(ws, start_row, assignments):
         COL_ASSIGN_FTE: (
             "Total person-months this person contributes to this WP across "
             "the window [Start Month, End Month]. The Capacity sheet "
-            "distributes this amount ONLY across the WP's active months "
-            "within the window — WP SCHEDULE gaps are excluded automatically."
+            "distributes this amount across the intersection of the window "
+            "and the WP's active range [Start, End] from WP BUDGET."
         ),
         COL_ASSIGN_START: (
             "First project month (1-based) this person is allocated to this "
-            "WP. Gaps in WP SCHEDULE inside this window are skipped "
+            "WP. Months outside the WP's [Start, End] range are greyed out "
             "automatically in the Capacity grid."
         ),
         COL_ASSIGN_END: (
@@ -647,19 +628,18 @@ def _write_external_section(ws, start_row, external_commitments):
     return next_row, layout
 
 
-def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
+def build_config_sheet(ws, wb, project_params, work_packages,
                        team=None, reporting_periods=None, grade_rates=None,
                        assignments=None, external_commitments=None,
                        version_stamp=None):
-    """Build the Config sheet with project parameters, WP budget/schedule, team roster, and grade rates.
+    """Build the Config sheet with project parameters, WP budget (incl. schedule), team roster, and grade rates.
 
     Args:
         ws: Config worksheet to populate.
         wb: Parent Workbook (for named ranges).
         project_params: dict with keys 'title', 'start', 'months', 'rate'.
-        work_packages: list of dicts with keys 'id', 'name', 'fte'.
-        wp_schedule: list of dicts with keys 'id', 'start', 'end', 'type'.
-            When None, lazy-imports from config.
+        work_packages: list of dicts with keys 'id', 'name', 'fte', 'start',
+            'end', 'type' (single-range schedule merged into WP BUDGET).
         team: list of dicts with keys 'name', 'max_fte', 'grade'.
             When None, lazy-imports from config.
         reporting_periods: list of dicts with keys 'id', 'start', 'end'.
@@ -672,12 +652,9 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
             'start', 'end', 'is_eu'. When None, defaults to empty list.
 
     Returns:
-        config_layout dict with keys including param_rows, wp_*, sched_*, roster_*,
+        config_layout dict with keys including param_rows, wp_*, roster_*,
         rp_*, grade_*, assign_*, ext_*.
     """
-    if wp_schedule is None:
-        from budget_planner import config
-        wp_schedule = config.WP_SCHEDULE
     if team is None:
         from budget_planner import config
         team = config.TEAM
@@ -813,9 +790,6 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
     # ── Section 2c: External Commitments ──
     next_row, ext_layout = _write_external_section(ws, next_row + 1, external_commitments)
 
-    # ── Section 3: WP Schedule ──
-    next_row, sched_layout = _write_schedule_section(ws, next_row + 1, wp_schedule)
-
     # ── Section 4: Team Roster ──
     next_row, roster_layout = _write_roster_section(ws, next_row + 1, team)
 
@@ -903,25 +877,6 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         attr_text=f"{SHEET_CONFIG}!$C${roster_layout['roster_first_row']}:$C${roster_layout['roster_last_row']}",
     )
     wb.defined_names.add(dn_roster_grades)
-
-    # Schedule table column named ranges
-    dn_sched_ids = DefinedName(
-        "sched_wp_ids",
-        attr_text=f"{SHEET_CONFIG}!$A${sched_layout['sched_first_row']}:$A${sched_layout['sched_last_row']}",
-    )
-    wb.defined_names.add(dn_sched_ids)
-
-    dn_sched_starts = DefinedName(
-        "sched_starts",
-        attr_text=f"{SHEET_CONFIG}!$B${sched_layout['sched_first_row']}:$B${sched_layout['sched_last_row']}",
-    )
-    wb.defined_names.add(dn_sched_starts)
-
-    dn_sched_ends = DefinedName(
-        "sched_ends",
-        attr_text=f"{SHEET_CONFIG}!$C${sched_layout['sched_first_row']}:$C${sched_layout['sched_last_row']}",
-    )
-    wb.defined_names.add(dn_sched_ends)
 
     # Assignment column named ranges
     a_first = assign_layout["assign_first_row"]
@@ -1019,9 +974,6 @@ def build_config_sheet(ws, wb, project_params, work_packages, wp_schedule=None,
         "ext_first_row": ext_layout["ext_first_row"],
         "ext_last_row": ext_layout["ext_last_row"],
         "external_config_rows": ext_layout["external_config_rows"],
-        "sched_header_row": sched_layout["sched_header_row"],
-        "sched_first_row": sched_layout["sched_first_row"],
-        "sched_last_row": sched_layout["sched_last_row"],
         "roster_header_row": roster_layout["roster_header_row"],
         "roster_first_row": roster_layout["roster_first_row"],
         "roster_last_row": roster_layout["roster_last_row"],

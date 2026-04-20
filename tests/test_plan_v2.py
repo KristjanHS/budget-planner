@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from budget_planner.reader import discover_layout
 from budget_planner import config as _config
 from budget_planner.config import (
-    WORK_PACKAGES, WP_SCHEDULE, MONTH_COL_START, PROJECT_MONTHS,
+    WORK_PACKAGES, MONTH_COL_START, PROJECT_MONTHS,
 )
 from budget_planner.config_sheet import build_config_sheet
 from budget_planner.plan import build_plan_sheet, _apply_planned_formulas
@@ -37,7 +37,7 @@ def test_planned_fte_formula_refs_match_capacity_layout(
     capacity = v2_workbook["Capacity"]
     row = v2_layout["planned_first_wp_row"] + wp_idx
     wp = WORK_PACKAGES[wp_idx]
-    wp_start, wp_end = wp_month_bounds(wp["id"], WP_SCHEDULE)
+    wp_start, wp_end = wp_month_bounds(wp["id"], WORK_PACKAGES)
 
     # Find an active month to inspect
     active_month = None
@@ -79,7 +79,7 @@ def test_planned_fte_formula_refs_match_capacity_layout(
             )
 
 
-def _build_plan_standalone(*, project_params, work_packages, wp_schedule):
+def _build_plan_standalone(*, project_params, work_packages):
     """Build Config + Capacity + Plan in a fresh wb, returning the Plan layout + formulas.
 
     Used to compare None-defaulted invocations against explicit invocations.
@@ -91,9 +91,8 @@ def _build_plan_standalone(*, project_params, work_packages, wp_schedule):
     # build_config_sheet always needs explicit params (they're positional)
     cfg_params = project_params if project_params is not None else _config.default_project_params()
     cfg_wps = work_packages if work_packages is not None else _config.WORK_PACKAGES
-    cfg_sched = wp_schedule if wp_schedule is not None else _config.WP_SCHEDULE
     cfg_layout = build_config_sheet(
-        cfg_ws, wb, cfg_params, cfg_wps, wp_schedule=cfg_sched,
+        cfg_ws, wb, cfg_params, cfg_wps,
         team=_config.TEAM, reporting_periods=_config.REPORTING_PERIODS,
         grade_rates=_config.GRADE_RATES,
         assignments=_config.DEMO_CAPACITY_ASSIGNMENTS,
@@ -105,14 +104,13 @@ def _build_plan_standalone(*, project_params, work_packages, wp_schedule):
         plan_ws, wb,
         project_params=project_params,
         work_packages=work_packages,
-        wp_schedule=wp_schedule,
         config_layout=cfg_layout,
     )
 
     cap_ws = wb.create_sheet("Capacity")
     cap_layout = build_capacity_sheet(
         cap_ws, cfg_layout,
-        project_params=cfg_params, work_packages=cfg_wps, wp_schedule=cfg_sched,
+        project_params=cfg_params, work_packages=cfg_wps,
         team=_config.TEAM, external_commitments=_config.EXTERNAL_COMMITMENTS,
         assignments=_config.DEMO_CAPACITY_ASSIGNMENTS,
         config_first_wp_row=layout["config_first_wp_row"],
@@ -122,7 +120,6 @@ def _build_plan_standalone(*, project_params, work_packages, wp_schedule):
         plan_ws, layout, cap_layout,
         work_packages=work_packages,
         project_params=project_params,
-        wp_schedule=wp_schedule,
     )
 
     # Snapshot the planned FTE block: rows × all month cols
@@ -138,8 +135,7 @@ def _build_plan_standalone(*, project_params, work_packages, wp_schedule):
 @pytest.mark.parametrize("kwargs", [
     {"project_params": None},
     {"work_packages": None},
-    {"wp_schedule": None},
-    {"project_params": None, "work_packages": None, "wp_schedule": None},
+    {"project_params": None, "work_packages": None},
 ])
 def test_build_plan_none_defaults_match_explicit(kwargs):
     """None-defaulted params produce the same Plan sheet as explicit config values.
@@ -151,7 +147,6 @@ def test_build_plan_none_defaults_match_explicit(kwargs):
     explicit = {
         "project_params": _config.default_project_params(),
         "work_packages": _config.WORK_PACKAGES,
-        "wp_schedule": _config.WP_SCHEDULE,
     }
     _, baseline = _build_plan_standalone(**explicit)
 
@@ -170,7 +165,7 @@ def test_planned_fte_cells_have_black_font(v2_workbook, v2_layout, wp_idx):
     plan = v2_workbook["Plan"]
     row = v2_layout["planned_first_wp_row"] + wp_idx
     wp = WORK_PACKAGES[wp_idx]
-    wp_start, wp_end = wp_month_bounds(wp["id"], WP_SCHEDULE)
+    wp_start, wp_end = wp_month_bounds(wp["id"], WORK_PACKAGES)
 
     for m in range(PROJECT_MONTHS):
         month_num = m + 1

@@ -52,6 +52,11 @@ def _seed_with_marker(path: Path) -> None:
                 # finds its section anchors. Seed col B+ strings.
                 if cell.column == 1:
                     continue
+                # Preserve WP Type enum values (flat/front-loaded/bell/back-loaded)
+                # — structural, not user data, and the reader strict-validates
+                # them under the single-range schema.
+                if v in {"flat", "front-loaded", "bell", "back-loaded"}:
+                    continue
                 cell.value = f"{MARKER}-{cell.coordinate}"
             elif isinstance(v, (int, float)) and not isinstance(v, bool):
                 # Every numeric cell becomes the magic number — this is

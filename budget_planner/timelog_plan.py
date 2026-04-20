@@ -120,7 +120,6 @@ def build_timelog_plan_sheet(
     *,
     project_params: dict,
     work_packages: list[dict],
-    wp_schedule: list[dict],
     team: list[dict],
     assignments: list[dict],
     grade_rates: Mapping[str, float],
@@ -134,8 +133,8 @@ def build_timelog_plan_sheet(
         ws: Worksheet to populate (created by orchestrator, named "Timelog Plan").
         wb: Parent workbook — receives the ``timelog_resolve_flag`` named range.
         project_params: dict with keys 'title', 'start', 'months', 'rate', etc.
-        work_packages: list of WP dicts with keys 'id', 'name', 'fte', 'rate'.
-        wp_schedule: list of WP schedule entries (id, start, end, type).
+        work_packages: list of WP dicts with keys 'id', 'name', 'fte', 'rate',
+            'start', 'end', 'type' (single contiguous active range).
         team: list of team-member dicts with keys 'name', 'max_fte', 'grade',
             'priority' (1-3, defaults to 2 from the reader).
         assignments: list of person-WP assignment dicts (person, wp,
@@ -198,7 +197,7 @@ def build_timelog_plan_sheet(
         )
         for m in sorted_team
     ]
-    wps = _build_wps(work_packages, wp_schedule, project_params)
+    wps = _build_wps(work_packages, project_params)
     windows = [
         PersonWPWindow(
             person_name=a["person"],
@@ -362,7 +361,6 @@ def build_timelog_plan_sheet(
         _write_wp_summary_row(
             ws, wp_summary_first_row + i, wp,
             cfg_wp_row=cfg_wp_first_row + i,
-            wp_schedule=wp_schedule,
             grid_range=grid_range,
             rate_col_range=rate_col_range,
             midx_range=midx_range,
@@ -380,7 +378,6 @@ def build_timelog_plan_sheet(
             wp_summary_first_row=wp_summary_first_row,
             wp_summary_last_row=wp_summary_last_row,
             wps=wps,
-            wp_schedule=wp_schedule,
             year_specs=year_specs,
             cfg_wp_first_row=cfg_wp_first_row,
         )
@@ -667,20 +664,16 @@ def build_timelog_plan_sheet(
 
 def _build_wps(
     work_packages: list[dict],
-    wp_schedule: list[dict],
     project_params: dict,
 ) -> list[WP]:
-    """Convert config WP + schedule rows into solver WP records.
+    """Convert config WPs into solver WP records.
 
-    Multi-segment WPs (e.g. WP3 with a mid-WP gap) are represented by their
-    union span (min start, max end) — the solver treats the WP active window
-    as contiguous because in-window-but-empty cells are still legal placements;
-    the WP SCHEDULE gap remains visible on other sheets (Capacity, Plan).
-
-    ``ceiling_eur`` mirrors the sheet's displayed `Config!E{wp_row}` =
-    ``FTE × Rate``. Per-WP rate is taken from ``wp["rate"]`` when present
-    (post-reader rebuild path); on init the seed WP dicts lack the key, so
-    we fall back to ``project_params["rate"]`` — the same default used by
+    Single-range schema: each WP carries its own ``start``/``end``/``type``
+    directly. ``ceiling_eur`` mirrors the sheet's displayed
+    `Config!E{wp_row}` = ``FTE × Rate``. Per-WP rate is taken from
+    ``wp["rate"]`` when present (post-reader rebuild path); on init the
+    seed WP dicts may lack the key, so we fall back to
+    ``project_params["rate"]`` — the same default used by
     ``config_sheet.py`` to populate the sheet.
     """
     default_rate = project_params.get("rate", 10000)
@@ -688,11 +681,10 @@ def _build_wps(
         default_rate = 10000
     wps: list[WP] = []
     for wp in work_packages:
-        entries = [s for s in wp_schedule if s["id"] == wp["id"]]
-        if not entries:
+        if "start" not in wp or "end" not in wp:
             continue
-        active_start = min(int(s["start"]) for s in entries)
-        active_end = max(int(s["end"]) for s in entries)
+        active_start = int(wp["start"])
+        active_end = int(wp["end"])
         wp_rate = wp.get("rate", default_rate)
         if not isinstance(wp_rate, (int, float)):
             wp_rate = default_rate
@@ -704,18 +696,6 @@ def _build_wps(
             ceiling_eur=ceiling_eur,
         ))
     return wps
-
-
-def _wp_sched_months(wp_code: str, wp_schedule: list[dict]) -> int:
-    """Sum active months across every schedule segment for this WP code.
-
-    Multi-segment WPs (e.g. a mid-project gap) count only the active
-    segments — the gap is NOT a schedule month.
-    """
-    return sum(
-        int(s["end"]) - int(s["start"]) + 1
-        for s in wp_schedule if s["id"] == wp_code
-    )
 
 
 def _upsert_defined_name(wb: Workbook, name: str, attr_text: str) -> None:
@@ -952,7 +932,6 @@ def _write_yearly_rows(
     wp_summary_first_row: int,
     wp_summary_last_row: int,
     wps: list[WP],
-    wp_schedule: list[dict],
     year_specs: list["_YearColSpec"],
     cfg_wp_first_row: int,
 ) -> None:
@@ -990,13 +969,11 @@ def _write_yearly_rows(
     ).value = f"=SUM(B{wp_summary_first_row}:B{wp_summary_last_row})"
 
     # Precompute per-WP schedule-month sets for build-time overlap math.
+    # Single-range schema: each WP is one contiguous interval.
     wp_month_sets: list[set[int]] = []
     wp_sched_totals: list[int] = []
     for wp in wps:
-        ms: set[int] = set()
-        for s in wp_schedule:
-            if s["id"] == wp.code:
-                ms.update(range(int(s["start"]), int(s["end"]) + 1))
+        ms = set(range(wp.active_start, wp.active_end + 1))
         wp_month_sets.append(ms)
         wp_sched_totals.append(len(ms))
 
@@ -1091,7 +1068,6 @@ def _write_wp_summary_row(
     wp: WP,
     *,
     cfg_wp_row: int,
-    wp_schedule: list[dict],
     grid_range: str,
     rate_col_range: str,
     midx_range: str,
@@ -1140,17 +1116,17 @@ def _write_wp_summary_row(
     else:
         style_cell(ws, row, 5, value=0, font=BLACK_FORMULA, fmt="0")
 
-    # Col F: WP sched months — build-time literal. Multi-segment WPs sum their
-    # active segments only (gap months don't count).
-    # Rule 3 carve-out: BLACK_FORMULA font on a literal — signals "builder-
-    # written, do not edit." Cell comment echoes the deviation.
+    # Col F: WP sched months — build-time literal (end − start + 1 under the
+    # single-range schema). Rule 3 carve-out: BLACK_FORMULA font on a literal
+    # — signals "builder-written, do not edit." Cell comment echoes the
+    # deviation.
     sched_cell = style_cell(
-        ws, row, 6, value=_wp_sched_months(wp_code, wp_schedule),
+        ws, row, 6, value=int(wp.active_end - wp.active_start + 1),
         font=BLACK_FORMULA, fmt="0", alignment=CENTER,
     )
     sched_cell.comment = sized_comment(
-        "Number of months the WP SCHEDULE marks as active for this WP. "
-        "Literal (not a formula) — recomputed on rebuild from Config.",
+        "Number of months this WP is active (end − start + 1). Literal "
+        "(not a formula) — recomputed on rebuild from Config.",
         author="Programme Budget Tool",
     )
 

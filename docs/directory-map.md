@@ -46,7 +46,7 @@ scripts/
 
 One bullet per worksheet — what it is, what feeds it, what it feeds. Build order matches `_build_all_sheets` in `workbook.py`. See `docs/architecture.md` for the full cross-sheet formula graph.
 
-- **Config** — Single source of truth: project parameters, WP budget table, person-WP assignments, external commitments, WP schedule, team roster, reporting periods, grade rate table. The two through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) now live on the Actuals / Actuals-Hours sheets — Config no longer owns them.
+- **Config** — Single source of truth: project parameters, WP budget table (incl. each WP's single-range start/end/type), person-WP assignments, external commitments, team roster, reporting periods, grade rate table. The two through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) now live on the Actuals / Actuals-Hours sheets — Config no longer owns them.
   - IN ← user edits only (blue input cells).
   - OUT → every other sheet (params, named ranges `project_start` / `fte_rate` / `version_stamp`, WP list, roster).
 
@@ -59,7 +59,7 @@ One bullet per worksheet — what it is, what feeds it, what it feeds. Build ord
   - OUT → Summary (Plan EUR = Plan FTE × rate); Trends (planned cumulative curve).
 
 - **Timelog Plan** — Prescriptive whole-month 1.0-FTE WP allocation grid. Separate surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). v2 layout (2026-04-19): **single merged editable grid** holding literal WP codes (solver-written on init), flanked by PER-WP SUMMARY (Ceiling / Assigned / Buffer / WP sched months / Burn rate / per-year EUR cols `Y{yyyy} €`) and PER-PERSON SUMMARY (Assigned / Pool / Switches / First log / Last log / Rate). Row 2 carries the `timelog_resolve_flag` toggle (cols 9-10) — TRUE = rebuild re-solves + overwrites, FALSE = rebuild preserves the grid verbatim.
-  - IN ← Config (WP budget + WP schedule + PERSON-WP ASSIGNMENTS + Team Roster including `Priority` + grade rates); `current_month` (per-WP window-months-remaining).
+  - IN ← Config (WP budget incl. single-range start/end/type + PERSON-WP ASSIGNMENTS + Team Roster including `Priority` + grade rates); `current_month` (per-WP window-months-remaining).
   - OUT → (terminal surface; no downstream sheet consumes it).
 
 - **Actuals** — EUR actuals per WP per month (accountant input) plus a parallel forecast-monitoring block reading Plan-Forecast. CF greys monthly Actual EUR cells past `eur_actuals_through_month` (not-yet-closed months). Hosts the `eur_actuals_through_month` named range at `$D$1` (row-1 through-month control strip: label / blue-input override / auto-derived scan / effective cell). Tab color: Blue.

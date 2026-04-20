@@ -92,7 +92,7 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
     config_ws = wb["Config"]
 
     if variant == "extra_wp":
-        _, wps, _ = read_config_sheet(config_ws)
+        _, wps = read_config_sheet(config_ws)
         ids = [w["id"] for w in wps]
         assert "WPX" in ids, f"Rebuild dropped inserted WP. Got {ids}"
     elif variant == "extra_external":

@@ -76,7 +76,6 @@ def build_plan_forecast_sheet(
     *,
     project_params,
     work_packages,
-    wp_schedule,
     assignments,
     config_first_wp_row,
     actuals_hours_layout,
@@ -86,8 +85,8 @@ def build_plan_forecast_sheet(
     Args:
         ws: Target worksheet.
         project_params: dict with ``title``, ``start``, ``months``, ``rate``.
-        work_packages: list of WP dicts.
-        wp_schedule: list of schedule entries — drives active-month greying.
+        work_packages: list of WP dicts with single-range 'start'/'end'/'type'
+            fields — drives active-month greying.
         assignments: list of person-WP assignment dicts; determines which
             persons' forecast-EUR leaves flow into each WP cell.
         config_first_wp_row: Row number of the first WP on Config sheet
@@ -169,7 +168,7 @@ def build_plan_forecast_sheet(
             f"={SHEET_CONFIG}!B{config_row}"
         )
 
-        active = wp_active_months(wp_id, wp_schedule)
+        active = wp_active_months(wp_id, work_packages)
         for m in range(months):
             c = month_col_start + m
             month_num = m + 1

@@ -21,8 +21,7 @@ from budget_planner.styles import (
 
 
 def _apply_planned_formulas(ws, layout, capacity_layout, *,
-                            work_packages=None, project_params=None,
-                            wp_schedule=None):
+                            work_packages=None, project_params=None):
     """Fill planned FTE cells with cross-sheet SUM formulas from Capacity.
 
     Called after build_capacity_sheet() so that capacity row positions are known.
@@ -36,14 +35,12 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
         work_packages: WP list; falls back to config.WORK_PACKAGES.
         project_params: Project params dict; falls back to config values.
     """
-    if project_params is None or work_packages is None or wp_schedule is None:
+    if project_params is None or work_packages is None:
         from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
-        if wp_schedule is None:
-            wp_schedule = config.WP_SCHEDULE
 
     # Derived constants
     month_col_start = MONTH_COL_START
@@ -59,7 +56,7 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
                 cap_rows.append(group["wp_rows"][wp_id])
         cap_rows.sort()  # deterministic order
 
-        active = wp_active_months(wp_id, wp_schedule)
+        active = wp_active_months(wp_id, work_packages)
         for m in range(project_params["months"]):
             c = month_col_start + m
             month_num = m + 1
@@ -71,7 +68,7 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
 
 
 def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
-                     wp_schedule=None, config_layout):
+                     config_layout):
     """Build the Plan sheet: compact header + planned FTE block.
 
     Args:
@@ -86,14 +83,12 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
     Returns:
         Layout dict with row numbers for all key positions.
     """
-    if project_params is None or work_packages is None or wp_schedule is None:
+    if project_params is None or work_packages is None:
         from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:
             work_packages = config.WORK_PACKAGES
-        if wp_schedule is None:
-            wp_schedule = config.WP_SCHEDULE
 
     # Config sheet WP row positions (config_layout always provided)
     cfg_wp_first = config_layout["wp_first_row"]
@@ -167,7 +162,7 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
             f"={SHEET_CONFIG}!B{config_row}"
         )
 
-        active = wp_active_months(wp["id"], wp_schedule)
+        active = wp_active_months(wp["id"], work_packages)
         for m in range(project_months):
             c = month_col_start + m
             month_num = m + 1

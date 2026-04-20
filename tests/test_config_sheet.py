@@ -187,7 +187,7 @@ def test_config_round_trip_eu_ceiling():
     ws.title = "Config"
     params = {**_sample_params(), "eu_ceiling_pm": 10.0}
     build_config_sheet(ws, wb, params, _sample_wps())
-    read_params, read_wps, _ = read_config_sheet(ws)
+    read_params, read_wps = read_config_sheet(ws)
     assert read_params["eu_ceiling_pm"] == 10.0
     assert len(read_wps) == 2  # WPs still read correctly after row shift
 
@@ -468,18 +468,21 @@ def test_config_externals_data_rows():
         assert "0000FF" in str(ws.cell(row, 1).font.color.rgb)
 
 
-def test_config_wp_budget_expanded_to_7_cols():
-    """WP Budget now has 7 columns; table ref covers A:G."""
+def test_config_wp_budget_expanded_to_10_cols():
+    """WP Budget now has 10 columns (Start/End/Type merged in); table ref covers A:J."""
     _wb, ws, layout = _build_with_assignments()
-    # Check header row has 7 column labels
+    # Check header row has 10 column labels
     header_row = layout["wp_header_row"]
     assert ws.cell(header_row, 6).value == "Assigned PM"
     assert ws.cell(header_row, 7).value == "Variance"
-    # Table ref covers A:G
+    assert ws.cell(header_row, 8).value == "Start"
+    assert ws.cell(header_row, 9).value == "End"
+    assert ws.cell(header_row, 10).value == "Type"
+    # Table ref covers A:J
     tables = list(ws.tables.values())
     assert len(tables) == 1
     table_ref = tables[0].ref
-    assert table_ref.endswith(f"G{layout['wp_last_row']}")
+    assert table_ref.endswith(f"J{layout['wp_last_row']}")
 
 
 def test_config_wp_budget_assigned_pm_formula():

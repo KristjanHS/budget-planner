@@ -20,13 +20,6 @@ from budget_planner.reader import (
 )
 
 
-def _sample_schedule():
-    return [
-        {"id": "WP1", "start": 1, "end": 24, "type": "flat"},
-        {"id": "WP2", "start": 1, "end": 6, "type": "flat"},
-    ]
-
-
 def _make_config_wb():
     """Create a workbook with a Config sheet for testing."""
     wb = Workbook()
@@ -40,10 +33,12 @@ def _make_config_wb():
         "rate": 7500,
     }
     wps = [
-        {"id": "WP1", "name": "Mgmt", "fte": 12.0},
-        {"id": "WP2", "name": "Dev", "fte": 8.0},
+        {"id": "WP1", "name": "Mgmt", "fte": 12.0,
+         "start": 1, "end": 24, "type": "flat"},
+        {"id": "WP2", "name": "Dev",  "fte":  8.0,
+         "start": 1, "end": 18, "type": "flat"},
     ]
-    build_config_sheet(ws, wb, params, wps, wp_schedule=_sample_schedule())
+    build_config_sheet(ws, wb, params, wps)
     return wb
 
 
@@ -51,7 +46,7 @@ def test_read_config_sheet_roundtrip():
     """Write Config sheet, read it back, values match."""
     wb = _make_config_wb()
     ws = wb["Config"]
-    params, wps, wp_sched = read_config_sheet(ws)
+    params, wps = read_config_sheet(ws)
     assert params["title"] == "Test"
     assert params["start"] == datetime(2026, 7, 1)
     assert params["months"] == 24
@@ -64,11 +59,10 @@ def test_read_config_sheet_roundtrip():
     assert wps[0]["fte"] == 12.0
     assert wps[1]["id"] == "WP2"
     assert wps[1]["name"] == "Dev"
-    # Start/end now come from wp_schedule
-    wp2_sched = [s for s in wp_sched if s["id"] == "WP2"]
-    assert len(wp2_sched) >= 1
-    assert wp2_sched[0]["start"] == 1
-    assert wp2_sched[0]["end"] == 18
+    # Start/end now live on the WP row itself (merged WP BUDGET section).
+    assert wps[1]["start"] == 1
+    assert wps[1]["end"] == 18
+    assert wps[1]["type"] == "flat"
     wb.close()
 
 
@@ -277,7 +271,7 @@ class TestConfigSheetValidation:
         # Need a WP BUDGET section for full parse
         ws.cell(8, 1, "WP BUDGET")
         ws.cell(9, 1, "WP ID")
-        params, wps, _ = read_config_sheet(ws)
+        params, wps = read_config_sheet(ws)
         assert params["title"] == "Test"
         assert params["rate"] == 7500
         wb.close()
@@ -286,9 +280,49 @@ class TestConfigSheetValidation:
         """A properly built Config sheet passes validation."""
         wb = _make_config_wb()
         ws = wb["Config"]
-        params, wps, _ = read_config_sheet(ws)
+        params, wps = read_config_sheet(ws)
         assert params["title"] == "Test"
         assert len(wps) == 2
+        wb.close()
+
+    def test_rebuild_rejects_legacy_wp_schedule_section(self):
+        """Legacy two-section Config (WP SCHEDULE separate from WP BUDGET) is rejected.
+
+        Pre-merge workbooks had a standalone WP SCHEDULE section on Config;
+        under the single-range schema the reader hard-fails with a migration
+        recipe rather than silently collapsing multi-row schedules.
+        """
+        wb = _make_config_wb()
+        ws = wb["Config"]
+        # Append a legacy section marker somewhere past the existing content.
+        ws.cell(row=ws.max_row + 2, column=1, value="WP SCHEDULE")
+        with pytest.raises(
+            ValueError, match="Legacy Config layout detected"
+        ):
+            read_config_sheet(ws)
+        wb.close()
+
+    def test_rebuild_rejects_duplicate_wp_id(self):
+        """Duplicate WP id in the merged WP BUDGET section is rejected."""
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.title = "Config"
+        params = {
+            "title": "Test",
+            "start": datetime(2026, 7, 1),
+            "months": 24,
+            "rate": 7500,
+        }
+        wps = [
+            {"id": "WP1", "name": "Mgmt", "fte": 12.0,
+             "start": 1, "end": 24, "type": "flat"},
+            {"id": "WP1", "name": "Dup",  "fte":  8.0,
+             "start": 1, "end": 18, "type": "flat"},
+        ]
+        build_config_sheet(ws, wb, params, wps)
+        with pytest.raises(ValueError, match="Duplicate WP id"):
+            read_config_sheet(ws)
         wb.close()
 
 
@@ -552,8 +586,10 @@ def _make_config_wb_with_assignments(assignments=None, externals=None):
         "eu_ceiling_pm": 12.0,
     }
     wps = [
-        {"id": "WP1", "name": "Mgmt", "fte": 12.0},
-        {"id": "WP2", "name": "Dev", "fte": 8.0},
+        {"id": "WP1", "name": "Mgmt", "fte": 12.0,
+         "start": 1, "end": 60, "type": "flat"},
+        {"id": "WP2", "name": "Dev", "fte": 8.0,
+         "start": 1, "end": 60, "type": "flat"},
     ]
     build_config_sheet(
         ws,

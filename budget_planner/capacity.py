@@ -670,7 +670,6 @@ def _write_person_grid(
 
 def build_capacity_sheet(ws, team_layout, *,
                          project_params=None, work_packages=None,
-                         wp_schedule=None,
                          team=None, external_commitments=None,
                          assignments=None,
                          config_first_wp_row=None):
@@ -710,9 +709,6 @@ def build_capacity_sheet(ws, team_layout, *,
             team = config.TEAM
         if external_commitments is None:
             external_commitments = config.EXTERNAL_COMMITMENTS
-    if wp_schedule is None:
-        from budget_planner.config import WP_SCHEDULE
-        wp_schedule = WP_SCHEDULE
 
     if assignments is None:
         assignments = []
@@ -748,11 +744,10 @@ def build_capacity_sheet(ws, team_layout, *,
     todate_col_var = todate_col_start + 1
     todate_col_end = todate_col_var
 
-    # Build WP type lookup from schedule (first matching entry per WP)
-    wp_type_map: dict[str, str] = {}
-    for entry in wp_schedule:
-        if entry["id"] not in wp_type_map:
-            wp_type_map[entry["id"]] = entry.get("type", "flat")
+    # Build WP type lookup — single entry per WP under the merged schema.
+    wp_type_map: dict[str, str] = {
+        wp["id"]: wp.get("type", "flat") for wp in work_packages
+    }
 
     ws.sheet_properties.tabColor = "7030A0"
 
@@ -880,11 +875,10 @@ def build_capacity_sheet(ws, team_layout, *,
     for entry in _dedup.values():
         per_person_assignments.setdefault(entry["person"], []).append(entry)
 
-    # Pre-compute active months per WP so the per-person grid can intersect
-    # each assignment window with the WP's valid months (WP SCHEDULE may have
-    # multiple ranges / gaps).
+    # Pre-compute active months per WP so the per-person grid can clip each
+    # assignment window to the WP's single contiguous active range.
     wp_active_map: dict[str, frozenset[int]] = {
-        wp["id"]: wp_active_months(wp["id"], wp_schedule)
+        wp["id"]: wp_active_months(wp["id"], work_packages)
         for wp in work_packages
     }
 

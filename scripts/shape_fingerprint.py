@@ -27,7 +27,6 @@ SAFE_NAMED_RANGES = [
     "roster_ftes", "roster_grades",
     "assign_persons", "assign_wps", "assign_ftes",
     "ext_persons", "ext_ftes",
-    "sched_wp_ids", "sched_starts", "sched_ends",
     "tbl_GradeRates", "project_start", "fte_rate",
     "eu_annual_ceiling_pm", "partner_ceiling", "current_month",
     # v2 hours-timelog named ranges: the through-month trust boundary.
@@ -78,10 +77,9 @@ def extract_fingerprint(path: str) -> dict:
         if entry is not None:
             named_ranges[nm] = entry
 
-    _, wps, sched = read_config_sheet(config_ws)
+    _, wps = read_config_sheet(config_ws)
     sections = {
         "work_packages":        {"row_count": len(wps)},
-        "wp_schedule":          {"row_count": len(sched)},
         "team_roster":          {"row_count": len(read_team_from_config(config_ws))},
         "assignments":          {"row_count": len(read_assignments_from_config(config_ws))},
         "external_commitments": {"row_count": len(read_externals_from_config(config_ws))},

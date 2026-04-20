@@ -63,6 +63,10 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
         config_ws.cell(insert_at, 2, "Extra WP")
         config_ws.cell(insert_at, 3, 1.0)
         config_ws.cell(insert_at, 4, 6500)
+        # Single-range WP schedule merged into WP BUDGET (cols H/I/J).
+        config_ws.cell(insert_at, 8, 1)          # Start
+        config_ws.cell(insert_at, 9, 24)         # End
+        config_ws.cell(insert_at, 10, "flat")    # Type
     elif variant == "extra_external":
         data_start = _first_data_row_after(config_ws, SECTION_LABELS["externals"])
         insert_at = data_start + 1

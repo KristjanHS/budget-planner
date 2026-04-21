@@ -18,5 +18,8 @@ docs/plans/archived/
 # Analysis artifacts from prior sessions
 docs/analysis/
 
+# Human-facing runbooks (bash scripts, reproducer workflows) — not AI-loadable
+docs/human/
+
 # Windows scripts (WSL interop disabled)
 *.bat

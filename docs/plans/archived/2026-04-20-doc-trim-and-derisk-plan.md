@@ -243,3 +243,12 @@ Current 8 memory files (176 lines total) are lean and well-scoped. No changes.
 ## Remaining open question
 
 - **Part B0's `plan-hygiene.md` gate** — proposed `paths: ["docs/**/*.md", "**/CLAUDE.md", "docs/plans/**/*.md"]`. Too narrow? Broaden to include `.claude/rules/**/*.md`? Flag for user check at PR 2 time.
+
+---
+
+## Corrections (2026-04-20, Part B execution)
+
+1. **B1+B2 routing** — plan text said "Add paragraph to `dev-workflow.md`". Executed in `plan-hygiene.md` instead, because B0/B7 extracted all plan/doc-hygiene content out of `dev-workflow.md` into `plan-hygiene.md` for path-gating reasons. Adding B1/B2 to `dev-workflow.md` (`**/*.py` gate) would re-load plan rules on every Python edit — the opposite of B0's goal. Code-reviewer confirmed this routing is better than the plan.
+2. **`plan-hygiene.md` gate** (remaining open question) — resolved to `paths: ["docs/**/*.md", "**/CLAUDE.md", "docs/plans/**/*.md", ".claude/rules/**/*.md"]`. B7's own table listed the fourth path to cover rule-authoring overlap; used that form.
+3. **Font-color rules relocation** — B7 removed Rule-3 font-color rules from `dev-workflow.md`; B4 added them to `openpyxl.md` §Core (`### Styling`). Intermediate absence spanned one commit (30d08b3..f0d66ae); acceptable since `.claude/rules/` path-gating means no consumer was loading the rules during that window that needed them.
+4. **`dev-workflow.md` line count** — shipped at 31 total lines (17 rule lines). Plan acceptance criterion said ≤18 lines. Interpreted strictly on total-line count, this is unmet; interpreted on rule lines, it's met. Compressing further requires merging 10 distinct Build+Test rules into paragraphs, which hurts skimmability. Accepted as-is; noted as open design question for future audit.

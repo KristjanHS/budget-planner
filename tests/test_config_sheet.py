@@ -790,28 +790,22 @@ def test_config_named_range_targets_match_internals_doc():
     internals_path = Path(__file__).parent.parent / "docs" / "internals.md"
     text = internals_path.read_text(encoding="utf-8")
 
-    # Scope to the Config per-sheet paragraph so a stray `(B7)` reference in
-    # another sheet's prose can't contaminate the map. The pattern consumes
-    # through the next blank line or next per-sheet heading (``**Name**``)
-    # so a future word-wrap of the Config paragraph doesn't silently
-    # truncate the capture to just the first line.
-    config_match = re.search(
-        r"\*\*Config\*\*.*?(?=\n\n|\n\*\*[A-Z]|\Z)",
+    # Named-range cell mappings live in the Cross-Sheet Reference Map table
+    # (Config-hosted rows only). Table row form:
+    #     | `name` | Config!$B$N | Named range |
+    # The three-column shape + literal `Named range` tail makes the pattern
+    # specific enough to skip doc-scoping — no other table in the file emits
+    # it. (Earlier revisions parsed a `` `name` (B<row>) `` prose form from
+    # the **Config** per-sheet paragraph; 2026-04-20 Doc Trim removed that
+    # enumeration and redirected readers to the reference map.)
+    pairs = re.findall(
+        r"\|\s*`([a-z_]+)`\s*\|\s*Config!\$B\$(\d+)\s*\|\s*Named range\s*\|",
         text,
-        re.DOTALL,
     )
-    assert config_match, (
-        "docs/internals.md lost the **Config** per-sheet paragraph — "
-        "update the regex or restore the doc structure"
-    )
-    config_para = config_match.group(0)
-
-    # Expected form: `` `name` (B<row>) `` — matches the prose convention
-    # used for every Config-held named range.
-    pairs = re.findall(r"`([a-z_]+)` \(B(\d+)\)", config_para)
     assert pairs, (
-        "No named-range → cell mappings parsed from internals.md Config "
-        "paragraph — doc format drifted from the `name` (B<row>) convention"
+        "No named-range → cell mappings parsed from internals.md Cross-Sheet "
+        "Reference Map — doc format drifted from the "
+        "`| `name` | Config!$B$N | Named range |` table convention"
     )
     doc_map = {name: int(row) for name, row in pairs}
 

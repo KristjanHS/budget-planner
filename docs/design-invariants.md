@@ -91,18 +91,27 @@ Placeholders for invariants that have a home elsewhere today but belong here whe
   | `num_vacation_months` | `config_sheet.py` (Config!$B$8, BLACK_FORMULA builder-written literal — Rule 3 carve-out, same pattern as `version_stamp`) | `timelog_plan.py` PER-PERSON SUMMARY Pool formula: `=ROUND(max_fte × (project_months − num_vacation_months), 0)`. Recomputed on rebuild from `vacation_month` + `project_start` + `Project Months`. |
 - **Reader/builder round-trip rule**: readers use named ranges (not coordinates); tolerate internal blanks; rebuild must preserve user-authored values on blue input cells.
 
-## Timelog Plan vacation-month invariants
+## Timelog Plan — auditor-side invariants
 
-Added 2026-04-19 with the Phase 2 enhancements.
+Cross-sheet invariants only. Grid/summary/totals-row implementation details (Pool formula, Monthly total € row, Yearly total/budget rows, build-time proportions) live next to the code — see the `timelog_plan.py` module docstring and the `_write_*` helper docstrings.
 
-- **Pool formula invariant**: PER-PERSON SUMMARY col C must read `=ROUND(max_fte × (project_months − num_vacation_months), 0)`. Vacation is treated as a separate axis from `max_fte` — the latter stays semantically "fractional allocation during available months"; subtracting vacation months from the multiplicand keeps the semantics clean and uniform with the future per-(person, year) extension (Option A, deferred). A Pool formula that omits the `− num_vacation_months` term regresses a shipped invariant.
-- **Vacation cells are always locked and empty**: every TIMELOG GRID cell whose 1-indexed project month matches the calendar `vacation_month` across all person rows must carry `VACATION_FILL` (pale yellow `#FFF2CC`), `Protection(locked=True)`, and an empty string value — NOT BLUE_INPUT (cell is not user-editable). The solver must never place a WP code there; on rebuild with `resolve_flag=FALSE`, any preserved WP code in a vacation cell is discarded (one-shot migration). No CF rule targets vacation cells; the direct yellow fill is authoritative. Violating any leg of this invariant corrupts the programme auditor story (time logged during vacation is non-allowable) or breaks the solver's `(grid<>"") × rate` SUMPRODUCT inputs.
+### Vacation cells are always locked and empty
 
-## Timelog Plan totals-row invariants
+Every TIMELOG GRID cell whose 1-indexed project month matches the calendar `vacation_month` must carry `VACATION_FILL` (pale yellow `#FFF2CC`), `Protection(locked=True)`, and an empty string value across every person row — NOT BLUE_INPUT (cell is not user-editable). The solver must never place a WP code there; on rebuild with `resolve_flag=FALSE`, any preserved WP code in a vacation cell is discarded (one-shot migration). No CF rule targets vacation cells; the direct yellow fill is authoritative. Violating any leg of this invariant corrupts the programme auditor story (time logged during vacation is non-allowable) or breaks the solver's `(grid<>"") × rate` SUMPRODUCT inputs.
 
-Added 2026-04-19 with the Phase 3–4 enhancements (Monthly total €, Yearly total €, Yearly budget €).
+## WP schedule — single active range
 
-- **Monthly total € row**: a single black-formula row at `grid_person_last_row + 1` (no spacer, same outline group as the merged grid). Each month cell is `=ROUND(SUMPRODUCT((col<>"")*rate_vector),0)` where `rate_vector` is PER-PERSON SUMMARY col H over the summary person-row range. Non-empty grid cells (WP codes) contribute their person's Rate; empty / vacation cells contribute 0. Vacation-month cells on this row additionally carry `VACATION_FILL` for visual column continuity — the formula still evaluates to 0 because every vacation grid cell is empty. The row is outside the grid's CF range (pastel WP / red OOW rules target the grid band only).
-- **Yearly total € / Yearly budget € col-C cross-check**: two black-formula rows at `wp_summary_last_row + 1` and `+ 2` (no spacer, same outline group as PER-WP SUMMARY). Col C on each row is the grand total across WPs — `=SUM(C{W1}:C{Wn})` on Yearly total € (total Assigned €) and `=SUM(B{W1}:B{Wn})` on Yearly budget € (total Ceiling €). Col C must equal the row-wise sum across all year cols within leaf-rounding / fp tolerance (≤ num_years EUR). Divergence flags a formula-drift regression in the year-col builder or the term-sum proportions.
-- **Yearly budget build-time proportions**: Yearly budget per-year cells are term sums `Σ prop_ky × Config!E{wp_row}`, where `prop_ky = months_of_wpk_in_year_y / (end − start + 1)` for each WP's single active range. Proportions are build-time literals; the formula stays live to Config FTE / rate changes but is rebuild-dependent on WP start/end. Zero-prop WP terms are omitted (design §5 D16).
-- **Single-range WP schedule**: every WP has exactly one `(start, end)` pair (cols H/I of WP BUDGET). The reader hard-fails on multi-row per WP or legacy two-section Config layout with a `ValueError` carrying a migration recipe (see `budget_planner/reader.py` — "Legacy Config layout detected" / "Duplicate WP id").
+Every WP has exactly one `(start, end)` pair (cols H/I of WP BUDGET). The reader hard-fails on multi-row per WP or legacy two-section Config layout with a `ValueError` carrying a migration recipe (see `budget_planner/reader.py` — "Legacy Config layout detected" / "Duplicate WP id"). Multi-segment schedules are rejected at rebuild.
+
+## Row-order contracts (cross-sheet)
+
+Cross-sheet formulas (Plan's `=SUM(Capacity!...)`, Trends person-load refs, Summary aggregations) index by row position, so row order is a contract not an accident.
+
+- **Capacity person order matches Config TEAM ROSTER order.** Adding a roster row shifts every downstream Capacity person group.
+- **Plan WP row order matches Config WP BUDGET order.** Same for Actuals, Plan-Forecast, Summary.
+- **Capacity per-person WP rows are ordered by Config PERSON-WP ASSIGNMENTS** for that person (intersection filter — not all WPs).
+- **Actuals-Hours person + WP row order mirrors Capacity** — the Actual-FTE band on Capacity sibling-refs Actuals-Hours by matched row position.
+
+## Inactive-month rule
+
+On every sheet with monthly data (Capacity, Plan, Actuals, Actuals-Hours, Plan-Forecast), months outside the intersection of the assignment window `[Start, End]` and the WP's single-range active months are **greyed and empty**. Distribution curves must never leak FTE into out-of-range months. Auditors reject PM logged outside a WP's active range.

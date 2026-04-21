@@ -298,7 +298,9 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
     # Legacy layout detection — forbid the pre-merge two-section Config.
     # Multi-segment WP schedules are no longer supported; migration requires
     # collapsing each WP to a single (Start, End) range in WP BUDGET.
-    for r in range(1, ws.max_row + 1):
+    # The "WP SCHEDULE" header always sat within the first ~200 rows on
+    # pre-merge workbooks; bound the scan to avoid walking user appendixes.
+    for r in range(1, min(ws.max_row, 200) + 1):
         val = ws.cell(row=r, column=1).value
         if isinstance(val, str) and val.strip() == "WP SCHEDULE":
             raise ValueError(

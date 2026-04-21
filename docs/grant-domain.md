@@ -48,6 +48,15 @@ Monthly rates are organisation-specific. They must reflect actual costs, not inf
 
 **Vacation months.** Auditors also reject PM logged during vacation. The workbook encodes a single uniform vacation month via the Config `vacation_month` scalar (default `"Jul"`; named range); the derived `num_vacation_months` literal counts calendar-vacation months inside the project span. On Timelog Plan, vacation-month columns are yellow-locked and empty across every person row — the solver never places a WP code there, and the PER-PERSON SUMMARY Pool reduces to `max_fte × (project_months − num_vacation_months)` so the "Over-pool?" check doesn't false-flag people whose Assigned count sits at the available-month ceiling. Heterogeneous per-(person, year) vacation is deferred (Option A); the scalar path is designed to accept an additive override table later with no cell-relocation on Timelog Plan.
 
+**WP distribution-curve types.** Each WP has a single contiguous active range `[Start, End]` and a single `Type` from `{flat, front-loaded, bell, back-loaded}`. Type drives the per-month curve shape `capacity.py::distribute` applies to each assignment's `Total FTE` scalar.
+
+| Type | When to use |
+|------|-------------|
+| `flat` | Steady-state work — management, ongoing analysis. |
+| `front-loaded` | Fast-start work — early design, research. Tail is minor. |
+| `bell` | Ramps, peaks mid-range, tapers — iterative design. |
+| `back-loaded` | Deadline-driven — integration, assembly, demo prep. |
+
 ### 2. Travel & Subsistence
 
 Direct costs for project-related travel: flights, hotels, per diem. Must be justified per trip or trip category.

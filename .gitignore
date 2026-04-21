@@ -13,5 +13,5 @@ __pycache__/
 .claude/settings.local.json
 .claude/worktrees/
 
-# Shape-only reproducer artifacts (see docs/debugging-your-real-file.md)
+# Shape-only reproducer artifacts (see docs/human/debugging-your-real-file.md)
 tmp/

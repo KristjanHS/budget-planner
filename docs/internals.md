@@ -33,23 +33,21 @@ def build_<sheet>_sheet(ws, wb, ..., *, project_params=None, work_packages=None,
 
 ### Per-Sheet Notes
 
-**Config** (`config_sheet.py`): Rows 1-6 blue-input project params (Title, Start, Months, FTE Rate, EU Ceiling, Hours/FTE Month); row 7 `Vacation Month` blue-input string abbreviation (default `"Jul"`); row 8 `Num Vacation Months` black-formula-styled builder-written literal (count of calendar-vacation months in the project span — Rule 3 carve-out, same pattern as Version Stamp); row 9 black-formula-styled `Version Stamp` (code-written audit cell overwritten on every init/rebuild via `_resolve_version_stamp()` in `workbook.py` — `git describe --always --dirty`, fallback `"unknown"`), then WP table (`tbl_WorkPackages`), then Team Roster section. Creates named ranges `project_start` (B2), `fte_rate` (B4), `vacation_month` (B7), `num_vacation_months` (B8), `version_stamp` (B9). The through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) are registered by the Actuals / Actuals-Hours builders against their own Row 1 override strips, not Config — see the per-sheet paragraphs below. Returns `config_layout` with `wp_first_row`, `wp_last_row`, `person_rows`.
+**Config** (`config_sheet.py`): Stacked sections — blue-input project-parameters block (Title, Start, Months, FTE Rate, EU Ceiling, Hours/FTE Month, Vacation Month), black-formula builder-written scalars (`Num Vacation Months`, `Version Stamp` — Rule 3 carve-out, see `.claude/rules/dev-workflow.md`), then the WP table (`tbl_WorkPackages`), then Team Roster. Source of truth for every named range listed in `docs/design-invariants.md` § Named-range contract except the two through-month names (hosted on Actuals / Actuals-Hours). Returns `config_layout` with `wp_first_row`, `wp_last_row`, `person_rows`.
 
 **Plan** (`plan.py`): Two-phase build. Phase 1 creates structure with empty FTE cells. Phase 2 (`_apply_planned_formulas()`) fills cells with `=SUM(Capacity!...)` after Capacity is built. Has validation columns: Sum, Budget FTE, Variance.
 
-**Capacity** (`capacity.py`): Most complex builder. Creates per-person groups: WP rows (blue input, static values from distribution curves), external project rows, TOTAL (SUM), REMAINING (Max FTE - TOTAL), EU TOTAL (programme WP rows + EU-flagged externals — tracks total EU commitment against the 215-day annual ceiling, distinct from TOTAL). Per-person WP rows are **only the WPs assigned to that person** in Config PERSON-WP ASSIGNMENTS — not every WP. Distribution curve per WP (flat/front-loaded/bell/back-loaded) comes from the Type col on the merged WP BUDGET row. Right-side raw-monthly band (outline_level=1, default collapsed): Actual-FTE (green cross-ref to Actuals-Hours hour / hours_per_fte_month) + Variance-FTE (Planned - Actual). Always-visible 2-col **TO-DATE** block beyond that: `Actual PM` (WP rows: green ref to Actuals-Hours `cum_hours_col` / hours_per_fte_month; TOTAL/EU TOTAL: SUM of WP Actual cells) + `Variance PM` (only populated on TOTAL + EU TOTAL: windowed plan SUM on same-row planned cells − Actual; red CF < 0). Returns `capacity_layout` with `person_groups` + `todate_col_actual` / `todate_col_var`.
+**Capacity** (`capacity.py`): Per-person groups with WP rows (blue input, distribution-curve static values), TOTAL, REMAINING (Max - TOTAL), and **EU TOTAL** (programme WPs + EU-flagged externals — tracks the 215-day annual ceiling separately from TOTAL). Non-obvious conventions: per-person WP rows cover **only the assigned WPs** (from Config PERSON-WP ASSIGNMENTS), not every WP; distribution curve type comes from the Type col on the merged WP BUDGET row; the right-side raw-monthly band sits at `outline_level=1` (default collapsed); the always-visible TO-DATE `Variance PM` column is populated only on TOTAL + EU TOTAL rows. Returns `capacity_layout` with `person_groups` + `todate_col_actual` / `todate_col_var`. See `capacity.py` for the formulas and CF rules.
 
-**Timelog Plan** (`timelog_plan.py`): Prescriptive whole-month 1.0-FTE WP allocation grid — separate allocation surface from Plan/Capacity (see `docs/design-invariants.md` § Plan vs Timelog Plan). **v2 layout (2026-04-19) + Phase 3–4 enhancements (2026-04-19)**: single merged editable grid + two summary bands with appended totals rows: (1) **PER-WP SUMMARY** (WP code, Ceiling €, Assigned €, **Buffer €** signed, Assigned months, WP sched months, Burn rate needed, Any OOW?, plus one EUR column per calendar year `Y{yyyy} €`) — two totals rows appended below the last WP row (same outline group, no spacer): **Yearly total €** (col A label, col C = `SUM(C{W1}:C{Wn})`, per-year cells = `SUM` of the per-WP year col) and **Yearly budget €** (col A label, col C = `SUM(B{W1}:B{Wn})`, per-year cells = build-time term-sum `Σ prop_ky × Config!E{wp_row}` with fractional-month-ratio proportions from `_wp_sched_months`; zero-prop WPs omitted); (2) **merged editable grid** (was PROPOSED + ASSIGNED — now one grid holding literal WP codes, blue-input editable, solver-written on init, pastel per-WP CF + red OOW CF; **vacation-month columns** carry `VACATION_FILL` pale yellow `#FFF2CC` + `Protection(locked=True)` across every person row and the Monthly total € row) — a **Monthly total €** row is appended directly under the last person row (same outline group, no spacer) with `=ROUND(SUMPRODUCT((col<>"")*rate_vector),0)` per month (rate vector = PER-PERSON SUMMARY col H); `TIMELOG_MONTH_COL_START = 2` (col B); no per-row metric col; (3) **PER-PERSON SUMMARY** (Person, Assigned, **Pool** (reduced via `max_fte × (project_months − num_vacation_months)`), Over-pool?, Switches, First log, Last log, **Rate** — single source, was duplicated on each grid row in v1; `Largest gap` placeholder dropped 2026-04-19 so Rate sits at col H). Row 2 carries five traffic-light label/value pairs in cols 1-10; cols **9-10** hold the `timelog_resolve_flag` toggle (TRUE/FALSE blue input, named range `timelog_resolve_flag`, see `docs/design-invariants.md` § Timelog Plan merged grid). Freeze panes at **B3**. First log / Last log formulas use the `SUMPRODUCT(MIN/MAX((arr<>"")*COL...))` pattern — the v1 `MATCH(1, (arr<>"")*1, 0)` / `LOOKUP(2, 1/..., headers)` forms shipped with a silent LO recalc drift (see banned-pattern invariant). Reader: `read_timelog_plan(wb, months)` returns `{"grid": {(person, month_num): wp_code}, "resolve_flag": bool}`; orchestrator gates `solve(...)` on the flag. Reader stops the grid-row scan at the "Monthly total €" label (in addition to `PER-` section titles and blank col A).
+**Timelog Plan** (`timelog_plan.py`): Prescriptive whole-month 1.0-FTE WP allocation grid — separate allocation surface from Plan/Capacity. See the `timelog_plan.py` module docstring + `docs/plans/archived/2026-04-18-timelog-plan-design.md` (v1), `2026-04-19-timelog-plan-v2-design.md` (merged grid + toggle), `2026-04-19-timelog-plan-enhancements-design.md` (phases 3–4 totals + vacation). Cross-sheet invariants in `docs/design-invariants.md`.
 
-**Actuals** (`actuals.py`): Similar to Plan but with EUR input cells. **Row 1 is the EUR through-month control strip** (A: label, B: optional blue-input override, C: black-formula auto-derived `SUMPRODUCT(MAX(...))` scan across the WP data block excluding TOTAL, D: black-formula effective `=IF(ISNUMBER(B1),B1,C1)` — D1 is the target of the `eur_actuals_through_month` named range). "As of" header pair shifted to row 2 (label + `=EDATE(project_start, eur_actuals_through_month-1)` green date for the Actual block; same pattern for the Forecast block at the forecast-column offset). Section header on row 3. Extra validation columns: Cum. EUR (SUMPRODUCT up to `current_month`), % Ceiling, Breach In — formula `(ceiling − cum EUR) / (cum EUR / MAX(1,eur_actuals_through_month))` inlined (cumulative-slope from project start through `eur_actuals_through_month`; not a per-month slope). Parallel forecast-monitoring block (4 cols, outline_level=1, collapsible, separated from actual-EUR block by a 1-col gutter): Cum Forecast EUR, Forecast Variance, Forecast % Ceiling, Forecast Breach In (denominator inlined as `MAX(1,hours_actuals_through_month)`) — green cross-refs into Plan-Forecast WP rows. CF rules mirror the actual-EUR block. Registers the `eur_actuals_through_month` named range on its own `$D$1`.
-
-**Actuals-Hours** (`actuals_hours.py`): Per-person monthly hour timelog — primary hours input surface. **Row 1 is the Hours through-month control strip** (A: label, B: optional blue-input override, C: black-formula auto-derived scan across programme-WP data rows excluding external / subtotal / EU-total rows, D: black-formula effective — D1 is the target of the `hours_actuals_through_month` named range; sheet name is hyphenated so the DefinedName `attr_text` is single-quoted `'Actuals-Hours'!$D$1`). Band-label row shifted to row 2; year header row 3; month header row 4; first person-header row follows. Per-person block order: header, WP rows, external rows, **two summary rows** ("Cumulative hours to date" + "Actual PM to date" — col A blank so the reader skips them; formulas reference `cum_hours_col`; outline_level=1 so they collapse with the block), TOTAL, EU TOTAL. The TOTAL per-month SUM spans only the data rows (WP + external), not the summary rows. Annual ceiling is enforced by CF against `eu_annual_ceiling_pm * hours_per_fte_month`. Person header A-column name **must be a literal string**, not a cross-ref formula — it is the VLOOKUP key for the forecast-EUR leaves and must evaluate under `data_only=True`. Sibling forecast-EUR band (outline_level=1, 1-col gutter right of Sum): each leaf `=IF(h="","",ROUND(h/hours_per_fte_month*VLOOKUP(person,roster_lookup,4,FALSE),0))`. ROUND wraps each leaf to whole EUR so hundreds-of-leaves SUMs on Plan-Forecast don't drift. Forecast-EUR leaves here are the **sole authoritative source** for Plan-Forecast and Actuals forecast monitoring. One gutter right of the forecast band, an always-visible helper col **`Cum hours (to date)`** carries a per-row windowed `SUM+INDEX` cumulation through `hours_actuals_through_month` — Capacity's to-date Actual PM reads this single cell per WP row (see `cum_hours_col` in the returned layout). Two grey CF rules on the forecast band: `month <= eur_actuals_through_month` (finance-closed) and `month > hours_actuals_through_month` (no hours yet).
+**Actuals** (`actuals.py`) + **Actuals-Hours** (`actuals_hours.py`): EUR and hours input surfaces (two cadences). Builder internals live in module docstrings; cross-sheet trust boundaries and through-month invariants are canonical in `docs/design-invariants.md` § Two-cadence actuals.
 
 **Plan-Forecast** (`plan_forecast.py`): WP x month forecast-EUR grid — pure aggregation, read-only (every cell is a formula). Shape mirrors Plan. Each monthly cell `=SUM(<Actuals-Hours forecast-EUR leaves for this WP x month across all assignments>)`. No user inputs.
 
-**Summary** (`summary.py`): Calendar-year groups with Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR sub-columns (5 per year) + PROJECT TOTAL group. Budget Overview section: Personnel Actual, Total Claimable (+25% indirect), Personnel Ceiling, Remaining, % Consumed. Reporting Period Summary section (grouped by Config reporting periods) with Form C preparation rows (Personnel EUR, Indirect 25%, Total Eligible, Cum. Eligible, CFS Required?).
+**Summary** (`summary.py`): Calendar-year column groups (5 sub-columns/year: Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR) + PROJECT TOTAL. Budget Overview applies the **25% indirect uplift** to Total Claimable. Reporting Period Summary emits **Form C preparation rows** grouped by Config reporting periods — compliance-load-bearing, not free to restructure. Per-row specifics in `summary.py`.
 
-**Trends** (`trends.py`): Dashboard with WP Burn Rate & Exhaustion table; cumulative EUR LineChart (Planned / Actual / Cumulative Forecast / Ceiling / RP End) where Actual and Forecast series emit `NA()` past `eur_actuals_through_month` / `hours_actuals_through_month` respectively so the lines clip cleanly; a **Reconciliation: Forecast vs Actual EUR** section (between the cumulative chart and Person Load) with three health cells — Actuals EUR through (green ref to `eur_actuals_through_month`), Hours through (green ref to `hours_actuals_through_month`), **Reconciled through** (black formula `=MIN(eur_actuals_through_month,hours_actuals_through_month)`, **local helper cell at `$B$<recon_section_row+4>` on Trends** — no longer a named range; the per-WP cumulative SUM and Gap chart both read this same-sheet helper via absolute ref). Per-WP summary table (WP, Cum Forecast EUR, Cum Actual EUR, Gap EUR, Gap %) with TOTAL row, all cumulative-through the local helper cell, Gap % CF red >|10%| and amber >|5%|; a second LineChart (gap-over-time, anchored right below the reconciliation TOTAL) — single purple `cum Actual − cum Forecast` series clipped via `NA()` past the local Reconciled-through helper (inherited from the actual / forecast helper rows, which already clip at their respective through-months), dashed grey zero reference line; a 4-column **Person Load** table (Person, Avg FTE to date = Actuals-Hours cumulative / `MAX(1,hours_actuals_through_month)` inline, Plan Avg FTE to date, Variance to-date %; CF red >|20%| / amber >|10%|). Hidden helper-row block below Person Load grew from 6 to 8 rows (added `helper_row_gap`, `helper_row_zero`) and feeds both charts' data series.
+**Trends** (`trends.py`): Dashboard — WP Burn Rate & Exhaustion table, cumulative EUR LineChart (Planned / Actual / Forecast / Ceiling / RP End; Actual + Forecast series clip via `NA()` past their respective through-month), **Reconciliation: Forecast vs Actual EUR** section, per-WP Gap table, a gap-over-time LineChart, and a Person Load table. **Non-obvious invariant:** the **Reconciled through** value (`=MIN(eur_actuals_through_month, hours_actuals_through_month)`) is a **local helper cell on Trends** at `$B$<recon_section_row+4>` — it is **not a named range**; per-WP Gap SUMs and the gap chart both read it via absolute same-sheet ref. CF thresholds: Gap % red >|10%| / amber >|5%|; Variance to-date % red >|20%| / amber >|10%|. See `trends.py` for chart wiring, helper-row block layout, and formula bodies.
 
 ### Sheet Role Contract
 
@@ -96,8 +94,8 @@ Actuals cell =Plan!A6 -> Plan!A6 =Config!A8 -> Config!A8 = "WP1"
 
 | Function | Extracts | Key technique |
 |----------|----------|---------------|
-| `read_config_sheet(ws)` | Project params (rows 1-6 blue inputs, row 7 vacation month, row 8 derived num vacation months, row 9 version stamp), WP table (rows 10+). Through-month values are read from the Actuals / Actuals-Hours sheets, not Config. | Direct cell reads + named-range map |
-| `read_actuals_override(ws)` | Optional integer at row 1 col B (blue through-month override; shared signature — caller passes either the Actuals or Actuals-Hours worksheet); returns `None` when blank/non-numeric so the effective cell falls through to the auto-derived scan in C1 | Typed cell read |
+| `read_config_sheet(ws)` | Project params (blue-input scalars + Vacation Month; derived `num_vacation_months` + `version_stamp` via named ranges) and WP table. Through-month values are read from the Actuals / Actuals-Hours sheets, not Config. | Direct cell reads + named-range map |
+| `read_actuals_override(ws)` | Optional integer blue-input override on the Row 1 through-month control strip (shared signature — caller passes either the Actuals or Actuals-Hours worksheet); returns `None` when blank/non-numeric so the effective cell falls through to the auto-derived scan | Typed cell read |
 | `read_team_from_config(ws)` | Team roster (name + max_fte) | Scans from "TEAM ROSTER" header |
 | `read_capacity_sheet(ws, ...)` | External commitments, per-person monthly FTE | Person header detection by bold + fill `2F5496` |
 | `read_actuals_values(ws, ...)` | EUR per WP per month | Formula chain resolution |
@@ -174,88 +172,26 @@ No other solvers exist today. If a future builder needs algorithmic assignment (
 
 ## Layout and Styling
 
-`layout.py` and `styles.py` centralize constants that every builder imports.
+> Layout constants, row/column positions, validation-column offsets, freeze panes, and alert thresholds live in `budget_planner/layout.py`. Not duplicated here to avoid drift. Styling primitives (fonts, fills, `BLACK_FORMULA` / `BLUE_INPUT`, `VACATION_FILL`) live in `budget_planner/styles.py`.
 
-### Month Column Positioning
+### Styling conventions
 
-All sheets with monthly data share the same column structure:
-
-```
-Col A (1) = WP ID / Person name
-Col B (2) = Label
-Col C (3) = Month 1              (MONTH_COL_START = 3)
-...
-Col N     = Month N              (month_col_end(N))
-Col N+1   = Sum                  (val_columns(N)["sum"])
-Col N+2   = Budget               (val_columns(N)["budget"])
-Col N+3   = Variance             (val_columns(N)["diff"])
-Col N+4   = Cum. EUR             (Actuals only)
-Col N+5   = % Ceiling            (Actuals only)
-Col N+6   = Breach In            (Actuals only)
-```
-
-Validation columns are offsets from the last month column, so changing project duration auto-repositions them.
-
-### Alert Thresholds (layout.py)
-
-| Constant | Value | Used by |
-|----------|-------|---------|
-| `CAPACITY_AMBER_LOAD` | 0.80 | Capacity + Trends person load |
-| `ACTUALS_AMBER_PCT_CEIL` | 0.85 | Actuals % ceiling |
-| `ACTUALS_AMBER_BREACH_MONTHS` | 12 | Actuals breach column |
-| `ACTUALS_RED_BREACH_MONTHS` | 6 | Actuals breach column |
-| `TREND_OK_BAND` | 0.05 | Trends burn delta |
-| `TREND_OVER_THRESHOLD` | 0.15 | Trends burn delta |
-| `TREND_SLOW_THRESHOLD` | -0.10 | Trends burn delta |
-
-### style_cell() Auto-Unlock
-
-When font color is blue (`0000FF`), `style_cell()` automatically sets `Protection(locked=False)`. When sheet protection is re-enabled, all blue input cells become editable with no extra code.
-
-### Column Grouping
-
-`apply_year_groups()` creates collapsible column groups by calendar year. The group containing `current_month` is expanded; all others are collapsed.
-
-### Tab Colors
-
-Each sheet's tab color is a semantic role marker — don't change without updating this table.
+- **`style_cell()` auto-unlock.** When font color is blue (`0000FF`), `style_cell()` automatically sets `Protection(locked=False)` so blue inputs stay editable when sheet protection is re-enabled.
+- **Column grouping.** `apply_year_groups()` creates collapsible column groups per calendar year. The group containing `current_month` is expanded; others collapse.
+- **Tab color is a semantic role marker** — don't change without updating the mapping:
 
 | Sheet | Tab color | Why |
 |-------|-----------|-----|
 | Config | Blue (4472C4) | Single source of truth for all parameters |
 | Capacity | Purple | Primary planning surface (derived from Config assignments) |
-| Timelog Plan | Orange (FF8C00) | Prescriptive 1.0-FTE WP allocation — distinct surface from Plan/Capacity |
+| Timelog Plan | Orange (FF8C00) | Prescriptive 1.0-FTE WP allocation — distinct from Plan/Capacity |
 | Actuals | Blue (0000FF) | EUR input from accountant |
-| Actuals-Hours | Red (C00000) | Hours input — distinct to flag as the primary hours surface |
+| Actuals-Hours | Red (C00000) | Hours input — primary hours surface |
 | Plan-Forecast | Green (00B050) | Read-only aggregation (green = formula-derived) |
 | Summary | Green (008000) | Read-only aggregation |
 | Trends | Gold (FFD700) | PM dashboard |
 
-### Freeze Panes
-
-Every sheet with monthly data freezes at column C (row varies) so columns A (ID) and B (Name/Label) stay visible during horizontal scroll. Row varies by sheet — use the builder's live coordinates, not a hardcoded row number:
-
-| Sheet | Freeze |
-|-------|--------|
-| Config | `A{wp_section_row}` (freezes project-params block above WP BUDGET) |
-| Plan | `C{plan_first_wp}` |
-| Actuals | `C4` |
-| Actuals-Hours | `C{first_person_header}` |
-| Plan-Forecast | `C{pf_first_wp_row}` |
-| Summary | `C{sum_first_wp}` |
-
-### Row-Order Contracts
-
-Cross-sheet formulas (Plan's `=SUM(Capacity!...)`, Trends person-load refs, Summary aggregations) index by row position, so row order is a contract not an accident.
-
-- **Capacity person order matches Config TEAM ROSTER order.** Adding a roster row shifts every downstream Capacity person group.
-- **Plan WP row order matches Config WP BUDGET order.** Same for Actuals, Plan-Forecast, Summary.
-- **Capacity per-person WP rows are ordered by Config PERSON-WP ASSIGNMENTS** for that person (intersection filter — not all WPs).
-- **Actuals-Hours person + WP row order mirrors Capacity** — the T9 Actual-FTE band on Capacity sibling-refs Actuals-Hours by matched row position.
-
-### Inactive-Month Rule
-
-On every sheet with monthly data (Capacity, Plan, Actuals, Actuals-Hours, Plan-Forecast), months outside the intersection of the assignment window `[Start, End]` and the WP's single-range active months (from WP BUDGET cols H/I) are **greyed and empty**. Distribution curves must never leak FTE into out-of-range months. Under the single-range schema every WP has exactly one (Start, End) pair; multi-segment schedules are rejected at rebuild with a ValueError (reader §5.1).
+Row-order contracts and the inactive-month rule are cross-sheet invariants — see `docs/design-invariants.md` § Row-order contracts / § Inactive-month rule.
 
 ---
 

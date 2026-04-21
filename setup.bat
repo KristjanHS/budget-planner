@@ -7,16 +7,26 @@ if errorlevel 1 (
 echo === Budget Planner - Setup ===
 echo.
 
-where python >nul 2>nul
+py -3.14 --version >nul 2>nul
 if errorlevel 1 (
-    echo ERROR: Python not found. Install Python 3.14+ from https://www.python.org/downloads/
-    echo Make sure to check "Add to PATH" during installation.
+    echo ERROR: Python 3.14 not found via the py launcher.
+    echo Install Python 3.14 from https://www.python.org/downloads/ (check "Add to PATH" and "Install launcher").
     pause
     exit /b 1
 )
 
-echo Creating virtual environment...
-python -m venv .venv
+if exist .venv (
+    echo Removing stale .venv...
+    rmdir /s /q .venv
+    if errorlevel 1 (
+        echo ERROR: Failed to remove existing .venv directory. Close any process using it and retry.
+        pause
+        exit /b 1
+    )
+)
+
+echo Creating virtual environment with Python 3.14...
+py -3.14 -m venv .venv
 if errorlevel 1 (
     echo ERROR: Failed to create virtual environment.
     pause

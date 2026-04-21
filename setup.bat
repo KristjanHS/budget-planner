@@ -10,7 +10,8 @@ echo.
 py -3.14 --version >nul 2>nul
 if errorlevel 1 (
     echo ERROR: Python 3.14 not found via the py launcher.
-    echo Install Python 3.14 from https://www.python.org/downloads/ (check "Add to PATH" and "Install launcher").
+    echo Install Python 3.14 from https://www.python.org/downloads/
+    echo During install, check "Add to PATH" and "Install launcher".
     pause
     exit /b 1
 )

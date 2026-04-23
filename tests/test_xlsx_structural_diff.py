@@ -670,3 +670,56 @@ def test_noise_filtered_summary_always_present(tmp_path: Path):
     out = _diff(tmp_path, build, build)
     nfs = out["noise_filtered_summary"]
     assert nfs == {"number_format_normalized": 0, "tab_color_alpha_normalized": 0}
+
+
+def test_format_noise_kept_with_flag(tmp_path: Path):
+    """--keep-noise retains the record and tags `noise_class: "format"`."""
+    wb_a = Workbook()
+    ws_a = _active(wb_a)
+    ws_a.title = "S"
+    ws_a["G5"] = 1
+    ws_a["G5"].number_format = "mmm\\ yyyy"
+    wb_b = Workbook()
+    ws_b = _active(wb_b)
+    ws_b.title = "S"
+    ws_b["G5"] = 1
+    ws_b["G5"].number_format = "MMM YYYY"
+
+    a = _save(wb_a, tmp_path / "a.xlsx")
+    b = _save(wb_b, tmp_path / "b.xlsx")
+    out_path = tmp_path / "diff.json"
+    assert main([str(a), str(b), "--out", str(out_path), "--keep-noise"]) == 0
+    parsed = json.loads(out_path.read_text())
+
+    entry = parsed["sheets"]["S"]["cells"]["G5"]
+    assert entry["noise_class"] == "format"
+    assert entry["number_format"]["old"] == "mmm\\ yyyy"
+    assert entry["number_format"]["new"] == "MMM YYYY"
+    # Counter still bumps regardless of keep_noise.
+    assert parsed["noise_filtered_summary"]["number_format_normalized"] == 1
+
+
+def test_color_noise_kept_with_flag(tmp_path: Path):
+    """--keep-noise retains tab_color delta and tags `noise_class: "color"`."""
+    from openpyxl.styles import Color
+
+    wb_a = Workbook()
+    ws_a = _active(wb_a)
+    ws_a.title = "S"
+    ws_a.sheet_properties.tabColor = Color(rgb="FFC00000")
+    wb_b = Workbook()
+    ws_b = _active(wb_b)
+    ws_b.title = "S"
+    ws_b.sheet_properties.tabColor = Color(rgb="00C00000")
+
+    a = _save(wb_a, tmp_path / "a.xlsx")
+    b = _save(wb_b, tmp_path / "b.xlsx")
+    out_path = tmp_path / "diff.json"
+    assert main([str(a), str(b), "--out", str(out_path), "--keep-noise"]) == 0
+    parsed = json.loads(out_path.read_text())
+
+    tab_entry = parsed["sheets"]["S"]["structure"]["tab_color"]
+    assert tab_entry["noise_class"] == "color"
+    assert tab_entry["old"] == "FFC00000"
+    assert tab_entry["new"] == "00C00000"
+    assert parsed["noise_filtered_summary"]["tab_color_alpha_normalized"] == 1

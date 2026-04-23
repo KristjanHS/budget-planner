@@ -511,9 +511,10 @@ def _diff_sheet(
     ws_a: Any | None,
     ws_b: Any | None,
     counter: dict[str, int],
+    keep_noise: bool,
 ) -> dict[str, Any]:
     """Build the per-sheet diff dict."""
-    structure = _diff_structure(ws_a, ws_b, counter)
+    structure = _diff_structure(ws_a, ws_b, counter, keep_noise)
     cells_diff: dict[str, Any] = {}
     changed_formulas: dict[tuple[int, int], tuple[str, str]] = {}
 
@@ -564,7 +565,9 @@ def _diff_sheet(
         if sa == sb:
             continue
         coord_s = _coord_str(coord)
-        entry = _build_change_entry(sheet_name, coord, ca, cb, sa, sb, counter)
+        entry = _build_change_entry(
+            sheet_name, coord, ca, cb, sa, sb, counter, keep_noise
+        )
         if entry:
             cells_diff[coord_s] = entry
         if sa["kind"] == "formula" and sb["kind"] == "formula" and sa.get("formula") != sb.get("formula"):
@@ -608,6 +611,7 @@ def _build_change_entry(
     sa: dict[str, Any],
     sb: dict[str, Any],
     counter: dict[str, int],
+    keep_noise: bool,
 ) -> dict[str, Any]:
     """Produce a single cells diff entry for a coord present on both sides."""
     # If kind itself changed, that subsumes everything.
@@ -646,15 +650,18 @@ def _build_change_entry(
     # number_format change — combine into the same entry rather than overwriting kind.
     # Canonicalization predicate absorbs Excel-cosmetic differences (case, escape
     # backslashes); counter bumps when a raw mismatch collapses to canonical match.
+    # keep_noise retains the record and stamps `noise_class`.
     if sa["number_format"] != sb["number_format"]:
-        equal, _noise_class = _compare_numfmt(
+        equal, noise_class = _compare_numfmt(
             sa["number_format"], sb["number_format"], counter
         )
-        if not equal:
+        if not equal or (keep_noise and noise_class):
             entry["number_format"] = {
                 "old": sa["number_format"],
                 "new": sb["number_format"],
             }
+            if keep_noise and noise_class:
+                entry["noise_class"] = noise_class
             has_payload = True
 
     # style change — emit changed fields under nested `style` block so the parent
@@ -678,7 +685,10 @@ def _build_change_entry(
 
 
 def _diff_structure(
-    ws_a: Any | None, ws_b: Any | None, counter: dict[str, int]
+    ws_a: Any | None,
+    ws_b: Any | None,
+    counter: dict[str, int],
+    keep_noise: bool,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {}
 
@@ -705,9 +715,12 @@ def _diff_structure(
     b_tab = ws_b.sheet_properties.tabColor.rgb if ws_b and ws_b.sheet_properties.tabColor else None
     if a_tab != b_tab:
         # Canonicalization absorbs ARGB alpha-byte noise (FF vs 00 both opaque).
-        equal, _noise_class = _compare_argb(a_tab, b_tab, counter)
-        if not equal:
-            out["tab_color"] = {"old": a_tab, "new": b_tab}
+        equal, noise_class = _compare_argb(a_tab, b_tab, counter)
+        if not equal or (keep_noise and noise_class):
+            tab_entry: dict[str, Any] = {"old": a_tab, "new": b_tab}
+            if keep_noise and noise_class:
+                tab_entry["noise_class"] = noise_class
+            out["tab_color"] = tab_entry
 
     a_hidden = (ws_a.sheet_state if ws_a else None) == "hidden"
     b_hidden = (ws_b.sheet_state if ws_b else None) == "hidden"
@@ -720,7 +733,9 @@ def _diff_structure(
 # ---------- top-level diff ----------
 
 
-def diff_workbooks(path_a: Path, path_b: Path) -> dict[str, Any]:
+def diff_workbooks(
+    path_a: Path, path_b: Path, keep_noise: bool = False
+) -> dict[str, Any]:
     wb_a = load_workbook(filename=str(path_a), data_only=False)
     wb_b = load_workbook(filename=str(path_b), data_only=False)
 
@@ -746,7 +761,9 @@ def diff_workbooks(path_a: Path, path_b: Path) -> dict[str, Any]:
     for name in sorted(a_sheets | b_sheets):
         ws_a = wb_a[name] if name in a_sheets else None
         ws_b = wb_b[name] if name in b_sheets else None
-        sheet_diffs[name] = _diff_sheet(name, ws_a, ws_b, noise_counter)
+        sheet_diffs[name] = _diff_sheet(
+            name, ws_a, ws_b, noise_counter, keep_noise
+        )
 
     formula_changes = 0
     cells_added = 0
@@ -868,6 +885,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Pretty-print JSON with indent=2. Default is compact (one-line) for "
         "smaller file size when an AI agent is the consumer.",
     )
+    parser.add_argument(
+        "--keep-noise",
+        action="store_true",
+        help="Retain records that would otherwise be dropped by noise "
+        "canonicalization (number-format case/escape, ARGB alpha); tag each "
+        "surviving record with `noise_class`.",
+    )
     args = parser.parse_args(argv)
 
     if args.dir_path is not None:
@@ -887,7 +911,7 @@ def main(argv: list[str] | None = None) -> int:
         args.out.rename(archive)
         print(f"Archived previous result to {archive}")
 
-    diff = diff_workbooks(file_a, file_b)
+    diff = diff_workbooks(file_a, file_b, keep_noise=args.keep_noise)
     diff["meta"]["mode"] = args.mode
     if args.mode == "logic":
         diff = _filter_logic_mode(diff)

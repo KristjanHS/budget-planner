@@ -155,18 +155,18 @@ def test_orphan_wp_dropped_with_bystander(tmp_path: Path, capsys):
 # ── Reader shape contract ──────────────────────────────────────────────────
 
 
-def test_reader_returns_grid_and_flag(tmp_path: Path):
-    """v2 reader returns {'grid': {(person, month): wp_code}, 'resolve_flag': bool}."""
+def test_reader_returns_grid_and_rebuild_from_month(tmp_path: Path):
+    """Reader returns {'grid': dict, 'rebuild_from_month': int}."""
     path = tmp_path / "wb.xlsx"
     init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
     wb = openpyxl.load_workbook(path)
     months = _project_months(wb)
     out = read_timelog_plan(wb, months)
-    assert set(out.keys()) == {"grid", "resolve_flag"}, out.keys()
+    assert set(out.keys()) == {"grid", "rebuild_from_month"}, out.keys()
     assert isinstance(out["grid"], dict)
-    assert isinstance(out["resolve_flag"], bool)
-    # Fresh init: flag defaults to TRUE (named range writes literal True).
-    assert out["resolve_flag"] is True
+    assert isinstance(out["rebuild_from_month"], int)
+    # Fresh init: default is 1 (solve-all equivalent).
+    assert out["rebuild_from_month"] == 1
     # Grid has ≥1 solver-placed cell keyed by (person, 1-indexed month).
     assert len(out["grid"]) > 0, "solver placed no cells in merged grid"
     for key, val in out["grid"].items():

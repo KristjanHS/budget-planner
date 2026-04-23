@@ -303,15 +303,27 @@ class TestActualsConditionalFormatting:
     """Actuals sheet has red fill on variance column when < 0."""
 
     def test_actuals_variance_red(self, workbook):
-        """Actuals variance column has red fill for negative values."""
+        """Actuals variance column has red fill for negative values.
+
+        T3 (2026-04-22 indirect-view restructure) doubled the Actual-EUR
+        and Forecast CF rule sets to add +i mirror-block rules. The
+        one-time rule-count bump is permitted per testing.md.
+
+        Pre-T3: 11 rules
+            - Actual-EUR -i: variance red, %ceiling amber/red, breach amber/red = 5
+            - Forecast -i: variance red, %ceiling amber/red, breach amber/red = 5
+            - Reconciliation grey-fill (Task 8): future-month grey = 1
+
+        Post-T3: 21 rules
+            - All 10 -i rules above, retained.
+            - Actual-EUR +i mirror: variance red, %ceiling amber/red, breach amber/red = 5
+            - Forecast +i mirror: variance red, %ceiling amber/red, breach amber/red = 5
+            - Reconciliation grey-fill: 1
+        """
         ws = workbook["Actuals"]
         rules = _collect_cf_rules(ws)
-        # Actual-EUR block: variance red, %ceiling amber/red, breach amber/red = 5
-        # Forecast block (Task 6): variance red, %ceiling amber/red, breach amber/red = 5
-        # Reconciliation grey-fill (Task 8): monthly Actual EUR future-grey = 1
-        # Total: 11
-        assert len(rules) == 11, f"Expected 11 CF rules on Actuals, got {len(rules)}"
-        # First rule is variance red on the Actual-EUR block
+        assert len(rules) == 21, f"Expected 21 CF rules on Actuals, got {len(rules)}"
+        # First rule is variance red on the Actual-EUR -i block
         sqref, formulas, fg_color = rules[0]
         assert len(formulas) == 1
         assert "<0" in formulas[0], (

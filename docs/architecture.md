@@ -76,7 +76,7 @@ sequenceDiagram
   Note right of PL: Patches Plan with SUM(Capacity!...)
   WB->>TR: Skeleton: current_month input + named range
   WB->>TLP: build_timelog_plan_sheet(config_layout, ...)
-  Note right of TLP: Solver writes merged grid on init;<br/>rebuild gated by timelog_resolve_flag
+  Note right of TLP: Solver writes merged grid on init;<br/>rebuild freezes months < timelog_rebuild_from_month
   WB->>AC: build_actuals_sheet(plan_layout)
   Note right of AC: Returns actuals_layout
   WB->>SM: build_summary_sheet(plan_layout, actuals_layout)
@@ -163,7 +163,7 @@ flowchart TD
 User-facing tab order (set in `workbook.py` after build): **Config → Timelog Plan → Actuals-Hours → Capacity → Plan → Actuals → Plan-Forecast → Trends → Summary**. Positions 1-3 hold the frequently-edited tabs (Config + Timelog Plan + Actuals-Hours) so the user can reach them without scrolling (2026-04-19 v2 redesign). Note the Cross-Sheet Formula References diagram above omits `Actuals-Hours`, `Plan-Forecast`, and `Timelog Plan`; the first two form a secondary data chain documented here in prose, and Timelog Plan is a terminal surface (Config refs in; nothing out).
 
 ### Config
-Single source of truth for project parameters, WP budget table (incl. each WP's single-range start/end/type), person-WP assignments, external commitments, team roster, reporting periods, and the grade rate table. Hosts the named ranges `project_start` (B2), `fte_rate` (B4), `vacation_month` (B7), `num_vacation_months` (B8), `version_stamp` (B9). The two through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) now live on the Actuals / Actuals-Hours sheets, not Config — see those sheet sections. **Tab color: Blue (4472C4).** Upstream to every other sheet.
+Single source of truth for project parameters, WP budget table (incl. each WP's single-range start/end/type), person-WP assignments, external commitments, team roster, reporting periods, and the grade rate table. Hosts the named ranges `project_start` (B2), `fte_rate` (B4), `vacation_month` (B7), `num_vacation_months` (B8), `timelog_rebuild_from_month` (B9), `version_stamp` (B10). The two through-month named ranges (`eur_actuals_through_month`, `hours_actuals_through_month`) now live on the Actuals / Actuals-Hours sheets, not Config — see those sheet sections. **Tab color: Blue (4472C4).** Upstream to every other sheet.
 
 ### Capacity
 Primary planning surface: per-person monthly FTE allocation across programme WPs and external projects. Includes a to-date block (Plan/Actual/Variance in PM and %) that reads from Actuals-Hours. Feeds Plan via `SUM(Capacity!…)`.
@@ -172,7 +172,7 @@ Primary planning surface: per-person monthly FTE allocation across programme WPs
 Compact 1-row header + Planned-FTE block whose cells are `=SUM(Capacity!…)` per WP × month. Downstream consumers: Summary, Trends.
 
 ### Timelog Plan
-Prescriptive whole-month 1.0-FTE WP allocation grid — a separate allocation surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). v2 layout (2026-04-19) + Phase 3–4 totals rows (2026-04-19): single merged editable grid holding literal WP codes, flanked by PER-WP SUMMARY (with per-year EUR columns `Y{yyyy} €` + **Yearly total €** and **Yearly budget €** totals rows beneath the last WP row) and PER-PERSON SUMMARY bands, and a **Monthly total €** row beneath the grid summing non-empty cells × per-person rates. Vacation-month columns are yellow-filled + locked across every person row and the Monthly total € row. The `timelog_resolve_flag` toggle gates whether rebuild re-runs the solver (named range; location in `timelog_plan.py`). Consumes `current_month`, `team_priorities`, `roster_lookup`, `num_vacation_months` (Pool formula). **Tab color: Orange (FF8C00).** Terminal surface — no downstream sheet consumes it.
+Prescriptive whole-month 1.0-FTE WP allocation grid — a separate allocation surface from Plan (see `docs/design-invariants.md` § Plan vs Timelog Plan). v2 layout (2026-04-19) + Phase 3–4 totals rows (2026-04-19): single merged editable grid holding literal WP codes, flanked by PER-WP SUMMARY (with per-year EUR columns `Y{yyyy} €` + **Yearly total €** and **Yearly budget €** totals rows beneath the last WP row) and PER-PERSON SUMMARY bands, and a **Monthly total €** row beneath the grid summing non-empty cells × per-person rates. Vacation-month columns are yellow-filled + locked across every person row and the Monthly total € row. The integer `timelog_rebuild_from_month` Config param (Config!$B$9) sets the freeze-point: months `< N` preserve user edits verbatim; months `≥ N` are re-solved against narrowed ceilings + pools (2026-04-23 freeze-point redesign). Consumes `current_month`, `team_priorities`, `roster_lookup`, `num_vacation_months` (Pool formula). **Tab color: Orange (FF8C00).** Terminal surface — no downstream sheet consumes it.
 
 ### Actuals
 EUR actuals per WP per month (input from accountant) **plus** a parallel forecast-monitoring block that reads Plan-Forecast. Monthly Actual-EUR cells past `eur_actuals_through_month` are greyed via CF — those months are not closed yet. **Hosts the `eur_actuals_through_month` named range at `$D$1` (row-1 through-month control strip: label / optional blue-input override / auto-derived scan / effective cell).** **Tab color: Blue.**

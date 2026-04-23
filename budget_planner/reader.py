@@ -1383,18 +1383,20 @@ def read_actuals_hours_sheet(
 
 
 def read_timelog_plan(wb, project_months: int) -> dict:
-    """Read preserved grid values and resolve-flag from the Timelog Plan sheet.
+    """Read preserved grid values and rebuild-from-month N from the Timelog Plan sheet.
 
     v2 surface: the merged "TIMELOG GRID" band holds literal WP codes (no
-    `=<Proposed>` formulas anymore). All non-empty cells are preserved values —
-    the rebuild either re-solves (resolve_flag TRUE, discards them) or keeps
-    them verbatim (resolve_flag FALSE).
+    `=<Proposed>` formulas anymore). The reader returns the ENTIRE preserved
+    grid unconditionally; filtering against the freeze boundary is the
+    builder's job (see ``docs/plans/archived/2026-04-23-solver-freeze-point-design.md``
+    §5).
 
     Anchoring strategy: scan col A for the exact GRID section-title string
     (imported from the builder so edits don't drift). The band layout is
     ``title, year, month, midx, persons...``; the first person row is
-    anchor + 4. The resolve flag lives at the `timelog_resolve_flag` named
-    range (defaults TRUE if the name is absent — pre-v2 workbooks).
+    anchor + 4. The rebuild-from-month integer lives at the
+    ``timelog_rebuild_from_month`` named range on Config (defaults to 1 —
+    solve-all — when the name is absent on pre-freeze-point workbooks).
 
     Args:
         wb: Workbook (load with ``data_only=False`` so formulas are visible).
@@ -1404,12 +1406,13 @@ def read_timelog_plan(wb, project_months: int) -> dict:
         Dict with keys:
           - ``grid``: ``{(person_name, month_num_1_indexed): wp_code}``, one
             entry per non-empty grid cell.
-          - ``resolve_flag``: bool, read from the named range or True default.
-        Returns ``{"grid": {}, "resolve_flag": True}`` when the sheet is
+          - ``rebuild_from_month``: int, read from the Config named range or
+            1 default.
+        Returns ``{"grid": {}, "rebuild_from_month": 1}`` when the sheet is
         missing or the anchor cannot be located (degraded-but-safe).
     """
-    resolve_flag = _read_resolve_flag(wb)
-    empty: dict = {"grid": {}, "resolve_flag": resolve_flag}
+    rebuild_from_month = _read_rebuild_from_month(wb)
+    empty: dict = {"grid": {}, "rebuild_from_month": rebuild_from_month}
 
     if SHEET_TIMELOG_PLAN not in wb.sheetnames:
         return empty
@@ -1479,7 +1482,7 @@ def read_timelog_plan(wb, project_months: int) -> dict:
                 # strings) but preserve rather than silently drop.
                 grid[(name, mi + 1)] = str(val)
 
-    return {"grid": grid, "resolve_flag": resolve_flag}
+    return {"grid": grid, "rebuild_from_month": rebuild_from_month}
 
 
 _MONTH_ABBREV_TO_NUM = {
@@ -1526,41 +1529,48 @@ def _read_vacation_month_num(ws) -> int:
     return 7
 
 
-def _read_resolve_flag(wb) -> bool:
-    """Read the ``timelog_resolve_flag`` named-range cell.
+def _read_rebuild_from_month(wb) -> int:
+    """Read the ``timelog_rebuild_from_month`` named-range cell.
 
-    Returns True (re-solve) when the named range is missing or the cell is
-    unparseable — safe default for pre-v2 workbooks and corruption cases.
+    Returns 1 (solve-all — equivalent to the old ``resolve_flag=TRUE``
+    default) when the named range is missing, the cell is blank, or the
+    value is unparseable — safe default for pre-freeze-point workbooks
+    and corruption cases. Shape mirrors ``_read_vacation_month_num``.
     """
     try:
-        dn = wb.defined_names["timelog_resolve_flag"]
+        dn = wb.defined_names["timelog_rebuild_from_month"]
     except (KeyError, TypeError):
-        return True
+        return 1
     if dn is None:
-        return True
+        return 1
     try:
         destinations = list(dn.destinations)
     except Exception:
-        return True
+        return 1
     if not destinations:
-        return True
+        return 1
     sheet_name, ref = destinations[0]
     if sheet_name not in wb.sheetnames:
-        return True
-    ws = wb[sheet_name]
+        return 1
     try:
-        val = ws[ref.replace("$", "")].value
+        val = wb[sheet_name][ref.replace("$", "")].value
     except Exception:
-        return True
+        return 1
     if isinstance(val, bool):
-        return val
+        # bool is an int subclass — treat True/False as unparseable.
+        return 1
+    if isinstance(val, (int, float)):
+        n = int(val)
+        return max(1, n)
     if isinstance(val, str):
-        s = val.strip().upper()
-        if s in ("TRUE", "1", "YES"):
-            return True
-        if s in ("FALSE", "0", "NO"):
-            return False
-    return True
+        s = val.strip()
+        if not s:
+            return 1
+        try:
+            return max(1, int(float(s)))
+        except ValueError:
+            return 1
+    return 1
 
 
 def _resolve_plan_ref(cell_value, plan_ws, config_ws=None):

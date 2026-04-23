@@ -15,3 +15,8 @@ __pycache__/
 
 # Shape-only reproducer artifacts (see docs/human/debugging-your-real-file.md)
 tmp/
+
+# diff/ holds user-supplied xlsx pairs for scripts/xlsx_structural_diff.py;
+# contents are potentially confidential — track the folder, ignore contents.
+diff/*
+!diff/.gitkeep

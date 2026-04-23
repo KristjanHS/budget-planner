@@ -207,13 +207,148 @@ def test_actuals_breach_formula(actuals_workbook):
 
 
 def test_actuals_cum_headers(actuals_workbook):
-    """Year row has Cum. EUR, % Ceiling, Breach In headers."""
+    """Year row has -i Cum EUR / % of Budget / Breach-In headers at the
+    legacy -i positions. T3 renamed ``Cum. EUR``/``% Ceiling``/``Breach
+    In`` to ``Cum EUR -i``/``% of Budget -i``/``Breach-In -i`` and added
+    +i mirrors at offsets 10/11/12 (covered by separate asserts below).
+    """
     ws = actuals_workbook["Actuals"]
     year_row = _find_year_row(ws)
     assert year_row is not None
-    assert ws.cell(year_row, VAL_COL_CUM).value == "Cum. EUR"
-    assert ws.cell(year_row, VAL_COL_PCT_CEIL).value == "% Ceiling"
-    assert ws.cell(year_row, VAL_COL_BREACH).value == "Breach In"
+    assert ws.cell(year_row, VAL_COL_CUM).value == "Cum EUR -i"
+    assert ws.cell(year_row, VAL_COL_PCT_CEIL).value == "% of Budget -i"
+    assert ws.cell(year_row, VAL_COL_BREACH).value == "Breach-In -i"
+
+
+# ── +i mirror block (T3 indirect-view restructure 2026-04-22) ──
+
+
+def test_actuals_plus_i_headers(actuals_workbook):
+    """+i mirror block headers carry the '+i' suffix in the year row."""
+    from budget_planner.layout import val_columns
+    from budget_planner.config import PROJECT_MONTHS
+    ws = actuals_workbook["Actuals"]
+    year_row = _find_year_row(ws)
+    assert year_row is not None
+    vcols = val_columns(PROJECT_MONTHS)
+    assert ws.cell(year_row, vcols["sum_plus_i"]).value == "Sum +i"
+    assert ws.cell(year_row, vcols["budget_plus_i"]).value == "Budget +i"
+    assert ws.cell(year_row, vcols["diff_plus_i"]).value == "Variance +i"
+    assert ws.cell(year_row, vcols["cum_plus_i"]).value == "Cum EUR +i"
+    assert ws.cell(year_row, vcols["pct_ceil_plus_i"]).value == "% of Budget +i"
+    assert ws.cell(year_row, vcols["breach_plus_i"]).value == "Breach-In +i"
+
+
+def test_actuals_plus_i_header_fills(actuals_workbook):
+    """+i headers use WITH_INDIRECT_HEADER_FILL (E2EFDA); -i headers use
+    WITHOUT_INDIRECT_HEADER_FILL (FBE5D6). Overrides the default
+    LIGHT_BLUE_FILL that build_year_month_headers writes."""
+    from budget_planner.layout import val_columns
+    from budget_planner.config import PROJECT_MONTHS
+    ws = actuals_workbook["Actuals"]
+    year_row = _find_year_row(ws)
+    assert year_row is not None
+    vcols = val_columns(PROJECT_MONTHS)
+
+    def _fg(cell):
+        return str(cell.fill.fgColor.rgb).upper() if cell.fill.fgColor else ""
+
+    # +i mirror cols use light-green fill
+    for key in ("sum_plus_i", "budget_plus_i", "diff_plus_i",
+                "cum_plus_i", "pct_ceil_plus_i", "breach_plus_i"):
+        assert _fg(ws.cell(year_row, vcols[key])).endswith("E2EFDA"), (
+            f"col {key} expected WITH_INDIRECT_HEADER_FILL (E2EFDA), "
+            f"got {_fg(ws.cell(year_row, vcols[key]))}"
+        )
+    # -i rollup cols use pale-orange fill
+    for key in ("sum", "budget", "diff", "cum", "pct_ceil", "breach"):
+        assert _fg(ws.cell(year_row, vcols[key])).endswith("FBE5D6"), (
+            f"col {key} expected WITHOUT_INDIRECT_HEADER_FILL (FBE5D6), "
+            f"got {_fg(ws.cell(year_row, vcols[key]))}"
+        )
+
+
+def test_actuals_sum_plus_i_formula_multiplies_by_1_25(actuals_workbook):
+    """Sum +i = ROUND(Sum -i * 1.25, 0) per D3 + openpyxl.md EUR rule."""
+    from budget_planner.layout import val_columns
+    from budget_planner.config import PROJECT_MONTHS
+    ws = actuals_workbook["Actuals"]
+    first_wp_row = _find_first_wp_row(ws)
+    assert first_wp_row is not None
+    vcols = val_columns(PROJECT_MONTHS)
+    formula = str(ws.cell(first_wp_row, vcols["sum_plus_i"]).value)
+    sum_minus_l = col_letter(vcols["sum"])
+    assert formula == f"=ROUND({sum_minus_l}{first_wp_row}*1.25,0)", formula
+
+
+def test_actuals_budget_plus_i_uses_named_range(actuals_workbook):
+    """Budget +i resolves via INDEX(wp_budget_with_indirect, i+1). No
+    ×1.25 — Config Budget +i is already with-indirect by D4."""
+    from budget_planner.layout import val_columns
+    from budget_planner.config import PROJECT_MONTHS
+    ws = actuals_workbook["Actuals"]
+    first_wp_row = _find_first_wp_row(ws)
+    assert first_wp_row is not None
+    vcols = val_columns(PROJECT_MONTHS)
+    formula = str(ws.cell(first_wp_row, vcols["budget_plus_i"]).value)
+    assert "wp_budget_with_indirect" in formula
+    assert "INDEX" in formula
+    # No ×1.25 applied since Config Budget +i is already +i.
+    assert "1.25" not in formula, formula
+
+
+def _col_outline_level(ws, col_idx):
+    """Return outline_level for `col_idx` (1-based) by scanning
+    ColumnDimension ranges — openpyxl stores contiguous runs on a single
+    entry (e.g. cols 6..16 on key 'F'), so direct
+    ``ws.column_dimensions[letter]`` misses cols inside a range. Returns
+    0 if no covering range sets an outline level."""
+    for dim in ws.column_dimensions.values():
+        if dim.min <= col_idx <= dim.max and dim.outline_level:
+            return dim.outline_level
+    return 0
+
+
+def test_actuals_minus_i_band_outline_level(actuals_workbook):
+    """Monthly -i grid + -i rollups + forecast -i siblings sit in
+    outline band at level 1 (collapsed by default via hidden=True)."""
+    from budget_planner.layout import (
+        MONTH_COL_START, val_columns, forecast_val_columns,
+        month_col_end as _mce,
+    )
+    from budget_planner.config import PROJECT_MONTHS
+    ws = actuals_workbook["Actuals"]
+    vcols = val_columns(PROJECT_MONTHS)
+    fcols = forecast_val_columns(PROJECT_MONTHS)
+    mce = _mce(PROJECT_MONTHS)
+
+    inside = (
+        *range(MONTH_COL_START, mce + 1),
+        vcols["sum"], vcols["budget"], vcols["diff"],
+        vcols["cum"], vcols["pct_ceil"], vcols["breach"],
+        fcols["cum_forecast"], fcols["var_forecast"],
+        fcols["pct_ceil_forecast"], fcols["breach_forecast"],
+    )
+    for col in inside:
+        lvl = _col_outline_level(ws, col)
+        assert lvl == 1, (
+            f"col {col_letter(col)} (idx {col}) should be in outline "
+            f"band, got outline_level={lvl}"
+        )
+
+    # +i mirrors stay outside the outline band
+    outside = (
+        vcols["sum_plus_i"], vcols["budget_plus_i"], vcols["diff_plus_i"],
+        vcols["cum_plus_i"], vcols["pct_ceil_plus_i"], vcols["breach_plus_i"],
+        fcols["cum_forecast_plus_i"], fcols["var_forecast_plus_i"],
+        fcols["pct_ceil_forecast_plus_i"], fcols["breach_forecast_plus_i"],
+    )
+    for col in outside:
+        lvl = _col_outline_level(ws, col)
+        assert lvl == 0, (
+            f"col {col_letter(col)} (+i mirror idx {col}) should NOT "
+            f"be in outline band, got outline_level={lvl}"
+        )
 
 
 def test_actuals_total_cum_formula(actuals_workbook):

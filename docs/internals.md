@@ -58,7 +58,7 @@ The authoring UX assigns each sheet a single role — derived views must not wri
 | Config (PERSON-WP ASSIGNMENTS, EXTERNAL COMMITMENTS, WP tables, roster, grade rates, reporting periods) | **Primary planning surface** — all assignment/roster edits land here |
 | Capacity monthly cells | Auto-filled by distribution curves on rebuild; users can override for fine-tuning (overrides lost on next rebuild) |
 | Plan monthly cells | Formula-driven (`=SUM(Capacity!...)`) — **do not edit directly** |
-| Timelog Plan merged grid | Literal WP codes — solver-written on init; rebuild behaviour gated by `timelog_resolve_flag` (TRUE = re-solve + overwrite, FALSE = preserve) |
+| Timelog Plan merged grid | Literal WP codes — solver-written on init; rebuild behaviour gated by integer `timelog_rebuild_from_month` (Config!$B$9): months `< N` frozen verbatim, months `≥ N` re-solved against ceilings + pools narrowed by pre-N consumption |
 | Actuals monthly cells | Input surface for EUR spend (accountant figures) |
 | Actuals-Hours monthly cells | Input surface for hour timelog (primary hours surface) |
 | Plan-Forecast | Read-only — every cell is a formula aggregating Actuals-Hours leaves |
@@ -99,7 +99,7 @@ Actuals cell =Plan!A6 -> Plan!A6 =Config!A8 -> Config!A8 = "WP1"
 | `read_team_from_config(ws)` | Team roster (name + max_fte) | Scans from "TEAM ROSTER" header |
 | `read_capacity_sheet(ws, ...)` | External commitments, per-person monthly FTE | Person header detection by bold + fill `2F5496` |
 | `read_actuals_values(ws, ...)` | EUR per WP per month | Formula chain resolution |
-| `read_timelog_plan(wb, months)` | Merged-grid literal WP codes per (person, month) + `resolve_flag` from the toggle cell (named range `timelog_resolve_flag`, defaults TRUE on pre-v2 workbooks). Returns `{"grid": dict, "resolve_flag": bool}`. | Col-A person-row scan + `TIMELOG_MONTH_COL_START` offset; named-range lookup for the toggle |
+| `read_timelog_plan(wb, months)` | Merged-grid literal WP codes per (person, month) + `rebuild_from_month` integer from Config!$B$9 (named range `timelog_rebuild_from_month`, defaults `1` / solve-all when missing or unparseable). Returns `{"grid": dict, "rebuild_from_month": int}`. | Col-A person-row scan + `TIMELOG_MONTH_COL_START` offset; named-range lookup for the freeze-point |
 
 ### What Rebuild Preserves
 
@@ -111,7 +111,7 @@ All sheets are regenerated from scratch. Only these user-entered values survive:
 | Person-WP assignments, external commitments | Config sheet PERSON-WP ASSIGNMENTS (B2) + EXTERNAL COMMITMENTS (B3) sections |
 | Monthly EUR values per WP | Actuals data cells |
 | Hour timelog per person × WP × month | Actuals-Hours data cells |
-| Timelog Plan merged-grid cells (WP codes) | Timelog Plan merged grid; preserved only when `timelog_resolve_flag` = FALSE. TRUE wipes edits (re-solve) per v2 toggle semantics. |
+| Timelog Plan merged-grid cells (WP codes) | Timelog Plan merged grid; preserved verbatim for months `< timelog_rebuild_from_month`; months `≥ N` are re-solved (any preserved cells there are discarded). Default `N = 1` re-solves everything. |
 
 Everything else (formulas, styling, CF, charts, Plan/Summary/Trends) is overwritten.
 
@@ -160,7 +160,7 @@ Pure algorithmic modules — no openpyxl, no workbook I/O. Called by a builder, 
 
 ### timelog_solver (`budget_planner/timelog_solver.py`)
 
-Two-pass greedy allocator driving the Timelog Plan merged grid on init (and on rebuild when `timelog_resolve_flag` = TRUE). See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §4 for the algorithm spec; `docs/plans/archived/2026-04-19-timelog-plan-v2-design.md` §4 for the toggle-gated semantics.
+Two-pass greedy allocator driving the Timelog Plan merged grid on init (and on rebuild for months `≥ timelog_rebuild_from_month`, against ceilings + pools narrowed by frozen pre-N consumption). See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §4 for the algorithm spec; `docs/plans/archived/2026-04-19-timelog-plan-v2-design.md` §4 for the merged-grid rewrite; `docs/plans/archived/2026-04-23-solver-freeze-point-design.md` for the freeze-point semantics + `Person.frozen_months` solver guard.
 
 - `greedy_pass(persons, wps, person_wp_windows, project_months)` — fills WPs in earliest-close order; within a WP, priority-1 persons before priority-2 before priority-3; continue-a-run preferred over starting a new run. Check-after-placing allows exactly one month of overshoot (the "buffer for auditor haircut" requirement).
 - `switch_reduction_pass(assigned, ...)` — adjacent-pair local search: swaps `(p1, m, m+1) ↔ (p2, m, m+1)` whenever the swap is legal and strictly reduces the total switch count. **Known shape limitation:** only pair-wise adjacent swaps are considered. Rearrangements that require a 3+ month block swap or a same-month-window 3-person rotation are not found. In practice the greedy pass leaves few such patterns, and the algorithm trades optimality for determinism + bounded runtime.
@@ -244,6 +244,8 @@ Row-order contracts and the inactive-month rule are cross-sheet invariants — s
 | **Config -> Plan** | | |
 | `project_start` | Config!$B$2 | Named range |
 | `fte_rate` | Config!$B$4 | Named range |
+| `timelog_rebuild_from_month` | Config!$B$9 | Named range |
+| `version_stamp` | Config!$B$10 | Named range |
 | **Plan -> Config** | | |
 | Plan global cells (start, rate) | Config params | Green formula |
 | **Plan -> Capacity** | | |

@@ -143,8 +143,11 @@ def test_row_ordering_is_consistent(actuals_ws):
     assert actuals_ws.cell(1, 1).value == "EUR Actuals Through Month:"
     # As-of row shifted to row 2.
     assert actuals_ws.cell(2, 2).value == "As of:"
-    # Section header "ACTUAL EUR" now on row 3.
-    assert actuals_ws.cell(3, 1).value == "ACTUAL EUR"
+    # Section header split by T3 (indirect-view restructure 2026-04-22)
+    # into "ACTUAL EUR -i" (cols 1..breach) + "ACTUAL EUR +i" (cols
+    # sum_pi..breach_pi) merged regions on row 3; col 1 anchors the -i
+    # region.
+    assert actuals_ws.cell(3, 1).value == "ACTUAL EUR -i"
     # Year row sits between section header and month header
     assert 3 < month_header - 1 < month_header
     assert month_header + 1 == first_wp

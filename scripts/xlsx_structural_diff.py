@@ -4,6 +4,11 @@ xlsx structural diff — emit logic + structure of two workbooks while suppressi
 Consumer: an AI agent that wrote v1 of budget_planner/**, asked to replicate user-driven
 manual edits in code without ever seeing budget numbers, rates, hours, or names.
 
+Default output is `--mode=logic` (drops pure-style cell entries + style sub-dicts
+from mixed entries) with compact JSON, to keep the result small enough for the
+consumer's context window. Use `--mode=full --pretty` for human-readable output
+that includes every styling delta.
+
 Design: docs/plans/archived/2026-04-23-xlsx-structural-diff-design.md
 """
 
@@ -699,17 +704,104 @@ def diff_workbooks(path_a: Path, path_b: Path) -> dict[str, Any]:
     }
 
 
+def _filter_logic_mode(diff: dict[str, Any]) -> dict[str, Any]:
+    """Drop pure-style cell entries and style sub-dicts from mixed entries.
+
+    Keeps the full `summary` block so the consumer sees suppressed counts
+    (e.g. `style_changes: 500`) even when bodies are hidden.
+
+    Edge case: `kind == "empty"` entries with `added`/`removed` are also dropped.
+    These represent styled-empty cells, usually decoration. The one case this
+    misses is a formula cleared to a styled placeholder (e.g. greyed blank
+    replacing a deleted formula); consumers replicating logic edits should
+    cross-check formula removals against any unexpected styled-empty appearances
+    in `--mode=full` if such a pattern is suspected.
+    """
+    for sd in diff["sheets"].values():
+        kept: dict[str, Any] = {}
+        for coord, entry in sd.get("cells", {}).items():
+            kind = entry.get("kind")
+            if kind == "style":
+                continue
+            if kind == "empty":
+                # Styled empty cells added/removed — decoration, not logic.
+                continue
+            if "style" in entry:
+                entry = {k: v for k, v in entry.items() if k != "style"}
+            kept[coord] = entry
+        sd["cells"] = kept
+    return diff
+
+
+def _pick_oldest_newest(dir_path: Path) -> tuple[Path, Path]:
+    if not dir_path.is_dir():
+        raise SystemExit(f"--dir {dir_path} is not a directory")
+    candidates = [
+        p for p in dir_path.iterdir()
+        if p.is_file() and p.suffix.lower() == ".xlsx" and not p.name.startswith("~$")
+    ]
+    if len(candidates) < 2:
+        raise SystemExit(
+            f"--dir {dir_path}: need at least 2 .xlsx files (found {len(candidates)})"
+        )
+    candidates.sort(key=lambda p: p.stat().st_mtime)
+    return candidates[0], candidates[-1]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Emit a confidentiality-safe structural diff between two .xlsx files."
     )
-    parser.add_argument("file_a", type=Path)
-    parser.add_argument("file_b", type=Path)
+    parser.add_argument("file_a", type=Path, nargs="?")
+    parser.add_argument("file_b", type=Path, nargs="?")
+    parser.add_argument(
+        "--dir",
+        dest="dir_path",
+        type=Path,
+        help="Directory containing ≥2 .xlsx files; diffs oldest vs newest by mtime (excludes ~$ lock files).",
+    )
     parser.add_argument("--out", type=Path, default=Path("diff.json"))
+    parser.add_argument(
+        "--mode",
+        choices=["logic", "full"],
+        default="logic",
+        help="logic (default): drop pure-style cell entries and style sub-dicts — "
+        "keeps consumer context small. full: emit every styling delta.",
+    )
+    parser.add_argument(
+        "--pretty",
+        action="store_true",
+        help="Pretty-print JSON with indent=2. Default is compact (one-line) for "
+        "smaller file size when an AI agent is the consumer.",
+    )
     args = parser.parse_args(argv)
 
-    diff = diff_workbooks(args.file_a, args.file_b)
-    args.out.write_text(json.dumps(diff, sort_keys=True, indent=2, ensure_ascii=False))
+    if args.dir_path is not None:
+        if args.file_a is not None or args.file_b is not None:
+            parser.error("--dir is mutually exclusive with positional file arguments")
+        file_a, file_b = _pick_oldest_newest(args.dir_path)
+        print(f"Oldest : {file_a}")
+        print(f"Newest : {file_b}")
+    else:
+        if args.file_a is None or args.file_b is None:
+            parser.error("provide two positional file arguments or --dir")
+        file_a, file_b = args.file_a, args.file_b
+
+    if args.out.exists():
+        stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        archive = args.out.with_name(f"{args.out.stem}.{stamp}{args.out.suffix}")
+        args.out.rename(archive)
+        print(f"Archived previous result to {archive}")
+
+    diff = diff_workbooks(file_a, file_b)
+    diff["meta"]["mode"] = args.mode
+    if args.mode == "logic":
+        diff = _filter_logic_mode(diff)
+    if args.pretty:
+        payload = json.dumps(diff, sort_keys=True, indent=2, ensure_ascii=False)
+    else:
+        payload = json.dumps(diff, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    args.out.write_text(payload, encoding="utf-8")
     return 0
 
 

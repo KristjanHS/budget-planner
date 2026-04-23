@@ -264,29 +264,39 @@ def test_underload_removed(tlp, assigned_wb):
     assert months > 0
 
 
-# ── Toggle cell ─────────────────────────────────────────────────────────────
+# ── Rebuild-from-month Config param ─────────────────────────────────────────
 
 
-def test_toggle_cell_present(assigned_wb, tlp):
-    """Row 2 col J (col 10) holds literal TRUE; named range resolves."""
-    cell = tlp.cell(2, 10)
-    assert cell.value is True, (
-        f"toggle cell expected True, got {cell.value!r} ({type(cell.value)})"
-    )
-
-    # Label in col I (col 9) anchors what the toggle is.
-    label = str(tlp.cell(2, 9).value or "")
-    assert "re-run" in label.lower() or "rebuild" in label.lower(), label
-
-    # Named range resolves to the same cell.
-    dn = assigned_wb.defined_names["timelog_resolve_flag"]
+def test_rebuild_from_month_named_range(assigned_wb):
+    """``timelog_rebuild_from_month`` named range targets Config!$B$9 (row 9)
+    and resolves to an integer default of 1. Replaces the v2 toggle cell.
+    """
+    dn = assigned_wb.defined_names["timelog_rebuild_from_month"]
     dests = list(dn.destinations)
-    assert len(dests) == 1
+    assert len(dests) == 1, dests
     sheet, ref = dests[0]
-    assert sheet == SHEET_TIMELOG_PLAN
-    # Accept either $J$2 or 'Timelog Plan'!$J$2 after Excel/LO munging —
-    # destinations already strips the sheet prefix.
-    assert ref.replace("$", "").upper() == "J2", ref
+    assert sheet == "Config", sheet
+    assert ref.replace("$", "").upper() == "B9", ref
+    # Value: the BLUE_INPUT default is 1 (solve-all).
+    cfg = assigned_wb["Config"]
+    cell_val = cfg[ref.replace("$", "")].value
+    assert cell_val == 1, f"expected default 1, got {cell_val!r}"
+
+
+def test_no_toggle_row2_label_or_value(tlp):
+    """Row 2 cols 9-10 (old toggle label/value) are not written by the builder
+    on a fresh init — no BC shim for the legacy ``timelog_resolve_flag``.
+    """
+    for c in (9, 10):
+        v = tlp.cell(2, c).value
+        assert v in (None, ""), (
+            f"row 2 col {c} expected empty after toggle removal, got {v!r}"
+        )
+
+
+def test_legacy_resolve_flag_named_range_absent(assigned_wb):
+    """Fresh workbook: the legacy ``timelog_resolve_flag`` name is never written."""
+    assert "timelog_resolve_flag" not in assigned_wb.defined_names
 
 
 # ── Traffic-light formulas (cols 2/4/6/8) ───────────────────────────────────

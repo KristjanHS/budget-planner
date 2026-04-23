@@ -722,6 +722,7 @@ def build_config_sheet(ws, wb, project_params, work_packages,
         ("Hours per FTE Month", 143, "0", None),
         ("Vacation Month", vacation_month_str, None, None),
         ("Num Vacation Months", num_vacation_months, "0", None),
+        ("Rebuild from month #", 1, "0", None),
         # Code-written audit receipt — overwritten on every init/rebuild.
         # Default "unknown" survives when no git context is passed in.
         ("Version Stamp", version_stamp or "unknown", None, None),
@@ -740,7 +741,8 @@ def build_config_sheet(ws, wb, project_params, work_packages,
         "Hours per FTE Month": 6,
         "Vacation Month": 7,
         "Num Vacation Months": 8,
-        "Version Stamp": 9,
+        "Rebuild from month #": 9,
+        "Version Stamp": 10,
     }
     for i, (label, value, fmt, _) in enumerate(param_defs, start=1):
         assert param_rows.get(label) == i, (
@@ -800,6 +802,16 @@ def build_config_sheet(ws, wb, project_params, work_packages,
             "Start + Project Months. Referenced by the Timelog Plan Pool "
             "formula: Pool = max_fte × (Project Months − Num Vacation "
             "Months). Black = do-not-edit (overwritten on every rebuild)."
+        ),
+        param_rows["Rebuild from month #"]: (
+            "Freeze assignee-grid cells in month-columns BEFORE this "
+            "number; re-solve from this month onward. 1 (or blank) = solve "
+            "the whole project. A value larger than Project Months = "
+            "preserve all existing assignments verbatim. The solver "
+            "subtracts pre-N person-months from each WP's budget and each "
+            "person's pool before filling the remainder — over-consumed "
+            "WPs surface as negative Buffer +i in the per-WP summary, not "
+            "as a solver error. Blue = user input."
         ),
         param_rows["Version Stamp"]: (
             "Commit identifier of the code that produced this workbook. "
@@ -905,6 +917,24 @@ def build_config_sheet(ws, wb, project_params, work_packages,
         "num_vacation_months",
         attr_text=f"{SHEET_CONFIG}!$B${num_vacation_months_row}",
     ))
+
+    rebuild_from_month_row = param_rows["Rebuild from month #"]
+    wb.defined_names.add(DefinedName(
+        "timelog_rebuild_from_month",
+        attr_text=f"{SHEET_CONFIG}!$B${rebuild_from_month_row}",
+    ))
+    # Integer-whole data validation (1..999). 999 is a loose upper guard —
+    # no realistic project spans that many months, and Excel's default
+    # reject dialog surfaces on out-of-range entries.
+    dv_rebuild = DataValidation(
+        type="whole",
+        operator="between",
+        formula1=1,
+        formula2=999,
+        allow_blank=True,
+    )
+    dv_rebuild.sqref = f"B{rebuild_from_month_row}"
+    ws.add_data_validation(dv_rebuild)
 
     # Grade table named range (2-column: grade name + rate)
     dn_grades = DefinedName(

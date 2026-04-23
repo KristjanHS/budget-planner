@@ -559,3 +559,19 @@ Tests: monthly-total + year-col assertion blocks get `+i` / `×1.25` updates.
 
 `docs(plan): T7.1 Timelog Plan column-map survey — D9 H-shift resolution + T7.2/T7.3 edit lists`
 
+
+---
+
+## Correction — T3 re-touched `layout.py` (2026-04-23)
+
+**Context:** the original plan specified *"`layout.py` lands once in T1"* (Stage 1). T1 shipped the foundation: `WITH_INDIRECT_HEADER_FILL`, `WITHOUT_INDIRECT_HEADER_FILL`, `COL_WP_BUDGET_MINUS_I`, `COL_WP_BUDGET_PLUS_I`, and the `wp_budget_with_indirect` named range.
+
+**Discovered during T3:** the `val_columns()` / `forecast_val_columns()` helpers that key the Actuals rollup-block geometry are Actuals-specific and couldn't be expanded at T1 — the +i offsets (7..12) plus the forecast +i keys (GUTTER+5..+8) only make sense once Actuals is the sheet consuming them. Deferred consumers (Summary, Trends, Plan) still read -i values at offsets 1..6, which is preserved.
+
+**Resolution:** T3 added the following to `budget_planner/layout.py`:
+- `VAL_OFFSET_SUM_PLUS_I` .. `VAL_OFFSET_BREACH_PLUS_I` (7..12) — offsets for the +i mirror rollups.
+- Six new keys on `val_columns()`: `sum_plus_i`, `budget_plus_i`, `diff_plus_i`, `cum_plus_i`, `pct_ceil_plus_i`, `breach_plus_i`.
+- Four new offsets + keys on `forecast_val_columns()`: `cum_forecast_plus_i`, `var_forecast_plus_i`, `pct_ceil_forecast_plus_i`, `breach_forecast_plus_i`.
+- `forecast_val_columns()` re-based on `val_columns(..)["breach_plus_i"]` (was `breach`). Legacy `cum_forecast` / `var_forecast` / `pct_ceil_forecast` / `breach_forecast` keys now point at -i siblings in the new base band. Adjacency (`var_forecast == cum_forecast + 1` etc.) preserved within the -i sub-block, so `test_actuals_forecast_block.py` continues to pass unchanged.
+
+**No downstream breakage:** `config.py` derives `VAL_COL_SUM/BUDGET/DIFF/CUM/PCT_CEIL/BREACH` via the -i keys, unchanged. Other builders (`plan_forecast.py`, `plan.py`, `capacity.py`, `actuals_hours.py`) read `_vcols["sum"]` only and keep working. No migration path hit.

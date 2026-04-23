@@ -6,7 +6,7 @@ the sheet prescribes which WP they should log 100% against.
 Layout (v2 + 2026-04-19 enhancements — supersedes v1's PROPOSED + ASSIGNED twin bands):
 
   1. Banner (row 1)
-  2. Traffic lights + resolve-flag toggle (row 2)
+  2. Traffic lights (row 2)
   3. blank spacer
   4. PER-WP SUMMARY band (8 base cols + one EUR col per calendar year)
      blank spacer
@@ -81,7 +81,9 @@ from budget_planner.timelog_solver import Person, PersonWPWindow, WP, solve
 # Section-title strings — exported so the reader can anchor on the grid title
 # via the same literal the builder writes. Update here, not at the callsite.
 SECTION_TITLE_WP_SUMMARY = "PER-WP SUMMARY"
-SECTION_TITLE_GRID = "TIMELOG GRID (edit freely — toggle re-solve at J2)"
+SECTION_TITLE_GRID = (
+    "TIMELOG GRID (edit freely — rebuild re-solves from Config!B9 onward)"
+)
 SECTION_TITLE_PERSON_SUMMARY = "PER-PERSON SUMMARY"
 
 # PER-PERSON SUMMARY layout: col A = Person, cols B..H = 7 metric cols.
@@ -110,10 +112,7 @@ _WP_SUMMARY_BASE_LAST_COL = len(_WP_SUMMARY_BASE_HEADERS)  # 8
 # cross-module callers; the header-count derivation here must stay in sync.
 assert _WP_SUMMARY_BASE_LAST_COL == TIMELOG_WP_SUMMARY_BASE_LAST_COL
 
-# Toggle cell coordinates on row 2. Pair (label col, value col) = (9, 10).
-_TOGGLE_LABEL_COL = 9
-_TOGGLE_VALUE_COL = 10
-_TOGGLE_NAMED_RANGE = "timelog_resolve_flag"
+_LEGACY_RESOLVE_FLAG_NAMED_RANGE = "timelog_resolve_flag"
 
 
 # ---------------------------------------------------------------------------
@@ -132,13 +131,14 @@ def build_timelog_plan_sheet(
     grade_rates: Mapping[str, float],
     config_layout: dict,
     preserved_grid: Mapping[tuple[str, int], str] | None = None,
-    resolve_flag: bool = True,
+    rebuild_from_month: int = 1,
 ) -> dict:
     """Build the Timelog Plan sheet with merged grid + summary bands.
 
     Args:
         ws: Worksheet to populate (created by orchestrator, named "Timelog Plan").
-        wb: Parent workbook — receives the ``timelog_resolve_flag`` named range.
+        wb: Parent workbook — legacy ``timelog_resolve_flag`` defined name is
+            removed here if present (no BC shim).
         project_params: dict with keys 'title', 'start', 'months', 'rate', etc.
         work_packages: list of WP dicts with keys 'id', 'name', 'fte', 'rate',
             'start', 'end', 'type' (single contiguous active range).
@@ -151,17 +151,18 @@ def build_timelog_plan_sheet(
             €-accounting: each Person's ``rate_eur_per_pm`` is resolved
             from this mapping via the roster's grade.
         config_layout: dict returned by build_config_sheet() — must include
-            ``param_rows``, ``wp_first_row``, ``person_rows``.
+            ``param_rows`` (incl. "Rebuild from month #"), ``wp_first_row``,
+            ``person_rows``.
         preserved_grid: Optional mapping ``(person_name, month_num)`` →
-            WP code. When ``resolve_flag`` is False, the grid is written
-            from this dict verbatim (user edits preserved). When
-            ``resolve_flag`` is True, the solver runs and this dict is
-            ignored.
-        resolve_flag: Gate for the solver. True → solver runs, grid is
-            re-derived from assignments. False → grid is written from
-            ``preserved_grid``, preserving user edits. On init the caller
-            passes True; on rebuild the caller passes the user's value
-            from the toggle cell.
+            WP code. Cells whose ``month_num`` is strictly below
+            ``rebuild_from_month`` are treated as FROZEN: kept verbatim
+            and subtracted from WP ceilings + Person pools before solving.
+            Cells at or above are discarded (solver re-derives them).
+        rebuild_from_month: 1-indexed month boundary. Cells in months
+            ``< rebuild_from_month`` are frozen (preserved from
+            ``preserved_grid``); cells from ``rebuild_from_month`` onward
+            are re-solved. Default ``1`` = solve-all (pre-v2 migration and
+            init path). A value > project_months preserves every cell.
 
     Returns:
         Layout dict with keys:
@@ -170,7 +171,7 @@ def build_timelog_plan_sheet(
           summary_person_first_row, summary_person_last_row,
           wp_summary_first_row, wp_summary_last_row,
           person_rows_by_band (dict band → {name: row}),
-          resolve_flag_cell (coordinate string).
+          rebuild_from_month_cell (Config!B{row} coordinate string).
     """
     project_months: int = project_params["months"]
     project_start = project_params["start"]
@@ -188,23 +189,74 @@ def build_timelog_plan_sheet(
     canvas_last_col = month_col_end
 
     # ── Solver input prep ──
+    # Freeze semantics: months strictly below ``rebuild_from_month`` are
+    # preserved verbatim from ``preserved_grid`` and their € / pool usage
+    # is subtracted from WP ceilings + Person pools before solving. See
+    # docs/plans/archived/2026-04-23-solver-freeze-point-design.md §6.
+    freeze_boundary = max(1, int(rebuild_from_month))
+    frozen_months: frozenset[int] = frozenset(range(1, freeze_boundary))
+
+    # Partition preserved_grid: keep only frozen-month, non-vacation cells.
+    # Vacation-month entries are dropped defensively (vacation cells are
+    # always empty per invariant; mirrors _write_grid_cell's migration).
+    frozen_placements: dict[str, dict[int, str]] = {}
+    for (pname, mi), wp_code in (preserved_grid or {}).items():
+        if mi in frozen_months and mi not in vacation_months_project:
+            frozen_placements.setdefault(pname, {})[mi] = wp_code
+
     sorted_team = sorted(
         team, key=lambda m: (int(m.get("priority", 2)), m["name"])
     )
+    rate_by_person: dict[str, int] = {
+        m["name"]: int(round(grade_rates[m["grade"]]))
+        for m in sorted_team
+    }
+    # Per-person frozen-month count shrinks the logging pool.
+    frozen_count_by_person: dict[str, int] = {
+        pname: len(month_wp) for pname, month_wp in frozen_placements.items()
+    }
+    # Per-WP frozen €-consumption narrows the solver's fill target. Negative
+    # residuals (frozen > budget) surface as negative Buffer € in the per-WP
+    # summary — that cell reads Config!E directly, so the full ceiling is
+    # still displayed; only the solver sees the narrowed remainder.
+    frozen_eur_by_wp: dict[str, int] = {}
+    for pname, month_wp in frozen_placements.items():
+        rate = rate_by_person.get(pname, 0)
+        for wp_code in month_wp.values():
+            frozen_eur_by_wp[wp_code] = (
+                frozen_eur_by_wp.get(wp_code, 0) + rate
+            )
+
     persons = [
         Person(
             name=m["name"],
             priority=int(m.get("priority", 2)),
-            pool=round(
-                float(m["max_fte"])
-                * (project_months - len(vacation_months_project))
+            pool=max(
+                0,
+                round(
+                    float(m["max_fte"])
+                    * (project_months - len(vacation_months_project))
+                )
+                - frozen_count_by_person.get(m["name"], 0),
             ),
             rate_eur_per_pm=int(round(grade_rates[m["grade"]])),
             vacation_months=vacation_months_project,
+            frozen_months=frozen_months,
         )
         for m in sorted_team
     ]
-    wps = _build_wps(work_packages, project_params)
+    wps_full = _build_wps(work_packages, project_params)
+    wps = [
+        WP(
+            code=w.code,
+            active_start=w.active_start,
+            active_end=w.active_end,
+            ceiling_eur=max(
+                0, w.ceiling_eur - frozen_eur_by_wp.get(w.code, 0)
+            ),
+        )
+        for w in wps_full
+    ]
     windows = [
         PersonWPWindow(
             person_name=a["person"],
@@ -214,12 +266,13 @@ def build_timelog_plan_sheet(
         )
         for a in (assignments or [])
     ]
-    if resolve_flag:
-        assigned_map = solve(persons, wps, windows, project_months)
-    else:
-        assigned_map = {}
-        for (pname, month_num), wp_code in (preserved_grid or {}).items():
-            assigned_map.setdefault(pname, {})[month_num] = wp_code
+    assigned_map = solve(persons, wps, windows, project_months)
+    # Overlay frozen placements — freeze wins in frozen months. The solver
+    # is already guarded against touching frozen months, so this is a no-op
+    # for correctly-behaving solvers; keep as a belt-and-suspenders write.
+    for pname, month_wp in frozen_placements.items():
+        for mi, wp_code in month_wp.items():
+            assigned_map.setdefault(pname, {})[mi] = wp_code
     person_windows: dict[str, list[tuple[str, int, int]]] = {}
     for w in windows:
         person_windows.setdefault(w.person_name, []).append(
@@ -311,26 +364,13 @@ def build_timelog_plan_sheet(
         style_cell(ws, tl_row, c, value=lbl, font=HEADER_FONT, alignment=CENTER)
     for c in tl_value_cols:
         style_cell(ws, tl_row, c, font=BLACK_FORMULA, alignment=CENTER, fmt="0")
-    # Toggle (cols 9-10): label + BLUE_INPUT TRUE/FALSE cell.
-    style_cell(
-        ws, tl_row, _TOGGLE_LABEL_COL,
-        value="Re-run solver on next rebuild?",
-        font=HEADER_FONT, alignment=CENTER,
-    )
-    toggle_cell = style_cell(
-        ws, tl_row, _TOGGLE_VALUE_COL,
-        value=bool(resolve_flag),
-        font=BLUE_INPUT, alignment=CENTER,
-    )
-    toggle_cell.comment = sized_comment(
-        "TRUE: next rebuild re-solves the grid (user edits discarded). "
-        "FALSE: next rebuild preserves grid values verbatim. "
-        "No auto-reset — flip manually.",
-        author="Programme Budget Tool",
-    )
-    # Register named range (hyphen-/space-safe single-quoted sheet ref).
-    toggle_ref = f"'{SHEET_TIMELOG_PLAN}'!${get_column_letter(_TOGGLE_VALUE_COL)}${tl_row}"
-    _upsert_defined_name(wb, _TOGGLE_NAMED_RANGE, toggle_ref)
+    # Toggle-row legacy cells (cols 9-10) are no longer written. The rebuild
+    # control is now the Config!B{Rebuild from month #} integer param (see
+    # config_sheet.py + docs/plans/archived/2026-04-23-solver-freeze-point-design.md).
+    # Any pre-v2 workbook carrying the old ``timelog_resolve_flag`` defined
+    # name is actively unregistered on rebuild — no BC shim.
+    if _LEGACY_RESOLVE_FLAG_NAMED_RANGE in wb.defined_names:
+        del wb.defined_names[_LEGACY_RESOLVE_FLAG_NAMED_RANGE]
 
     # row 3: blank spacer (no write)
 
@@ -665,8 +705,8 @@ def build_timelog_plan_sheet(
         "person_rows_by_band": person_rows_by_band,
         "wp_summary_first_row": wp_summary_first_row,
         "wp_summary_last_row": wp_summary_last_row,
-        "resolve_flag_cell": (
-            f"{get_column_letter(_TOGGLE_VALUE_COL)}{tl_row}"
+        "rebuild_from_month_cell": (
+            f"B{config_layout['param_rows']['Rebuild from month #']}"
         ),
     }
 
@@ -907,8 +947,9 @@ def _write_grid_cell(
 
     Vacation-month cells are an exception: always empty string, VACATION_FILL
     (pale yellow), Protection(locked=True), default font (not BLUE_INPUT).
-    Solver never places WP codes there; on rebuild with resolve_flag=FALSE,
-    any preserved WP code in a vacation cell is discarded (one-shot migration).
+    Solver never places WP codes there; on rebuild any preserved WP code in
+    a vacation cell (frozen or not) is discarded before solve, per the
+    freeze-point design (vacation cells are always empty + locked).
 
     Rule 3 carve-out: cells hold literal strings (WP codes), not formulas,
     but styled BLUE_INPUT because the user types here.

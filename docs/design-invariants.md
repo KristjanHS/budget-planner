@@ -51,20 +51,22 @@ Stage 4 (T14–T15) will harden rebuild preservation + the shape fingerprint.
 The workbook hosts two distinct allocation surfaces, both editable, and they may legitimately diverge:
 
 - **Plan / Capacity** records **actual effort** — fractional monthly FTE per (person, WP) reflecting what people *do*. Driven by Config PERSON-WP ASSIGNMENTS + distribution curves.
-- **Timelog Plan** records **timesheet-compliant allocation** — prescriptive whole-month 1.0-FTE WP labels per (person, month) telling the person where to *log*. Single merged editable grid (v2, 2026-04-19) holding literal WP codes; no formulas per cell. Initial content comes from the solver (`budget_planner/timelog_solver.py`); rebuild behaviour is governed by the `timelog_resolve_flag` toggle (see below).
+- **Timelog Plan** records **timesheet-compliant allocation** — prescriptive whole-month 1.0-FTE WP labels per (person, month) telling the person where to *log*. Single merged editable grid (v2, 2026-04-19) holding literal WP codes; no formulas per cell. Initial content comes from the solver (`budget_planner/timelog_solver.py`); rebuild behaviour is governed by the `timelog_rebuild_from_month` freeze-point (see below).
 
 A person splitting effort 0.6/0.4 across two WPs in a given month may legitimately log 1.0 to one of them that month and 1.0 to the other a different month — the timesheet rule is whole-month, the underlying effort is not. **Do not write cross-sheet formulas that reconcile Plan monthly cells against Timelog Plan monthly cells as if they must agree.** The only shared constraints are the Config inputs both surfaces consume (WP windows, PERSON-WP ASSIGNMENTS windows, Max FTE pool, Ceiling €).
 
 See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §1 for v1 scope and `docs/plans/archived/2026-04-19-timelog-plan-v2-design.md` for the merged-grid + toggle redesign.
 
-### Timelog Plan merged grid = literal values; toggle governs re-solve
+### Timelog Plan merged grid = literal values; `timelog_rebuild_from_month` governs re-solve
 
-The Timelog Plan merged grid holds **literal WP codes** (or empty cells), never formulas — user edits and solver output share one surface. The toggle cell at row 2 col 10 (named range `timelog_resolve_flag`) controls rebuild:
+The Timelog Plan merged grid holds **literal WP codes** (or empty cells), never formulas — user edits and solver output share one surface. The integer cell Config!$B$9 (named range `timelog_rebuild_from_month`) controls rebuild:
 
-- `TRUE` (default on init): rebuild re-runs the solver and overwrites the grid unconditionally. User edits are wiped — this is by design ("re-solve often").
-- `FALSE`: rebuild preserves the grid verbatim from the prior workbook; no solver run. Cells for persons/months no longer in scope are dropped; new persons/months get empty cells (user flips to TRUE + rebuilds to populate).
+- Let `N = max(1, int(rebuild_from_month))`. Months `< N` are **frozen**: the solver does not touch them, and any literal WP code preserved from the prior workbook is written back verbatim.
+- Months `≥ N` are **solved**: the solver re-runs for that span against per-WP `ceiling_eur` and per-Person `pool` already narrowed by the frozen span's consumption (builder-side subtraction — solver purity preserved). Any literal WP code preserved in months `≥ N` is discarded.
+- Endpoints collapse the old binary toggle: `N ≤ 1` (or blank → defaults to `1`) ≡ "solve everything" (old `resolve_flag=TRUE`); `N > project_months` ≡ "preserve everything" (old `resolve_flag=FALSE`, remaining solver span empty).
+- Overshoot-as-state: if the frozen span over-consumes a WP's `ceiling_eur`, the solver does not raise. The per-WP Buffer +i cell renders the negative residual against the **original** (pre-narrowed) Budget — matches existing out-of-window overshoot semantics.
 
-No auto-reset: once the user sets FALSE, it stays FALSE until explicitly flipped. Readers that encounter a pre-v2 workbook (no toggle cell) default to TRUE — one-shot migration, no separate script.
+No backwards-compatibility shim: the old `timelog_resolve_flag` named range is unregistered on first rebuild (one-shot migration); the derelict toggle cell at Timelog Plan row 2 col 10 is left untouched. Readers encountering a pre-v2 workbook (no `timelog_rebuild_from_month` name) default to `1` / solve-all.
 
 ### Banned: `MATCH(1, arr, 0)` / `LOOKUP(2, 1/arr, …)` — use `SUMPRODUCT(MIN/MAX(…))`
 
@@ -86,7 +88,7 @@ Placeholders for invariants that have a home elsewhere today but belong here whe
   | `roster_lookup` | `config_sheet.py` (Team Roster cols A-D: name, Max FTE, grade, rate EUR/PM; Priority column E intentionally excluded so existing VLOOKUP indices stay stable) | `actuals_hours.py` (forecast-EUR leaves VLOOKUP col 4), `config_sheet.py` (Assignments Balance VLOOKUP col 2), `timelog_plan.py` (per-person rate helper VLOOKUP col 4) |
   | `team_priorities` | `config_sheet.py` (Team Roster Priority col E, blue input, default 2) | `timelog_plan.py` solver fill order — priority flows in via `reader.read_team_from_config` (header scan of the Priority column, not via name resolution). The named range is reserved for future Excel-formula consumers. |
   | `current_month` | `workbook.py` Stage 5 Trends stub (Trends!$B$1, **black formula** — `=MAX(1,MIN(Config!B3, ...))`; user may overwrite with a static number to freeze). Stub written before Actuals builder runs. | `actuals.py` (Cum. EUR / Breach-In cutoff), `timelog_plan.py` (per-WP `Window months remaining`) |
-  | `timelog_resolve_flag` | `timelog_plan.py` (Timelog Plan row 2, col 10; TRUE/FALSE blue input, default TRUE on init, no auto-reset) | `reader.read_timelog_plan` → `workbook.py` orchestrator gates whether `solve(...)` runs on rebuild (see "Timelog Plan merged grid" above) |
+  | `timelog_rebuild_from_month` | `config_sheet.py` (Config!$B$9, blue-input integer, default `1` on init, `min=1 / max=999` data validation) | `reader.read_timelog_plan` returns it as `rebuild_from_month: int`; `timelog_plan.py` builder partitions `preserved_grid` into frozen (months `< N`) and narrows solver-input `ceiling_eur` + `pool` by frozen consumption (see "Timelog Plan merged grid" above) |
   | `vacation_month` | `config_sheet.py` (Config!$B$7, blue input string, default `"Jul"`) | `reader.read_config_sheet` → orchestrator + `timelog_plan.py` solver (vacation-month exclusion). Fallback to `"Jul"` when missing (one-shot migration for pre-enhancement workbooks). |
   | `num_vacation_months` | `config_sheet.py` (Config!$B$8, BLACK_FORMULA builder-written literal — Rule 3 carve-out, same pattern as `version_stamp`) | `timelog_plan.py` PER-PERSON SUMMARY Pool formula: `=ROUND(max_fte × (project_months − num_vacation_months), 0)`. Recomputed on rebuild from `vacation_month` + `project_start` + `Project Months`. |
 - **Reader/builder round-trip rule**: readers use named ranges (not coordinates); tolerate internal blanks; rebuild must preserve user-authored values on blue input cells.
@@ -97,7 +99,7 @@ Cross-sheet invariants only. Grid/summary/totals-row implementation details (Poo
 
 ### Vacation cells are always locked and empty
 
-Every TIMELOG GRID cell whose 1-indexed project month matches the calendar `vacation_month` must carry `VACATION_FILL` (pale yellow `#FFF2CC`), `Protection(locked=True)`, and an empty string value across every person row — NOT BLUE_INPUT (cell is not user-editable). The solver must never place a WP code there; on rebuild with `resolve_flag=FALSE`, any preserved WP code in a vacation cell is discarded (one-shot migration). No CF rule targets vacation cells; the direct yellow fill is authoritative. Violating any leg of this invariant corrupts the programme auditor story (time logged during vacation is non-allowable) or breaks the solver's `(grid<>"") × rate` SUMPRODUCT inputs.
+Every TIMELOG GRID cell whose 1-indexed project month matches the calendar `vacation_month` must carry `VACATION_FILL` (pale yellow `#FFF2CC`), `Protection(locked=True)`, and an empty string value across every person row — NOT BLUE_INPUT (cell is not user-editable). The solver must never place a WP code there; on rebuild, the builder drops vacation-month entries from `frozen_placements` before the overlay step, so a preserved WP code in a vacation cell is discarded regardless of where the vacation month falls relative to `timelog_rebuild_from_month`. No CF rule targets vacation cells; the direct yellow fill is authoritative. Violating any leg of this invariant corrupts the programme auditor story (time logged during vacation is non-allowable) or breaks the solver's `(grid<>"") × rate` SUMPRODUCT inputs.
 
 ## WP schedule — single active range
 

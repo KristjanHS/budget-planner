@@ -301,10 +301,11 @@ def _build_all_sheets(
     # move_sheet calls at the end of this function).
     timelog_plan_ws = wb.create_sheet(SHEET_TIMELOG_PLAN)
     # `preserved_timelog["grid"]` was pruned in `rebuild_workbook` before
-    # reaching here. When resolve_flag is False the builder writes it verbatim;
-    # when True the solver runs and the dict is ignored.
+    # reaching here. Cells in months < rebuild_from_month are frozen and kept
+    # verbatim by the builder; cells ≥ rebuild_from_month are discarded and
+    # the solver re-derives them. See `docs/plans/archived/2026-04-23-solver-freeze-point-design.md`.
     _preserved_grid = (preserved_timelog or {}).get("grid") or None
-    _resolve_flag = (preserved_timelog or {}).get("resolve_flag", True)
+    _rebuild_from_month = (preserved_timelog or {}).get("rebuild_from_month", 1)
     assert ctx.config_layout is not None
     build_timelog_plan_sheet(
         timelog_plan_ws,
@@ -316,7 +317,7 @@ def _build_all_sheets(
         grade_rates=grade_rates,
         config_layout=ctx.config_layout,
         preserved_grid=_preserved_grid,
-        resolve_flag=_resolve_flag,
+        rebuild_from_month=_rebuild_from_month,
     )
 
     # Stage 6a — Actuals-Hours (hour timelog; depends only on config_layout).
@@ -641,9 +642,9 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             existing_wb[SHEET_ACTUALS_HOURS]
         )
 
-    # Preserve Timelog Plan grid values + resolve flag (v2 surface).
-    # Missing sheet → {"grid": {}, "resolve_flag": True} (pre-v2 workbook;
-    # builder still renders and the solver will populate the grid).
+    # Preserve Timelog Plan grid values + rebuild-from-month N (freeze-point).
+    # Missing sheet → {"grid": {}, "rebuild_from_month": 1} (pre-freeze-point
+    # workbook; builder still renders and the solver will populate the grid).
     preserved_timelog: dict = read_timelog_plan(
         existing_wb, project_params["months"]
     )

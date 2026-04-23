@@ -54,6 +54,13 @@ class Person:
             July model this is identical across every Person; the per-person
             field is what keeps the solver contract stable when a future
             design ships per-(person, year) overrides.
+        frozen_months: Project-1-indexed month numbers whose assignee-grid
+            cells are preserved verbatim by the builder (from the rebuilding
+            workbook's preserved grid). The solver never places a WP code
+            in a frozen month and never swaps across one. Frozen consumption
+            is accounted for in the builder via ``ceiling_eur`` / ``pool``
+            narrowing before ``solve`` is called — mirrors the vacation
+            guard shape.
     """
 
     name: str
@@ -61,6 +68,7 @@ class Person:
     pool: int
     rate_eur_per_pm: int
     vacation_months: frozenset[int] = frozenset()
+    frozen_months: frozenset[int] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -197,6 +205,7 @@ def greedy_pass(
     windows_idx = _build_windows_index(person_wp_windows)
     pool = {p.name: p.pool for p in persons}
     vacations = {p.name: p.vacation_months for p in persons}
+    frozen = {p.name: p.frozen_months for p in persons}
     assigned = _empty_assignment(persons, project_months)
 
     # WPs in earliest-close order; code as deterministic tiebreaker.
@@ -244,6 +253,12 @@ def greedy_pass(
                         break
                     if m in vacations[p.name]:
                         # Vacation month for this person — never placed.
+                        continue
+                    if m in frozen[p.name]:
+                        # Frozen month — builder preserves the cell verbatim
+                        # from the rebuilding workbook. Solver never places
+                        # here. Frozen consumption is pre-subtracted from
+                        # ceiling_eur / pool by the caller.
                         continue
                     if assigned[p.name][m] is None:
                         assigned[p.name][m] = wp.code
@@ -336,6 +351,15 @@ def switch_reduction_pass(
                     if (
                         m in vac1 or m + 1 in vac1
                         or m in vac2 or m + 1 in vac2
+                    ):
+                        continue
+                    # Frozen guard: no swap may touch a frozen cell on
+                    # either side. Mirrors the vacation guard shape.
+                    fr1 = persons_by_name[p1_name].frozen_months
+                    fr2 = persons_by_name[p2_name].frozen_months
+                    if (
+                        m in fr1 or m + 1 in fr1
+                        or m in fr2 or m + 1 in fr2
                     ):
                         continue
                     b1 = state[p2_name][m]

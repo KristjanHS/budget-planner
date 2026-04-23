@@ -1,7 +1,11 @@
-"""Tests for the Plan-Forecast sheet builder (T5).
+"""Tests for the Plan-Forecast sheet builder.
 
 Plan-Forecast aggregates forecast-EUR leaves from Actuals-Hours into a
 WP × month grid that mirrors the Plan sheet shape.
+
+T4 (2026-04-22 indirect-view restructure) flipped the default-visible
+rollup surface to with-indirect (+i) and wrapped the monthly grid + -i
+rollups in a collapsible column outline group.
 """
 import re
 
@@ -20,7 +24,11 @@ from budget_planner.layout import (
     month_col_end,
     wp_active_months,
 )
-from budget_planner.styles import CF_GREY_FILL, GREY_FILL, col_letter
+from budget_planner.styles import (
+    CF_GREY_FILL, GREY_FILL,
+    WITH_INDIRECT_HEADER_FILL, WITHOUT_INDIRECT_HEADER_FILL,
+    col_letter,
+)
 
 
 # ── Fixtures ──
@@ -160,7 +168,11 @@ def test_plan_forecast_inactive_months_grey(pf):
 
 
 def test_plan_forecast_variance_red_cf(pf):
-    """At least one CF rule with red fill applies on the Variance column."""
+    """At least one CF rule with red fill applies on the Variance -i column.
+
+    The -i variance CF was the historical behaviour; T4 added a +i sibling
+    (asserted separately below). This test pins the -i rule still exists.
+    """
     vcols = val_columns(PROJECT_MONTHS)
     diff_col = col_letter(vcols["diff"])
 
@@ -206,14 +218,15 @@ def test_plan_forecast_total_row_sums_wp_rows(pf):
 
 # ── Validation columns ──
 
-def test_plan_forecast_ceiling_column_refs_config(pf):
-    """Ceiling column on each WP row cross-refs Config!E<wp_row>."""
+def test_plan_forecast_budget_minus_i_column_refs_config(pf):
+    """Budget -i column on each WP row cross-refs Config!E<wp_row> (col 5
+    = Budget -i, numerically identical to the legacy Ceiling value)."""
     vcols = val_columns(PROJECT_MONTHS)
-    ceil_col = vcols["budget"]  # 'budget' slot reused for Ceiling
+    budget_col = vcols["budget"]
 
     # Take first WP row
     wp_row = _find_wp_row(pf, 0)
-    val = pf.cell(wp_row, ceil_col).value
+    val = pf.cell(wp_row, budget_col).value
     assert isinstance(val, str) and val.startswith("=Config!E"), val
 
 
@@ -250,7 +263,7 @@ def test_plan_forecast_grey_cf_past_hours_actuals_threshold(pf):
 
 
 def test_plan_forecast_sum_column_totals_months(pf):
-    """Sum column = SUM(<month range>) for each WP row."""
+    """Sum -i column = SUM(<month range>) for each WP row."""
     vcols = val_columns(PROJECT_MONTHS)
     sum_col = vcols["sum"]
     end_col = month_col_end(PROJECT_MONTHS)
@@ -259,3 +272,203 @@ def test_plan_forecast_sum_column_totals_months(pf):
     val = pf.cell(wp_row, sum_col).value
     assert isinstance(val, str) and val.startswith("=SUM("), val
     assert f"{col_letter(MONTH_COL_START)}{wp_row}:{col_letter(end_col)}{wp_row}" in val
+
+
+# ── T4 (2026-04-22): indirect-view +i mirror block ──
+
+def _header_text_at(ws, col, *, scan_rows=8):
+    """Return the rollup-column month-row header text for ``col``.
+
+    Walks rows 1..scan_rows looking for a short (<20 chars) string in the
+    column that contains a ``+i`` / ``-i`` suffix. The length filter skips
+    the merged section-header row ("FORECAST EUR (from hours) +i") which
+    is long prose, and surfaces the month-row rollup label
+    ("Sum +i", "Budget -i", etc.).
+    """
+    for r in range(1, scan_rows + 1):
+        v = ws.cell(r, col).value
+        if (
+            isinstance(v, str)
+            and ("+i" in v or "-i" in v)
+            and len(v) < 20
+        ):
+            return v
+    return None
+
+
+def test_plan_forecast_plus_i_rollup_headers(pf):
+    """The five +i mirror columns carry headers with the '+i' suffix and
+    WITH_INDIRECT_HEADER_FILL on the month-header row."""
+    vcols = val_columns(PROJECT_MONTHS)
+    expected = {
+        vcols["sum_plus_i"]: "Sum +i",
+        vcols["budget_plus_i"]: "Budget +i",
+        vcols["diff_plus_i"]: "Variance +i",
+        vcols["cum_plus_i"]: "Cum EUR +i",
+        vcols["pct_ceil_plus_i"]: "% of Budget +i",
+    }
+    target_fill = str(WITH_INDIRECT_HEADER_FILL.fgColor.rgb).upper()
+    for col, want_label in expected.items():
+        got = _header_text_at(pf, col)
+        assert got == want_label, (
+            f"Col {col_letter(col)}: expected header {want_label!r}, got {got!r}"
+        )
+        # Month-header row = where the label is written. Find it and
+        # confirm the fill matches WITH_INDIRECT_HEADER_FILL.
+        for r in range(1, 10):
+            if pf.cell(r, col).value == want_label:
+                fill = pf.cell(r, col).fill
+                bg = str(getattr(fill.fgColor, "rgb", "") or "").upper()
+                assert bg.endswith(target_fill), (
+                    f"Col {col_letter(col)}: expected WITH_INDIRECT fill, got {bg!r}"
+                )
+                break
+
+
+def test_plan_forecast_minus_i_rollup_headers(pf):
+    """The five -i sibling columns carry headers with the '-i' suffix and
+    WITHOUT_INDIRECT_HEADER_FILL on the month-header row."""
+    vcols = val_columns(PROJECT_MONTHS)
+    expected = {
+        vcols["sum"]: "Sum -i",
+        vcols["budget"]: "Budget -i",
+        vcols["diff"]: "Variance -i",
+        vcols["cum"]: "Cum EUR -i",
+        vcols["pct_ceil"]: "% of Budget -i",
+    }
+    target_fill = str(WITHOUT_INDIRECT_HEADER_FILL.fgColor.rgb).upper()
+    for col, want_label in expected.items():
+        got = _header_text_at(pf, col)
+        assert got == want_label, (
+            f"Col {col_letter(col)}: expected header {want_label!r}, got {got!r}"
+        )
+        for r in range(1, 10):
+            if pf.cell(r, col).value == want_label:
+                fill = pf.cell(r, col).fill
+                bg = str(getattr(fill.fgColor, "rgb", "") or "").upper()
+                assert bg.endswith(target_fill), (
+                    f"Col {col_letter(col)}: expected WITHOUT_INDIRECT fill, got {bg!r}"
+                )
+                break
+
+
+def test_plan_forecast_sum_plus_i_formula(pf):
+    """Sum +i = ROUND(Sum -i * 1.25, 0) per openpyxl.md EUR rule."""
+    vcols = val_columns(PROJECT_MONTHS)
+    sum_pi_col = vcols["sum_plus_i"]
+    sum_col_l = col_letter(vcols["sum"])
+
+    wp_row = _find_wp_row(pf, 0)
+    val = pf.cell(wp_row, sum_pi_col).value
+    assert isinstance(val, str), val
+    assert val == f"=ROUND({sum_col_l}{wp_row}*1.25,0)", val
+
+
+def test_plan_forecast_budget_plus_i_xrefs_named_range(pf):
+    """Budget +i = INDEX(wp_budget_with_indirect, i+1). No ×1.25 applied —
+    the named range already targets the Config Budget +i column."""
+    vcols = val_columns(PROJECT_MONTHS)
+    budget_pi_col = vcols["budget_plus_i"]
+
+    # First WP row — i=0 → INDEX(..,1)
+    wp_row = _find_wp_row(pf, 0)
+    val = pf.cell(wp_row, budget_pi_col).value
+    assert isinstance(val, str), val
+    assert val == "=INDEX(wp_budget_with_indirect,1)", val
+    assert "*1.25" not in val, (
+        "Budget +i xrefs an already-with-indirect source; must not apply ×1.25"
+    )
+
+    # Second WP row — i=1 → INDEX(..,2)
+    wp_row_2 = _find_wp_row(pf, 1)
+    val_2 = pf.cell(wp_row_2, budget_pi_col).value
+    assert val_2 == "=INDEX(wp_budget_with_indirect,2)", val_2
+
+
+def test_plan_forecast_cum_plus_i_formula(pf):
+    """Cum EUR +i = ROUND(Cum EUR -i * 1.25, 0)."""
+    vcols = val_columns(PROJECT_MONTHS)
+    cum_pi_col = vcols["cum_plus_i"]
+    cum_col_l = col_letter(vcols["cum"])
+
+    wp_row = _find_wp_row(pf, 0)
+    val = pf.cell(wp_row, cum_pi_col).value
+    assert isinstance(val, str), val
+    assert val == f"=ROUND({cum_col_l}{wp_row}*1.25,0)", val
+
+
+def test_plan_forecast_variance_plus_i_formula(pf):
+    """Variance +i = Budget +i - Sum +i."""
+    vcols = val_columns(PROJECT_MONTHS)
+    diff_pi_col = vcols["diff_plus_i"]
+    sum_pi_l = col_letter(vcols["sum_plus_i"])
+    budget_pi_l = col_letter(vcols["budget_plus_i"])
+
+    wp_row = _find_wp_row(pf, 0)
+    val = pf.cell(wp_row, diff_pi_col).value
+    assert isinstance(val, str), val
+    assert val == f"={budget_pi_l}{wp_row}-{sum_pi_l}{wp_row}", val
+
+
+def test_plan_forecast_pct_plus_i_formula(pf):
+    """% of Budget +i = Cum +i / Budget +i."""
+    vcols = val_columns(PROJECT_MONTHS)
+    pct_pi_col = vcols["pct_ceil_plus_i"]
+    cum_pi_l = col_letter(vcols["cum_plus_i"])
+    budget_pi_l = col_letter(vcols["budget_plus_i"])
+
+    wp_row = _find_wp_row(pf, 0)
+    val = pf.cell(wp_row, pct_pi_col).value
+    assert isinstance(val, str), val
+    assert val == f"={cum_pi_l}{wp_row}/{budget_pi_l}{wp_row}", val
+
+
+def test_plan_forecast_monthly_grid_in_outline_group(pf):
+    """Monthly forecast grid cols are wrapped in a column outline group
+    (outline_level=1, hidden=True) per T4's collapsible -i band.
+
+    The -i rollup cols are also in the band; the +i mirrors are NOT."""
+    vcols = val_columns(PROJECT_MONTHS)
+    end_col = month_col_end(PROJECT_MONTHS)
+
+    # Spot-check the monthly grid (a few columns, not all 48).
+    for col in (MONTH_COL_START, MONTH_COL_START + 1, end_col):
+        dim = pf.column_dimensions[col_letter(col)]
+        assert dim.outline_level == 1, (
+            f"Monthly-grid col {col_letter(col)} should be outline_level=1"
+        )
+        assert dim.hidden is True, (
+            f"Monthly-grid col {col_letter(col)} should be hidden by default"
+        )
+
+    # -i rollup cols must also sit inside the band.
+    for key in ("sum", "budget", "diff", "cum", "pct_ceil"):
+        dim = pf.column_dimensions[col_letter(vcols[key])]
+        assert dim.outline_level == 1, (
+            f"-i rollup col {col_letter(vcols[key])} should be in outline band"
+        )
+        assert dim.hidden is True
+
+    # +i mirrors must NOT be in the collapsible band.
+    for key in ("sum_plus_i", "budget_plus_i", "diff_plus_i",
+                "cum_plus_i", "pct_ceil_plus_i"):
+        dim = pf.column_dimensions[col_letter(vcols[key])]
+        assert (dim.outline_level or 0) == 0, (
+            f"+i mirror col {col_letter(vcols[key])} must stay outside "
+            f"the collapsible band"
+        )
+
+
+def test_plan_forecast_no_ceiling_residue(pf):
+    """Header cells and the compact row-1 block no longer contain the
+    word 'Ceiling' — T4 renamed all such surfaces to 'Budget'."""
+    # Row-1 compact label cell (col 6 holds the "Budget:" label).
+    assert pf.cell(1, 6).value == "Budget:"
+    # Scan rollup-column month-header row for any "Ceiling" text.
+    for r in range(1, 10):
+        for c in range(1, pf.max_column + 1):
+            v = pf.cell(r, c).value
+            if isinstance(v, str):
+                assert "Ceiling" not in v and "ceiling" not in v, (
+                    f"Ceiling/ceiling residue at {col_letter(c)}{r}: {v!r}"
+                )

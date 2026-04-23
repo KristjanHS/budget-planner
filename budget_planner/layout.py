@@ -29,6 +29,7 @@ ConfigParamRows = TypedDict("ConfigParamRows", {
     "Hours per FTE Month": int,
     "Vacation Month": int,
     "Num Vacation Months": int,
+    "Rebuild from month #": int,
     "Version Stamp": int,
 })
 
@@ -49,8 +50,9 @@ MONTH_COL_START = 3
 # ── Timelog Plan column structure (merged-grid layout) ──
 # A = Person (cross-ref to Team Roster)
 # B..B+months-1 = month grid — single editable grid (v2 layout collapsed the
-#     v1 PROPOSED + ASSIGNED twin bands into one). On rebuild, re-solve or
-#     preserve is governed by the `timelog_resolve_flag` toggle cell.
+#     v1 PROPOSED + ASSIGNED twin bands into one). On rebuild, the freeze
+#     point is governed by the `timelog_rebuild_from_month` integer Config
+#     param (Config!B9): months < N frozen verbatim, months ≥ N re-solved.
 # PER-PERSON SUMMARY band reuses col A for Person; metrics live at B..H
 # (Assigned, Pool, Over-pool?, Switches, First log, Last log, Rate). Rate is
 # duplicated only once per person — on the summary row.
@@ -146,7 +148,11 @@ COL_EXT_END = 5
 COL_EXT_EU = 6
 EXT_LAST_COL = 6
 
-# Validation column offsets (relative to month_col_end)
+# Validation column offsets (relative to month_col_end).
+# Offsets 1..6 carry the without-indirect (-i) rollups (historical keys
+# ``sum`` / ``budget`` / ``diff`` / ``cum`` / ``pct_ceil`` / ``breach`` —
+# retained to preserve deferred-consumer semantics on Summary / Trends /
+# Plan, which read -i numbers from these positions).
 VAL_OFFSET_SUM = 1
 VAL_OFFSET_BUDGET = 2
 VAL_OFFSET_DIFF = 3
@@ -154,6 +160,17 @@ VAL_OFFSET_DIFF = 3
 VAL_OFFSET_CUM = 4
 VAL_OFFSET_PCT_CEIL = 5
 VAL_OFFSET_BREACH = 6
+# Offsets 7..12 carry the with-indirect (+i) mirrors on the Actuals sheet.
+# Added in T3 of the indirect-view restructure (see
+# ``docs/plans/2026-04-22-indirect-view-restructure-design.md`` Stage B).
+# The +i block is outside the collapsible -i band and forms the
+# default-visible rollup surface for external-facing use.
+VAL_OFFSET_SUM_PLUS_I = 7
+VAL_OFFSET_BUDGET_PLUS_I = 8
+VAL_OFFSET_DIFF_PLUS_I = 9
+VAL_OFFSET_CUM_PLUS_I = 10
+VAL_OFFSET_PCT_CEIL_PLUS_I = 11
+VAL_OFFSET_BREACH_PLUS_I = 12
 
 
 # Alert thresholds
@@ -195,7 +212,16 @@ def month_col_end(project_months: int) -> int:
 
 
 def val_columns(project_months: int) -> dict[str, int]:
-    """Return dict of validation column numbers."""
+    """Return dict of validation column numbers.
+
+    Keys without a suffix (``sum`` / ``budget`` / ``diff`` / ``cum`` /
+    ``pct_ceil`` / ``breach``) are the without-indirect (-i) rollups at
+    offsets 1..6 from ``month_col_end``. These keep their historical
+    positions so deferred consumers (Summary / Trends / Plan) that read
+    by position continue to resolve to a numerically identical -i cell.
+    Keys with ``_plus_i`` suffix are the with-indirect (+i) mirrors at
+    offsets 7..12, added in T3 of the indirect-view restructure.
+    """
     end = month_col_end(project_months)
     return {
         "sum": end + VAL_OFFSET_SUM,
@@ -204,33 +230,55 @@ def val_columns(project_months: int) -> dict[str, int]:
         "cum": end + VAL_OFFSET_CUM,
         "pct_ceil": end + VAL_OFFSET_PCT_CEIL,
         "breach": end + VAL_OFFSET_BREACH,
+        "sum_plus_i": end + VAL_OFFSET_SUM_PLUS_I,
+        "budget_plus_i": end + VAL_OFFSET_BUDGET_PLUS_I,
+        "diff_plus_i": end + VAL_OFFSET_DIFF_PLUS_I,
+        "cum_plus_i": end + VAL_OFFSET_CUM_PLUS_I,
+        "pct_ceil_plus_i": end + VAL_OFFSET_PCT_CEIL_PLUS_I,
+        "breach_plus_i": end + VAL_OFFSET_BREACH_PLUS_I,
     }
 
 
 # ── Forecast monitoring column offsets (Actuals sheet) ──
-# Placed after the Actual-EUR validation block (``val_columns``) with a
-# 1-column gutter so the groupable forecast band is visually separable.
+# Placed after the Actual-EUR ``breach_plus_i`` column with a 1-column
+# gutter so the groupable forecast band is visually separable.
+# Offsets 1..4 carry the without-indirect (-i) siblings that live
+# **inside** the collapsible -i band; offsets 5..8 carry the with-indirect
+# (+i) mirrors that form the default-visible forecast rollup block. T3
+# of the indirect-view restructure (2026-04-22) added the +i mirrors and
+# re-based the forecast block on ``breach_plus_i`` (was ``breach``).
 FORECAST_GUTTER = 1
 FORECAST_OFFSET_CUM = FORECAST_GUTTER + 1
 FORECAST_OFFSET_VAR = FORECAST_GUTTER + 2
 FORECAST_OFFSET_PCT_CEIL = FORECAST_GUTTER + 3
 FORECAST_OFFSET_BREACH = FORECAST_GUTTER + 4
+FORECAST_OFFSET_CUM_PLUS_I = FORECAST_GUTTER + 5
+FORECAST_OFFSET_VAR_PLUS_I = FORECAST_GUTTER + 6
+FORECAST_OFFSET_PCT_CEIL_PLUS_I = FORECAST_GUTTER + 7
+FORECAST_OFFSET_BREACH_PLUS_I = FORECAST_GUTTER + 8
 
 
 def forecast_val_columns(project_months: int) -> dict[str, int]:
     """Return dict of forecast-monitoring column numbers on Actuals.
 
-    Positioned after the Actual-EUR ``val_columns`` breach column, with a
-    1-column gutter. The four columns mirror the Actual-EUR shape:
-    ``cum_forecast``, ``var_forecast``, ``pct_ceil_forecast``,
-    ``breach_forecast``.
+    Positioned after the Actual-EUR ``breach_plus_i`` column, with a
+    1-column gutter. Legacy keys ``cum_forecast`` / ``var_forecast`` /
+    ``pct_ceil_forecast`` / ``breach_forecast`` resolve to the
+    without-indirect (-i) siblings that live inside the collapsible -i
+    band (adjacency ``var_forecast == cum_forecast + 1`` etc. still
+    holds within the -i sub-block). ``*_forecast_plus_i`` keys name the
+    +i mirrors placed outside the collapsible band.
     """
-    breach = val_columns(project_months)["breach"]
+    breach_pi = val_columns(project_months)["breach_plus_i"]
     return {
-        "cum_forecast": breach + FORECAST_OFFSET_CUM,
-        "var_forecast": breach + FORECAST_OFFSET_VAR,
-        "pct_ceil_forecast": breach + FORECAST_OFFSET_PCT_CEIL,
-        "breach_forecast": breach + FORECAST_OFFSET_BREACH,
+        "cum_forecast": breach_pi + FORECAST_OFFSET_CUM,
+        "var_forecast": breach_pi + FORECAST_OFFSET_VAR,
+        "pct_ceil_forecast": breach_pi + FORECAST_OFFSET_PCT_CEIL,
+        "breach_forecast": breach_pi + FORECAST_OFFSET_BREACH,
+        "cum_forecast_plus_i": breach_pi + FORECAST_OFFSET_CUM_PLUS_I,
+        "var_forecast_plus_i": breach_pi + FORECAST_OFFSET_VAR_PLUS_I,
+        "pct_ceil_forecast_plus_i": breach_pi + FORECAST_OFFSET_PCT_CEIL_PLUS_I,
+        "breach_forecast_plus_i": breach_pi + FORECAST_OFFSET_BREACH_PLUS_I,
     }
 
 

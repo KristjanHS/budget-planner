@@ -484,6 +484,87 @@ def test_formula_and_style_changing_together_emits_both(tmp_path: Path):
     assert entry["style"]["bold"] == "false→true"
 
 
+def test_logic_mode_drops_style_only_and_strips_subdict(tmp_path: Path):
+    """Logic mode (default via main): pure-style cells dropped; formula+style
+    cells keep the formula facet but lose the style sub-dict. Summary still
+    reports the suppressed style count so the consumer sees what was hidden."""
+    wb_a = Workbook()
+    ws_a = _active(wb_a)
+    ws_a.title = "S"
+    ws_a["C5"] = "=SUM(A1:A4)"
+    ws_a["F5"] = 1
+
+    wb_b = Workbook()
+    ws_b = _active(wb_b)
+    ws_b.title = "S"
+    ws_b["C5"] = "=SUM(A1:A5)"
+    ws_b["C5"].font = Font(bold=True)
+    ws_b["F5"] = 1
+    ws_b["F5"].font = Font(bold=True)
+
+    a = _save(wb_a, tmp_path / "a.xlsx")
+    b = _save(wb_b, tmp_path / "b.xlsx")
+    out_path = tmp_path / "diff.json"
+    assert main([str(a), str(b), "--out", str(out_path)]) == 0
+    parsed = json.loads(out_path.read_text())
+
+    assert parsed["meta"]["mode"] == "logic"
+    cells = parsed["sheets"]["S"]["cells"]
+    assert "F5" not in cells  # pure-style entry dropped
+    assert cells["C5"]["kind"] == "formula"
+    assert cells["C5"]["new"] == "=SUM(A1:A5)"
+    assert "style" not in cells["C5"]  # style sub-dict stripped
+    # Counts reflect pre-filter reality so the consumer can triage what was hidden.
+    assert parsed["summary"]["style_changes"] >= 1
+
+
+def test_full_mode_keeps_style_entries(tmp_path: Path):
+    """--mode=full bypasses the logic filter — pure-style cells stay."""
+    wb_a = Workbook()
+    ws_a = _active(wb_a)
+    ws_a.title = "S"
+    ws_a["F5"] = 1
+    wb_b = Workbook()
+    ws_b = _active(wb_b)
+    ws_b.title = "S"
+    ws_b["F5"] = 1
+    ws_b["F5"].font = Font(bold=True)
+
+    a = _save(wb_a, tmp_path / "a.xlsx")
+    b = _save(wb_b, tmp_path / "b.xlsx")
+    out_path = tmp_path / "diff.json"
+    assert main([str(a), str(b), "--out", str(out_path), "--mode", "full"]) == 0
+    parsed = json.loads(out_path.read_text())
+    assert parsed["meta"]["mode"] == "full"
+    assert parsed["sheets"]["S"]["cells"]["F5"]["kind"] == "style"
+
+
+def test_default_output_is_compact_single_line(tmp_path: Path):
+    """Default JSON output is compact (no newlines) — consumer is an AI agent.
+
+    Fixture must be non-trivial so that --pretty (indent=2) would actually
+    introduce newlines; otherwise the compact assertion passes vacuously.
+    """
+    wb_a = Workbook()
+    ws_a = _active(wb_a)
+    ws_a.title = "S"
+    ws_a["C5"] = "=SUM(A1:A4)"
+    wb_b = Workbook()
+    ws_b = _active(wb_b)
+    ws_b.title = "S"
+    ws_b["C5"] = "=SUM(A1:A5)"  # formula change → non-trivial body
+    a = _save(wb_a, tmp_path / "a.xlsx")
+    b = _save(wb_b, tmp_path / "b.xlsx")
+    out_path = tmp_path / "diff.json"
+    assert main([str(a), str(b), "--out", str(out_path)]) == 0
+    text = out_path.read_text()
+    assert "\n" not in text
+    # Sanity: with --pretty the same fixture would be multi-line.
+    pretty_path = tmp_path / "diff_pretty.json"
+    assert main([str(a), str(b), "--out", str(pretty_path), "--pretty"]) == 0
+    assert "\n" in pretty_path.read_text()
+
+
 def test_no_decimal_value_leaks_when_only_data_changed(tmp_path: Path):
     """If the only change is a numeric literal value flip, the diff body must not
     contain the actual numbers."""

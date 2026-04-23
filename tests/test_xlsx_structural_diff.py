@@ -197,7 +197,8 @@ def test_number_format_change_only(tmp_path: Path):
 
     out = _diff(tmp_path, build_a, build_b)
     entry = out["sheets"]["S"]["cells"]["G5"]
-    assert entry["kind"] == "format"
+    # kind preserves cell nature ("literal"); number_format change rides as a subfield.
+    assert entry["kind"] == "literal"
     assert entry["number_format"]["old"] == "0.00"
     assert entry["number_format"]["new"] == "0.00%"
 
@@ -458,6 +459,29 @@ def test_main_writes_diff_json(tmp_path: Path):
     parsed = json.loads(out_path.read_text())
     assert parsed["meta"]["schema_version"] == 1
     assert parsed["sheets"]["S"]["cells"]["C5"]["new"] == "=SUM(A1:A5)"
+
+
+def test_formula_and_style_changing_together_emits_both(tmp_path: Path):
+    """A cell whose formula AND style both changed must surface BOTH facets —
+    early-return ordering used to drop the style change silently."""
+    def build_a(wb):
+        ws = _active(wb)
+        ws.title = "S"
+        ws["C5"] = "=SUM(A1:A4)"
+
+    def build_b(wb):
+        ws = _active(wb)
+        ws.title = "S"
+        ws["C5"] = "=SUM(A1:A5)"
+        ws["C5"].font = Font(bold=True)
+
+    out = _diff(tmp_path, build_a, build_b)
+    entry = out["sheets"]["S"]["cells"]["C5"]
+    assert entry["kind"] == "formula"
+    assert entry["new"] == "=SUM(A1:A5)"
+    # Style must travel under a nested key, not be discarded.
+    assert "style" in entry
+    assert entry["style"]["bold"] == "false→true"
 
 
 def test_no_decimal_value_leaks_when_only_data_changed(tmp_path: Path):

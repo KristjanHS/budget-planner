@@ -65,17 +65,11 @@ def _build_merge_anchor_map(ws: Any) -> dict[tuple[int, int], tuple[int, int]]:
     return anchors
 
 
-def _formula_anchor(cell: Cell) -> tuple[int, int] | None:
-    """If `cell` is a non-anchor member of a shared/array formula, return anchor (row, col).
-    Otherwise None.
-    """
-    val = cell.value
-    if not isinstance(val, str) or not val.startswith("="):
-        return None
-    # openpyxl exposes ArrayFormula / shared formula refs. Treat the cell that
-    # actually owns the formula string as the anchor (best-effort: openpyxl drops
-    # most shared-formula info on read; this is a no-op fallback).
-    return None
+# Shared/array-formula anchor handling (D3): openpyxl drops most shared-formula
+# refs on read — only the anchor cell carries the formula string; member cells
+# come back with `value is None`. The merge-anchor map above already filters
+# merged-range members; for shared formulas we rely on openpyxl's own behavior
+# (members read as empty → naturally excluded).
 
 
 # ---------- style + cell signature ----------
@@ -196,10 +190,7 @@ def _collect_cells(ws: Any) -> dict[tuple[int, int], Cell]:
                 # member of merged range — skip; anchor cell will be visited.
                 continue
             if cell.value is None and cell.number_format in ("General", None):
-                # truly empty + default format — skip.
-                if _style_fingerprint(cell) == _style_fingerprint(cell):
-                    pass  # always true; check actual style below
-                # Only skip if no styling at all.
+                # truly empty + default format — skip only if no styling either.
                 style = _style_fingerprint(cell)
                 blank_style = {
                     "bold": "false",
@@ -399,13 +390,17 @@ def _build_hint(
             matching_coords.append(coord)
         elif direction == "col" and rd == 0 and cd == delta:
             matching_coords.append(coord)
-    # inferred_start = smallest old-side row/col referenced - delta.
+    # inferred_start (heuristic-only per D6): plan spec uses smallest old-side
+    # *referenced* row/col minus delta, but we only have the formula-cell coord
+    # in the deltas tuple — using coord[0]/coord[1] as a proxy. For self- or
+    # near-self-referencing formulas (the common case) this produces the right
+    # answer; for formulas that reference rows far from their own coord it
+    # may be off. Documented as heuristic in the design.
     inferred_start: int | None = None
     if direction == "row":
         rows_referenced = []
         for rd, cd, coord in deltas:
             if cd == 0 and rd == delta:
-                # we don't have the parsed refs handy; estimate from coord row - delta
                 rows_referenced.append(coord[0])
         if rows_referenced:
             inferred_start = min(rows_referenced) - delta
@@ -547,45 +542,48 @@ def _build_change_entry(
         return entry
 
     kind = sa["kind"]
+    entry: dict[str, Any] = {"kind": kind}
+    has_payload = False
 
-    # Formula change.
+    # Formula change (logic-bearing — primary kind).
     if kind == "formula" and sa.get("formula") != sb.get("formula"):
-        return {
-            "kind": "formula",
-            "old": sa["formula"],
-            "new": sb["formula"],
-        }
+        entry["old"] = sa["formula"]
+        entry["new"] = sb["formula"]
+        has_payload = True
 
     # Literal type change (data_type flip).
     if kind == "literal" and sa.get("data_type") != sb.get("data_type"):
-        entry = {
-            "kind": "literal",
-            "type_change": {"old": sa.get("data_type"), "new": sb.get("data_type")},
-        }
+        entry["type_change"] = {"old": sa.get("data_type"), "new": sb.get("data_type")}
         value, suppressed = _emit_literal_value(sheet_name, coord[0], coord[1], cb)
         if value is not None:
             entry["value"] = value
         elif suppressed:
             entry["value_suppressed"] = True
-        return entry
+        has_payload = True
 
-    # number_format change.
+    # number_format change — combine into the same entry rather than overwriting kind.
     if sa["number_format"] != sb["number_format"]:
-        return {
-            "kind": "format",
-            "number_format": {"old": sa["number_format"], "new": sb["number_format"]},
-        }
+        entry["number_format"] = {"old": sa["number_format"], "new": sb["number_format"]}
+        has_payload = True
 
-    # style change.
+    # style change — emit changed fields under nested `style` block so the parent
+    # `kind` keeps its semantic meaning (formula/literal/empty) when other facets
+    # also changed. Standalone style edits get kind="style" promoted.
     if sa["style"] != sb["style"]:
-        entry = {"kind": "style"}
-        for field in sorted(sa["style"]):
-            if sa["style"][field] != sb["style"][field]:
-                entry[field] = f"{sa['style'][field]}→{sb['style'][field]}"
-        return entry
+        style_diff = {
+            field: f"{sa['style'][field]}→{sb['style'][field]}"
+            for field in sorted(sa["style"])
+            if sa["style"][field] != sb["style"][field]
+        }
+        if has_payload:
+            entry["style"] = style_diff
+        else:
+            entry = {"kind": "style", **style_diff}
+            has_payload = True
 
-    # Should be unreachable since signatures differ.
-    return {}
+    if not has_payload:
+        return {}
+    return entry
 
 
 def _diff_structure(ws_a: Any | None, ws_b: Any | None) -> dict[str, Any]:
@@ -643,9 +641,7 @@ def diff_workbooks(path_a: Path, path_b: Path) -> dict[str, Any]:
     workbook_block: dict[str, Any] = {
         "sheets_added": sheets_added,
         "sheets_removed": sheets_removed,
-        "protection_changed": bool(wb_a.security != wb_b.security)
-        if (wb_a.security is not None and wb_b.security is not None)
-        else False,
+        "protection_changed": bool(wb_a.security != wb_b.security),
     }
 
     sheet_diffs: dict[str, dict[str, Any]] = {}
@@ -661,9 +657,12 @@ def diff_workbooks(path_a: Path, path_b: Path) -> dict[str, Any]:
     hints_emitted = 0
     for sd in sheet_diffs.values():
         for entry in sd.get("cells", {}).values():
-            if entry.get("kind") == "formula" and "old" in entry and "new" in entry:
+            # formula_changes covers any formula activity: edit, add, or removal —
+            # the consumer's "skip body if zero" triage relies on this catching
+            # added/removed formulas too, not just edits.
+            if entry.get("kind") == "formula":
                 formula_changes += 1
-            if entry.get("kind") == "style":
+            if entry.get("kind") == "style" or "style" in entry:
                 style_changes += 1
             if entry.get("added") is not None and entry.get("added") is not False:
                 cells_added += 1

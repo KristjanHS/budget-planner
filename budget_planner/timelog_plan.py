@@ -1039,9 +1039,17 @@ def _write_yearly_rows(
     #   - yearly_budget_row col C = SUM(B6:B13). Aiko-port Q-B flipped
     #     PER-WP SUMMARY col B to direct Config!F (Budget +i via
     #     COL_WP_BUDGET_PLUS_I), so SUM(B) is already +i — no ×1.25.
-    style_cell(
+    yt_c = style_cell(
         ws, yearly_total_row, 3, font=BLACK_FORMULA, fmt="€#,##0",
-    ).value = f"=SUM(C{wp_summary_first_row}:C{wp_summary_last_row})"
+    )
+    yt_c.value = f"=SUM(C{wp_summary_first_row}:C{wp_summary_last_row})"
+    yt_c.comment = sized_comment(
+        "Cross-check SUM of PER-WP SUMMARY col C (Assigned €, -i). "
+        "Row label 'Yearly total +i' refers to the per-year cells to "
+        "the right (all +i via ×1.25 at the SUMPRODUCT leaf). Compare "
+        "this cell × 1.25 against the per-year sum for drift detection.",
+        author="Programme Budget Tool",
+    )
     style_cell(
         ws, yearly_budget_row, 3, font=BLACK_FORMULA, fmt="€#,##0",
     ).value = f"=SUM(B{wp_summary_first_row}:B{wp_summary_last_row})"

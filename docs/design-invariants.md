@@ -117,3 +117,20 @@ Cross-sheet formulas (Plan's `=SUM(Capacity!...)`, Trends person-load refs, Summ
 ## Inactive-month rule
 
 On every sheet with monthly data (Capacity, Plan, Actuals, Actuals-Hours, Plan-Forecast), months outside the intersection of the assignment window `[Start, End]` and the WP's single-range active months are **greyed and empty**. Distribution curves must never leak FTE into out-of-range months. Auditors reject PM logged outside a WP's active range.
+
+## Config `Budget +i` (col F) is a derived black-formula, not a blue input
+
+`Config!F13:F20` holds a structured-reference formula into `tbl_WorkPackages` that resolves to `FTE Budget × Rate (€/PM) -i × 1.25` (shipped 2026-04-23 as Aiko-port T1). The authoritative blue-input fields for a WP's budget are **FTE Budget (col C)** and **Rate (col D)**; col F is a display-layer derivation.
+
+- **Rule 3 carve-out**: the cell uses `BLACK_FORMULA` font even though Budget +i is semantically the grant-agreement-stated figure — signals "do not hand-edit; edit FTE or Rate instead."
+- **Reader round-trip**: `reader.py::read_config_sheet` loads Config under `data_only=False`, so `ws.cell(r, COL_WP_BUDGET_PLUS_I).value` returns the formula string; `_safe_float` falls back to the same `FTE × Rate × 1.25` product the formula computes, preserving `budget_plus_i` numerically on rebuild. Any user hand-edit to `F{n}` is silently reset by the next rebuild — this is intentional (Aiko-port Q-F).
+- **Consequences for downstream sheets**: `wp_budget_with_indirect` named range still targets `Config!$F${first}:$F${last}`, so Actuals / Plan-Forecast `=INDEX(wp_budget_with_indirect, i+1)` formulas keep resolving to the same numeric after recalc.
+
+## Timelog Plan PER-WP SUMMARY col B is `Config!F{wp_row}` (Budget +i)
+
+Shipped 2026-04-23 as Aiko-port T2. `_write_wp_summary_row` col B xrefs `Config!$F{cfg_wp_row}` (via `COL_WP_BUDGET_PLUS_I`) — direct-read of Budget +i. Previously xrefed col E (Budget -i).
+
+Knock-on effects recorded here so future row-15 / cross-check work stays consistent:
+- `_write_yearly_rows` col C cross-checks are raw SUMs (no inline ×1.25). `yearly_total_row` col C = `SUM(C{first}:C{last})` is -i by construction (PER-WP SUMMARY col C / Assigned € stays -i). `yearly_budget_row` col C = `SUM(B{first}:B{last})` is +i (col B is now +i direct).
+- Drift-detection between `yearly_total_row` col C and the per-year cells on the same row requires a ×1.25 scale (col C is -i, per-year cells are +i via ×1.25-at-leaf). See `tests/test_timelog_plan.py::test_yearly_total_col_c_crosscheck`.
+- `yearly_budget_row` col C exactly matches the per-year sum within float64 noise (both +i from Config!F).

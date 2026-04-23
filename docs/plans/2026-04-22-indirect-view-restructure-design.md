@@ -575,3 +575,22 @@ Tests: monthly-total + year-col assertion blocks get `+i` / `×1.25` updates.
 - `forecast_val_columns()` re-based on `val_columns(..)["breach_plus_i"]` (was `breach`). Legacy `cum_forecast` / `var_forecast` / `pct_ceil_forecast` / `breach_forecast` keys now point at -i siblings in the new base band. Adjacency (`var_forecast == cum_forecast + 1` etc.) preserved within the -i sub-block, so `test_actuals_forecast_block.py` continues to pass unchanged.
 
 **No downstream breakage:** `config.py` derives `VAL_COL_SUM/BUDGET/DIFF/CUM/PCT_CEIL/BREACH` via the -i keys, unchanged. Other builders (`plan_forecast.py`, `plan.py`, `capacity.py`, `actuals_hours.py`) read `_vcols["sum"]` only and keep working. No migration path hit.
+
+
+---
+
+## Correction — Aiko-port T2 retargets PER-WP SUMMARY col B (2026-04-23)
+
+**Context:** this plan's T7.1 survey + T7.2 edit list (L449–L510) declared *"PER-WP SUMMARY col B/C/D stay at their current semantics for T7 scope"* and set `yearly_budget_row` per-year cells to `=Σ prop_ky × Config!E{wp_row}` (Budget -i). Aiko-port T2 (commit `4d30f2d`) explicitly supersedes that scoping decision for col B.
+
+**What shipped (T2):**
+- `_write_wp_summary_row` col B xref flipped `Config!$E{cfg_wp_row}` → `Config!$F{cfg_wp_row}` (`COL_WP_BUDGET_PLUS_I`). Col B now displays Budget +i directly from Config's authoritative column.
+- `_write_yearly_rows` col C cross-checks dropped the ×1.25 multiplier on BOTH rows:
+  - `yearly_total_row` col C = `=SUM(C{first}:C{last})` (raw; -i by construction since PER-WP SUMMARY col C / Assigned € stays -i).
+  - `yearly_budget_row` col C = `=SUM(B{first}:B{last})` (raw; +i because col B now pulls from Config!F directly).
+- The per-year cells on `yearly_budget_row` already used `Config!F{wp_row}` (COL_WP_BUDGET_PLUS_I) via T7.3's constant import — T2 only changed the col C cross-check and col B xref.
+
+**Net effect for future Stage-B work in this plan:**
+- PER-WP SUMMARY col B is +i. Any Stage-B task (T3 Actuals, T4 Plan-Forecast — already shipped; T5 Capacity, T6 Actuals-Hours) that reads the Timelog Plan col B value gets +i, not -i.
+- `yearly_total_row` col C is -i while per-year cells on the same row are +i. Intentional per Aiko-port Q-B. Drift-detection cross-check compares `col_c × 1.25` vs year_sum (see `tests/test_timelog_plan.py::test_yearly_total_col_c_crosscheck`).
+- The L451 / L468 / L501–L505 passages above describing col B as `Config!E` / Budget -i are superseded. Do NOT reference them as authoritative in new work.

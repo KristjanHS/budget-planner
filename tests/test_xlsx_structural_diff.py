@@ -15,7 +15,12 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from scripts.xlsx_structural_diff import diff_workbooks, main
+from scripts.xlsx_structural_diff import (
+    _canon_argb,
+    _canon_numfmt,
+    diff_workbooks,
+    main,
+)
 
 
 def _active(wb: Workbook):
@@ -583,3 +588,31 @@ def test_no_decimal_value_leaks_when_only_data_changed(tmp_path: Path):
     # The actual numeric values must not appear anywhere in the JSON.
     assert "1234.56" not in serialized
     assert "9876.54" not in serialized
+
+
+# ---------- noise canonicalization (Stage 1) ----------
+
+
+def test_canon_numfmt_case_and_escape():
+    """Case + backslash escapes collapse; `mmm\\ yyyy` ≡ `MMM YYYY`, `\\€#,##0` ≡ `€#,##0`.
+
+    Non-equivalence preserved: digit count, month-specifier length.
+    """
+    assert _canon_numfmt("mmm\\ yyyy") == _canon_numfmt("MMM YYYY")
+    assert _canon_numfmt("\\€#,##0") == _canon_numfmt("€#,##0")
+    # Non-equivalence cases must survive.
+    assert _canon_numfmt("0.00") != _canon_numfmt("0.0000")
+    assert _canon_numfmt("mmm yyyy") != _canon_numfmt("mm yyyy")
+
+
+def test_canon_argb_alpha_opacity_and_non_alpha():
+    """FF/00 alpha bytes collapse to same sentinel; non-opaque alpha preserved."""
+    assert _canon_argb("FF0000FF") == _canon_argb("000000FF")
+    assert _canon_argb("FFC00000") == _canon_argb("00C00000")
+    # Non-alpha bytes must still differentiate.
+    assert _canon_argb("FF0000FF") != _canon_argb("FF000080")
+    # Non-opaque alpha (0x80) is NOT collapsed — stays distinct from opaque forms.
+    assert _canon_argb("800000FF") != _canon_argb("FF0000FF")
+    # Non-8-char / non-string pass through.
+    assert _canon_argb(None) is None
+    assert _canon_argb("FF00") == "FF00"

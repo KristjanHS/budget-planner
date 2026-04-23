@@ -180,6 +180,42 @@ def _emit_literal_value(
     return val, False
 
 
+# ---------- noise canonicalization (Stage 1) ----------
+
+
+def _canon_numfmt(s: Any) -> Any:
+    """Canonical form of a number-format string for noise-suppression comparison.
+
+    Collapses case + Excel backslash escapes so cosmetic differences compare equal:
+    - ``mmm\\ yyyy`` ≡ ``MMM YYYY``
+    - ``\\€#,##0``   ≡ ``€#,##0``
+
+    Preserves meaningful differences: ``"0.00"`` ≠ ``"0.0000"``;
+    ``"mmm yyyy"`` ≠ ``"mm yyyy"``. Non-string inputs pass through.
+    """
+    if not isinstance(s, str):
+        return s
+    return s.upper().replace("\\", "")
+
+
+def _canon_argb(s: Any) -> Any:
+    """Canonical form of an 8-char ARGB color for noise-suppression comparison.
+
+    Excel ignores the alpha byte for tab colors: ``FF`` and ``00`` both read as
+    fully opaque. Collapse both onto a sentinel prefix so they compare equal:
+    - ``"FF0000FF"`` ≡ ``"000000FF"`` → both → ``"__0000FF"``.
+
+    Non-opaque alphas (e.g. ``80``) pass through uppercased so partial
+    transparency, if ever intentional, still registers as a real delta.
+    Non-string inputs pass through unchanged.
+    """
+    if isinstance(s, str) and len(s) == 8 and s[:2].upper() in ("FF", "00"):
+        return "__" + s[2:].upper()
+    if isinstance(s, str):
+        return s.upper()
+    return s
+
+
 # ---------- per-sheet build ----------
 
 

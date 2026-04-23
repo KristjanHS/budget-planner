@@ -216,6 +216,41 @@ def _canon_argb(s: Any) -> Any:
     return s
 
 
+def _compare_numfmt(a: Any, b: Any, counter: dict[str, int]) -> tuple[bool, str | None]:
+    """Return ``(equal, noise_class)`` for a number-format comparison.
+
+    ``equal`` is True on raw match OR canonical match. When canonical match
+    drops a raw mismatch, the counter's ``number_format_normalized`` key is
+    bumped and ``noise_class == "format"`` is returned for optional tagging.
+    """
+    if a == b:
+        return True, None
+    if _canon_numfmt(a) == _canon_numfmt(b):
+        counter["number_format_normalized"] += 1
+        return True, "format"
+    return False, None
+
+
+def _compare_argb(a: Any, b: Any, counter: dict[str, int]) -> tuple[bool, str | None]:
+    """Return ``(equal, noise_class)`` for an ARGB color comparison.
+
+    Same shape as :func:`_compare_numfmt` — when the only delta is the alpha
+    byte collapsing under :func:`_canon_argb`, bumps ``tab_color_alpha_normalized``
+    and returns ``noise_class == "color"``.
+    """
+    if a == b:
+        return True, None
+    if _canon_argb(a) == _canon_argb(b):
+        counter["tab_color_alpha_normalized"] += 1
+        return True, "color"
+    return False, None
+
+
+def _new_noise_counter() -> dict[str, int]:
+    """Fresh zeroed ``noise_filtered_summary`` accumulator. Always emitted."""
+    return {"number_format_normalized": 0, "tab_color_alpha_normalized": 0}
+
+
 # ---------- per-sheet build ----------
 
 
@@ -471,9 +506,14 @@ def _build_hint(
 # ---------- per-sheet diff ----------
 
 
-def _diff_sheet(sheet_name: str, ws_a: Any | None, ws_b: Any | None) -> dict[str, Any]:
+def _diff_sheet(
+    sheet_name: str,
+    ws_a: Any | None,
+    ws_b: Any | None,
+    counter: dict[str, int],
+) -> dict[str, Any]:
     """Build the per-sheet diff dict."""
-    structure = _diff_structure(ws_a, ws_b)
+    structure = _diff_structure(ws_a, ws_b, counter)
     cells_diff: dict[str, Any] = {}
     changed_formulas: dict[tuple[int, int], tuple[str, str]] = {}
 
@@ -524,7 +564,7 @@ def _diff_sheet(sheet_name: str, ws_a: Any | None, ws_b: Any | None) -> dict[str
         if sa == sb:
             continue
         coord_s = _coord_str(coord)
-        entry = _build_change_entry(sheet_name, coord, ca, cb, sa, sb)
+        entry = _build_change_entry(sheet_name, coord, ca, cb, sa, sb, counter)
         if entry:
             cells_diff[coord_s] = entry
         if sa["kind"] == "formula" and sb["kind"] == "formula" and sa.get("formula") != sb.get("formula"):
@@ -567,6 +607,7 @@ def _build_change_entry(
     cb: Cell,
     sa: dict[str, Any],
     sb: dict[str, Any],
+    counter: dict[str, int],
 ) -> dict[str, Any]:
     """Produce a single cells diff entry for a coord present on both sides."""
     # If kind itself changed, that subsumes everything.
@@ -603,9 +644,18 @@ def _build_change_entry(
         has_payload = True
 
     # number_format change — combine into the same entry rather than overwriting kind.
+    # Canonicalization predicate absorbs Excel-cosmetic differences (case, escape
+    # backslashes); counter bumps when a raw mismatch collapses to canonical match.
     if sa["number_format"] != sb["number_format"]:
-        entry["number_format"] = {"old": sa["number_format"], "new": sb["number_format"]}
-        has_payload = True
+        equal, _noise_class = _compare_numfmt(
+            sa["number_format"], sb["number_format"], counter
+        )
+        if not equal:
+            entry["number_format"] = {
+                "old": sa["number_format"],
+                "new": sb["number_format"],
+            }
+            has_payload = True
 
     # style change — emit changed fields under nested `style` block so the parent
     # `kind` keeps its semantic meaning (formula/literal/empty) when other facets
@@ -627,7 +677,9 @@ def _build_change_entry(
     return entry
 
 
-def _diff_structure(ws_a: Any | None, ws_b: Any | None) -> dict[str, Any]:
+def _diff_structure(
+    ws_a: Any | None, ws_b: Any | None, counter: dict[str, int]
+) -> dict[str, Any]:
     out: dict[str, Any] = {}
 
     a_dim = {"max_row": int(ws_a.max_row or 0), "max_col": int(ws_a.max_column or 0)} if ws_a else {"max_row": 0, "max_col": 0}
@@ -652,7 +704,10 @@ def _diff_structure(ws_a: Any | None, ws_b: Any | None) -> dict[str, Any]:
     a_tab = ws_a.sheet_properties.tabColor.rgb if ws_a and ws_a.sheet_properties.tabColor else None
     b_tab = ws_b.sheet_properties.tabColor.rgb if ws_b and ws_b.sheet_properties.tabColor else None
     if a_tab != b_tab:
-        out["tab_color"] = {"old": a_tab, "new": b_tab}
+        # Canonicalization absorbs ARGB alpha-byte noise (FF vs 00 both opaque).
+        equal, _noise_class = _compare_argb(a_tab, b_tab, counter)
+        if not equal:
+            out["tab_color"] = {"old": a_tab, "new": b_tab}
 
     a_hidden = (ws_a.sheet_state if ws_a else None) == "hidden"
     b_hidden = (ws_b.sheet_state if ws_b else None) == "hidden"
@@ -685,11 +740,13 @@ def diff_workbooks(path_a: Path, path_b: Path) -> dict[str, Any]:
         "protection_changed": bool(wb_a.security != wb_b.security),
     }
 
+    noise_counter = _new_noise_counter()
+
     sheet_diffs: dict[str, dict[str, Any]] = {}
     for name in sorted(a_sheets | b_sheets):
         ws_a = wb_a[name] if name in a_sheets else None
         ws_b = wb_b[name] if name in b_sheets else None
-        sheet_diffs[name] = _diff_sheet(name, ws_a, ws_b)
+        sheet_diffs[name] = _diff_sheet(name, ws_a, ws_b, noise_counter)
 
     formula_changes = 0
     cells_added = 0
@@ -734,6 +791,7 @@ def diff_workbooks(path_a: Path, path_b: Path) -> dict[str, Any]:
             "schema_version": SCHEMA_VERSION,
         },
         "summary": summary,
+        "noise_filtered_summary": noise_counter,
         "defined_names": defined_names,
         "workbook": workbook_block,
         "sheets": sheet_diffs,

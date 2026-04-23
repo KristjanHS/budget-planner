@@ -616,3 +616,57 @@ def test_canon_argb_alpha_opacity_and_non_alpha():
     # Non-8-char / non-string pass through.
     assert _canon_argb(None) is None
     assert _canon_argb("FF00") == "FF00"
+
+
+def test_format_noise_suppressed_by_default(tmp_path: Path):
+    """Workbooks differing only in number-format casing/escapes produce no cell
+    records; `noise_filtered_summary.number_format_normalized` bumps."""
+    def build_a(wb):
+        ws = wb.active
+        ws.title = "S"
+        ws["G5"] = 1
+        ws["G5"].number_format = "mmm\\ yyyy"
+
+    def build_b(wb):
+        ws = wb.active
+        ws.title = "S"
+        ws["G5"] = 1
+        ws["G5"].number_format = "MMM YYYY"
+
+    out = _diff(tmp_path, build_a, build_b)
+    assert "G5" not in out["sheets"]["S"]["cells"]
+    assert out["noise_filtered_summary"]["number_format_normalized"] == 1
+    assert out["noise_filtered_summary"]["tab_color_alpha_normalized"] == 0
+
+
+def test_color_noise_suppressed_by_default(tmp_path: Path):
+    """Tab-color alpha-byte difference (FF vs 00) produces no tab_color entry;
+    counter increments."""
+    from openpyxl.styles import Color
+
+    def build_a(wb):
+        ws = wb.active
+        ws.title = "S"
+        ws.sheet_properties.tabColor = Color(rgb="FF0000FF")
+
+    def build_b(wb):
+        ws = wb.active
+        ws.title = "S"
+        ws.sheet_properties.tabColor = Color(rgb="000000FF")
+
+    out = _diff(tmp_path, build_a, build_b)
+    assert "tab_color" not in out["sheets"]["S"]["structure"]
+    assert out["noise_filtered_summary"]["tab_color_alpha_normalized"] == 1
+    assert out["noise_filtered_summary"]["number_format_normalized"] == 0
+
+
+def test_noise_filtered_summary_always_present(tmp_path: Path):
+    """Zero-noise workbook pair still emits the summary with zero counts."""
+    def build(wb):
+        ws = wb.active
+        ws.title = "S"
+        ws["C5"] = "=SUM(A1:A4)"
+
+    out = _diff(tmp_path, build, build)
+    nfs = out["noise_filtered_summary"]
+    assert nfs == {"number_format_normalized": 0, "tab_color_alpha_normalized": 0}

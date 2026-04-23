@@ -998,18 +998,15 @@ def _write_yearly_rows(
       ``WITH_INDIRECT_HEADER_FILL`` — the per-year cells on this row are +i,
       so the label carries the +i header fill.
     - Col C: cross-check sum (across-WP SUM of the PER-WP SUMMARY column
-      that feeds the row's aggregate). Both rows carry ``*1.25`` to flip to
-      +i parity with the per-year cells on the same row:
-        * ``yearly_total_row`` col C = ``=SUM(C{first}:C{last})*1.25``.
-          PER-WP SUMMARY col C (Assigned €) is -i; the per-year cells on
-          this row sum PER-WP SUMMARY year-cells which are wrapped in
-          ×1.25 at the leaf SUMPRODUCT (T7.3 display-layer wrap). ×1.25
-          on the SUM brings the cross-check to +i parity.
-        * ``yearly_budget_row`` col C = ``=SUM(B{first}:B{last})*1.25``.
-          Per-year cells on this row xref Config col F (Budget +i) via
-          ``COL_WP_BUDGET_PLUS_I``, so the per-year sum is +i; ×1.25 on
-          the PER-WP SUMMARY col B SUM (col B is -i via Config col E)
-          brings the cross-check to +i parity.
+      that feeds the row's aggregate). Aiko-port Q-B dropped the inline
+      ``*1.25`` from both rows:
+        * ``yearly_total_row`` col C = ``=SUM(C{first}:C{last})``. PER-WP
+          SUMMARY col C (Assigned €) is -i; this cross-check is -i by
+          construction. The per-year cells to its right stay +i via the
+          ×1.25 wrap at the leaf SUMPRODUCT (T7.3 display-layer wrap).
+        * ``yearly_budget_row`` col C = ``=SUM(B{first}:B{last})``. Q-B
+          flipped PER-WP SUMMARY col B to direct Config!F (Budget +i,
+          ``COL_WP_BUDGET_PLUS_I``), so SUM(B) is already +i.
     - Cols B, D-G: intentionally blank.
     - Per-year cols (I…):
       * yearly_total_row: =SUM(<year_col>{W1}:<year_col>{Wn}) — stacks the
@@ -1033,22 +1030,21 @@ def _write_yearly_rows(
         font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,
     )
 
-    # Col C cross-checks. Both rows wrap in ×1.25 to reach +i parity with
-    # the per-year cells to their right:
-    #   - yearly_total_row: PER-WP SUMMARY col C (Assigned €) is -i. Year
-    #     cells on this row wrap SUMPRODUCT in ×1.25 at the leaf (T7.3),
-    #     so the per-year sum is +i. ×1.25 on SUM(C) brings the cross-
-    #     check to +i parity.
-    #   - yearly_budget_row: PER-WP SUMMARY col B (Budget -i = Config E)
-    #     is -i. Year cells on this row xref Config F (Budget +i, via
-    #     COL_WP_BUDGET_PLUS_I below), so the per-year sum is +i. ×1.25
-    #     on SUM(B) brings the cross-check to +i parity.
+    # Col C cross-checks (Aiko-port Q-B: raw SUMs, no inline ×1.25):
+    #   - yearly_total_row col C = SUM(C6:C13). Matches Aiko's raw total;
+    #     PER-WP SUMMARY col C (Assigned €) is -i, so this cross-check is
+    #     -i by construction. +i parity with the per-year cells on this
+    #     row is no longer enforced at col C — the per-year SUMs stay +i
+    #     via the ×1.25 wrap at the leaf (T7.3).
+    #   - yearly_budget_row col C = SUM(B6:B13). Aiko-port Q-B flipped
+    #     PER-WP SUMMARY col B to direct Config!F (Budget +i via
+    #     COL_WP_BUDGET_PLUS_I), so SUM(B) is already +i — no ×1.25.
     style_cell(
         ws, yearly_total_row, 3, font=BLACK_FORMULA, fmt="€#,##0",
-    ).value = f"=SUM(C{wp_summary_first_row}:C{wp_summary_last_row})*1.25"
+    ).value = f"=SUM(C{wp_summary_first_row}:C{wp_summary_last_row})"
     style_cell(
         ws, yearly_budget_row, 3, font=BLACK_FORMULA, fmt="€#,##0",
-    ).value = f"=SUM(B{wp_summary_first_row}:B{wp_summary_last_row})*1.25"
+    ).value = f"=SUM(B{wp_summary_first_row}:B{wp_summary_last_row})"
 
     # Precompute per-WP schedule-month sets for build-time overlap math.
     # Single-range schema: each WP is one contiguous interval.
@@ -1173,10 +1169,11 @@ def _write_wp_summary_row(
     # Col A: WP code (literal).
     style_cell(ws, row, 1, value=wp_code, font=BLACK_FORMULA, alignment=CENTER)
 
-    # Col B: Budget € — green xref to Config!E{wp_row} (Budget -i position;
-    # numerically unchanged from pre-T1 Ceiling). -i semantics preserved per
-    # D9; +i flip deferred to a later polish pass.
-    budget_ref = cell_ref(SHEET_CONFIG, cfg_wp_row, 5)
+    # Col B: Budget +i — green xref to Config!F{wp_row} (COL_WP_BUDGET_PLUS_I).
+    # Aiko-port Q-B: B-col on PER-WP SUMMARY is Budget +i direct from Config,
+    # so the TOTAL-row col C cross-check on the yearly-budget row becomes a
+    # plain SUM(B6:B13) without ×1.25 (pairs with _write_yearly_rows change).
+    budget_ref = cell_ref(SHEET_CONFIG, cfg_wp_row, COL_WP_BUDGET_PLUS_I)
     style_cell(ws, row, 2, font=GREEN_XREF, fmt="€#,##0").value = f"={budget_ref}"
 
     # Col C: Assigned € = ROUND(SUMPRODUCT((grid="WP") * rate_vector), 0).

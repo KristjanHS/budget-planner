@@ -1074,38 +1074,41 @@ def test_yearly_rows_present(tlp):
 
 
 def test_yearly_total_col_c_formula(tlp, assigned_wb):
-    """Yearly total +i col C cross-check = SUM of WP Assigned € col (C) × 1.25.
+    """Yearly total col C cross-check = raw SUM(C{first}:C{last}) (Aiko-port Q-B).
 
-    PER-WP SUMMARY col C stays -i; per-year cells on yearly_total_row are
-    +i (T7.3 display-layer ×1.25 at the SUMPRODUCT leaf). ×1.25 wrap on SUM(C)
-    brings the cross-check to +i parity."""
+    PER-WP SUMMARY col C stays -i; the cross-check is -i by construction.
+    Per-year cells to the right of col C stay +i via the ×1.25 wrap at the
+    SUMPRODUCT leaf (T7.3), but the cross-check no longer wraps in ×1.25."""
     wps = _read_wps(assigned_wb)
     y_total, _ = _yearly_rows(tlp)
     first = _wp_summary_first_row(tlp)
     last = first + len(wps) - 1
     v = str(tlp.cell(y_total, 3).value or "")
-    assert v == f"=SUM(C{first}:C{last})*1.25", v
+    assert v == f"=SUM(C{first}:C{last})", v
 
 
 def test_yearly_budget_col_c_formula(tlp, assigned_wb):
-    """Yearly Budget +i col C cross-check = SUM of WP Budget € col (B) × 1.25.
+    """Yearly Budget +i col C cross-check = raw SUM(B{first}:B{last}) (Aiko-port Q-B).
 
-    PER-WP SUMMARY col B pulls from Config col E (Budget -i) and stays -i (T7
-    scope); ×1.25 wrap flips to +i for drift detection."""
+    PER-WP SUMMARY col B now xrefs Config col F (Budget +i, COL_WP_BUDGET_PLUS_I)
+    directly, so SUM(B) is already +i — no ×1.25 multiplier needed."""
     wps = _read_wps(assigned_wb)
     _, y_budget = _yearly_rows(tlp)
     first = _wp_summary_first_row(tlp)
     last = first + len(wps) - 1
     v = str(tlp.cell(y_budget, 3).value or "")
-    assert v == f"=SUM(B{first}:B{last})*1.25", v
+    assert v == f"=SUM(B{first}:B{last})", v
 
 
 def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
     """Col C value equals row-sum of year cells (within leaf-rounding tolerance).
 
-    Post-T7.3 both sides are +i but compute via different paths:
-      - col_c = SUM(C{first}:C{last}) * 1.25 — sums per-WP Assigned € leaves,
-        each independently rounded; error ≤ len(wps) * 0.5, scaled by 1.25.
+    Aiko-port Q-B dropped the ×1.25 from col C, so col C is -i and year cells
+    are +i. Drift-detection cross-check now compares ``col_c * 1.25`` vs
+    year_sum:
+      - col_c = SUM(C{first}:C{last}) — sums per-WP Assigned € leaves, each
+        independently rounded; error ≤ len(wps) * 0.5. ×1.25 scales both the
+        signal and the error for +i-parity comparison.
       - year_sum = Σ ROUND(SUMPRODUCT_{wp,y} * 1.25, 0) over len(wps)×len(groups)
         independently-rounded cells; error ≤ len(wps) * len(groups) * 0.5.
     Safe tolerance: len(wps) * (len(groups) + 2) covers both paths with
@@ -1125,8 +1128,9 @@ def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
             year_sum += float(v)
     assert isinstance(col_c, (int, float)), f"col C not numeric: {col_c!r}"
     tolerance = len(wps) * (len(groups) + 2)
-    assert abs(year_sum - float(col_c)) <= tolerance, (
-        f"Yearly total: col C {col_c} vs year-sum {year_sum} "
+    col_c_plus_i = float(col_c) * 1.25
+    assert abs(year_sum - col_c_plus_i) <= tolerance, (
+        f"Yearly total: col C×1.25 {col_c_plus_i} vs year-sum {year_sum} "
         f"(tolerance ±{tolerance})"
     )
     wb.close()
@@ -1151,10 +1155,10 @@ def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
     # Yearly Budget +i uses un-ROUND'd term sums — per design §5 the formula is
     # `=Σ prop_ky × Config!F{wp_row}` with no outer ROUND (col F = Budget +i).
     # In real arithmetic Σ_y prop_ky = 1 for every WP, so Σ year cells =
-    # Σ budgets_+i. Col C is `=SUM(B{first}:B{last})*1.25` = Σ budgets_-i ×
-    # 1.25 = Σ budgets_+i (since col B Budget -i = Config E = Budget +i / 1.25
-    # by construction). Equality holds exactly; fp rounding errors are the only
-    # drift source. ±1 EUR tolerance covers float64 noise.
+    # Σ budgets_+i. Col C post-Aiko-port Q-B is `=SUM(B{first}:B{last})` with
+    # col B now direct Config!F (Budget +i) — so SUM(B) = Σ budgets_+i exactly.
+    # Equality holds; fp rounding errors are the only drift source.
+    # ±1 EUR tolerance covers float64 noise.
     # If the per-year formula is later changed to wrap each cell in
     # `ROUND(..., 0)` (e.g. to align with the Yearly total +i convention),
     # bump this tolerance to `len(groups)` EUR to accommodate ±0.5 EUR per year.

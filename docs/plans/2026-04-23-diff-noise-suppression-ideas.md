@@ -1,6 +1,10 @@
 # Diff Script Noise-Suppression — Ideas Seed
 
-**Status**: SEED for separate brainstorm — not yet designed. Captured during the Aiko-port session on 2026-04-23 to make sure the observations are not lost.
+**Status**: BRAINSTORMED 2026-04-23 → resolved into two design docs:
+- **Stage 1** (D + A + C — bug fix, normalizers, schema additions): `docs/plans/2026-04-23-diff-noise-suppression-stage-1-design.md` — ready for `/impag`.
+- **Stage 2** (B1 + B2 — structural-shift detection): `docs/plans/2026-04-23-diff-noise-suppression-stage-2-design.md` — skeleton; full design deferred to a follow-up brainstorm after Stage 1 ships.
+
+Original status (pre-brainstorm): SEED for separate brainstorm — not yet designed. Captured during the Aiko-port session on 2026-04-23 to make sure the observations are not lost.
 **Source script**: `scripts/xlsx_structural_diff.py` (+ `tests/test_xlsx_structural_diff.py`)
 **Triggered by**: `diff/diff_result.json` (220 KB) where ≥99% of reported changes were noise that had to be filtered downstream.
 

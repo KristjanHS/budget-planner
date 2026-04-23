@@ -195,6 +195,30 @@ def test_plan_forecast_variance_red_cf(pf):
     )
 
 
+def test_plan_forecast_variance_plus_i_red_cf(pf):
+    """Red CF rule mirrors onto the Variance +i column (T4 review-fix)."""
+    vcols = val_columns(PROJECT_MONTHS)
+    diff_pi_col = col_letter(vcols["diff_plus_i"])
+
+    red_rules = 0
+    for cf_range in pf.conditional_formatting:
+        rng_str = str(cf_range)
+        if diff_pi_col not in rng_str:
+            continue
+        rules = pf.conditional_formatting[cf_range]
+        for rule in rules:
+            assert isinstance(rule, Rule)
+            fill = getattr(rule.dxf, "fill", None) if rule.dxf else None
+            if fill is None:
+                continue
+            bg = getattr(fill.bgColor, "rgb", None)
+            if bg and "C7CE" in str(bg).upper():
+                red_rules += 1
+    assert red_rules >= 1, (
+        f"Expected ≥1 red CF rule on variance +i col {diff_pi_col}"
+    )
+
+
 def test_plan_forecast_total_row_sums_wp_rows(pf):
     """TOTAL row per-month formula sums the WP rows above it."""
     # Locate WP rows + total row by scanning col A.

@@ -247,7 +247,7 @@ def test_roster_has_grade_and_rate_columns():
     _wb, ws, layout = _build_with_grades()
     header_row = layout["roster_header_row"]
     assert ws.cell(header_row, 3).value == "Grade"
-    assert ws.cell(header_row, 4).value == "Rate (EUR/PM)"
+    assert ws.cell(header_row, 4).value == "Rate (EUR/PM) -i"
     first = layout["roster_first_row"]
     # Grade is blue user input.
     grade_font = str(ws.cell(first, 3).font.color.rgb).upper()
@@ -468,41 +468,66 @@ def test_config_externals_data_rows():
         assert "0000FF" in str(ws.cell(row, 1).font.color.rgb)
 
 
-def test_config_wp_budget_expanded_to_10_cols():
-    """WP Budget now has 10 columns (Start/End/Type merged in); table ref covers A:J."""
+def test_config_wp_budget_expanded_to_11_cols():
+    """WP Budget has 11 columns (Budget -i + Budget +i + Start/End/Type); table ref covers A:K."""
     _wb, ws, layout = _build_with_assignments()
-    # Check header row has 10 column labels
     header_row = layout["wp_header_row"]
-    assert ws.cell(header_row, 6).value == "Assigned PM"
-    assert ws.cell(header_row, 7).value == "Variance"
-    assert ws.cell(header_row, 8).value == "Start"
-    assert ws.cell(header_row, 9).value == "End"
-    assert ws.cell(header_row, 10).value == "Type"
-    # Table ref covers A:J
+    # Col 5/6 = Budget -i (orange, formula) / Budget +i (green, blue-input).
+    assert ws.cell(header_row, 5).value == "Budget -i"
+    assert ws.cell(header_row, 6).value == "Budget +i"
+    # Assignment/variance/schedule cols shift right by one.
+    assert ws.cell(header_row, 7).value == "Assigned PM"
+    assert ws.cell(header_row, 8).value == "Variance"
+    assert ws.cell(header_row, 9).value == "Start"
+    assert ws.cell(header_row, 10).value == "End"
+    assert ws.cell(header_row, 11).value == "Type"
+    # Table ref covers A:K
     tables = list(ws.tables.values())
     assert len(tables) == 1
     table_ref = tables[0].ref
-    assert table_ref.endswith(f"J{layout['wp_last_row']}")
+    assert table_ref.endswith(f"K{layout['wp_last_row']}")
 
 
 def test_config_wp_budget_assigned_pm_formula():
-    """WP Budget col F has SUMIFS formula referencing assign named ranges."""
+    """WP Budget col G has SUMIFS formula referencing assign named ranges."""
     _wb, ws, layout = _build_with_assignments()
     first = layout["wp_first_row"]
-    val = str(ws.cell(first, 6).value)
+    val = str(ws.cell(first, 7).value)
     assert "SUMIFS" in val
     assert "assign_ftes" in val
     assert "assign_wps" in val
 
 
 def test_config_wp_budget_variance_formula():
-    """WP Budget col G = C - F (FTE Budget minus Assigned PM)."""
+    """WP Budget col H = C - G (FTE Budget minus Assigned PM)."""
     _wb, ws, layout = _build_with_assignments()
     first = layout["wp_first_row"]
-    val = str(ws.cell(first, 7).value)
-    # Should reference col C (FTE) and col F (Assigned PM) in same row
+    val = str(ws.cell(first, 8).value)
+    # Should reference col C (FTE) and col G (Assigned PM) in same row
     assert f"C{first}" in val
-    assert f"F{first}" in val
+    assert f"G{first}" in val
+
+
+def test_config_wp_budget_minus_i_is_derived_from_plus_i():
+    """Budget -i (col E) is a black-formula = Budget +i / 1.25."""
+    _wb, ws, layout = _build_with_assignments()
+    first = layout["wp_first_row"]
+    val = str(ws.cell(first, 5).value)
+    assert val.startswith("="), f"Budget -i should be a formula, got {val!r}"
+    assert f"F{first}/1.25" in val
+    # Blue-input Budget +i value seeded from FTE × Rate × 1.25.
+    plus_i = ws.cell(first, 6).value
+    assert isinstance(plus_i, (int, float)) and plus_i > 0
+
+
+def test_config_wp_budget_with_indirect_named_range():
+    """``wp_budget_with_indirect`` named range targets the Budget +i column (F)."""
+    wb, _ws, layout = _build_with_assignments()
+    assert "wp_budget_with_indirect" in wb.defined_names
+    attr = wb.defined_names["wp_budget_with_indirect"].attr_text
+    assert (
+        f"Config!$F${layout['wp_first_row']}:$F${layout['wp_last_row']}" in attr
+    ), f"unexpected named-range target: {attr!r}"
 
 
 def test_config_new_named_ranges():

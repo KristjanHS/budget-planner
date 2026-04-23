@@ -10,7 +10,8 @@ from budget_planner.layout import (
     ConfigParamRows,
     SHEET_CONFIG,
     SECTION_HEADER_LABELS,
-    COL_WP_FTE, COL_WP_RATE, COL_WP_CEILING,
+    COL_WP_FTE, COL_WP_RATE,
+    COL_WP_BUDGET_MINUS_I, COL_WP_BUDGET_PLUS_I,
     COL_WP_ASSIGNED_PM, COL_WP_VARIANCE,
     COL_WP_START, COL_WP_END, COL_WP_TYPE, WP_BUDGET_LAST_COL,
     COL_ROSTER_FTE, COL_ROSTER_GRADE, COL_ROSTER_RATE, COL_ROSTER_PRIORITY,
@@ -32,6 +33,8 @@ from budget_planner.styles import (
     SECTION_FILL,
     TITLE_FONT,
     LIGHT_BLUE_FILL,
+    WITH_INDIRECT_HEADER_FILL,
+    WITHOUT_INDIRECT_HEADER_FILL,
     auto_fit_columns,
     CF_YELLOW_FILL,
     CF_RED_FILL,
@@ -90,27 +93,43 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
     style_cell(ws, budget_section_row, 1, value=SECTION_HEADER_LABELS["wp_budget"],
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
-    # Column headers
+    # Column headers. EUR-bearing columns carry +i / -i suffix and green/orange
+    # fill per the indirect-view convention (docs/grant-domain.md § Indirect view).
     budget_headers = [
-        "WP ID", "WP Name", "FTE Budget", "Rate (€/PM)", "Ceiling (€)",
-        "Assigned PM", "Variance", "Start", "End", "Type",
+        ("WP ID", LIGHT_BLUE_FILL),
+        ("WP Name", LIGHT_BLUE_FILL),
+        ("FTE Budget", LIGHT_BLUE_FILL),
+        ("Rate (€/PM) -i", WITHOUT_INDIRECT_HEADER_FILL),
+        ("Budget -i", WITHOUT_INDIRECT_HEADER_FILL),
+        ("Budget +i", WITH_INDIRECT_HEADER_FILL),
+        ("Assigned PM", LIGHT_BLUE_FILL),
+        ("Variance", LIGHT_BLUE_FILL),
+        ("Start", LIGHT_BLUE_FILL),
+        ("End", LIGHT_BLUE_FILL),
+        ("Type", LIGHT_BLUE_FILL),
     ]
-    for col, hdr in enumerate(budget_headers, start=1):
+    for col, (hdr, fill) in enumerate(budget_headers, start=1):
         style_cell(ws, budget_header_row, col, value=hdr,
-                   font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
+                   font=HEADER_FONT, fill=fill, alignment=CENTER)
     _apply_header_comments(ws, budget_header_row, {
         COL_WP_FTE: (
             "Total person-months budgeted for this WP across its entire "
             "active period. Blue = user input."
         ),
         COL_WP_RATE: (
-            "EUR per person-month for this WP. Overrides the project default "
-            "rate. Blue = user input (can also be a formula referencing the "
-            "grade-rates table)."
+            "EUR per person-month for this WP (without indirect). Overrides "
+            "the project default rate. Blue = user input (can also be a "
+            "formula referencing the grade-rates table)."
         ),
-        COL_WP_CEILING: (
-            "Auditor-visible budget cap in EUR. Formula: FTE Budget × Rate. "
-            "Black = calculated — don't edit."
+        COL_WP_BUDGET_MINUS_I: (
+            "Budget without 25% EU indirect. Formula: Budget +i / 1.25. "
+            "Black = calculated — don't edit. Used for accounting-feed "
+            "reconciliation against the without-indirect monthly grid."
+        ),
+        COL_WP_BUDGET_PLUS_I: (
+            "Grant-agreement budget with 25% EU indirect (authoritative "
+            "external number, e.g. 1,625,000 for a €1.3M direct WP). "
+            "Blue = user input."
         ),
         COL_WP_ASSIGNED_PM: (
             "Total person-months committed to this WP across all assignment "
@@ -163,20 +182,31 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
                 wp_rate = default_rate
             style_cell(ws, row_idx, COL_WP_RATE, value=wp_rate, font=BLUE_INPUT,
                        fmt="€#,##0", border=False)
-        # Col E: Ceiling (€) — formula = FTE * Rate
-        fte_cl = get_column_letter(COL_WP_FTE)
-        rate_cl = get_column_letter(COL_WP_RATE)
-        style_cell(ws, row_idx, COL_WP_CEILING, font=BLACK_FORMULA, fmt="€#,##0",
-                   border=False).value = f"={fte_cl}{row_idx}*{rate_cl}{row_idx}"
-        # Col F: Assigned PM — SUMIFS over assignment section
+        # Col E: Budget -i (€) — black-formula = Budget +i / 1.25 (orange fill).
+        # Col F: Budget +i (€) — blue-input authoritative grant-agreement value
+        # (green fill). Fresh builds seed from FTE × Rate × 1.25 so the default
+        # numeric output at col E matches legacy ``FTE × Rate`` chain; existing
+        # rebuilds replay whatever value the reader parsed/migrated.
+        plus_i_cl = get_column_letter(COL_WP_BUDGET_PLUS_I)
+        style_cell(ws, row_idx, COL_WP_BUDGET_MINUS_I, font=BLACK_FORMULA,
+                   fmt="€#,##0", border=False).value = (
+            f"={plus_i_cl}{row_idx}/1.25"
+        )
+        default_plus_i = float(wp.get("fte", 0)) * float(
+            wp.get("rate") if isinstance(wp.get("rate"), (int, float)) else default_rate
+        ) * 1.25
+        plus_i_value = wp.get("budget_plus_i", round(default_plus_i))
+        style_cell(ws, row_idx, COL_WP_BUDGET_PLUS_I, value=plus_i_value,
+                   font=BLUE_INPUT, fmt="€#,##0", border=False)
+        # Col G: Assigned PM — SUMIFS over assignment section
         style_cell(ws, row_idx, COL_WP_ASSIGNED_PM, font=BLACK_FORMULA, fmt="0.00",
                    border=False).value = f"=SUMIFS(assign_ftes,assign_wps,A{row_idx})"
-        # Col G: Variance — FTE Budget minus Assigned PM
+        # Col H: Variance — FTE Budget minus Assigned PM
         fte_cl_g = get_column_letter(COL_WP_FTE)
         apm_cl = get_column_letter(COL_WP_ASSIGNED_PM)
         style_cell(ws, row_idx, COL_WP_VARIANCE, font=BLACK_FORMULA, fmt="0.00",
                    border=False).value = f"={fte_cl_g}{row_idx}-{apm_cl}{row_idx}"
-        # Cols H/I/J: Start, End, Type — single-range WP schedule (blue input)
+        # Cols I/J/K: Start, End, Type — single-range WP schedule (blue input)
         style_cell(ws, row_idx, COL_WP_START, value=int(wp["start"]),
                    font=BLUE_INPUT, fmt="0", border=False)
         style_cell(ws, row_idx, COL_WP_END, value=int(wp["end"]),
@@ -227,10 +257,15 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
         f"=SUM({fte_cl}{budget_first_data_row}:{fte_cl}{budget_last_data_row})"
     )
     style_cell(ws, budget_total_row, COL_WP_RATE, "", fill=LIGHT_BLUE_FILL)
-    ceil_cl = get_column_letter(COL_WP_CEILING)
-    style_cell(ws, budget_total_row, COL_WP_CEILING, font=BLACK_FORMULA,
+    minus_i_cl = get_column_letter(COL_WP_BUDGET_MINUS_I)
+    style_cell(ws, budget_total_row, COL_WP_BUDGET_MINUS_I, font=BLACK_FORMULA,
                fill=LIGHT_BLUE_FILL, fmt="€#,##0").value = (
-        f"=SUM({ceil_cl}{budget_first_data_row}:{ceil_cl}{budget_last_data_row})"
+        f"=SUM({minus_i_cl}{budget_first_data_row}:{minus_i_cl}{budget_last_data_row})"
+    )
+    plus_i_cl = get_column_letter(COL_WP_BUDGET_PLUS_I)
+    style_cell(ws, budget_total_row, COL_WP_BUDGET_PLUS_I, font=BLACK_FORMULA,
+               fill=LIGHT_BLUE_FILL, fmt="€#,##0").value = (
+        f"=SUM({plus_i_cl}{budget_first_data_row}:{plus_i_cl}{budget_last_data_row})"
     )
     apm_cl = get_column_letter(COL_WP_ASSIGNED_PM)
     style_cell(ws, budget_total_row, COL_WP_ASSIGNED_PM, font=BLACK_FORMULA,
@@ -290,8 +325,8 @@ def _write_roster_section(ws, start_row, team):
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
     style_cell(ws, r, COL_ROSTER_GRADE, "Grade", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, r, COL_ROSTER_RATE, "Rate (EUR/PM)", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    style_cell(ws, r, COL_ROSTER_RATE, "Rate (EUR/PM) -i", font=HEADER_FONT,
+               fill=WITHOUT_INDIRECT_HEADER_FILL, alignment=CENTER)
     priority_header_cell = style_cell(
         ws, r, COL_ROSTER_PRIORITY, "Priority", font=HEADER_FONT,
         fill=LIGHT_BLUE_FILL, alignment=CENTER,
@@ -393,8 +428,8 @@ def _write_rate_by_grade_section(ws, start_row, grade_rates):
     grade_header_row = grade_section_row + 1
     style_cell(ws, grade_header_row, 1, "Grade", font=HEADER_FONT,
                fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    style_cell(ws, grade_header_row, 2, "Rate (EUR/PM)", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    style_cell(ws, grade_header_row, 2, "Rate (EUR/PM) -i", font=HEADER_FONT,
+               fill=WITHOUT_INDIRECT_HEADER_FILL, alignment=CENTER)
 
     grade_first_row = grade_header_row + 1
     grade_names = list(grade_rates.keys())
@@ -841,6 +876,19 @@ def build_config_sheet(ws, wb, project_params, work_packages,
     # month-cleanup-design.md. Derived names `months_elapsed_hours`,
     # `months_elapsed_eur`, and `reconciled_through_month` were dropped; each
     # callsite now inlines `MAX(1, …)` / `MIN(…, …)` directly.
+    # WP Budget +i column — authoritative with-indirect EUR per WP, consumed
+    # by every sheet that reports a with-indirect budget (Actuals, Plan-Forecast,
+    # Timelog Plan in later stages).
+    wp_budget_plus_i_col_letter = get_column_letter(COL_WP_BUDGET_PLUS_I)
+    wb.defined_names.add(DefinedName(
+        "wp_budget_with_indirect",
+        attr_text=(
+            f"{SHEET_CONFIG}!"
+            f"${wp_budget_plus_i_col_letter}${budget_layout['wp_first_row']}:"
+            f"${wp_budget_plus_i_col_letter}${budget_layout['wp_last_row']}"
+        ),
+    ))
+
     version_stamp_row = param_rows["Version Stamp"]
     wb.defined_names.add(DefinedName(
         "version_stamp",

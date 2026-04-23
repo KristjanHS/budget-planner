@@ -56,6 +56,15 @@ MONTH_COL_START = 3
 # duplicated only once per person — on the summary row.
 TIMELOG_MONTH_COL_START = 2   # col B
 
+# PER-WP SUMMARY base-column span: A..H (8 cols: WP code + 7 metrics).
+# Year cols (``Y{yyyy} +i``) start at TIMELOG_WP_SUMMARY_BASE_LAST_COL + 1 = I.
+TIMELOG_WP_SUMMARY_BASE_LAST_COL = 8
+
+# ``Yearly total +i`` / ``Yearly Budget +i`` row labels sit at col H (last
+# base col of PER-WP SUMMARY), immediately left of the per-year breakdown
+# cols (I..). Shift from col A decided in plan D9 (2026-04-22).
+TIMELOG_YEARLY_LABEL_COL = 8
+
 # ── Section header contract ──
 # Every labelled section on the Config sheet uses: title row, header row,
 # then data starting at offset +2. Readers rely on this exact layout.
@@ -73,18 +82,28 @@ SECTION_HEADER_LABELS = {
 }
 
 # ── Config sheet column constants ──
-# WP Budget section (Config sheet)
+# WP Budget section (Config sheet). Indirect-view layout:
+#   Col 5 = Budget -i (black-formula = Budget +i / 1.25, without 25% indirect).
+#   Col 6 = Budget +i (blue-input, user types grant-agreement with-indirect gross).
+# Col 5's numeric value matches the legacy ``Ceiling = FTE * Rate`` output so
+# deferred consumers (Summary/Trends/Plan) that read by position keep working.
 COL_WP_ID = 1
 COL_WP_NAME = 2
 COL_WP_FTE = 3
 COL_WP_RATE = 4
-COL_WP_CEILING = 5
-COL_WP_ASSIGNED_PM = 6  # SUMIFS formula: total assigned PM per WP
-COL_WP_VARIANCE = 7     # FTE Budget - Assigned PM
-COL_WP_START = 8        # project-month start (blue input, 1-indexed)
-COL_WP_END = 9          # project-month end (blue input, 1-indexed)
-COL_WP_TYPE = 10        # distribution curve (blue input, data-validation list)
-WP_BUDGET_LAST_COL = 10  # for table ref / section header merge
+COL_WP_BUDGET_MINUS_I = 5   # black-formula = Budget +i / 1.25 (orange header)
+COL_WP_BUDGET_PLUS_I = 6    # blue-input, user types with-indirect EUR (green header)
+COL_WP_ASSIGNED_PM = 7  # SUMIFS formula: total assigned PM per WP
+COL_WP_VARIANCE = 8     # FTE Budget - Assigned PM
+COL_WP_START = 9        # project-month start (blue input, 1-indexed)
+COL_WP_END = 10         # project-month end (blue input, 1-indexed)
+COL_WP_TYPE = 11        # distribution curve (blue input, data-validation list)
+WP_BUDGET_LAST_COL = 11  # for table ref / section header merge
+
+# Compat alias for out-of-T1-scope consumers (actuals.py, tests/test_layout.py)
+# that still reference the legacy ``COL_WP_CEILING`` name. Resolves to the same
+# column as ``COL_WP_BUDGET_MINUS_I``. Remove when all sheets migrate.
+COL_WP_CEILING = COL_WP_BUDGET_MINUS_I
 
 # Team Roster section (Config sheet)
 COL_ROSTER_FTE = 2

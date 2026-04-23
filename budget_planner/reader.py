@@ -1,6 +1,8 @@
 """Read existing workbooks for round-trip updates."""
 
+import os
 import re
+import warnings
 from collections.abc import Iterator
 from decimal import Decimal
 from typing import Literal, overload
@@ -16,6 +18,8 @@ from budget_planner.layout import (
     SECTION_HEADER_ROWS,
     COL_WP_FTE,
     COL_WP_RATE,
+    COL_WP_BUDGET_MINUS_I,
+    COL_WP_BUDGET_PLUS_I,
     COL_WP_START,
     COL_WP_END,
     COL_WP_TYPE,
@@ -344,13 +348,29 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
     project_params["vacation_month_num"] = _read_vacation_month_num(ws)
 
     # WP Budget table — find "WP BUDGET" section header. Under the single-range
-    # schema, each row carries id/name/fte/rate AND start/end/type (cols H/I/J).
+    # schema, each row carries id/name/fte/rate AND start/end/type (cols I/J/K
+    # post-indirect-view restructure; cols H/I/J pre-restructure).
     wp_section = _find_header_row(ws, SECTION_HEADER_LABELS["wp_budget"])
     work_packages: list[dict] = []
     seen_ids: set[str] = set()
     valid_types = {"flat", "front-loaded", "bell", "back-loaded"}
     project_months = int(project_params.get("months") or 0)
+
+    # Detect legacy vs indirect-view layout by inspecting the header row of the
+    # WP BUDGET section. Pre-restructure header at col 5 was "Ceiling (€)" and
+    # there was no col 6 Budget. Post-restructure: col 5 = "Budget -i",
+    # col 6 = "Budget +i" (blue-input authoritative with-indirect EUR).
+    # Legacy workbooks: migrate by computing Budget +i = FTE × Rate × 1.25, and
+    # Start/End/Type live one column to the left (cols 8/9/10) because the new
+    # Budget +i column hasn't shifted them right yet.
+    header_row = wp_section + 1
+    col5_header = str(ws.cell(header_row, COL_WP_BUDGET_MINUS_I).value or "").strip()
+    is_legacy_ceiling_layout = "Ceiling" in col5_header and "Budget -i" not in col5_header
+    start_col = COL_WP_START - 1 if is_legacy_ceiling_layout else COL_WP_START
+    end_col = COL_WP_END - 1 if is_legacy_ceiling_layout else COL_WP_END
+    type_col = COL_WP_TYPE - 1 if is_legacy_ceiling_layout else COL_WP_TYPE
     r = _data_row_after(wp_section)
+    legacy_rows: list[tuple[str, float]] = []  # (wp_id, computed budget_plus_i) — for post-loop sanity check
     while r <= ws.max_row:
         wp_id = ws.cell(r, 1).value
         col_b = ws.cell(r, 2).value
@@ -369,13 +389,13 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
                 f"range."
             )
         seen_ids.add(id_str)
-        start_val = ws.cell(r, COL_WP_START).value
-        end_val = ws.cell(r, COL_WP_END).value
-        type_val = ws.cell(r, COL_WP_TYPE).value
+        start_val = ws.cell(r, start_col).value
+        end_val = ws.cell(r, end_col).value
+        type_val = ws.cell(r, type_col).value
         if start_val is None or end_val is None:
             raise ValueError(
-                f"WP '{id_str}' is missing Start or End (cols H/I of WP "
-                f"BUDGET). Populate both — blank cells are not a valid "
+                f"WP '{id_str}' is missing Start or End columns in WP "
+                f"BUDGET. Populate both — blank cells are not a valid "
                 f"placeholder under the single-range schema."
             )
         start_int = int(start_val)
@@ -396,23 +416,57 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
                 f"WP '{id_str}' has invalid Type {type_str!r}. "
                 f"Must be one of: {sorted(valid_types)}."
             )
+        fte_val = float(ws.cell(r, COL_WP_FTE).value or 0)
+        rate_numeric = _safe_float(rate_cell, 6500)
+        if is_legacy_ceiling_layout:
+            # Legacy Ceiling cell is the FTE×Rate formula — numeric value equals
+            # fte*rate. Migrate to Budget +i by applying the 25% indirect uplift.
+            budget_plus_i = round(fte_val * rate_numeric * 1.25)
+            legacy_rows.append((id_str, budget_plus_i))
+        else:
+            # Post-restructure: read blue-input Budget +i cell directly.
+            plus_i_raw = ws.cell(r, COL_WP_BUDGET_PLUS_I).value
+            budget_plus_i = round(_safe_float(plus_i_raw, fte_val * rate_numeric * 1.25))
         work_packages.append(
             {
                 "id": id_str,
                 "name": str(col_b or ""),
-                "fte": float(ws.cell(r, COL_WP_FTE).value or 0),
+                "fte": fte_val,
                 # ``rate`` is the numeric coercion for downstream consumers (falls
                 # back to 6500 when the cell is a formula). ``rate_raw`` preserves
                 # the literal cell value — formula string or numeric — so that
                 # writers can restore the user's formula on round-trip.
-                "rate": _safe_float(rate_cell, 6500),
+                "rate": rate_numeric,
                 "rate_raw": rate_cell,
+                "budget_plus_i": budget_plus_i,
                 "start": start_int,
                 "end": end_int,
                 "type": type_str,
             }
         )
         r += 1
+
+    # Sanity guard for legacy migration: double-applying ×1.25 produces
+    # values >€3M per WP. Require explicit env-flag opt-in before proceeding
+    # so a mis-applied migration doesn't silently inflate the grant budget.
+    if is_legacy_ceiling_layout:
+        over_cap = [(wp_id, amount) for wp_id, amount in legacy_rows if amount > 3_000_000]
+        if over_cap and os.environ.get("GRANT_ACCEPT_CEILING_MIGRATION") != "1":
+            offenders = ", ".join(f"{wp}={amount:,.0f}" for wp, amount in over_cap)
+            raise RuntimeError(
+                "Legacy Ceiling→Budget migration would seed Budget +i values "
+                f"above €3,000,000 per WP: {offenders}. This usually means the "
+                "source workbook already holds with-indirect values (double-"
+                "apply). Verify, then set GRANT_ACCEPT_CEILING_MIGRATION=1 to "
+                "override if the gross values are genuinely above €3M."
+            )
+        warnings.warn(
+            f"Migrated {len(legacy_rows)} WP Ceiling value(s) to Budget +i "
+            "(×1.25 uplift). Header and formula in col 5 now derive Budget -i; "
+            "col 6 holds the authoritative with-indirect Budget +i.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     return project_params, work_packages
 

@@ -46,9 +46,12 @@ from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from budget_planner.layout import (
+    COL_WP_BUDGET_PLUS_I,
     SHEET_CONFIG,
     SHEET_TIMELOG_PLAN,
     TIMELOG_MONTH_COL_START,
+    TIMELOG_WP_SUMMARY_BASE_LAST_COL,
+    TIMELOG_YEARLY_LABEL_COL,
     cell_ref,
     month_range_ref,
 )
@@ -68,6 +71,7 @@ from budget_planner.styles import (
     SECTION_FONT,
     TITLE_FONT,
     VACATION_FILL,
+    WITH_INDIRECT_HEADER_FILL,
     col_letter,
     sized_comment,
     style_cell,
@@ -94,14 +98,17 @@ _PERSON_SUMMARY_RATE_COL = (
 )  # col H
 
 # PER-WP SUMMARY metric columns live at A..H (WP code + 7 metrics).
-# Phase 3 appends dynamic "Y{yyyy} €" cols right of col H — one per calendar
+# Phase 3 appends dynamic "Y{yyyy} +i" cols right of col H — one per calendar
 # year spanned by the project. See `_year_col_specs`.
 _WP_SUMMARY_BASE_HEADERS = [
-    "WP code", "Ceiling €", "Assigned €", "Buffer €",
+    "WP code", "Budget €", "Assigned €", "Buffer €",
     "Assigned months", "WP sched months", "Burn rate needed",
     "Any out-of-window?",
 ]
 _WP_SUMMARY_BASE_LAST_COL = len(_WP_SUMMARY_BASE_HEADERS)  # 8
+# Drift guard: layout.py exposes this boundary publicly for tests and future
+# cross-module callers; the header-count derivation here must stay in sync.
+assert _WP_SUMMARY_BASE_LAST_COL == TIMELOG_WP_SUMMARY_BASE_LAST_COL
 
 # Toggle cell coordinates on row 2. Pair (label col, value col) = (9, 10).
 _TOGGLE_LABEL_COL = 9
@@ -252,7 +259,7 @@ def build_timelog_plan_sheet(
         grid_person_first_row + num_persons - 1 if num_persons > 0
         else grid_person_first_row - 1
     )
-    # Monthly total € row sits directly under the last person row (no spacer,
+    # Monthly total +i row sits directly under the last person row (no spacer,
     # same outline group). Only emitted when there are person rows.
     grid_total_row = grid_person_last_row + 1 if num_persons > 0 else None
 
@@ -337,12 +344,19 @@ def build_timelog_plan_sheet(
         last_col=wp_summary_last_col,
     )
     wp_summary_headers = _WP_SUMMARY_BASE_HEADERS + [
-        f"Y{spec.year} €" for spec in year_specs
+        f"Y{spec.year} +i" for spec in year_specs
     ]
     for i, hdr in enumerate(wp_summary_headers):
+        # Year-col headers (i ≥ _WP_SUMMARY_BASE_LAST_COL) carry
+        # WITH_INDIRECT_HEADER_FILL — per-WP year cells display +i
+        # via ×1.25 wrap at the SUMPRODUCT leaf (T7.3). Base-col
+        # headers (A..H) retain neutral fill per D8 — their semantics
+        # stay -i for T7 scope.
+        is_year_col = i >= _WP_SUMMARY_BASE_LAST_COL
         style_cell(
             ws, wp_summary_header_row, 1 + i,
             value=hdr, font=HEADER_FONT, alignment=CENTER,
+            fill=WITH_INDIRECT_HEADER_FILL if is_year_col else None,
         )
     cfg_wp_first_row = config_layout["wp_first_row"]
     rate_col_range = (
@@ -472,7 +486,7 @@ def build_timelog_plan_sheet(
             cfg_row=cfg_row,
         )
 
-    # ── Monthly total € row (under TIMELOG GRID, same outline group) ──
+    # ── Monthly total +i row (under TIMELOG GRID, same outline group) ──
     if grid_total_row is not None:
         _write_monthly_total_row(
             ws, row=grid_total_row,
@@ -669,10 +683,10 @@ def _build_wps(
     """Convert config WPs into solver WP records.
 
     Single-range schema: each WP carries its own ``start``/``end``/``type``
-    directly. ``ceiling_eur`` mirrors the sheet's displayed
-    `Config!E{wp_row}` = ``FTE × Rate``. Per-WP rate is taken from
-    ``wp["rate"]`` when present (post-reader rebuild path); on init the
-    seed WP dicts may lack the key, so we fall back to
+    directly. ``ceiling_eur`` (solver-internal field, pre-T1 naming) mirrors
+    the Budget -i position at ``Config!E{wp_row}`` = ``FTE × Rate``. Per-WP
+    rate is taken from ``wp["rate"]`` when present (post-reader rebuild
+    path); on init the seed WP dicts may lack the key, so we fall back to
     ``project_params["rate"]`` — the same default used by
     ``config_sheet.py`` to populate the sheet.
     """
@@ -801,7 +815,7 @@ class _YearColSpec:
 def _year_col_specs(
     project_start, project_months: int, month_col_start: int,
 ) -> list[_YearColSpec]:
-    """Compute the dynamic Y{yyyy} € column specs for PER-WP SUMMARY."""
+    """Compute the dynamic Y{yyyy} +i column specs for PER-WP SUMMARY."""
     specs: list[_YearColSpec] = []
     for group_start, span in _calendar_year_groups(project_start, project_months):
         cal_date = project_start + relativedelta(months=group_start)
@@ -935,38 +949,65 @@ def _write_yearly_rows(
     year_specs: list["_YearColSpec"],
     cfg_wp_first_row: int,
 ) -> None:
-    """Write the Yearly total € and Yearly budget € rows under PER-WP SUMMARY.
+    """Write the Yearly total +i and Yearly Budget +i rows under PER-WP SUMMARY.
 
-    - Col A: row label (HEADER_FONT).
-    - Col C: cross-check sum — total Assigned € (yearly_total_row) or total
-      Ceiling € (yearly_budget_row) across all WPs. Divergence from the row's
-      per-year sum flags formula drift.
-    - Cols B, D-H: intentionally blank.
+    - Col A: blank. (Pre-D9 layout placed the row label here; shifted to col H
+      2026-04-22 so the label sits adjacent-left to the per-year breakdown.)
+    - Col H (``TIMELOG_YEARLY_LABEL_COL``): row label (HEADER_FONT) with
+      ``WITH_INDIRECT_HEADER_FILL`` — the per-year cells on this row are +i,
+      so the label carries the +i header fill.
+    - Col C: cross-check sum (across-WP SUM of the PER-WP SUMMARY column
+      that feeds the row's aggregate). Both rows carry ``*1.25`` to flip to
+      +i parity with the per-year cells on the same row:
+        * ``yearly_total_row`` col C = ``=SUM(C{first}:C{last})*1.25``.
+          PER-WP SUMMARY col C (Assigned €) is -i; the per-year cells on
+          this row sum PER-WP SUMMARY year-cells which are wrapped in
+          ×1.25 at the leaf SUMPRODUCT (T7.3 display-layer wrap). ×1.25
+          on the SUM brings the cross-check to +i parity.
+        * ``yearly_budget_row`` col C = ``=SUM(B{first}:B{last})*1.25``.
+          Per-year cells on this row xref Config col F (Budget +i) via
+          ``COL_WP_BUDGET_PLUS_I``, so the per-year sum is +i; ×1.25 on
+          the PER-WP SUMMARY col B SUM (col B is -i via Config col E)
+          brings the cross-check to +i parity.
+    - Cols B, D-G: intentionally blank.
     - Per-year cols (I…):
       * yearly_total_row: =SUM(<year_col>{W1}:<year_col>{Wn}) — stacks the
-        per-WP Y{yyyy} € cells for that year.
-      * yearly_budget_row: build-time term-sum ``Σ prop_ky × Config!E{wp_row}``
-        where ``prop_ky = months_of_wpk_in_year_y / total_sched_months_for_wpk``
-        for WPs overlapping year y, zero-term WPs omitted (design §5 D16).
-        Formula stays live to Config FTE/rate changes; rebuild re-derives the
-        proportions when the WP schedule changes.
+        per-WP Y{yyyy} +i cells for that year (each cell is +i via the T7.3
+        ×1.25 wrap at the display layer).
+      * yearly_budget_row: build-time term-sum
+        ``Σ prop_ky × Config!F{wp_row}`` — Config col F = Budget +i
+        (``COL_WP_BUDGET_PLUS_I``). Budget +i is the authoritative +i source
+        per D1/D4; no ×1.25 applied.
+        ``prop_ky = months_of_wpk_in_year_y / total_sched_months_for_wpk``
+        for WPs overlapping year y; zero-term WPs omitted (design §5 D16).
+        Formula stays live to Config edits; rebuild re-derives the proportions
+        when the WP schedule changes.
     """
     style_cell(
-        ws, yearly_total_row, 1, value="Yearly total €",
-        font=HEADER_FONT, alignment=CENTER,
+        ws, yearly_total_row, TIMELOG_YEARLY_LABEL_COL, value="Yearly total +i",
+        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,
     )
     style_cell(
-        ws, yearly_budget_row, 1, value="Yearly budget €",
-        font=HEADER_FONT, alignment=CENTER,
+        ws, yearly_budget_row, TIMELOG_YEARLY_LABEL_COL, value="Yearly Budget +i",
+        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,
     )
 
-    # Col C cross-checks.
+    # Col C cross-checks. Both rows wrap in ×1.25 to reach +i parity with
+    # the per-year cells to their right:
+    #   - yearly_total_row: PER-WP SUMMARY col C (Assigned €) is -i. Year
+    #     cells on this row wrap SUMPRODUCT in ×1.25 at the leaf (T7.3),
+    #     so the per-year sum is +i. ×1.25 on SUM(C) brings the cross-
+    #     check to +i parity.
+    #   - yearly_budget_row: PER-WP SUMMARY col B (Budget -i = Config E)
+    #     is -i. Year cells on this row xref Config F (Budget +i, via
+    #     COL_WP_BUDGET_PLUS_I below), so the per-year sum is +i. ×1.25
+    #     on SUM(B) brings the cross-check to +i parity.
     style_cell(
         ws, yearly_total_row, 3, font=BLACK_FORMULA, fmt="€#,##0",
-    ).value = f"=SUM(C{wp_summary_first_row}:C{wp_summary_last_row})"
+    ).value = f"=SUM(C{wp_summary_first_row}:C{wp_summary_last_row})*1.25"
     style_cell(
         ws, yearly_budget_row, 3, font=BLACK_FORMULA, fmt="€#,##0",
-    ).value = f"=SUM(B{wp_summary_first_row}:B{wp_summary_last_row})"
+    ).value = f"=SUM(B{wp_summary_first_row}:B{wp_summary_last_row})*1.25"
 
     # Precompute per-WP schedule-month sets for build-time overlap math.
     # Single-range schema: each WP is one contiguous interval.
@@ -1002,8 +1043,10 @@ def _write_yearly_rows(
             if months_in_year <= 0:
                 continue
             prop = months_in_year / total_months
-            ceiling_ref = cell_ref(SHEET_CONFIG, cfg_wp_first_row + wi, 5)
-            terms.append(f"{prop}*{ceiling_ref}")
+            budget_ref = cell_ref(
+                SHEET_CONFIG, cfg_wp_first_row + wi, COL_WP_BUDGET_PLUS_I,
+            )
+            terms.append(f"{prop}*{budget_ref}")
         if terms:
             style_cell(
                 ws, yearly_budget_row, col, font=BLACK_FORMULA, fmt="€#,##0",
@@ -1027,16 +1070,18 @@ def _write_monthly_total_row(
     summary_person_last_row: int,
     vacation_months_project: frozenset[int],
 ) -> None:
-    """Write the Monthly total € row under the TIMELOG GRID.
+    """Write the Monthly total +i row under the TIMELOG GRID.
 
-    Each month cell: ``=ROUND(SUMPRODUCT((col<>"")*rate_vector),0)``. Non-empty
-    grid cells (WP codes) contribute their person's rate; empty cells (incl.
-    vacation) contribute 0. Vacation-month cells additionally carry
-    VACATION_FILL for visual column continuity (formula still evaluates to 0).
+    Each month cell: ``=ROUND(SUMPRODUCT((col<>"")*rate_vector)*1.25,0)``.
+    Non-empty grid cells (WP codes) contribute their person's rate; empty
+    cells (incl. vacation) contribute 0. The ×1.25 wrap flips the display
+    to with-indirect at the leaf (rates are -i). Vacation-month cells
+    additionally carry VACATION_FILL for visual column continuity (formula
+    still evaluates to 0).
     """
     style_cell(
-        ws, row, 1, value="Monthly total €",
-        font=HEADER_FONT, alignment=CENTER,
+        ws, row, 1, value="Monthly total +i",
+        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,
     )
     rate_col_letter = get_column_letter(_PERSON_SUMMARY_RATE_COL)
     rate_range = (
@@ -1058,7 +1103,7 @@ def _write_monthly_total_row(
             fill=VACATION_FILL if is_vacation else None,
         )
         cell.value = (
-            f'=ROUND(SUMPRODUCT(({grid_col_range}<>"")*{rate_range}),0)'
+            f'=ROUND(SUMPRODUCT(({grid_col_range}<>"")*{rate_range})*1.25,0)'
         )
 
 
@@ -1078,7 +1123,7 @@ def _write_wp_summary_row(
 ) -> None:
     """Fill the per-WP-summary cells on a single WP row.
 
-    Cols A..H are the 8 base metrics; cols I.. hold one ``Y{yyyy} €`` column
+    Cols A..H are the 8 base metrics; cols I.. hold one ``Y{yyyy} +i`` column
     per calendar year spanned by the project. Year cells where the WP's
     active window does not overlap the year are blank (build-time check).
     """
@@ -1087,9 +1132,11 @@ def _write_wp_summary_row(
     # Col A: WP code (literal).
     style_cell(ws, row, 1, value=wp_code, font=BLACK_FORMULA, alignment=CENTER)
 
-    # Col B: Ceiling € — green xref to Config!E{wp_row}.
-    ceiling_ref = cell_ref(SHEET_CONFIG, cfg_wp_row, 5)
-    style_cell(ws, row, 2, font=GREEN_XREF, fmt="€#,##0").value = f"={ceiling_ref}"
+    # Col B: Budget € — green xref to Config!E{wp_row} (Budget -i position;
+    # numerically unchanged from pre-T1 Ceiling). -i semantics preserved per
+    # D9; +i flip deferred to a later polish pass.
+    budget_ref = cell_ref(SHEET_CONFIG, cfg_wp_row, 5)
+    style_cell(ws, row, 2, font=GREEN_XREF, fmt="€#,##0").value = f"={budget_ref}"
 
     # Col C: Assigned € = ROUND(SUMPRODUCT((grid="WP") * rate_vector), 0).
     # Rate vector is the PER-PERSON SUMMARY's col H over the person-row range;
@@ -1102,7 +1149,7 @@ def _write_wp_summary_row(
     else:
         style_cell(ws, row, 3, value=0, font=BLACK_FORMULA, fmt="€#,##0")
 
-    # Col D: Buffer € = Assigned − Ceiling. Positive = buffer (good);
+    # Col D: Buffer € = Assigned − Budget. Positive = buffer (good);
     # negative = shortfall (bad). CF green>0 / red<0.
     style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="€#,##0").value = (
         f"=C{row}-B{row}"
@@ -1148,11 +1195,12 @@ def _write_wp_summary_row(
     else:
         style_cell(ws, row, 8, value=0, font=BLACK_FORMULA, fmt="0")
 
-    # Cols I..: Y{yyyy} € — EUR placed by the solver in this WP × year slice.
+    # Cols I..: Y{yyyy} +i — EUR placed by the solver in this WP × year slice.
     # (Still col I on PER-WP SUMMARY — this band has 8 base cols A..H; year
     # cols start at col I. Independent of the PER-PERSON SUMMARY Rate col.)
     # Overlap with the WP's active window is checked at build time; non-
-    # overlap cells are blank. Rounded per the programme leaf-rounding rule.
+    # overlap cells are blank. ×1.25 at the display layer flips the cell to
+    # with-indirect (rates are -i); rounded per the programme leaf-rounding rule.
     for i, spec in enumerate(year_specs):
         col = _WP_SUMMARY_BASE_LAST_COL + 1 + i
         overlaps = (
@@ -1166,7 +1214,7 @@ def _write_wp_summary_row(
             )
             style_cell(ws, row, col, font=BLACK_FORMULA, fmt="€#,##0").value = (
                 f'=ROUND(SUMPRODUCT(({year_subrange}="{wp_code}")'
-                f"*{rate_col_range}),0)"
+                f"*{rate_col_range})*1.25,0)"
             )
         else:
             style_cell(ws, row, col, value="", font=BLACK_FORMULA, fmt="€#,##0")

@@ -63,10 +63,15 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
         config_ws.cell(insert_at, 2, "Extra WP")
         config_ws.cell(insert_at, 3, 1.0)
         config_ws.cell(insert_at, 4, 6500)
-        # Single-range WP schedule merged into WP BUDGET (cols H/I/J).
-        config_ws.cell(insert_at, 8, 1)          # Start
-        config_ws.cell(insert_at, 9, 24)         # End
-        config_ws.cell(insert_at, 10, "flat")    # Type
+        # Budget +i blue-input (col F = 6) — reader expects the authoritative
+        # with-indirect EUR here; seeded to FTE × Rate × 1.25 = 7500.
+        config_ws.cell(insert_at, 6, 7500)
+        # Single-range WP schedule merged into WP BUDGET (cols I/J/K post-
+        # indirect-view restructure — shifted right by one vs pre-restructure
+        # because Budget +i was inserted at col 6).
+        config_ws.cell(insert_at, 9, 1)          # Start (col I)
+        config_ws.cell(insert_at, 10, 24)        # End (col J)
+        config_ws.cell(insert_at, 11, "flat")    # Type (col K)
     elif variant == "extra_external":
         data_start = _first_data_row_after(config_ws, SECTION_LABELS["externals"])
         insert_at = data_start + 1

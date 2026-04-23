@@ -709,34 +709,35 @@ class TestRebuildRecalc:
         assert data["status"] == "success"
         assert data["total_errors"] == 0
 
-    def test_recalc_ceiling_reflects_changed_fte(self, recalc_state):
-        """After FTE change + rebuild + recalc, partner_ceiling uses new value."""
+    def test_recalc_partner_ceiling_matches_config_budget_minus_i(self, recalc_state):
+        """partner_ceiling (Plan!G1) equals SUM of the Config Budget -i column
+        after recalc. Under the indirect-view restructure (D4), Budget +i is
+        authoritative blue-input and Budget -i is the derived ``/ 1.25`` cell;
+        plan.py still aggregates col E for backwards compat with deferred
+        consumers, so partner_ceiling tracks Config Budget -i, not live FTE."""
         wb = openpyxl.load_workbook(recalc_state["path"], data_only=True)
         config = wb["Config"]
         _, wps = read_config_sheet(config)
 
-        # Find WP Budget data rows and read per-WP rates
         from budget_planner.reader import _find_header_row
         wp_section = _find_header_row(config, "WP BUDGET")
         first_wp = wp_section + 2
         expected_ceiling = 0.0
         for i in range(len(wps)):
             r = first_wp + i
-            fte = config.cell(r, 3).value
-            wp_rate = config.cell(r, 4).value
-            assert isinstance(fte, (int, float)) and isinstance(wp_rate, (int, float)), (
-                f"WP row {r}: fte={fte}, rate={wp_rate} — expected numeric after recalc"
+            minus_i = config.cell(r, 5).value  # Budget -i column
+            assert isinstance(minus_i, (int, float)), (
+                f"WP row {r}: Budget -i={minus_i} — expected numeric after recalc"
             )
-            expected_ceiling += fte * wp_rate
+            expected_ceiling += minus_i
 
         plan = wb["Plan"]
-        # partner_ceiling is Plan!G1 (compact header)
         ceiling_val = plan.cell(1, 7).value
         assert isinstance(ceiling_val, (int, float)), (
             f"partner_ceiling should be numeric after recalc, got {ceiling_val}"
         )
         assert abs(ceiling_val - expected_ceiling) < 0.01, (
-            f"Ceiling {ceiling_val} != expected {expected_ceiling}"
+            f"partner_ceiling {ceiling_val} != SUM(Budget -i) {expected_ceiling}"
         )
         wb.close()
 

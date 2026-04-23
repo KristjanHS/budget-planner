@@ -113,7 +113,7 @@ def _wp_summary_first_row(ws) -> int:
 def _iter_person_rows(ws, first_row: int):
     """Yield rows from ``first_row`` until next section title / blank / total row.
 
-    Stops at PER- section titles, blank col A, and the "Monthly total €" label
+    Stops at PER- section titles, blank col A, and the "Monthly total +i" label
     (phase-3 row that sits directly under the grid in the same outline group).
     """
     r = first_row
@@ -318,7 +318,7 @@ def test_traffic_light_formulas_wired(tlp):
 def test_wp_summary_headers_v2(tlp):
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_WP_SUMMARY) + 1
     expected = [
-        "WP code", "Ceiling €", "Assigned €", "Buffer €",
+        "WP code", "Budget €", "Assigned €", "Buffer €",
         "Assigned months", "WP sched months", "Burn rate needed",
         "Any out-of-window?",
     ]
@@ -608,16 +608,25 @@ def _expected_year_groups(project_start, project_months: int) -> list[tuple[int,
 
 
 def test_year_cols_count_and_headers(tlp, assigned_wb):
-    """Year col count = distinct calendar years spanned; headers = Y{yyyy} €."""
+    """Year col count = distinct calendar years spanned; headers = Y{yyyy} +i
+    with WITH_INDIRECT_HEADER_FILL (T7.3 display-layer +i flip)."""
+    from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
     params, _wps = _read_config(assigned_wb)
     months = params["months"]
     groups = _expected_year_groups(params["start"], months)
 
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_WP_SUMMARY) + 1
     base_cols = 8  # cols A..H hold the base metrics
+    expected_fill_rgb = WITH_INDIRECT_HEADER_FILL.fgColor.rgb
     for i, (year, _fm, _lm) in enumerate(groups):
-        got = tlp.cell(hdr_row, base_cols + 1 + i).value
-        assert got == f"Y{year} €", f"col {base_cols + 1 + i}: {got!r}"
+        cell = tlp.cell(hdr_row, base_cols + 1 + i)
+        assert cell.value == f"Y{year} +i", (
+            f"col {base_cols + 1 + i}: {cell.value!r}"
+        )
+        assert cell.fill.fgColor.rgb == expected_fill_rgb, (
+            f"col {base_cols + 1 + i}: expected WITH_INDIRECT_HEADER_FILL "
+            f"{expected_fill_rgb}, got {cell.fill.fgColor.rgb!r}"
+        )
     # No stray header past the last year col.
     trailing = tlp.cell(hdr_row, base_cols + len(groups) + 1).value
     assert trailing in (None, ""), f"unexpected header past year cols: {trailing!r}"
@@ -658,12 +667,14 @@ def test_year_cols_overlap_blanks(tlp, assigned_wb):
 
 
 def test_year_cols_sum_matches_assigned(recalced_assigned_path):
-    """Sum across year cols on each WP row ≈ that WP's Assigned €.
+    """Sum across year cols on each WP row ≈ that WP's Assigned € × 1.25.
 
+    Post-T7.3: year cells are +i (display-layer ×1.25 wrap inside
+    ROUND/SUMPRODUCT); col C Assigned € stays -i. So year-sum ≈ Assigned × 1.25.
     Each year cell is independently ROUND'd per the EUR leaf-rounding rule,
-    so the sum of rounded-per-year can differ from the rounded-overall
-    Assigned € by at most one EUR per year (round-half-even). We allow a
-    tolerance of ``num_years`` EUR.
+    so the sum of rounded-per-year can differ from the expected +i Assigned
+    by at most one EUR per year (round-half-even). We allow a tolerance of
+    ``num_years`` EUR.
     """
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
@@ -683,9 +694,10 @@ def test_year_cols_sum_matches_assigned(recalced_assigned_path):
             v = ws.cell(first + wi, base_cols + 1 + yi).value
             if isinstance(v, (int, float)):
                 year_sum += float(v)
-        assert abs(year_sum - float(assigned_eur)) <= tolerance, (
-            f"WP {wp['id']}: sum of year cols {year_sum} vs Assigned € "
-            f"{assigned_eur} (tolerance ±{tolerance})"
+        expected_plus_i = float(assigned_eur) * 1.25
+        assert abs(year_sum - expected_plus_i) <= tolerance, (
+            f"WP {wp['id']}: sum of year cols {year_sum} vs Assigned × 1.25 "
+            f"{expected_plus_i} (tolerance ±{tolerance})"
         )
         checked += 1
     assert checked > 0, "no numeric Assigned € values — recalc didn't populate"
@@ -870,16 +882,22 @@ def _monthly_total_row(ws) -> int:
 
 
 def test_monthly_total_row_present(tlp, assigned_wb):
-    """Monthly total € row sits directly under the last person row with
-    SUMPRODUCT formulas per month col."""
+    """Monthly total +i row sits directly under the last person row with
+    ROUND(SUMPRODUCT(…)*1.25,0) formulas per month col and
+    WITH_INDIRECT_HEADER_FILL on the label cell (T7.3)."""
+    from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
     months = _project_months(assigned_wb)
     m_start = TIMELOG_MONTH_COL_START
     m_end = m_start + months - 1
 
     total_row = _monthly_total_row(tlp)
-    assert tlp.cell(total_row, 1).value == "Monthly total €"
+    label_cell = tlp.cell(total_row, 1)
+    assert label_cell.value == "Monthly total +i"
+    assert (
+        label_cell.fill.fgColor.rgb == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
+    ), f"label fill {label_cell.fill.fgColor.rgb!r}"
 
-    # Every month col must carry a ROUND(SUMPRODUCT(…)) formula.
+    # Every month col must carry a ROUND(SUMPRODUCT(…)*1.25,0) formula.
     checked = 0
     for c in range(m_start, m_end + 1):
         v = str(tlp.cell(total_row, c).value or "")
@@ -887,12 +905,13 @@ def test_monthly_total_row_present(tlp, assigned_wb):
             f"col {c}: expected ROUND(SUMPRODUCT(…), got {v!r}"
         )
         assert '<>""' in v, v
+        assert "*1.25" in v, f"col {c}: expected ×1.25 wrap, got {v!r}"
         checked += 1
     assert checked == months
 
 
 def test_monthly_total_row_vacation_fill(tlp, assigned_wb):
-    """July cells on the Monthly total € row carry VACATION_FILL; non-vacation
+    """July cells on the Monthly total +i row carry VACATION_FILL; non-vacation
     month cells on the same row do NOT (bystander for selectivity)."""
     from budget_planner.styles import VACATION_FILL
     params, _wps = _read_config(assigned_wb)
@@ -928,7 +947,7 @@ def test_monthly_total_row_vacation_fill(tlp, assigned_wb):
 
 
 def test_monthly_total_vacation_zero(recalced_assigned_path):
-    """Every vacation-month cell on the Monthly total € row recalcs to 0."""
+    """Every vacation-month cell on the Monthly total +i row recalcs to 0."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
     params, _wps = _read_config(wb)
@@ -946,8 +965,9 @@ def test_monthly_total_vacation_zero(recalced_assigned_path):
 
 
 def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
-    """For each non-vacation month with ≥1 assigned person, the Monthly total €
-    cell equals the sum of those persons' Rate values."""
+    """For each non-vacation month with ≥1 assigned person, the Monthly total +i
+    cell equals round(sum of those persons' Rate values × 1.25). Rates are -i
+    per D7; display-layer ×1.25 wrap flips to +i (T7.3)."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
     params, _wps = _read_config(wb)
@@ -977,8 +997,10 @@ def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
             if v not in (None, ""):
                 expected += rate
         got = ws.cell(total_row, c).value
-        assert got == round(expected), (
-            f"month {month_num} (col {c}): expected {round(expected)}, got {got!r}"
+        expected_plus_i = round(expected * 1.25)
+        assert got == expected_plus_i, (
+            f"month {month_num} (col {c}): expected {expected_plus_i} "
+            f"(= round({expected} × 1.25)), got {got!r}"
         )
         if expected > 0:
             checked += 1
@@ -993,26 +1015,48 @@ def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
 
 def _yearly_rows(tlp) -> tuple[int, int]:
     """Return (yearly_total_row, yearly_budget_row) — two rows directly beneath
-    the last WP row in PER-WP SUMMARY (no spacer, same outline group)."""
+    the last WP row in PER-WP SUMMARY (no spacer, same outline group).
+
+    Post-D9 (2026-04-22): row labels live at col H (TIMELOG_YEARLY_LABEL_COL),
+    not col A."""
+    from budget_planner.layout import TIMELOG_YEARLY_LABEL_COL
     first = _wp_summary_first_row(tlp)
-    # Walk past WP rows until we hit the first "Yearly " label.
+    # Walk down col H until we hit a cell whose text starts with "Yearly ".
+    # Blank cells at WP rows are normal (col H at WP rows is the
+    # "Any out-of-window?" formula output, not a label) — keep scanning.
     r = first
     while r <= tlp.max_row:
-        v = tlp.cell(r, 1).value
-        if v is None:
-            raise AssertionError("no Yearly rows found in PER-WP SUMMARY")
-        s = str(v).strip()
-        if s.lower().startswith("yearly "):
+        v = tlp.cell(r, TIMELOG_YEARLY_LABEL_COL).value
+        if v is not None and str(v).strip().lower().startswith("yearly "):
             break
         r += 1
+    else:
+        raise AssertionError("no Yearly rows found in PER-WP SUMMARY")
     return r, r + 1
 
 
 def test_yearly_rows_present(tlp):
-    """Both rows exist directly below the last WP row with expected labels."""
+    """Both rows exist directly below the last WP row with expected labels
+    at col H (post-D9 shift)."""
+    from budget_planner.layout import TIMELOG_YEARLY_LABEL_COL
+    from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
     y_total, y_budget = _yearly_rows(tlp)
-    assert tlp.cell(y_total, 1).value == "Yearly total €"
-    assert tlp.cell(y_budget, 1).value == "Yearly budget €"
+    assert tlp.cell(y_total, TIMELOG_YEARLY_LABEL_COL).value == "Yearly total +i"
+    assert tlp.cell(y_budget, TIMELOG_YEARLY_LABEL_COL).value == "Yearly Budget +i"
+
+    # Col A on these rows is blank (label shifted to col H).
+    assert tlp.cell(y_total, 1).value in (None, "")
+    assert tlp.cell(y_budget, 1).value in (None, "")
+
+    # With-indirect header fill on the label cell.
+    assert (
+        tlp.cell(y_total, TIMELOG_YEARLY_LABEL_COL).fill.fgColor.rgb
+        == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
+    )
+    assert (
+        tlp.cell(y_budget, TIMELOG_YEARLY_LABEL_COL).fill.fgColor.rgb
+        == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
+    )
 
     # Outline level: rows must be in the PER-WP SUMMARY outline group (level 1).
     assert tlp.row_dimensions[y_total].outline_level == 1
@@ -1020,30 +1064,45 @@ def test_yearly_rows_present(tlp):
 
 
 def test_yearly_total_col_c_formula(tlp, assigned_wb):
-    """Yearly total € col C cross-check = SUM of WP Assigned € col (C)."""
+    """Yearly total +i col C cross-check = SUM of WP Assigned € col (C) × 1.25.
+
+    PER-WP SUMMARY col C stays -i; per-year cells on yearly_total_row are
+    +i (T7.3 display-layer ×1.25 at the SUMPRODUCT leaf). ×1.25 wrap on SUM(C)
+    brings the cross-check to +i parity."""
     wps = _read_wps(assigned_wb)
     y_total, _ = _yearly_rows(tlp)
     first = _wp_summary_first_row(tlp)
     last = first + len(wps) - 1
     v = str(tlp.cell(y_total, 3).value or "")
-    assert v == f"=SUM(C{first}:C{last})", v
+    assert v == f"=SUM(C{first}:C{last})*1.25", v
 
 
 def test_yearly_budget_col_c_formula(tlp, assigned_wb):
-    """Yearly budget € col C cross-check = SUM of WP Ceiling € col (B)."""
+    """Yearly Budget +i col C cross-check = SUM of WP Budget € col (B) × 1.25.
+
+    PER-WP SUMMARY col B pulls from Config col E (Budget -i) and stays -i (T7
+    scope); ×1.25 wrap flips to +i for drift detection."""
     wps = _read_wps(assigned_wb)
     _, y_budget = _yearly_rows(tlp)
     first = _wp_summary_first_row(tlp)
     last = first + len(wps) - 1
     v = str(tlp.cell(y_budget, 3).value or "")
-    assert v == f"=SUM(B{first}:B{last})", v
+    assert v == f"=SUM(B{first}:B{last})*1.25", v
 
 
 def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
-    """Col C value equals row-sum of year cells (within leaf-rounding tolerance)."""
+    """Col C value equals row-sum of year cells (within leaf-rounding tolerance).
+
+    Post-T7.3 both sides are +i but compute via different paths:
+      - col_c = SUM(C{first}:C{last}) * 1.25 — sums per-WP Assigned € leaves,
+        each independently rounded; error ≤ len(wps) * 0.5, scaled by 1.25.
+      - year_sum = Σ ROUND(SUMPRODUCT_{wp,y} * 1.25, 0) over len(wps)×len(groups)
+        independently-rounded cells; error ≤ len(wps) * len(groups) * 0.5.
+    Safe tolerance: len(wps) * (len(groups) + 2) covers both paths with
+    slack for float64 noise."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
-    params, _wps = _read_config(wb)
+    params, wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     y_total, _ = _yearly_rows(ws)
     base_cols = 8
@@ -1055,10 +1114,10 @@ def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
         if isinstance(v, (int, float)):
             year_sum += float(v)
     assert isinstance(col_c, (int, float)), f"col C not numeric: {col_c!r}"
-    # Tolerance: ±N EUR (each year cell independently rounded by sub-formula).
-    assert abs(year_sum - float(col_c)) <= len(groups), (
+    tolerance = len(wps) * (len(groups) + 2)
+    assert abs(year_sum - float(col_c)) <= tolerance, (
         f"Yearly total: col C {col_c} vs year-sum {year_sum} "
-        f"(tolerance ±{len(groups)})"
+        f"(tolerance ±{tolerance})"
     )
     wb.close()
 
@@ -1079,14 +1138,16 @@ def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
         if isinstance(v, (int, float)):
             year_sum += float(v)
     assert isinstance(col_c, (int, float)), f"col C not numeric: {col_c!r}"
-    # Yearly budget uses un-ROUND'd term sums — per design §5 the formula is
-    # `=Σ prop_ky × Config!E{wp_row}` with no outer ROUND. In real arithmetic
-    # Σ_y prop_ky = 1 for every WP, so Σ year cells = Σ ceilings = col C
-    # EXACTLY; fp rounding errors are the only drift source. ±1 EUR tolerance
-    # covers float64 noise and does NOT cover per-cell leaf-rounding.
-    # If the formula is later changed to wrap each cell in `ROUND(..., 0)`
-    # (e.g. to align with the Yearly total € convention), bump this tolerance
-    # to `len(groups)` EUR to accommodate ±0.5 EUR per year.
+    # Yearly Budget +i uses un-ROUND'd term sums — per design §5 the formula is
+    # `=Σ prop_ky × Config!F{wp_row}` with no outer ROUND (col F = Budget +i).
+    # In real arithmetic Σ_y prop_ky = 1 for every WP, so Σ year cells =
+    # Σ budgets_+i. Col C is `=SUM(B{first}:B{last})*1.25` = Σ budgets_-i ×
+    # 1.25 = Σ budgets_+i (since col B Budget -i = Config E = Budget +i / 1.25
+    # by construction). Equality holds exactly; fp rounding errors are the only
+    # drift source. ±1 EUR tolerance covers float64 noise.
+    # If the per-year formula is later changed to wrap each cell in
+    # `ROUND(..., 0)` (e.g. to align with the Yearly total +i convention),
+    # bump this tolerance to `len(groups)` EUR to accommodate ±0.5 EUR per year.
     assert abs(year_sum - float(col_c)) <= 1.0, (
         f"Yearly budget: col C {col_c} vs year-sum {year_sum}"
     )
@@ -1095,7 +1156,7 @@ def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
 
 def test_yearly_budget_single_wp_single_year(tlp, assigned_wb):
     """For any WP whose active window lies inside one calendar year, that year's
-    Yearly budget term = 1.0 × Config!E{wp_row}."""
+    Yearly Budget +i term = 1.0 × Config!F{wp_row} (col F = Budget +i)."""
     params, wps = _read_wps_and_schedule_and_params(assigned_wb)
     groups = _expected_year_groups(params["start"], params["months"])
     _, y_budget = _yearly_rows(tlp)
@@ -1115,9 +1176,10 @@ def test_yearly_budget_single_wp_single_year(tlp, assigned_wb):
     wi, wp, yi, _fm, _lm = candidates[0]
     cfg_row = _config_wp_row(assigned_wb, wp["id"])
     formula = str(tlp.cell(y_budget, base_cols + 1 + yi).value or "")
-    # Term should contain "1.0*Config!$E${cfg_row}" exactly once (cell_ref uses
-    # absolute refs). Other WP terms may coexist in the same year's formula.
-    expected_term = f"1.0*Config!$E${cfg_row}"
+    # Term should contain "1.0*Config!$F${cfg_row}" exactly once (cell_ref uses
+    # absolute refs; Config col F = Budget +i per D4). Other WP terms may
+    # coexist in the same year's formula.
+    expected_term = f"1.0*Config!$F${cfg_row}"
     assert expected_term in formula, (
         f"WP {wp['id']} fully in year idx {yi}: expected {expected_term!r} "
         f"in yearly budget formula, got {formula!r}"

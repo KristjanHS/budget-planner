@@ -19,6 +19,12 @@ AMBER_FILL = PatternFill("solid", fgColor="FFD966")
 RED_FILL = PatternFill("solid", fgColor="FFC7CE")
 WHITE_FILL = PatternFill("solid", fgColor="FFFFFF")
 
+# Indirect-view header fills. External-facing EUR columns (+i = with 25% indirect)
+# fill green; internal reconciliation EUR columns (-i = without indirect) fill
+# orange. Non-EUR headers keep LIGHT_BLUE_FILL.
+WITH_INDIRECT_HEADER_FILL = PatternFill("solid", fgColor="E2EFDA")
+WITHOUT_INDIRECT_HEADER_FILL = PatternFill("solid", fgColor="FBE5D6")
+
 # CF (conditional formatting) fills — DXF context requires bgColor, not fgColor
 # Use 8-char AARRGGBB hex; 6-char gets 00 alpha (transparent)
 CF_YELLOW_FILL = PatternFill(bgColor="FFFFFF00")

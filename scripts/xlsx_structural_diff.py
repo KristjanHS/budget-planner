@@ -554,6 +554,15 @@ def _diff_sheet(
             entry["old"] = cell.value
         elif kind == "literal":
             entry["data_type"] = cell.data_type
+            # N4 fix: mirror the `added` branch — serialize string literal value
+            # through the label-zone + regex safety filter.
+            value, suppressed = _emit_literal_value(
+                sheet_name, coord[0], coord[1], cell
+            )
+            if value is not None:
+                entry["value"] = value
+            elif suppressed:
+                entry["value_suppressed"] = True
         cells_diff[coord_s] = entry
 
     # Changed: in both, signatures differ.

@@ -723,3 +723,41 @@ def test_color_noise_kept_with_flag(tmp_path: Path):
     assert tab_entry["old"] == "FFC00000"
     assert tab_entry["new"] == "00C00000"
     assert parsed["noise_filtered_summary"]["tab_color_alpha_normalized"] == 1
+
+
+# ---------- N4: added/removed literal value preservation (Stage 1) ----------
+
+
+def test_n4_removed_string_preserves_value(tmp_path: Path):
+    """A→B: string-literal cell A1 removed. Record must carry `value: "Foo"`
+    (label zone, benign content — same safety filter as the `added` branch)."""
+    def build_a(wb):
+        ws = wb.active
+        ws.title = "S"
+        ws["A1"] = "Foo"
+
+    def build_b(wb):
+        wb.active.title = "S"
+
+    out = _diff(tmp_path, build_a, build_b)
+    entry = out["sheets"]["S"]["cells"]["A1"]
+    assert entry.get("removed") is True
+    assert entry["data_type"] == "s"
+    assert entry["value"] == "Foo"
+
+
+def test_n4_added_string_preserves_value(tmp_path: Path):
+    """B→A direction: string-literal added on the B side carries `value`."""
+    def build_a(wb):
+        wb.active.title = "S"
+
+    def build_b(wb):
+        ws = wb.active
+        ws.title = "S"
+        ws["A1"] = "Foo"
+
+    out = _diff(tmp_path, build_a, build_b)
+    entry = out["sheets"]["S"]["cells"]["A1"]
+    assert entry.get("added") is True
+    assert entry["data_type"] == "s"
+    assert entry["value"] == "Foo"

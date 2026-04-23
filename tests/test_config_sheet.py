@@ -509,15 +509,24 @@ def test_config_wp_budget_variance_formula():
 
 
 def test_config_wp_budget_minus_i_is_derived_from_plus_i():
-    """Budget -i (col E) is a black-formula = Budget +i / 1.25."""
+    """Budget -i (col E) = Budget +i / 1.25; Budget +i (col F) = structured-ref
+    formula into ``tbl_WorkPackages`` computing FTE × Rate(-i) × 1.25."""
     _wb, ws, layout = _build_with_assignments()
     first = layout["wp_first_row"]
     val = str(ws.cell(first, 5).value)
     assert val.startswith("="), f"Budget -i should be a formula, got {val!r}"
     assert f"F{first}/1.25" in val
-    # Blue-input Budget +i value seeded from FTE × Rate × 1.25.
+    # Budget +i is a structured-ref formula — resolves on recalc via Excel
+    # Table column names. Literal seeding was retired in the Aiko-port (Q-F).
     plus_i = ws.cell(first, 6).value
-    assert isinstance(plus_i, (int, float)) and plus_i > 0
+    plus_i_str = str(plus_i)
+    assert plus_i_str.startswith("="), (
+        f"Budget +i should be a formula, got {plus_i!r}"
+    )
+    assert "tbl_WorkPackages" in plus_i_str
+    assert "[FTE Budget]" in plus_i_str
+    assert "[Rate (€/PM) -i]" in plus_i_str
+    assert "1.25" in plus_i_str
 
 
 def test_config_wp_budget_with_indirect_named_range():

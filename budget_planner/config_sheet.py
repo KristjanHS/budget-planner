@@ -183,21 +183,22 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
             style_cell(ws, row_idx, COL_WP_RATE, value=wp_rate, font=BLUE_INPUT,
                        fmt="€#,##0", border=False)
         # Col E: Budget -i (€) — black-formula = Budget +i / 1.25 (orange fill).
-        # Col F: Budget +i (€) — blue-input authoritative grant-agreement value
-        # (green fill). Fresh builds seed from FTE × Rate × 1.25 so the default
-        # numeric output at col E matches legacy ``FTE × Rate`` chain; existing
-        # rebuilds replay whatever value the reader parsed/migrated.
+        # Col F: Budget +i (€) — black-formula structured reference into the
+        # ``tbl_WorkPackages`` Excel Table (green fill). Resolves to
+        # ``FTE Budget × Rate (€/PM) -i × 1.25`` on recalc. Round-trip: the
+        # reader falls back to the same FTE×Rate×1.25 product when ``.value``
+        # returns the formula string under ``data_only=False``, so no numeric
+        # drift vs. the prior literal seed.
         plus_i_cl = get_column_letter(COL_WP_BUDGET_PLUS_I)
         style_cell(ws, row_idx, COL_WP_BUDGET_MINUS_I, font=BLACK_FORMULA,
                    fmt="€#,##0", border=False).value = (
             f"={plus_i_cl}{row_idx}/1.25"
         )
-        default_plus_i = float(wp.get("fte", 0)) * float(
-            wp.get("rate") if isinstance(wp.get("rate"), (int, float)) else default_rate
-        ) * 1.25
-        plus_i_value = wp.get("budget_plus_i", round(default_plus_i))
-        style_cell(ws, row_idx, COL_WP_BUDGET_PLUS_I, value=plus_i_value,
-                   font=BLUE_INPUT, fmt="€#,##0", border=False)
+        style_cell(ws, row_idx, COL_WP_BUDGET_PLUS_I, font=BLACK_FORMULA,
+                   fmt="€#,##0", border=False).value = (
+            "=tbl_WorkPackages[[#This Row],[FTE Budget]]"
+            "*tbl_WorkPackages[[#This Row],[Rate (€/PM) -i]]*1.25"
+        )
         # Col G: Assigned PM — SUMIFS over assignment section
         style_cell(ws, row_idx, COL_WP_ASSIGNED_PM, font=BLACK_FORMULA, fmt="0.00",
                    border=False).value = f"=SUMIFS(assign_ftes,assign_wps,A{row_idx})"

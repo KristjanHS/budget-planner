@@ -9,7 +9,21 @@ from mixed entries) with compact JSON, to keep the result small enough for the
 consumer's context window. Use `--mode=full --pretty` for human-readable output
 that includes every styling delta.
 
-Design: docs/plans/archived/2026-04-23-xlsx-structural-diff-design.md
+Schema versions
+---------------
+- v1 — original shape (xlsx structural diff design).
+- v2 — Stage 1 noise-suppression additions (additive; no renames / removals):
+  - `noise_filtered_summary` top-level dict (always emitted, zero counts as ``0``)
+    counting cosmetic deltas collapsed by canonicalization predicates
+    (``number_format_normalized``, ``tab_color_alpha_normalized``).
+  - ``--keep-noise`` CLI: retain such records and tag each with ``noise_class``
+    (``"format"`` or ``"color"``).
+  - N4 fix: ``added``/``removed`` branches now preserve ``value`` for
+    string-literal cells the same way ``kind_change`` does (subject to the
+    existing D2 label-zone + SENSITIVE_LITERAL_RE safety filters).
+
+Designs: docs/plans/archived/2026-04-23-xlsx-structural-diff-design.md (v1)
+         docs/plans/2026-04-23-diff-noise-suppression-stage-1-design.md (v2)
 """
 
 from __future__ import annotations
@@ -29,7 +43,7 @@ from openpyxl.cell.cell import Cell
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # D2 — safe-literal sensitive-value regex.
 SENSITIVE_LITERAL_RE = re.compile(

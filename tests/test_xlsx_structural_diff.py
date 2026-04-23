@@ -462,7 +462,7 @@ def test_main_writes_diff_json(tmp_path: Path):
     rc = main([str(a), str(b), "--out", str(out_path)])
     assert rc == 0
     parsed = json.loads(out_path.read_text())
-    assert parsed["meta"]["schema_version"] == 1
+    assert parsed["meta"]["schema_version"] == 2
     assert parsed["sheets"]["S"]["cells"]["C5"]["new"] == "=SUM(A1:A5)"
 
 
@@ -744,6 +744,15 @@ def test_n4_removed_string_preserves_value(tmp_path: Path):
     assert entry.get("removed") is True
     assert entry["data_type"] == "s"
     assert entry["value"] == "Foo"
+
+
+def test_schema_version_is_2(tmp_path: Path):
+    """Stage 1 bump: schema_version advances from 1 → 2 (additive; see docstring)."""
+    def build(wb):
+        wb.active.title = "S"
+
+    out = _diff(tmp_path, build, build)
+    assert out["meta"]["schema_version"] == 2
 
 
 def test_n4_added_string_preserves_value(tmp_path: Path):

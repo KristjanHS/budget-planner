@@ -1,7 +1,7 @@
 # Diff Script Noise-Suppression — Ideas Seed
 
 **Status**: BRAINSTORMED 2026-04-23 → resolved into two design docs:
-- **Stage 1** (D + A + C — bug fix, normalizers, schema additions): `docs/plans/archived/2026-04-23-diff-noise-suppression-stage-1-design.md` — shipped 2026-04-23 (commits 6a3162f → 38f920c).
+- **Stage 1** (D + A + C — bug fix, normalizers, schema additions): shipped 2026-04-23 (commits 6a3162f → 38f920c).
 - **Stage 2** (B1 + B2 — structural-shift detection): `docs/plans/2026-04-23-diff-noise-suppression-stage-2-design.md` — skeleton; full design deferred to a follow-up brainstorm after Stage 1 ships.
 
 Original status (pre-brainstorm): SEED for separate brainstorm — not yet designed. Captured during the Aiko-port session on 2026-04-23 to make sure the observations are not lost.
@@ -64,7 +64,7 @@ Logic-mode (`--mode=logic`, now default) string-literal cells on the `added: tru
 
 The third form (with `value`) happens only sometimes — inconsistently. The first two forms lose the literal text entirely. For cells whose *diff intent* is the text content (section titles, headers, labels, legends), losing the value means the diff tells you "something at A30 was removed" without telling you what it said.
 
-**Actual impact during Aiko-port brainstorm (session 1)**: `A30: {removed: true}` (Aiko-only) vs `A31: {added: true, value: "PER-PERSON SUMMARY"}` (rebuild-only) was misread as a **section-title rename** ("PER-WP SUMMARY" → "PER-PERSON SUMMARY"). The real intent was a pure 1-row shift of the same "PER-PERSON SUMMARY" title. This misread survived session 1 and drove a retracted decision cluster (Q-C in `docs/plans/archived/2026-04-23-aiko-port-decisions.md`) in session 2. Cost ~3 turns plus a Correction section to recover.
+**Actual impact during Aiko-port brainstorm (session 1)**: `A30: {removed: true}` (Aiko-only) vs `A31: {added: true, value: "PER-PERSON SUMMARY"}` (rebuild-only) was misread as a **section-title rename** ("PER-WP SUMMARY" → "PER-PERSON SUMMARY"). The real intent was a pure 1-row shift of the same "PER-PERSON SUMMARY" title. This misread survived session 1 and drove a retracted Q-C decision cluster in session 2. Cost ~3 turns plus a Correction section to recover.
 
 **Fix surface**: the `added`/`removed` branches need to serialize `value` for string-literal cells the same way the `kind_change` branch serializes `old`/`new`. A numeric cell's value is already lost under most suppression goals (numbers are usually formula results), but string cells carry semantic intent — losing them is a missing-signal bug, not noise.
 

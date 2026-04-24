@@ -1,7 +1,8 @@
 """Workbook orchestrator — init, rebuild, snapshot/restore modes.
 
-Build order (load-bearing — do not reorder without reading T5 in
-docs/plans/archived/2026-04-12-brittleness-refactor.md)::
+Build order (load-bearing — downstream builders consume layout dicts
+produced by upstream ones, so reordering silently breaks cross-sheet
+formulas)::
 
     Config ──► Capacity ──► Plan ──► (rewrite Plan FTE)
                                │
@@ -838,8 +839,6 @@ def seed_demo_data(workbook_path: str) -> str:
     # Models a 3-month finance-close lag (EUR cadence trails hours). Hours
     # through-month resolves via the auto-derived scan on Actuals-Hours;
     # no override needed because hours are seeded through DEMO_CURRENT_MONTH.
-    # See design doc
-    # ``docs/plans/archived/2026-04-18-config-through-month-cleanup-design.md``.
     hours_through = DEMO_CURRENT_MONTH
     act_ws.cell(row=1, column=2, value=max(1, DEMO_CURRENT_MONTH - 3))
 

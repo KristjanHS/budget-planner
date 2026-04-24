@@ -3,7 +3,7 @@
 **Date**: 2026-04-23
 **Status**: SKELETON — full design deferred to a follow-up brainstorm once Stage 1 ships
 **Seed**: `docs/plans/2026-04-23-diff-noise-suppression-ideas.md` § N5 + Group B
-**Stage 1 sibling**: `docs/plans/archived/2026-04-23-diff-noise-suppression-stage-1-design.md` (shipped 2026-04-23, commits 6a3162f → 38f920c)
+**Stage 1 sibling**: shipped 2026-04-23, commits 6a3162f → 38f920c
 
 ---
 

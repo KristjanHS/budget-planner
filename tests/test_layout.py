@@ -1,4 +1,6 @@
-"""Tests for layout helpers (see docs/plans/archived/2026-04-12-brittleness-refactor.md T4)."""
+"""Tests for layout helpers — `cell_ref` keeps cross-sheet refs layout-derived
+rather than hardcoded, so shifting a column in `layout.py` doesn't silently
+break formulas in other builders."""
 
 from budget_planner.layout import cell_ref, SHEET_CONFIG, COL_WP_CEILING, COL_ROSTER_FTE
 

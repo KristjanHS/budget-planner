@@ -1287,9 +1287,9 @@ def read_actuals_hours_sheet(
         name = str(val).strip()
         if not name:
             continue
-        # Skip merged section-header rows like "FORECAST EUR (from hours)"
+        # Skip merged section-header rows like "FORECAST EUR -i (from hours)"
         # that might also span A:B in future layouts. Person headers use
-        # SECTION_FILL; the forecast-band label row uses LIGHT_GREEN_FILL.
+        # SECTION_FILL; the forecast-band label row uses the -i orange fill.
         # Simple heuristic: section banner is on row 1; skip it.
         if r == 1:
             continue

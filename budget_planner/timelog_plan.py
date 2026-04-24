@@ -1345,8 +1345,8 @@ def _write_person_summary_metrics(
 
     # Col C: Pool = ROUND(max_fte * (project_months − num_vacation_months), 0).
     # Green xref. num_vacation_months is a Config named range (builder-written
-    # literal, Rule 3 carve-out — see `docs/plans/archived/2026-04-19-timelog-
-    # plan-enhancements-design.md` §3.4).
+    # literal, Rule 3 carve-out — see docs/design-invariants.md § Future
+    # invariants → Named-range contract).
     if cfg_row is not None:
         max_fte_ref = cell_ref(SHEET_CONFIG, cfg_row, 2)
         style_cell(ws, row, c0 + 1, font=GREEN_XREF, fmt="0").value = (

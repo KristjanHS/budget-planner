@@ -101,7 +101,6 @@ Full runbooks (pre-flight script, macro-dir init, per-failure XML probes, reprod
 Situational workflows loaded on demand. For always-on rules (build/test, linting, formatting, testing, invariants) see `.claude/rules/dev-workflow.md`.
 
 ### Code Review
-Before executing a plan, move completed/superseded plans to docs/plans/old_already_implemented/.
 When a plan claims a module is "unchanged", grep its imports to verify no coupling to changed modules.
 When inserting/removing a column on any sheet, grep ALL formula references (`Config!{letter}`, `Plan!{letter}`, etc.) across every builder AND test file. Column shifts cascade silently — a test asserting the old column letter will mask the bug.
 When inserting/removing a Config param row, grep ALL test files for hardcoded row numbers (e.g. `cell(4, 2)`, `wp_first_row = 8`, merge span tuples). Row shifts cascade into tests the plan doesn't list.
@@ -112,12 +111,12 @@ When splitting a doc or rule file, grep the source for in-file anchors (`§ X`, 
 When resuming a plan from memory, verify actual file state before acting — memory snapshots go stale between sessions and tasks marked "pending" may already be done.
 
 ### Planning & Implementation (/impag)
-Write plans to `docs/plans/` as dated .md files immediately — never keep plans only in conversation context (context gets compressed).
-Run brainstorm → write-plan → worktree isolation for each P-item. Don't skip planning even if the spec looks detailed.
+For multi-session or ≥3-file work: write a plan doc under `docs/plans/` as a dated .md file immediately — context gets compressed. For single-session / ≤2-file work: no plan doc (see `.claude/rules/plan-hygiene.md § When to write a plan doc`); commit message + code diff is the record.
+Run brainstorm → write-plan → worktree isolation for each multi-session P-item. Don't skip planning even if the spec looks detailed.
 Run `superpowers:code-reviewer` after every /impag stage — not just at the end. Each stage boundary is a review checkpoint.
 Fix pre-existing test failures when encountered during implementation — don't defer them.
 Commit or resolve dirty files at session start before executing any tasks.
-**Before starting a `/impag` default-selected plan:** the default is the most recent plan by mtime, which is often a *just-completed* plan still in `docs/plans/`. Cross-check `project_state.md` and recent `git log` to confirm it's not already landed. If it is, ask the user which queued plan to run instead.
+**Before starting a `/impag` default-selected plan:** the default is the most recent plan by mtime, which is often a *just-completed* plan still in `docs/plans/`. Cross-check recent `git log` to confirm it's not already landed. If it is, ask the user which queued plan to run instead.
 
 **Before dispatching task 1, pre-flight the plan:**
 1. Grep the central symbols the plan names (`build_workbook`, `DEFAULT_SEED`, etc.) to confirm they exist in the current tree. Plan text drifts as the code evolves; catching mis-references up front saves N subagent prompts downstream.

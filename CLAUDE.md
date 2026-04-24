@@ -41,7 +41,7 @@ Thresholds + intent-declaration rule in `~/.claude/rules/reading-large-files.md`
 |-----------|-------------|-------------|
 | `.claude/rules/dev-workflow.md` | `**/*.py` | Build/test, linting, formatting, invariants (core cross-cutting) |
 | `.claude/rules/testing-project.md` | `tests/**`, `**/test_*.py` | Project testing rules (no hardcoded seeds, round-trip, docs-only stages) |
-| `.claude/rules/plan-hygiene.md` | `docs/**`, `CLAUDE.md`, `.claude/rules/**` | Plan archival, doc hygiene, bucket migrations, single-file convention |
+| `.claude/rules/plan-hygiene.md` | `docs/**`, `CLAUDE.md`, `.claude/rules/**` | Write-gate (no plan doc for ≤2-file/1-session work), delete-not-archive for shipped single-session plans, doc hygiene |
 | `.claude/rules/rule-authoring.md` | `.claude/rules/**` | Copy shipped-fix form verbatim when adding rule examples |
 | `.claude/rules/openpyxl.md` | builder `.py` files (not `styles.py`) | openpyxl/LO core: CF, formulas, Rule 3 styling, charts |
 | `.claude/rules/openpyxl-infra.md` | `workbook.py`, `reader.py`, `config_sheet.py`, `scripts/**` | Workbook primitives, named-range auto-extend, section-reader guards |

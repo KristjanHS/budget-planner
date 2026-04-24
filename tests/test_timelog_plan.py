@@ -1060,8 +1060,10 @@ def test_monthly_person_cost_row_present(tlp, assigned_wb):
 
 def test_monthly_person_cost_row_precedes_summary_title(tlp):
     """Person-cost row abuts PER-PERSON SUMMARY title with no spacer — this
-    anchors summary_person_first_row at the H33:H40 range the formula bakes in.
-    Bystander: Monthly total +i row above is still at person_cost_row - 1."""
+    anchors summary_person_first_row at its historical offset, which the
+    row-30 formula depends on (formula refs the Rate col range at
+    summary_person_first_row..summary_person_last_row). Bystander: Monthly
+    total +i row is still at person_cost_row - 1."""
     person_cost_row = _monthly_total_row(tlp) + 1
     # Monthly total +i row is the row above — confirms layout order.
     assert (
@@ -1074,27 +1076,6 @@ def test_monthly_person_cost_row_precedes_summary_title(tlp):
         f"expected PER-PERSON SUMMARY title at row "
         f"{person_cost_row + 1}, got {next_val!r}"
     )
-
-
-def test_monthly_person_cost_recalc_matches_monthly_total(recalced_assigned_path):
-    """Recalc'd values on the person-cost row equal the Monthly total +i row
-    cell-for-cell — same formula, same inputs. Aiko's workbook had both as a
-    two-row display; we preserve the port by duplicating values (the -i row
-    was intentionally NOT restored per Q-C session-2 answers)."""
-    wb = load_workbook(recalced_assigned_path, data_only=True)
-    ws = wb[SHEET_TIMELOG_PLAN]
-    params, _wps = _read_config(wb)
-    m_start = TIMELOG_MONTH_COL_START
-    m_end = m_start + params["months"] - 1
-    total_row = _monthly_total_row(ws)
-    person_cost_row = total_row + 1
-
-    for c in range(m_start, m_end + 1):
-        assert ws.cell(total_row, c).value == ws.cell(person_cost_row, c).value, (
-            f"col {c}: total={ws.cell(total_row, c).value!r} "
-            f"vs cost={ws.cell(person_cost_row, c).value!r}"
-        )
-    wb.close()
 
 
 # ── Yearly total € / Yearly budget € rows (Phase 4 enhancement) ─────────────

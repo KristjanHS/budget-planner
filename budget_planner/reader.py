@@ -424,7 +424,10 @@ def read_config_sheet(ws) -> tuple[dict, list[dict]]:
             budget_plus_i = round(fte_val * rate_numeric * 1.25)
             legacy_rows.append((id_str, budget_plus_i))
         else:
-            # Post-restructure: read blue-input Budget +i cell directly.
+            # Post-restructure: read Budget +i cell directly. Post-Aiko-port T1
+            # the cell is a structured-ref formula; `_safe_float` returns the
+            # cached numeric on data_only reads and falls back to
+            # fte*rate*1.25 when the formula hasn't been recalc'd yet.
             plus_i_raw = ws.cell(r, COL_WP_BUDGET_PLUS_I).value
             budget_plus_i = round(_safe_float(plus_i_raw, fte_val * rate_numeric * 1.25))
         work_packages.append(
@@ -1445,8 +1448,12 @@ def read_timelog_plan(wb, project_months: int) -> dict:
         if not col_a_str:
             break
         # PER-PERSON SUMMARY title (or any PER- prefix) ends the grid band.
-        # "Monthly total €" label (phase-3 enhancement) also ends the band —
-        # its cells hold formulas, not preserved literals.
+        # "Monthly total" label also ends the band — its cells hold formulas,
+        # not preserved literals. Prefix guard catches both the legacy
+        # "Monthly total €" label and the current "Monthly total +i".
+        # Aiko-port T4's "Monthly person cost +i" row sits directly below
+        # Monthly total and is therefore never reached by this scan; no
+        # additional guard needed.
         if col_a_str.upper().startswith("PER-"):
             break
         if col_a_str.lower().startswith("monthly total"):

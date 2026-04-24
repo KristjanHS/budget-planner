@@ -89,7 +89,9 @@ SECTION_HEADER_LABELS = {
 # ── Config sheet column constants ──
 # WP Budget section (Config sheet). Indirect-view layout:
 #   Col 5 = Budget -i (black-formula = Budget +i / 1.25, without 25% indirect).
-#   Col 6 = Budget +i (blue-input, user types grant-agreement with-indirect gross).
+#   Col 6 = Budget +i (black-formula, Aiko-port T1: structured-ref
+#           =tbl_WorkPackages[[#This Row],[FTE Budget]]*...[Rate (€/PM) -i]*1.25;
+#           recalculates on edit — no user-typed literal).
 # Col 5's numeric value matches the legacy ``Ceiling = FTE * Rate`` output so
 # deferred consumers (Summary/Trends/Plan) that read by position keep working.
 COL_WP_ID = 1
@@ -97,7 +99,7 @@ COL_WP_NAME = 2
 COL_WP_FTE = 3
 COL_WP_RATE = 4
 COL_WP_BUDGET_MINUS_I = 5   # black-formula = Budget +i / 1.25 (orange header)
-COL_WP_BUDGET_PLUS_I = 6    # blue-input, user types with-indirect EUR (green header)
+COL_WP_BUDGET_PLUS_I = 6    # black-formula (structured-ref, Aiko-port T1); green header
 COL_WP_ASSIGNED_PM = 7  # SUMIFS formula: total assigned PM per WP
 COL_WP_VARIANCE = 8     # FTE Budget - Assigned PM
 COL_WP_START = 9        # project-month start (blue input, 1-indexed)

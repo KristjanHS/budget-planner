@@ -2,6 +2,8 @@
 
 Technical reference for the workbook generation engine: builder pipeline, reader/rebuild, layout infrastructure, conditional formatting, and cross-sheet references.
 
+> **Indirect-view scope (as of 2026-04-24).** The `+i` / `-i` EUR-column convention applies to Config, Actuals, Plan-Forecast, Capacity (EUR cells only), Actuals-Hours (Forecast-EUR band), Timelog Plan. **Trends, Summary, and Plan are intentionally not updated in this pass** — their terminology will be aligned in the follow-on overhaul plan. Expect mixed "Ceiling"/"Budget" wording on those three sheets until then; rollup descriptions below that still read "% Ceiling" or similar belong to deferred-sheet sections and are not drift. See `docs/grant-domain.md` § Indirect-view convention + `docs/design-invariants.md` § Indirect-view EUR header suffix.
+
 ---
 
 ## Sheet Builders
@@ -33,13 +35,13 @@ def build_<sheet>_sheet(ws, wb, ..., *, project_params=None, work_packages=None,
 
 ### Per-Sheet Notes
 
-**Config** (`config_sheet.py`): Stacked sections — blue-input project-parameters block (Title, Start, Months, FTE Rate, EU Ceiling, Hours/FTE Month, Vacation Month), black-formula builder-written scalars (`Num Vacation Months`, `Version Stamp` — Rule 3 carve-out, see `.claude/rules/dev-workflow.md`), then the WP table (`tbl_WorkPackages`), then Team Roster. Source of truth for every named range listed in `docs/design-invariants.md` § Named-range contract except the two through-month names (hosted on Actuals / Actuals-Hours). Returns `config_layout` with `wp_first_row`, `wp_last_row`, `person_rows`.
+**Config** (`config_sheet.py`): Stacked sections — blue-input project-parameters block (Title, Start, Months, FTE Rate, EU Annual Ceiling — the regulatory 215-day PM-per-FTE-year cap, preserved as grant vocabulary, Hours/FTE Month, Vacation Month), black-formula builder-written scalars (`Num Vacation Months`, `Version Stamp` — Rule 3 carve-out, see `.claude/rules/dev-workflow.md`), then the WP table (`tbl_WorkPackages`), then Team Roster. Source of truth for every named range listed in `docs/design-invariants.md` § Named-range contract except the two through-month names (hosted on Actuals / Actuals-Hours). Returns `config_layout` with `wp_first_row`, `wp_last_row`, `person_rows`.
 
 **Plan** (`plan.py`): Two-phase build. Phase 1 creates structure with empty FTE cells. Phase 2 (`_apply_planned_formulas()`) fills cells with `=SUM(Capacity!...)` after Capacity is built. Has validation columns: Sum, Budget FTE, Variance.
 
 **Capacity** (`capacity.py`): Per-person groups with WP rows (blue input, distribution-curve static values), TOTAL, REMAINING (Max - TOTAL), and **EU TOTAL** (programme WPs + EU-flagged externals — tracks the 215-day annual ceiling separately from TOTAL). Non-obvious conventions: per-person WP rows cover **only the assigned WPs** (from Config PERSON-WP ASSIGNMENTS), not every WP; distribution curve type comes from the Type col on the merged WP BUDGET row; the right-side raw-monthly band sits at `outline_level=1` (default collapsed); the always-visible TO-DATE `Variance PM` column is populated only on TOTAL + EU TOTAL rows. Returns `capacity_layout` with `person_groups` + `todate_col_actual` / `todate_col_var`. See `capacity.py` for the formulas and CF rules.
 
-**Timelog Plan** (`timelog_plan.py`): Prescriptive whole-month 1.0-FTE WP allocation grid — separate allocation surface from Plan/Capacity. See the `timelog_plan.py` module docstring + `docs/plans/archived/2026-04-18-timelog-plan-design.md` (v1), `2026-04-19-timelog-plan-v2-design.md` (merged grid + toggle), `2026-04-19-timelog-plan-enhancements-design.md` (phases 3–4 totals + vacation). Cross-sheet invariants in `docs/design-invariants.md`.
+**Timelog Plan** (`timelog_plan.py`): Prescriptive whole-month 1.0-FTE WP allocation grid — separate allocation surface from Plan/Capacity. See the `timelog_plan.py` module docstring + `docs/plans/archived/2026-04-18-timelog-plan-design.md` (v1), `2026-04-19-timelog-plan-v2-design.md` (merged grid + toggle), `2026-04-19-timelog-plan-enhancements-design.md` (phases 3–4 totals + vacation). Cross-sheet invariants in `docs/design-invariants.md`. **Column map (post indirect-view restructure, 2026-04-22..24):** PER-WP SUMMARY base cols A..I now carry `WP code` / `Budget +i` (col B = `Config!$F${cfg_wp_row}` direct xref) / `Assigned -i` / `Buffer +i` / **`Buffer %`** / `Assigned months` / `WP sched months` / `Burn rate needed` / `Any out-of-window?`; per-year EUR cols `Y{yyyy} +i` at cols J.. ; underneath: `Yearly total -i` + `Yearly Budget +i` rows (col C cross-check is raw SUM, no inline ×1.25). `Monthly total +i` row lives under the grid. Vacation-month cols yellow-locked. H-column shift (pre- vs post-: the legacy `Ceiling €` single-column became the `Budget +i` input + `Budget -i` derived pair; knock-on shift propagated through PER-WP SUMMARY cols B/C/D onto col H `Any out-of-window?`) is recorded in full in `docs/plans/archived/2026-04-22-indirect-view-restructure-design.md` § T7.1 survey outcome.
 
 **Actuals** (`actuals.py`) + **Actuals-Hours** (`actuals_hours.py`): EUR and hours input surfaces (two cadences). Builder internals live in module docstrings; cross-sheet trust boundaries and through-month invariants are canonical in `docs/design-invariants.md` § Two-cadence actuals.
 
@@ -58,7 +60,7 @@ The authoring UX assigns each sheet a single role — derived views must not wri
 | Config (PERSON-WP ASSIGNMENTS, EXTERNAL COMMITMENTS, WP tables, roster, grade rates, reporting periods) | **Primary planning surface** — all assignment/roster edits land here |
 | Capacity monthly cells | Auto-filled by distribution curves on rebuild; users can override for fine-tuning (overrides lost on next rebuild) |
 | Plan monthly cells | Formula-driven (`=SUM(Capacity!...)`) — **do not edit directly** |
-| Timelog Plan merged grid | Literal WP codes — solver-written on init; rebuild behaviour gated by integer `timelog_rebuild_from_month` (Config!$B$9): months `< N` frozen verbatim, months `≥ N` re-solved against ceilings + pools narrowed by pre-N consumption |
+| Timelog Plan merged grid | Literal WP codes — solver-written on init; rebuild behaviour gated by integer `timelog_rebuild_from_month` (Config!$B$9): months `< N` frozen verbatim, months `≥ N` re-solved against budgets + pools narrowed by pre-N consumption |
 | Actuals monthly cells | Input surface for EUR spend (accountant figures) |
 | Actuals-Hours monthly cells | Input surface for hour timelog (primary hours surface) |
 | Plan-Forecast | Read-only — every cell is a formula aggregating Actuals-Hours leaves |
@@ -217,16 +219,16 @@ Row-order contracts and the inactive-month rule are cross-sheet invariants — s
 
 ### Actuals Sheet
 - Negative variance: **red**
-- % Ceiling: **amber** > 85%, **red** > 100%
+- % of Budget (`-i` and `+i` mirror rule — scale-invariant): **amber** > 85%, **red** > 100%
 - Breach In: **amber** < 12 months, **red** < 6 months
 - **Reconciliation grey (T8):** Actual-EUR monthly cells past `eur_actuals_through_month` are greyed (not yet finance-closed). Mirror rule on Actuals-Hours forecast band greys the *opposite* side (months ≤ `eur_actuals_through_month`) so users see at a glance which side is authoritative per month.
-- Parallel forecast-monitoring block: same amber/red thresholds as actual-EUR block on Cum Forecast Variance / % Ceiling / Breach In.
+- Parallel forecast-monitoring block: same amber/red thresholds as actual-EUR block on Cum Forecast Variance / % of Budget / Breach In (each mirrored on the `+i` companion columns).
 
 ### Actuals-Hours Sheet
 - Annual EU hours ceiling: **red** when annual hour sum `> eu_annual_ceiling_pm * hours_per_fte_month`, **amber** within one `hours_per_fte_month` of the ceiling
 
 ### Plan-Forecast Sheet
-- Variance (Ceiling - Sum): **red** when negative (forecast exceeds ceiling)
+- Variance (Budget − Sum, `-i` and `+i` mirror rule): **red** when negative (forecast exceeds budget)
 
 ### Summary Sheet
 - Remaining EUR column: **red** when `value < 0`
@@ -246,6 +248,7 @@ Row-order contracts and the inactive-month rule are cross-sheet invariants — s
 | `fte_rate` | Config!$B$4 | Named range |
 | `timelog_rebuild_from_month` | Config!$B$9 | Named range |
 | `version_stamp` | Config!$B$10 | Named range |
+| `wp_budget_with_indirect` | Config!$F${wp_first_row}:$F${wp_last_row} | Named range (WP BUDGET `Budget +i` col) |
 | **Plan -> Config** | | |
 | Plan global cells (start, rate) | Config params | Green formula |
 | **Plan -> Capacity** | | |

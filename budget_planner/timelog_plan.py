@@ -400,14 +400,17 @@ def build_timelog_plan_sheet(
     for i, hdr in enumerate(wp_summary_headers):
         # Year-col headers (i ≥ _WP_SUMMARY_BASE_LAST_COL) carry
         # WITH_INDIRECT_HEADER_FILL — per-WP year cells display +i
-        # via ×1.25 wrap at the SUMPRODUCT leaf (T7.3). Base-col
-        # headers (A..I) retain neutral fill per D8 — their semantics
-        # stay -i for T7 scope.
+        # via ×1.25 wrap at the SUMPRODUCT leaf (T7.3). Among the base
+        # headers, only "Budget +i" (col B, retargeted to Config!F by
+        # Aiko-port Q-B) carries the +i token; it gets the same green
+        # fill so the T9 header-fill invariant holds.
         is_year_col = i >= _WP_SUMMARY_BASE_LAST_COL
+        carries_plus_i = hdr.endswith("+i")
         style_cell(
             ws, wp_summary_header_row, 1 + i,
             value=hdr, font=HEADER_FONT, alignment=CENTER,
-            fill=WITH_INDIRECT_HEADER_FILL if is_year_col else None,
+            fill=(WITH_INDIRECT_HEADER_FILL
+                  if is_year_col or carries_plus_i else None),
         )
     cfg_wp_first_row = config_layout["wp_first_row"]
     rate_col_range = (

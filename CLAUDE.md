@@ -8,21 +8,21 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 
 ## Reference Index (encounter a problem? check here)
 
-| Trigger | Read | Key content |
-|---------|------|-------------|
-| Programme cost model, funding rates, 25% indirect | `docs/grant-domain.md` | Cost categories, PM→EUR chain, reallocation rules |
-| Sheet builders, stateless pattern | `docs/internals.md` § Sheet Builders | Builder contract, dependency chain; don't add state |
-| Reader breaks, rebuild loses data | `docs/internals.md` § Reader and Rebuild | Formula chain resolution, fragile parsing |
-| Column offsets, month positioning, styles, row/column shifts, new sheet/column | `budget_planner/layout.py` + `budget_planner/styles.py` | `layout.py` is the single source for row/column positions, validation-column offsets, freeze panes, alert thresholds. Tab-color + styling conventions: `docs/internals.md` § Styling conventions. |
-| Cross-sheet invariant, trust boundary, derived-metric rule | `docs/design-invariants.md` | Two-cadence actuals, single-month-cell rule; update before merge |
-| C4 architecture, workflows, formula graph | `docs/architecture.md` | Mermaid diagrams, build order, cross-sheet dependencies |
-| Cloud/container env, LO missing, confidential-workbook debugging | `docs/ops-quickref.md` | LO install, failure-mode table, `make_reproducer` pointer. Full runbooks in `docs/human/` (intentionally `.claudeignore`'d — user-facing runbooks, not auto-loaded). |
-| Code review, /impag, worktrees, MCP tools for workbook inspection | `docs/dev-workflow-review.md` (§ MCP Tools for openpyxl-read / mcp-excel) | Grep-cascade checks, planning protocol, worktree sync, MCP usage |
-| Add WP, add team member, add actuals, compare scenarios | `docs/common-tasks.md` | Step-by-step SOPs for common data tasks |
-| Timelog Plan, solver, 1.0-FTE logging allocation, WP fill order, merged grid, freeze-point, per-year EUR cols, monthly total, yearly total, yearly budget, vacation month, Pool reduction | `budget_planner/timelog_plan.py` + `budget_planner/timelog_solver.py` + `docs/plans/archived/2026-04-23-solver-freeze-point-design.md` (freeze-point) + `docs/plans/archived/2026-04-19-timelog-plan-enhancements-design.md` (Phase 3–4 totals + vacation) + `docs/plans/archived/2026-04-19-timelog-plan-v2-design.md` (v2) + `docs/plans/archived/2026-04-18-timelog-plan-design.md` (v1) | Separate allocation surface from Plan; two-pass greedy solver; **merged editable grid** — integer `timelog_rebuild_from_month` (Config!$B$9) freezes months `< N` verbatim + re-solves months `≥ N` against narrowed ceilings/pools; vacation cols yellow-locked; Monthly total € row under grid; Yearly total € + Yearly budget € rows under PER-WP SUMMARY |
-| Rebuild drops rows, stale Config refs | `docs/plans/archived/2026-04-12-rebuild-shape-drift-design.md` | Readers use named ranges; tolerate internal blanks |
-| WP schedule single range, migration from legacy workbook, multi-segment error | `docs/plans/archived/2026-04-19-wp-gap-removal-design.md` + `docs/design-invariants.md` § WP schedule — single active range | Start/End/Type merged into WP BUDGET cols H/I/J; reader hard-fails "Legacy Config layout detected" / "Duplicate WP id" with migration recipe |
-| Run commands, generate workbook, compare scenarios, dev setup | `docs/commands.md` | Init, rebuild, snapshot/restore, pytest, recalc |
+| Trigger | Read |
+|---------|------|
+| Programme cost model, funding rates, 25% indirect | `docs/grant-domain.md` |
+| Sheet builders, stateless pattern | `docs/internals.md` § Sheet Builders |
+| Reader breaks, rebuild loses data | `docs/internals.md` § Reader and Rebuild |
+| Column offsets, month positioning, styles, row/column shifts, new sheet/column, tab-color conventions | `budget_planner/layout.py` + `budget_planner/styles.py` + `docs/internals.md` § Styling conventions |
+| Cross-sheet invariant, trust boundary, derived-metric rule | `docs/design-invariants.md` |
+| C4 architecture, workflows, formula graph | `docs/architecture.md` |
+| Cloud/container env, LO missing, confidential-workbook debugging | `docs/ops-quickref.md` |
+| Code review, /impag, worktrees, MCP tools for workbook inspection | `docs/dev-workflow-review.md` (§ MCP Tools for openpyxl-read / mcp-excel) |
+| Add WP, add team member, add actuals, compare scenarios | `docs/common-tasks.md` |
+| Timelog Plan, solver, 1.0-FTE logging allocation, WP fill order, merged grid, freeze-point, per-year EUR cols, monthly total, yearly total, yearly budget, vacation month, Pool reduction | `budget_planner/timelog_plan.py` + `budget_planner/timelog_solver.py` + `docs/plans/archived/2026-04-23-solver-freeze-point-design.md` + `docs/plans/archived/2026-04-19-timelog-plan-enhancements-design.md` + `docs/plans/archived/2026-04-19-timelog-plan-v2-design.md` + `docs/plans/archived/2026-04-18-timelog-plan-design.md` |
+| Rebuild drops rows, stale Config refs | `docs/plans/archived/2026-04-12-rebuild-shape-drift-design.md` |
+| WP schedule single range, migration from legacy workbook, multi-segment error | `docs/plans/archived/2026-04-19-wp-gap-removal-design.md` + `docs/design-invariants.md` § WP schedule — single active range |
+| Run commands, generate workbook, compare scenarios, dev setup | `docs/commands.md` |
 
 ## Critical Rules
 
@@ -32,6 +32,7 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 4. **Inactive month cells must be greyed out and empty.** Auditors flag time logged outside WP active periods.
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
 6. **New architectural invariants** (cross-sheet constraint, trust boundary, derived-metric rule) must be recorded in `docs/design-invariants.md` before merge. Rationale + scope carve-out in `.claude/rules/dev-workflow.md`.
+7. **Skills that emit markdown by default (retro, reflect, kaizen:*, mybrain, senior-architect, architecture-diagram-creator, brutal-honesty-review, deep-research) should output to conversation, not files, unless (a) the artifact survives past this session AND (b) no existing doc covers the topic. Prefer extending `docs/design-invariants.md` or a code docstring over creating a new file. One-off analyses that must be written go to `docs/analysis/` (`.claudeignore`'d).
 
 ## Large Files
 

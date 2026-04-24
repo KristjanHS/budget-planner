@@ -2,6 +2,8 @@
 
 Cross-sheet invariants, trust boundaries, and derived-metric rules that must hold across code, tests, and docs. When a new structural invariant lands, record it here — future agents need it in loaded context, not buried in a sheet builder.
 
+**Entries expire.** Rollout narrative (Stage 1 wired X, Stage 2 added Y…) is temporary — when the rollout completes, condense to the final invariant in one paragraph or delete if the code + tests now express it self-evidently. When refactoring removes an invariant (e.g. a named range retired, a trust boundary collapsed), delete the entry in the same commit. Git log carries the history; this file carries the currently-load-bearing specs.
+
 ## Two-cadence actuals (hours vs EUR)
 
 The workbook records actuals on two separate cadences. Any derived view that reads actual data must pick the correct trust boundary — mixing them produces wrong answers that look right.
@@ -36,15 +38,7 @@ No derived view reads a single-month cell as authoritative for that month. Every
 
 Raw monthly actual cells surface only in collapsed / clearly-labelled bands ("reliable only when hours were entered per-month"), never as the input to a derived metric.
 
-### Rollout status (hours-timelog v2)
-
-Stage 1 wired the Config inputs + named ranges only; no consumer code read them yet — so if you grep for `hours_actuals_through_month` in an early-rollout checkout and find only Config + docs, that was expected mid-rollout, not drift. Later (2026-04-19 config-through-month cleanup) the two through-month named ranges moved off Config onto `Actuals!$D$1` / `'Actuals-Hours'!$D$1`; downstream consumers were not touched — they still resolve via the named range.
-
-Stage 2 added a to-date column block on Capacity, switched Breach-In to a cumulative-slope formula, drove per-column partial-year shading on Summary by the stricter of the two through-months, and added cosmetic grey shading past the through-month on `Actuals-Hours` + `Plan-Forecast`.
-
-Stage 3 added a Reconciliation section on Trends: three health cells (EUR through / Hours through / Reconciled through — since 2026-04-19 the Reconciled-through cell is a local Trends helper, not a named range), a per-WP summary table with cumulative Forecast vs Actual EUR + gap %, and a gap-over-time LineChart clipped at the Reconciled-through helper.
-
-Stage 4 (T14–T15) will harden rebuild preservation + the shape fingerprint.
+- **Pending:** Stage 4 (T14–T15) will harden rebuild preservation + the shape fingerprint.
 
 ## Plan vs Timelog Plan — two allocation surfaces
 
@@ -53,7 +47,7 @@ The workbook hosts two distinct allocation surfaces, both editable, and they may
 - **Plan / Capacity** records **actual effort** — fractional monthly FTE per (person, WP) reflecting what people *do*. Driven by Config PERSON-WP ASSIGNMENTS + distribution curves.
 - **Timelog Plan** records **timesheet-compliant allocation** — prescriptive whole-month 1.0-FTE WP labels per (person, month) telling the person where to *log*. Single merged editable grid (v2, 2026-04-19) holding literal WP codes; no formulas per cell. Initial content comes from the solver (`budget_planner/timelog_solver.py`); rebuild behaviour is governed by the `timelog_rebuild_from_month` freeze-point (see below).
 
-A person splitting effort 0.6/0.4 across two WPs in a given month may legitimately log 1.0 to one of them that month and 1.0 to the other a different month — the timesheet rule is whole-month, the underlying effort is not. **Do not write cross-sheet formulas that reconcile Plan monthly cells against Timelog Plan monthly cells as if they must agree.** The only shared constraints are the Config inputs both surfaces consume (WP windows, PERSON-WP ASSIGNMENTS windows, Max FTE pool, Ceiling €).
+A person splitting effort 0.6/0.4 across two WPs in a given month may legitimately log 1.0 to one of them that month and 1.0 to the other a different month — the timesheet rule is whole-month, the underlying effort is not. **Do not write cross-sheet formulas that reconcile Plan monthly cells against Timelog Plan monthly cells as if they must agree.** The only shared constraints are the Config inputs both surfaces consume (WP windows, PERSON-WP ASSIGNMENTS windows, Max FTE pool, WP Budget).
 
 See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §1 for v1 scope and `docs/plans/archived/2026-04-19-timelog-plan-v2-design.md` for the merged-grid + toggle redesign.
 
@@ -62,7 +56,7 @@ See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §1 for v1 scope and
 The Timelog Plan merged grid holds **literal WP codes** (or empty cells), never formulas — user edits and solver output share one surface. The integer cell Config!$B$9 (named range `timelog_rebuild_from_month`) controls rebuild:
 
 - Let `N = max(1, int(rebuild_from_month))`. Months `< N` are **frozen**: the solver does not touch them, and any literal WP code preserved from the prior workbook is written back verbatim.
-- Months `≥ N` are **solved**: the solver re-runs for that span against per-WP `ceiling_eur` and per-Person `pool` already narrowed by the frozen span's consumption (builder-side subtraction — solver purity preserved). Any literal WP code preserved in months `≥ N` is discarded.
+- Months `≥ N` are **solved**: the solver re-runs for that span against per-WP `ceiling_eur` (Python dataclass field — cross-module rename to `budget_eur` is a deferred carry, see `project_state.md`) and per-Person `pool` already narrowed by the frozen span's consumption (builder-side subtraction — solver purity preserved). Any literal WP code preserved in months `≥ N` is discarded.
 - Endpoints collapse the old binary toggle: `N ≤ 1` (or blank → defaults to `1`) ≡ "solve everything" (old `resolve_flag=TRUE`); `N > project_months` ≡ "preserve everything" (old `resolve_flag=FALSE`, remaining solver span empty).
 - Overshoot-as-state: if the frozen span over-consumes a WP's `ceiling_eur`, the solver does not raise. The per-WP Buffer +i cell renders the negative residual against the **original** (pre-narrowed) Budget — matches existing out-of-window overshoot semantics.
 
@@ -71,6 +65,14 @@ No backwards-compatibility shim: the old `timelog_resolve_flag` named range is u
 ### Banned: `MATCH(1, arr, 0)` / `LOOKUP(2, 1/arr, …)` — use `SUMPRODUCT(MIN/MAX(…))`
 
 Formulas that pick the first/last non-empty index via `MATCH(1, (arr<>"")*1, 0)` or `LOOKUP(2, 1/(arr<>""), headers)` depend on CSE array coercion that **openpyxl-written workbooks do not carry**, so LibreOffice recalc returns `""` or the wrong extreme silently (v1 Timelog Plan's First log / Last log shipped with this bug — diagnosed and fixed in v2, commit 7d8c399). Use `SUMPRODUCT(MIN((arr<>"")*COL(...)))` / `SUMPRODUCT(MAX(...))` instead — SUMPRODUCT forces array context natively and survives the openpyxl→LO round-trip.
+
+## Indirect-view EUR header suffix — `+i` / `-i` on every in-scope EUR column
+
+Every EUR-bearing column header on an **in-scope** sheet carries a `+i` (with-indirect) or `-i` (without-indirect) suffix, with the matching `WITH_INDIRECT_HEADER_FILL` (green `#E2EFDA`) or `WITHOUT_INDIRECT_HEADER_FILL` (orange `#FBE5D6`) applied. Non-EUR headers keep `LIGHT_BLUE_FILL`. See `docs/grant-domain.md` § Indirect-view convention for the storage rules (blue-input is authoritative side, mirror is formula) and the fill-code legend.
+
+**In scope:** Config `WP BUDGET`, Actuals, Plan-Forecast, Capacity (EUR cells only — Capacity is FTE-dominant, most headers keep `LIGHT_BLUE_FILL`), Actuals-Hours (Forecast-EUR band), Timelog Plan. **Deferred (out of scope):** Trends, Summary, Plan — a follow-on overhaul plan will align those sheets (including their CF-rule prose like Summary's "Budget Overview Remaining < 10% of ceiling"). Until then the invariant does not apply to those three sheets; do not rewrite their EUR terminology drive-by.
+
+**Round-trip check:** for every WP, `Budget +i ÷ 1.25 ≈ Budget -i` within float-noise (`wp_budget_with_indirect[i] / 1.25 == Budget -i[i]`).
 
 ## Future invariants (reserved)
 
@@ -91,6 +93,7 @@ Placeholders for invariants that have a home elsewhere today but belong here whe
   | `timelog_rebuild_from_month` | `config_sheet.py` (Config!$B$9, blue-input integer, default `1` on init, `min=1 / max=999` data validation) | `reader.read_timelog_plan` returns it as `rebuild_from_month: int`; `timelog_plan.py` builder partitions `preserved_grid` into frozen (months `< N`) and narrows solver-input `ceiling_eur` + `pool` by frozen consumption (see "Timelog Plan merged grid" above) |
   | `vacation_month` | `config_sheet.py` (Config!$B$7, blue input string, default `"Jul"`) | `reader.read_config_sheet` → orchestrator + `timelog_plan.py` solver (vacation-month exclusion). Fallback to `"Jul"` when missing (one-shot migration for pre-enhancement workbooks). |
   | `num_vacation_months` | `config_sheet.py` (Config!$B$8, BLACK_FORMULA builder-written literal — Rule 3 carve-out, same pattern as `version_stamp`) | `timelog_plan.py` PER-PERSON SUMMARY Pool formula: `=ROUND(max_fte × (project_months − num_vacation_months), 0)`. Recomputed on rebuild from `vacation_month` + `project_start` + `Project Months`. |
+  | `wp_budget_with_indirect` | `config_sheet.py` (`Config!$F${wp_first_row}:$F${wp_last_row}` — the `Budget +i` column; bounds track the WP table extent) | `actuals.py`, `plan_forecast.py` (`=INDEX(wp_budget_with_indirect, i+1)` for per-WP `Budget +i` rollups), `actuals_hours.py` (Forecast-EUR `+i` rollup via the same INDEX), `timelog_plan.py` (`_write_wp_summary_row` col B = `Config!$F{cfg_wp_row}` direct xref — see § Timelog Plan PER-WP SUMMARY col B below) |
 - **Reader/builder round-trip rule**: readers use named ranges (not coordinates); tolerate internal blanks; rebuild must preserve user-authored values on blue input cells.
 
 ## Timelog Plan — auditor-side invariants

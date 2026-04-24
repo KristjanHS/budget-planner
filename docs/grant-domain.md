@@ -22,6 +22,24 @@ PM estimate per person x monthly rate = personnel EUR per partner
 
 ---
 
+## Indirect-view convention (workbook representation)
+
+Programme EUR numbers come in two forms: **without-indirect** (`-i`, direct costs only) and **with-indirect** (`+i`, direct × 1.25 with the 25% flat indirect rate already folded in — see § Cost Categories → 6. Indirect Costs). The workbook tags every EUR-bearing column header with `+i` or `-i` so a reader can tell at a glance which view they are looking at.
+
+**Storage convention — authoritative side is blue-input, mirror is formula.**
+
+- **`Budget +i`** (Config `WP BUDGET` col F, green fill `#E2EFDA`): the grant-agreement partner envelope with indirect folded in. In code the cell is a structured-reference formula `FTE Budget × Rate × 1.25` (BLACK_FORMULA — Rule 3 carve-out; hand edits reset on rebuild, edit FTE Budget or Rate instead). The authoritative blue-input fields for a WP budget are `FTE Budget` (col C) and `Rate` (col D).
+- **`Budget -i`** (Config `WP BUDGET` col E, orange fill `#FBE5D6`): derived `= Budget +i / 1.25`. Preserves the numeric semantic of the retired `Ceiling` column position so deferred consumers that read Config col E keep resolving to a without-indirect number.
+- **Forecast-EUR and Actual-EUR rollups** (Actuals, Plan-Forecast, Actuals-Hours) store the accountant-native without-indirect figure as the source; `+i` mirrors wrap each `-i` source in `ROUND(x × 1.25, 0)`. Flipping monthly prognosis storage to with-indirect would fight the feed's native form.
+
+**Header fills.** `+i` headers use `WITH_INDIRECT_HEADER_FILL` (green `#E2EFDA`); `-i` headers use `WITHOUT_INDIRECT_HEADER_FILL` (orange `#FBE5D6`); non-EUR headers keep `LIGHT_BLUE_FILL`. Definitions in `budget_planner/styles.py`.
+
+**Terminology.** The workbook uses "Budget" everywhere, not "Ceiling". When quoting the grant agreement itself (e.g. the grant-agreement phrasing "EUR ceiling per partner"), preserve the source wording as a quotation — do not rewrite regulatory text.
+
+**Scope (as of 2026-04-24).** In-scope sheets carrying the `+i`/`-i` convention: Config `WP BUDGET`, Actuals, Plan-Forecast, Capacity (EUR cols only — Capacity is FTE-dominant, most headers keep `LIGHT_BLUE_FILL`), Actuals-Hours (Forecast-EUR band), Timelog Plan. **Deferred (out of scope):** Trends, Summary, and Plan keep their current (legacy) EUR terminology; a follow-on overhaul plan will align those sheets and also switch Trends/Summary from reading Plan to reading Timelog Plan as their budget-plan source. Until that plan lands, expect mixed terminology on those three sheets — do not rename their cells drive-by.
+
+---
+
 ## Cost Categories
 
 ### 1. Personnel Costs (typically 50--70% of total budget)

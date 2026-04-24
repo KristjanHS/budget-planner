@@ -23,7 +23,7 @@ Schema versions
     existing D2 label-zone + SENSITIVE_LITERAL_RE safety filters).
 
 Designs: docs/plans/archived/2026-04-23-xlsx-structural-diff-design.md (v1)
-         docs/plans/2026-04-23-diff-noise-suppression-stage-1-design.md (v2)
+         docs/plans/archived/2026-04-23-diff-noise-suppression-stage-1-design.md (v2)
 """
 
 from __future__ import annotations

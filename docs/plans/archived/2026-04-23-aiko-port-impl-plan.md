@@ -2,7 +2,7 @@
 
 **Status**: DRAFT — ready for `/impag`.
 **Created**: 2026-04-23.
-**Source brief**: `docs/plans/2026-04-23-aiko-port-decisions.md` (locked Q-A…Q-F answers; rationale + alternatives live there — do not re-litigate).
+**Source brief**: `docs/plans/archived/2026-04-23-aiko-port-decisions.md` (locked Q-A…Q-F answers; rationale + alternatives live there — do not re-litigate).
 **Depends on**: solver freeze-point (shipped); Stage B of indirect-view-restructure is orthogonal (different sheets — Actuals/Plan-Forecast/Capacity/Actuals-Hours; no file overlap with this plan's edits to `config_sheet.py` + `timelog_plan.py`).
 
 ## Scope

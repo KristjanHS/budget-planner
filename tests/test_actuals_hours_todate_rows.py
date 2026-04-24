@@ -22,7 +22,8 @@ from budget_planner.styles import col_letter
 
 FORECAST_COL_START = val_columns(PROJECT_MONTHS)["sum"] + 2
 FORECAST_COL_END = FORECAST_COL_START + PROJECT_MONTHS - 1
-CUM_HOURS_COL = FORECAST_COL_END + 2
+FORECAST_PLUS_I_COL = FORECAST_COL_END + 1
+CUM_HOURS_COL = FORECAST_PLUS_I_COL + 2
 
 
 @pytest.fixture(scope="module")

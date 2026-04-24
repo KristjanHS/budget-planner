@@ -13,6 +13,8 @@ from budget_planner.styles import GREY_FILL, col_letter
 
 FORECAST_COL_START = val_columns(PROJECT_MONTHS)["sum"] + 2
 FORECAST_COL_END = FORECAST_COL_START + PROJECT_MONTHS - 1
+# Forecast EUR +i rollup col sits adjacent to (outside) the -i band.
+FORECAST_PLUS_I_COL = FORECAST_COL_END + 1
 
 
 @pytest.fixture(scope="module")
@@ -379,6 +381,48 @@ def test_forecast_eur_total_row_sums_wp_rows(hrs):
         )
 
 
+def test_forecast_plus_i_col_outside_band_outline(hrs):
+    """The +i rollup col is NOT part of the -i column outline group, so it
+    stays visible when the band collapses."""
+    cl = col_letter(FORECAST_PLUS_I_COL)
+    assert hrs.column_dimensions[cl].outline_level in (0, None), (
+        f"+i col {cl} should not be in the -i outline group, "
+        f"got outline_level={hrs.column_dimensions[cl].outline_level}"
+    )
+
+
+def test_forecast_plus_i_header_label(hrs):
+    """Band-label row (row 2) carries 'Forecast EUR +i' on the +i rollup col."""
+    label = hrs.cell(2, FORECAST_PLUS_I_COL).value
+    assert label == "Forecast EUR +i", (
+        f"Expected 'Forecast EUR +i' at +i col band-label row, got {label!r}"
+    )
+
+
+def test_forecast_plus_i_wp_row_formula(hrs):
+    """WP rows carry `=ROUND(SUM(fc_start{r}:fc_end{r})*1.25,0)` on the +i col."""
+    alice_header = _find_person_header_row(hrs, "Alice")
+    wp1_row = alice_header + 1
+    formula = hrs.cell(wp1_row, FORECAST_PLUS_I_COL).value
+    fc_start_l = col_letter(FORECAST_COL_START)
+    fc_end_l = col_letter(FORECAST_COL_END)
+    expected = f"=ROUND(SUM({fc_start_l}{wp1_row}:{fc_end_l}{wp1_row})*1.25,0)"
+    assert formula == expected, (
+        f"+i WP row formula expected {expected!r}, got {formula!r}"
+    )
+
+
+def test_forecast_plus_i_external_row_empty(hrs):
+    """External rows' +i cell is empty (externals don't contribute programme EUR)."""
+    alice_header = _find_person_header_row(hrs, "Alice")
+    alice_ext_row = alice_header + 4
+    assert hrs.cell(alice_ext_row, 1).value == "ProjectX"
+    cell = hrs.cell(alice_ext_row, FORECAST_PLUS_I_COL)
+    assert cell.value in (None, ""), (
+        f"External +i cell should be empty, got {cell.value!r}"
+    )
+
+
 def test_actuals_hours_has_only_sum_validation_column(hrs):
     """Year header row has 'Sum' at val_col_sum and no Budget/Variance
     label at val_col_budget — the hours log has no budget-vs-actual view.
@@ -398,7 +442,7 @@ def test_actuals_hours_has_only_sum_validation_column(hrs):
 
 # ── Cum-hours helper column (feeds Capacity to-date Actual PM) ──
 
-CUM_HOURS_COL = FORECAST_COL_END + 2
+CUM_HOURS_COL = FORECAST_PLUS_I_COL + 2
 
 
 def test_cum_hours_header_present(hrs):

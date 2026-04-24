@@ -594,3 +594,22 @@ Tests: monthly-total + year-col assertion blocks get `+i` / `×1.25` updates.
 - PER-WP SUMMARY col B is +i. Any Stage-B task (T3 Actuals, T4 Plan-Forecast — already shipped; T5 Capacity, T6 Actuals-Hours) that reads the Timelog Plan col B value gets +i, not -i.
 - `yearly_total_row` col C is -i while per-year cells on the same row are +i. Intentional per Aiko-port Q-B. Drift-detection cross-check compares `col_c × 1.25` vs year_sum (see `tests/test_timelog_plan.py::test_yearly_total_col_c_crosscheck`).
 - The L451 / L468 / L501–L505 passages above describing col B as `Config!E` / Budget -i are superseded. Do NOT reference them as authoritative in new work.
+
+---
+
+## Correction — T5 Capacity was a no-op; T6 Actuals-Hours band is columnar, not row-wise (2026-04-24)
+
+**T5 Capacity (no-op):** The plan allowed "If not [EUR columns]: rename `Ceiling` → `Budget`". `capacity.py` at this point has zero EUR columns and already uses `val_col_budget` / "Budget" headers. The remaining `ceiling` references (`ceiling_row` local, `EU-ceiling view` comment, `EU annual ceiling` prose) all refer to the **regulatory EU Annual Ceiling (PM/FTE/year)**, which per `feedback_terminology_budget_not_ceiling` memory is grey-area grant vocabulary — preserved, not renamed. T5 shipped no code changes; no commit.
+
+**T6 Actuals-Hours — band orientation:** The plan T6 spec reads *"Forecast-EUR band: … Wrap the band in a **row** outline group (not column — this band is vertical per person)."* Reality: `actuals_hours.py` lays the forecast-EUR band as **columns** (`forecast_col_start..forecast_col_end`, months across) adjacent to the hours grid on the same per-WP row. Each WP row carries both its hour cells and its forecast-EUR cells horizontally. There is no separate per-person forecast-EUR row-band. T6 kept the existing column-outline grouping on the -i band (already default-visible per the "prefer outline over hidden" rule) and placed the new `Forecast EUR +i` rollup at `forecast_col_end + 1` with `outline_level=0` so it stays visible when the -i band is collapsed via the column-outline toggle. T10's *"row outline collapses forecast-EUR band, Forecast EUR +i stays visible"* should be read as the column-outline toggle in practice.
+
+**What shipped (T6):**
+- `FORECAST_BAND_LABEL = "FORECAST EUR -i (from hours)"` (was `"FORECAST EUR (from hours)"`); band-label fill flipped `LIGHT_GREEN_FILL` → `WITHOUT_INDIRECT_HEADER_FILL` (orange).
+- `_mirror_year_month_headers_to_band` year + month labels flipped `LIGHT_BLUE_FILL` → `WITHOUT_INDIRECT_HEADER_FILL`.
+- New `forecast_plus_i_col = forecast_col_end + 1` (reclaims the former single gutter col); `cum_hours_col` shifts to `forecast_plus_i_col + 2`.
+- +i rollup cells: WP rows = `=ROUND(SUM(fc_start{r}:fc_end{r})*1.25,0)`; TOTAL + EU TOTAL mirror the shape (different row fills); external rows empty + grey.
+- +i band-label cell: green (`WITH_INDIRECT_HEADER_FILL`), label `"Forecast EUR +i"`. Year/month header cells on the +i col also green.
+- Test updates: `tests/test_actuals_hours.py` + `tests/test_actuals_hours_todate_rows.py` both redefined `CUM_HOURS_COL = FORECAST_PLUS_I_COL + 2`. Four new tests cover +i outline-level, label, WP-row formula, external-row blank.
+- No "Ceiling" rename in `actuals_hours.py` — zero non-regulatory `ceiling` references.
+
+**Next:** Stage C (T8 docs sweep, T9 cross-sheet invariants, T10 final gate + archive).

@@ -24,8 +24,7 @@ at col B (TIMELOG_MONTH_COL_START). The per-person Rate helper lives only
 once, on col H of the PER-PERSON SUMMARY band, and is consumed by the
 PER-WP SUMMARY Assigned-€ SUMPRODUCT via row-aligned vectors.
 
-Spec: ``docs/plans/archived/2026-04-19-timelog-plan-enhancements-design.md`` (builds
-on ``docs/plans/archived/2026-04-19-timelog-plan-v2-design.md``).
+Cross-sheet invariants: ``docs/design-invariants.md`` § Timelog Plan merged grid.
 
 Stateless builder — receives all config via kwargs from the orchestrator. Per
 ``.claude/rules/python-refactors.md``: no ``from budget_planner import config``
@@ -194,7 +193,7 @@ def build_timelog_plan_sheet(
     # Freeze semantics: months strictly below ``rebuild_from_month`` are
     # preserved verbatim from ``preserved_grid`` and their € / pool usage
     # is subtracted from WP ceilings + Person pools before solving. See
-    # docs/plans/archived/2026-04-23-solver-freeze-point-design.md §6.
+    # docs/design-invariants.md § Timelog Plan merged grid.
     freeze_boundary = max(1, int(rebuild_from_month))
     frozen_months: frozenset[int] = frozenset(range(1, freeze_boundary))
 
@@ -377,7 +376,7 @@ def build_timelog_plan_sheet(
         style_cell(ws, tl_row, c, font=BLACK_FORMULA, alignment=CENTER, fmt="0")
     # Toggle-row legacy cells (cols 9-10) are no longer written. The rebuild
     # control is now the Config!B{Rebuild from month #} integer param (see
-    # config_sheet.py + docs/plans/archived/2026-04-23-solver-freeze-point-design.md).
+    # config_sheet.py + docs/design-invariants.md § Timelog Plan merged grid).
     # Any pre-v2 workbook carrying the old ``timelog_resolve_flag`` defined
     # name is actively unregistered on rebuild — no BC shim.
     if _LEGACY_RESOLVE_FLAG_NAMED_RANGE in wb.defined_names:

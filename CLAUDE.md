@@ -17,9 +17,9 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 | Cross-sheet invariant, trust boundary, derived-metric rule | `docs/design-invariants.md` |
 | C4 architecture, workflows, formula graph | `docs/architecture.md` |
 | Run commands, generate workbook, compare scenarios, dev setup, add WP / team member / actuals, cloud/LO env setup, code review & /impag, MCP tools for workbook inspection | `docs/runbook.md` (§ MCP Tools for openpyxl-read / mcp-excel) |
-| Timelog Plan, solver, 1.0-FTE logging allocation, WP fill order, merged grid, freeze-point, per-year EUR cols, monthly total, yearly total, yearly budget, vacation month, Pool reduction | `budget_planner/timelog_plan.py` + `budget_planner/timelog_solver.py` + `docs/plans/archived/2026-04-23-solver-freeze-point-design.md` + `docs/plans/archived/2026-04-19-timelog-plan-enhancements-design.md` + `docs/plans/archived/2026-04-19-timelog-plan-v2-design.md` + `docs/plans/archived/2026-04-18-timelog-plan-design.md` |
-| Rebuild drops rows, stale Config refs | `docs/plans/archived/2026-04-12-rebuild-shape-drift-design.md` |
-| WP schedule single range, migration from legacy workbook, multi-segment error | `docs/plans/archived/2026-04-19-wp-gap-removal-design.md` + `docs/design-invariants.md` § WP schedule — single active range |
+| Timelog Plan, solver, 1.0-FTE logging allocation, WP fill order, merged grid, freeze-point, per-year EUR cols, monthly total, yearly total, yearly budget, vacation month, Pool reduction | `budget_planner/timelog_plan.py` + `budget_planner/timelog_solver.py` + `docs/design-invariants.md` § Timelog Plan merged grid |
+| Rebuild drops rows, stale Config refs | `docs/design-invariants.md` § Future invariants (reserved) → Reader/builder round-trip rule |
+| WP schedule single range, migration from legacy workbook, multi-segment error | `docs/design-invariants.md` § WP schedule — single active range |
 
 ## Critical Rules
 

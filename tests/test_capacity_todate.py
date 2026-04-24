@@ -1,7 +1,6 @@
 """Tests for the Capacity to-date block (Actual PM / Variance PM).
 
-Simplified per ``docs/plans/archived/2026-04-14-t5-simplification-design.md``:
-the block now has 2 cols. WP-row Actual PM is a single cross-sheet ref
+The block has 2 cols. WP-row Actual PM is a single cross-sheet ref
 to the Actuals-Hours ``cum_hours_col``; Variance PM is populated only
 on TOTAL + EU TOTAL rows as ``windowed-plan-sum − Actual``.
 """

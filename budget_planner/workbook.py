@@ -303,7 +303,7 @@ def _build_all_sheets(
     # `preserved_timelog["grid"]` was pruned in `rebuild_workbook` before
     # reaching here. Cells in months < rebuild_from_month are frozen and kept
     # verbatim by the builder; cells ≥ rebuild_from_month are discarded and
-    # the solver re-derives them. See `docs/plans/archived/2026-04-23-solver-freeze-point-design.md`.
+    # the solver re-derives them. See `docs/design-invariants.md` § Timelog Plan merged grid.
     _preserved_grid = (preserved_timelog or {}).get("grid") or None
     _rebuild_from_month = (preserved_timelog or {}).get("rebuild_from_month", 1)
     assert ctx.config_layout is not None

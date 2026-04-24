@@ -222,8 +222,7 @@ def _iter_config_section_rows(
     """Yield ``(row, numeric_parsed)`` for each data row of a Config-sheet section.
 
     Encapsulates the hybrid named-range-or-sentinel scan used by the roster,
-    assignments, and externals readers (see design doc
-    ``docs/plans/archived/2026-04-12-rebuild-shape-drift-design.md``):
+    assignments, and externals readers:
 
     * Resolves the named range (when present) to bound the section, so
       Excel-side row inserts don't require sentinel heuristics.
@@ -1391,8 +1390,7 @@ def read_timelog_plan(wb, project_months: int) -> dict:
     v2 surface: the merged "TIMELOG GRID" band holds literal WP codes (no
     `=<Proposed>` formulas anymore). The reader returns the ENTIRE preserved
     grid unconditionally; filtering against the freeze boundary is the
-    builder's job (see ``docs/plans/archived/2026-04-23-solver-freeze-point-design.md``
-    §5).
+    builder's job (see ``docs/design-invariants.md`` § Timelog Plan merged grid).
 
     Anchoring strategy: scan col A for the exact GRID section-title string
     (imported from the builder so edits don't drift). The band layout is

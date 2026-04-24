@@ -57,8 +57,9 @@ class TestCapacityConditionalFormatting:
           - 1 × years per person (red on Actual EU TOTAL annual ceiling)
         To-date block (kaizen simplification 2026-04-14 — 2 cols only):
           - 2 per person (Variance PM red < 0 on TOTAL + EU TOTAL only).
-            Variance-% CF and util/ceil CF dropped per design doc
-            ``docs/plans/archived/2026-04-14-t5-simplification-design.md``.
+            Variance-% CF and util/ceil CF dropped as duplicates of
+            planned-side signals (see ``docs/internals.md``
+            § Capacity Sheet CF).
         """
         from budget_planner.config import EXTERNAL_COMMITMENTS
         ws = workbook["Capacity"]

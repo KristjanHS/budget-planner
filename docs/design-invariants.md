@@ -49,7 +49,7 @@ The workbook hosts two distinct allocation surfaces, both editable, and they may
 
 A person splitting effort 0.6/0.4 across two WPs in a given month may legitimately log 1.0 to one of them that month and 1.0 to the other a different month — the timesheet rule is whole-month, the underlying effort is not. **Do not write cross-sheet formulas that reconcile Plan monthly cells against Timelog Plan monthly cells as if they must agree.** The only shared constraints are the Config inputs both surfaces consume (WP windows, PERSON-WP ASSIGNMENTS windows, Max FTE pool, WP Budget).
 
-See `docs/plans/archived/2026-04-18-timelog-plan-design.md` §1 for v1 scope and `docs/plans/archived/2026-04-19-timelog-plan-v2-design.md` for the merged-grid + toggle redesign.
+Merged-grid + freeze-point invariants below; algorithm lives in `budget_planner/timelog_solver.py`.
 
 ### Timelog Plan merged grid = literal values; `timelog_rebuild_from_month` governs re-solve
 

@@ -58,14 +58,17 @@ MONTH_COL_START = 3
 # duplicated only once per person — on the summary row.
 TIMELOG_MONTH_COL_START = 2   # col B
 
-# PER-WP SUMMARY base-column span: A..H (8 cols: WP code + 7 metrics).
-# Year cols (``Y{yyyy} +i``) start at TIMELOG_WP_SUMMARY_BASE_LAST_COL + 1 = I.
-TIMELOG_WP_SUMMARY_BASE_LAST_COL = 8
+# PER-WP SUMMARY base-column span: A..I (9 cols: WP code + 8 metrics).
+# Year cols (``Y{yyyy} +i``) start at TIMELOG_WP_SUMMARY_BASE_LAST_COL + 1 = J.
+# Aiko-port T3 (2026-04-23) inserted Buffer % at col E; cols E→F, F→G, G→H, H→I
+# shifted right by one, and the year band shifted I..M → J..N.
+TIMELOG_WP_SUMMARY_BASE_LAST_COL = 9
 
-# ``Yearly total +i`` / ``Yearly Budget +i`` row labels sit at col H (last
+# ``Yearly Assigned +i`` / ``Yearly Budget +i`` row labels sit at col I (last
 # base col of PER-WP SUMMARY), immediately left of the per-year breakdown
-# cols (I..). Shift from col A decided in plan D9 (2026-04-22).
-TIMELOG_YEARLY_LABEL_COL = 8
+# cols (J..). Shift from col A decided in plan D9 (2026-04-22); post-Aiko-port
+# T3 shifted one col right (H → I) when Buffer % was inserted.
+TIMELOG_YEARLY_LABEL_COL = 9
 
 # ── Section header contract ──
 # Every labelled section on the Config sheet uses: title row, header row,

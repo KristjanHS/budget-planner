@@ -327,15 +327,18 @@ def test_traffic_light_formulas_wired(tlp):
 
 def test_wp_summary_headers_v2(tlp):
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_WP_SUMMARY) + 1
+    # Aiko-port T3 (2026-04-23): col B renamed "Budget €" → "Budget +i"
+    # (direct Config!F xref = +i). Buffer % inserted at col E; cols
+    # Assigned months/WP sched months/Burn rate/OOW shifted one col right.
     expected = [
-        "WP code", "Budget €", "Assigned €", "Buffer €",
+        "WP code", "Budget +i", "Assigned €", "Buffer €", "Buffer %",
         "Assigned months", "WP sched months", "Burn rate needed",
         "Any out-of-window?",
     ]
     got = [tlp.cell(hdr_row, 1 + i).value for i in range(len(expected))]
     # Accept "Any out-of-window?" or a shorter variant — the 'OOW' semantic.
-    assert got[:7] == expected[:7], got
-    assert got[7] and "out-of-window" in str(got[7]).lower(), got[7]
+    assert got[:8] == expected[:8], got
+    assert got[8] and "out-of-window" in str(got[8]).lower(), got[8]
 
 
 def test_wp_summary_rows_match_work_packages(tlp, assigned_wb):
@@ -396,27 +399,31 @@ def test_buffer_signed(tlp, assigned_wb):
 
 
 def test_burn_rate_conditional(tlp, assigned_wb):
-    """Col G formula: IF(AND(D<0, wallclock>0), -D/wallclock, ""). CF red on excess."""
+    """Col H formula: IF(AND(D<0, wallclock>0), -D/wallclock, ""). CF red on excess.
+
+    Aiko-port T3 (2026-04-23): Burn rate shifted col G → H when Buffer % was
+    inserted at col E. Buffer column at col D unchanged.
+    """
     wps = _read_wps(assigned_wb)
     first = _wp_summary_first_row(tlp)
     last = first + len(wps) - 1
     for i, _wp in enumerate(wps):
         r = first + i
-        v = str(tlp.cell(r, 7).value or "")
+        v = str(tlp.cell(r, 8).value or "")
         assert v.startswith("=IF(AND(D"), f"row {r} Burn rate: {v!r}"
         assert f"D{r}<0" in v
         assert "current_month" in v
         assert '"")' in v or '"",' in v, v  # empty-string branch present
 
-    # CF: red fill + MAX-rate comparison on a range including col G.
+    # CF: red fill + MAX-rate comparison on a range including col H.
     red_argb = CF_RED_FILL.bgColor.rgb
     red_hits = 0
     for rng, rule in _iter_all_rules(tlp):
         if rule.type != "expression":
             continue
-        if not rng.startswith("G") or ":" not in rng:
+        if not rng.startswith("H") or ":" not in rng:
             continue
-        if f"G{first}:G{last}" not in rng:
+        if f"H{first}:H{last}" not in rng:
             continue
         fill = getattr(rule.dxf, "fill", None) if rule.dxf else None
         if fill is None or fill.bgColor is None:
@@ -424,9 +431,9 @@ def test_burn_rate_conditional(tlp, assigned_wb):
         if fill.bgColor.rgb != red_argb:
             continue
         formula = (rule.formula or [""])[0]
-        if "MAX(" in formula and "G" in formula:
+        if "MAX(" in formula and "H" in formula:
             red_hits += 1
-    assert red_hits >= 1, f"expected red Burn-rate CF on G-band, found {red_hits}"
+    assert red_hits >= 1, f"expected red Burn-rate CF on H-band, found {red_hits}"
 
 
 # ── PER-PERSON SUMMARY: v2 schema ───────────────────────────────────────────
@@ -626,7 +633,7 @@ def test_year_cols_count_and_headers(tlp, assigned_wb):
     groups = _expected_year_groups(params["start"], months)
 
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_WP_SUMMARY) + 1
-    base_cols = 8  # cols A..H hold the base metrics
+    base_cols = 9  # cols A..I hold the base metrics (Aiko-port T3 added Buffer % at col E)
     expected_fill_rgb = WITH_INDIRECT_HEADER_FILL.fgColor.rgb
     for i, (year, _fm, _lm) in enumerate(groups):
         cell = tlp.cell(hdr_row, base_cols + 1 + i)
@@ -647,7 +654,7 @@ def test_year_cols_overlap_blanks(tlp, assigned_wb):
     params, wps = _read_config(assigned_wb)
     groups = _expected_year_groups(params["start"], params["months"])
     first = _wp_summary_first_row(tlp)
-    base_cols = 8
+    base_cols = 9
 
     checked_nonoverlap = 0
     checked_overlap = 0
@@ -691,7 +698,7 @@ def test_year_cols_sum_matches_assigned(recalced_assigned_path):
     params, wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     first = _wp_summary_first_row(ws)
-    base_cols = 8
+    base_cols = 9
     tolerance = len(groups)
 
     checked = 0
@@ -1047,11 +1054,13 @@ def _yearly_rows(tlp) -> tuple[int, int]:
 
 def test_yearly_rows_present(tlp):
     """Both rows exist directly below the last WP row with expected labels
-    at col H (post-D9 shift)."""
+    at col I (post-D9 col-H shift + Aiko-port T3 one-col right shift)."""
     from budget_planner.layout import TIMELOG_YEARLY_LABEL_COL
     from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
     y_total, y_budget = _yearly_rows(tlp)
-    assert tlp.cell(y_total, TIMELOG_YEARLY_LABEL_COL).value == "Yearly total +i"
+    # Aiko-port T3 (2026-04-23) renamed "Yearly total +i" → "Yearly Assigned +i"
+    # per brainstorm locked spec.
+    assert tlp.cell(y_total, TIMELOG_YEARLY_LABEL_COL).value == "Yearly Assigned +i"
     assert tlp.cell(y_budget, TIMELOG_YEARLY_LABEL_COL).value == "Yearly Budget +i"
 
     # Col A on these rows is blank (label shifted to col H).
@@ -1118,7 +1127,7 @@ def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
     params, wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     y_total, _ = _yearly_rows(ws)
-    base_cols = 8
+    base_cols = 9
 
     col_c = ws.cell(y_total, 3).value
     year_sum = 0.0
@@ -1143,7 +1152,7 @@ def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
     params, _wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     _, y_budget = _yearly_rows(ws)
-    base_cols = 8
+    base_cols = 9
 
     col_c = ws.cell(y_budget, 3).value
     year_sum = 0.0
@@ -1174,7 +1183,7 @@ def test_yearly_budget_single_wp_single_year(tlp, assigned_wb):
     params, wps = _read_wps_and_schedule_and_params(assigned_wb)
     groups = _expected_year_groups(params["start"], params["months"])
     _, y_budget = _yearly_rows(tlp)
-    base_cols = 8
+    base_cols = 9
 
     # Find a WP fully contained in one year (existence, not every-row).
     candidates = []

@@ -89,3 +89,21 @@ Before final commit: full `pytest tests/ -q` + `python scripts/recalc.py output/
 - Update `memory/project_state.md`: mark Aiko-port shipped with commit range; drop "impl plan not yet written" note.
 - `git mv` this file + `docs/plans/2026-04-23-aiko-port-decisions.md` → `docs/plans/archived/` after ship (plan-hygiene rule: `git add` working-tree amendments BEFORE `git mv`).
 - Any load-bearing §Design content not in a living doc: migrate to `docs/internals.md` or `docs/design-invariants.md` before archive.
+
+## Correction — 2026-04-23 session 3 (supersedes T3 "4→5 cols" wording)
+
+**T1 + T2 shipped 2026-04-23** (`b39aaf9`, `4d30f2d`, `8a1878c`). The T3 hedge in §Tasks ("audit `_year_col_specs` — if it computes dynamic year count…") resolved during session-2 audit: code already emits 5 dynamic year cols at I-M and a yearly_budget row already exists at H15. Thus T3 is NOT a "4→5 col extension".
+
+**Real T3 deliverable (per brainstorm §"Header/label spec FULLY LOCKED"):**
+
+1. Insert **Buffer %** at col E (new col). `=D{row}/B{row}` with fmt="0.0%".
+2. Shift existing cols 5→6, 6→7, 7→8, 8→9. Existing content: Assigned months, WP sched months, Burn rate, Any out-of-window?
+3. `TIMELOG_WP_SUMMARY_BASE_LAST_COL`: 8 → 9. Year band auto-shifts I–M → J–N via `col = _WP_SUMMARY_BASE_LAST_COL + 1 + yi`.
+4. `TIMELOG_YEARLY_LABEL_COL`: 8 → 9 (label sits immediately left of year band).
+5. Rename `yearly_total_row` label: "Yearly total +i" → **"Yearly Assigned +i"**. `yearly_budget_row` label "Yearly Budget +i" unchanged.
+6. `_WP_SUMMARY_BASE_HEADERS[1]`: "Budget €" → "Budget +i" (S1 carry-forward from T2 review).
+7. Cascading test updates: `test_wp_summary_headers_v2` (9-entry list), `test_burn_rate_conditional` (col G→H), `test_year_cols_*` + `test_yearly_*_col_c_crosscheck` + `test_yearly_budget_single_wp_single_year` (`base_cols` 8→9), `test_yearly_rows_present` (label rename).
+
+**Not in scope (per T2 conservative shipping):** col C Assigned formula stays -i (no ×1.25 wrap); col C/D header text stays "Assigned €" / "Buffer €". The brainstorm's "Assigned +i" / "Buffer +i" naming would require flipping the formula semantics and breaks the yearly col C cross-check test — deferred to a later polish pass, out of scope here.
+
+**T4 deliverable (unchanged):** row-30 per-month person-cost row with `=ROUND(SUMPRODUCT((<col>21:<col>28<>"")*H33:H40)*1.25,0)` across B:AS.

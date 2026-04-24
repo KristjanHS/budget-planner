@@ -8,7 +8,7 @@ Layout (v2 + 2026-04-19 enhancements — supersedes v1's PROPOSED + ASSIGNED twi
   1. Banner (row 1)
   2. Traffic lights (row 2)
   3. blank spacer
-  4. PER-WP SUMMARY band (8 base cols + one EUR col per calendar year)
+  4. PER-WP SUMMARY band (9 base cols + one EUR col per calendar year)
      blank spacer
   5. TIMELOG GRID — single editable band, literal WP codes + empty strings
      blank spacer
@@ -99,15 +99,17 @@ _PERSON_SUMMARY_RATE_COL = (
     _PERSON_SUMMARY_FIRST_METRIC_COL + len(_PERSON_SUMMARY_METRIC_HEADERS) - 1
 )  # col H
 
-# PER-WP SUMMARY metric columns live at A..H (WP code + 7 metrics).
-# Phase 3 appends dynamic "Y{yyyy} +i" cols right of col H — one per calendar
-# year spanned by the project. See `_year_col_specs`.
+# PER-WP SUMMARY metric columns live at A..I (WP code + 8 metrics).
+# Phase 3 appends dynamic "Y{yyyy} +i" cols right of col I — one per calendar
+# year spanned by the project. See `_year_col_specs`. Aiko-port T3 inserted
+# Buffer % at col E; Assigned months/WP sched months/Burn rate/OOW shifted
+# one col right (E→F, F→G, G→H, H→I).
 _WP_SUMMARY_BASE_HEADERS = [
-    "WP code", "Budget €", "Assigned €", "Buffer €",
+    "WP code", "Budget +i", "Assigned €", "Buffer €", "Buffer %",
     "Assigned months", "WP sched months", "Burn rate needed",
     "Any out-of-window?",
 ]
-_WP_SUMMARY_BASE_LAST_COL = len(_WP_SUMMARY_BASE_HEADERS)  # 8
+_WP_SUMMARY_BASE_LAST_COL = len(_WP_SUMMARY_BASE_HEADERS)  # 9
 # Drift guard: layout.py exposes this boundary publicly for tests and future
 # cross-module callers; the header-count derivation here must stay in sync.
 assert _WP_SUMMARY_BASE_LAST_COL == TIMELOG_WP_SUMMARY_BASE_LAST_COL
@@ -293,7 +295,7 @@ def build_timelog_plan_sheet(
         wp_summary_first_row + num_wps - 1 if num_wps > 0
         else wp_summary_header_row
     )
-    # Yearly total € / Yearly budget € rows sit directly below the last WP row
+    # Yearly Assigned +i / Yearly Budget +i rows sit directly below the last WP row
     # (no spacer, same outline group). Only emitted when there are WP rows.
     yearly_total_row = wp_summary_last_row + 1 if num_wps > 0 else None
     yearly_budget_row = wp_summary_last_row + 2 if num_wps > 0 else None
@@ -390,7 +392,7 @@ def build_timelog_plan_sheet(
         # Year-col headers (i ≥ _WP_SUMMARY_BASE_LAST_COL) carry
         # WITH_INDIRECT_HEADER_FILL — per-WP year cells display +i
         # via ×1.25 wrap at the SUMPRODUCT leaf (T7.3). Base-col
-        # headers (A..H) retain neutral fill per D8 — their semantics
+        # headers (A..I) retain neutral fill per D8 — their semantics
         # stay -i for T7 scope.
         is_year_col = i >= _WP_SUMMARY_BASE_LAST_COL
         style_cell(
@@ -548,11 +550,12 @@ def build_timelog_plan_sheet(
         ).value = (
             f'=COUNTIF(D{wp_summary_first_row}:D{wp_summary_last_row},"<0")'
         )
-        # 2) Any out-of-window cell? — sum col H of PER-WP SUMMARY.
+        # 2) Any out-of-window cell? — sum col I of PER-WP SUMMARY (shifted
+        # from col H when Buffer % was inserted at col E, Aiko-port T3).
         style_cell(
             ws, tl_row, tl_value_cols[1], font=BLACK_FORMULA,
             alignment=CENTER, fmt="0",
-        ).value = f"=SUM(H{wp_summary_first_row}:H{wp_summary_last_row})"
+        ).value = f"=SUM(I{wp_summary_first_row}:I{wp_summary_last_row})"
     else:
         for c in tl_value_cols[:2]:
             ws.cell(row=tl_row, column=c, value=0)
@@ -652,8 +655,9 @@ def build_timelog_plan_sheet(
             ),
         )
 
-        # Rule 5 (PER-WP SUMMARY CF): Burn rate (col G) exceeds max team rate.
-        burn_range = f"G{wp_summary_first_row}:G{wp_summary_last_row}"
+        # Rule 5 (PER-WP SUMMARY CF): Burn rate (col H) exceeds max team rate.
+        # Shifted from col G when Buffer % was inserted at col E (Aiko-port T3).
+        burn_range = f"H{wp_summary_first_row}:H{wp_summary_last_row}"
         if num_persons > 0:
             rate_col_letter = get_column_letter(_PERSON_SUMMARY_RATE_COL)
             max_rate_expr = (
@@ -664,19 +668,20 @@ def build_timelog_plan_sheet(
                 burn_range,
                 FormulaRule(
                     formula=[
-                        f"AND(ISNUMBER(G{wp_summary_first_row}),"
-                        f"G{wp_summary_first_row}>{max_rate_expr})"
+                        f"AND(ISNUMBER(H{wp_summary_first_row}),"
+                        f"H{wp_summary_first_row}>{max_rate_expr})"
                     ],
                     fill=CF_RED_FILL,
                 ),
             )
 
-        # Rule 6 (PER-WP SUMMARY CF): Any out-of-window? > 0 → red. Col H.
-        oow_range = f"H{wp_summary_first_row}:H{wp_summary_last_row}"
+        # Rule 6 (PER-WP SUMMARY CF): Any out-of-window? > 0 → red. Col I
+        # (shifted from col H by Aiko-port T3).
+        oow_range = f"I{wp_summary_first_row}:I{wp_summary_last_row}"
         ws.conditional_formatting.add(
             oow_range,
             FormulaRule(
-                formula=[f"H{wp_summary_first_row}>0"],
+                formula=[f"I{wp_summary_first_row}>0"],
                 fill=CF_RED_FILL,
             ),
         )
@@ -990,11 +995,13 @@ def _write_yearly_rows(
     year_specs: list["_YearColSpec"],
     cfg_wp_first_row: int,
 ) -> None:
-    """Write the Yearly total +i and Yearly Budget +i rows under PER-WP SUMMARY.
+    """Write the Yearly Assigned +i and Yearly Budget +i rows under PER-WP SUMMARY.
 
-    - Col A: blank. (Pre-D9 layout placed the row label here; shifted to col H
-      2026-04-22 so the label sits adjacent-left to the per-year breakdown.)
-    - Col H (``TIMELOG_YEARLY_LABEL_COL``): row label (HEADER_FONT) with
+    - Col A: blank. (Pre-D9 layout placed the row label here; shifted to col I
+      via TIMELOG_YEARLY_LABEL_COL so the label sits adjacent-left to the
+      per-year breakdown. Aiko-port T3 shifted col H → I when Buffer % was
+      inserted at col E.)
+    - Col I (``TIMELOG_YEARLY_LABEL_COL``): row label (HEADER_FONT) with
       ``WITH_INDIRECT_HEADER_FILL`` — the per-year cells on this row are +i,
       so the label carries the +i header fill.
     - Col C: cross-check sum (across-WP SUM of the PER-WP SUMMARY column
@@ -1007,8 +1014,8 @@ def _write_yearly_rows(
         * ``yearly_budget_row`` col C = ``=SUM(B{first}:B{last})``. Q-B
           flipped PER-WP SUMMARY col B to direct Config!F (Budget +i,
           ``COL_WP_BUDGET_PLUS_I``), so SUM(B) is already +i.
-    - Cols B, D-G: intentionally blank.
-    - Per-year cols (I…):
+    - Cols B, D-H: intentionally blank.
+    - Per-year cols (J…):
       * yearly_total_row: =SUM(<year_col>{W1}:<year_col>{Wn}) — stacks the
         per-WP Y{yyyy} +i cells for that year (each cell is +i via the T7.3
         ×1.25 wrap at the display layer).
@@ -1022,7 +1029,7 @@ def _write_yearly_rows(
         when the WP schedule changes.
     """
     style_cell(
-        ws, yearly_total_row, TIMELOG_YEARLY_LABEL_COL, value="Yearly total +i",
+        ws, yearly_total_row, TIMELOG_YEARLY_LABEL_COL, value="Yearly Assigned +i",
         font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,
     )
     style_cell(
@@ -1045,7 +1052,7 @@ def _write_yearly_rows(
     yt_c.value = f"=SUM(C{wp_summary_first_row}:C{wp_summary_last_row})"
     yt_c.comment = sized_comment(
         "Cross-check SUM of PER-WP SUMMARY col C (Assigned €, -i). "
-        "Row label 'Yearly total +i' refers to the per-year cells to "
+        "Row label 'Yearly Assigned +i' refers to the per-year cells to "
         "the right (all +i via ×1.25 at the SUMPRODUCT leaf). Compare "
         "this cell × 1.25 against the per-year sum for drift detection.",
         author="Programme Budget Tool",
@@ -1067,7 +1074,7 @@ def _write_yearly_rows(
         col = _WP_SUMMARY_BASE_LAST_COL + 1 + yi
         col_letter_str = get_column_letter(col)
 
-        # Yearly total €: stack the per-WP year-col cells.
+        # Yearly Assigned +i: stack the per-WP year-col cells.
         style_cell(
             ws, yearly_total_row, col, font=BLACK_FORMULA, fmt="€#,##0",
         ).value = (
@@ -1168,7 +1175,7 @@ def _write_wp_summary_row(
 ) -> None:
     """Fill the per-WP-summary cells on a single WP row.
 
-    Cols A..H are the 8 base metrics; cols I.. hold one ``Y{yyyy} +i`` column
+    Cols A..I are the 9 base metrics; cols J.. hold one ``Y{yyyy} +i`` column
     per calendar year spanned by the project. Year cells where the WP's
     active window does not overlap the year are blank (build-time check).
     """
@@ -1201,20 +1208,26 @@ def _write_wp_summary_row(
         f"=C{row}-B{row}"
     )
 
-    # Col E: Assigned months = SUMPRODUCT(1*(grid="WP")).
+    # Col E: Buffer % = Buffer / Budget. Aiko-port T3 (2026-04-23) inserted
+    # this col; everything right of col D shifted one right.
+    style_cell(ws, row, 5, font=BLACK_FORMULA, fmt="0.0%").value = (
+        f"=D{row}/B{row}"
+    )
+
+    # Col F: Assigned months = SUMPRODUCT(1*(grid="WP")).
     if has_persons:
-        style_cell(ws, row, 5, font=BLACK_FORMULA, fmt="0").value = (
+        style_cell(ws, row, 6, font=BLACK_FORMULA, fmt="0").value = (
             f'=SUMPRODUCT(1*({grid_range}="{wp_code}"))'
         )
     else:
-        style_cell(ws, row, 5, value=0, font=BLACK_FORMULA, fmt="0")
+        style_cell(ws, row, 6, value=0, font=BLACK_FORMULA, fmt="0")
 
-    # Col F: WP sched months — build-time literal (end − start + 1 under the
+    # Col G: WP sched months — build-time literal (end − start + 1 under the
     # single-range schema). Rule 3 carve-out: BLACK_FORMULA font on a literal
     # — signals "builder-written, do not edit." Cell comment echoes the
     # deviation.
     sched_cell = style_cell(
-        ws, row, 6, value=int(wp.active_end - wp.active_start + 1),
+        ws, row, 7, value=int(wp.active_end - wp.active_start + 1),
         font=BLACK_FORMULA, fmt="0", alignment=CENTER,
     )
     sched_cell.comment = sized_comment(
@@ -1223,27 +1236,27 @@ def _write_wp_summary_row(
         author="Programme Budget Tool",
     )
 
-    # Col G: Burn rate needed — IF-guarded; "" when buffer≥0 or wallclock=0.
+    # Col H: Burn rate needed — IF-guarded; "" when buffer≥0 or wallclock=0.
     # wallclock = MAX(0, wp.active_end − current_month); buffer = D{row}.
     wallclock_expr = f"MAX(0,{wp.active_end}-current_month)"
-    style_cell(ws, row, 7, font=BLACK_FORMULA, fmt="€#,##0").value = (
+    style_cell(ws, row, 8, font=BLACK_FORMULA, fmt="€#,##0").value = (
         f"=IF(AND(D{row}<0,{wallclock_expr}>0),"
         f'-D{row}/{wallclock_expr},"")'
     )
 
-    # Col H: Any out-of-window? = SUMPRODUCT((grid="WP") * OOW).
+    # Col I: Any out-of-window? = SUMPRODUCT((grid="WP") * OOW).
     if has_persons:
-        style_cell(ws, row, 8, font=BLACK_FORMULA, fmt="0").value = (
+        style_cell(ws, row, 9, font=BLACK_FORMULA, fmt="0").value = (
             f'=SUMPRODUCT(({grid_range}="{wp_code}")*'
             f"(({midx_range}<{wp.active_start})+"
             f"({midx_range}>{wp.active_end})))"
         )
     else:
-        style_cell(ws, row, 8, value=0, font=BLACK_FORMULA, fmt="0")
+        style_cell(ws, row, 9, value=0, font=BLACK_FORMULA, fmt="0")
 
-    # Cols I..: Y{yyyy} +i — EUR placed by the solver in this WP × year slice.
-    # (Still col I on PER-WP SUMMARY — this band has 8 base cols A..H; year
-    # cols start at col I. Independent of the PER-PERSON SUMMARY Rate col.)
+    # Cols J..: Y{yyyy} +i — EUR placed by the solver in this WP × year slice.
+    # (Col J on PER-WP SUMMARY — this band has 9 base cols A..I; year
+    # cols start at col J. Independent of the PER-PERSON SUMMARY Rate col.)
     # Overlap with the WP's active window is checked at build time; non-
     # overlap cells are blank. ×1.25 at the display layer flips the cell to
     # with-indirect (rates are -i); rounded per the programme leaf-rounding rule.

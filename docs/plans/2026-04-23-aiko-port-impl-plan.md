@@ -107,3 +107,11 @@ Before final commit: full `pytest tests/ -q` + `python scripts/recalc.py output/
 **Not in scope (per T2 conservative shipping):** col C Assigned formula stays -i (no ×1.25 wrap); col C/D header text stays "Assigned €" / "Buffer €". The brainstorm's "Assigned +i" / "Buffer +i" naming would require flipping the formula semantics and breaks the yearly col C cross-check test — deferred to a later polish pass, out of scope here.
 
 **T4 deliverable (unchanged):** row-30 per-month person-cost row with `=ROUND(SUMPRODUCT((<col>21:<col>28<>"")*H33:H40)*1.25,0)` across B:AS.
+
+## Correction — 2026-04-24 T4 ship
+
+**T4 shipped 2026-04-24.** Row-30 "Monthly person cost +i" row added between the existing "Monthly total +i" row (grid_total_row = person_last + 1) and the PER-PERSON SUMMARY title. Implementation chose to consume the 1-row spacer that previously separated the grid band from PER-PERSON SUMMARY rather than shifting summary_title_row down — this keeps `summary_person_first_row` anchored at its prior value (H33 when person_first = 21), which the T4 formula hard-codes via `H{summary_first}:H{summary_last}`. Shifting the summary band down would have broken the H33:H40 anchor the decisions doc (Q-D session-2) explicitly locked.
+
+Row-30 reuses `_write_monthly_total_row` with a new `label` kwarg ("Monthly person cost +i"); formula shape is identical to the Monthly total +i row per the Q-C=(c) decision (Aiko's two-row model with a -i row at 29 was NOT restored — current rebuild keeps one collapsed +i row at grid_total_row, plus the Aiko-port additive row at row 30). New row is outside the grid outline group so it stays visible when the grid collapses. Vacation-month cells carry VACATION_FILL (inherits Monthly total +i behavior); formula evaluates to 0 there as the grid cells are empty.
+
+Tests: 3 new in `tests/test_timelog_plan.py` — `test_monthly_person_cost_row_present` (label + per-month formula shape + with-indirect fill), `test_monthly_person_cost_row_precedes_summary_title` (abuts PER-PERSON SUMMARY with no spacer, bystander that Monthly total +i still sits above), `test_monthly_person_cost_recalc_matches_monthly_total` (recalc equality vs Monthly total +i). Full 600/600 green; recalc 4244 formulas / 0 errors on `init` workbook.

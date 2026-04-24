@@ -317,6 +317,15 @@ def build_timelog_plan_sheet(
     # Monthly total +i row sits directly under the last person row (no spacer,
     # same outline group). Only emitted when there are person rows.
     grid_total_row = grid_person_last_row + 1 if num_persons > 0 else None
+    # Aiko-port T4: Monthly person cost +i row sits directly below Monthly
+    # total +i — consumes the 1-row spacer that previously separated the grid
+    # band from PER-PERSON SUMMARY. Outside the grid outline group so it stays
+    # visible when the grid collapses. Abutting summary_title_row keeps
+    # summary_person_first_row at its anchor (H33), which the row-30 formula
+    # hard-codes via H{summary_first}:H{summary_last}.
+    grid_person_cost_row = (
+        grid_total_row + 1 if grid_total_row is not None else None
+    )
 
     summary_title_row = (
         (grid_total_row if grid_total_row is not None else grid_midx_row) + 2
@@ -539,6 +548,20 @@ def build_timelog_plan_sheet(
             summary_person_first_row=summary_person_first_row,
             summary_person_last_row=summary_person_last_row,
             vacation_months_project=vacation_months_project,
+        )
+
+    # ── Monthly person cost +i row (Aiko-port T4, outside outline group) ──
+    if grid_person_cost_row is not None:
+        _write_monthly_total_row(
+            ws, row=grid_person_cost_row,
+            month_col_start=month_col_start,
+            month_col_end=month_col_end,
+            grid_person_first_row=grid_person_first_row,
+            grid_person_last_row=grid_person_last_row,
+            summary_person_first_row=summary_person_first_row,
+            summary_person_last_row=summary_person_last_row,
+            vacation_months_project=vacation_months_project,
+            label="Monthly person cost +i",
         )
 
     # ── Patch traffic-light formulas (downstream rows now exist) ──
@@ -1121,8 +1144,9 @@ def _write_monthly_total_row(
     summary_person_first_row: int,
     summary_person_last_row: int,
     vacation_months_project: frozenset[int],
+    label: str = "Monthly total +i",
 ) -> None:
-    """Write the Monthly total +i row under the TIMELOG GRID.
+    """Write a per-month +i aggregate row.
 
     Each month cell: ``=ROUND(SUMPRODUCT((col<>"")*rate_vector)*1.25,0)``.
     Non-empty grid cells (WP codes) contribute their person's rate; empty
@@ -1130,9 +1154,13 @@ def _write_monthly_total_row(
     to with-indirect at the leaf (rates are -i). Vacation-month cells
     additionally carry VACATION_FILL for visual column continuity (formula
     still evaluates to 0).
+
+    Used for both "Monthly total +i" (under the grid, inside the outline
+    group) and the Aiko-port "Monthly person cost +i" row (just above
+    PER-PERSON SUMMARY, always visible). Callers select via ``label``.
     """
     style_cell(
-        ws, row, 1, value="Monthly total +i",
+        ws, row, 1, value=label,
         font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,
     )
     rate_col_letter = get_column_letter(_PERSON_SUMMARY_RATE_COL)

@@ -1027,6 +1027,76 @@ def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
     wb.close()
 
 
+# ── Monthly person cost +i row (Aiko-port T4) ───────────────────────────────
+
+
+def test_monthly_person_cost_row_present(tlp, assigned_wb):
+    """Monthly person cost +i row sits directly under Monthly total +i with
+    the same ROUND(SUMPRODUCT(...)*1.25,0) formula shape per month col and
+    WITH_INDIRECT_HEADER_FILL on the label cell (Aiko-port T4, Q-D)."""
+    from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
+    months = _project_months(assigned_wb)
+    m_start = TIMELOG_MONTH_COL_START
+    m_end = m_start + months - 1
+
+    person_cost_row = _monthly_total_row(tlp) + 1
+    label_cell = tlp.cell(person_cost_row, 1)
+    assert label_cell.value == "Monthly person cost +i"
+    assert (
+        label_cell.fill.fgColor.rgb == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
+    ), f"label fill {label_cell.fill.fgColor.rgb!r}"
+
+    checked = 0
+    for c in range(m_start, m_end + 1):
+        v = str(tlp.cell(person_cost_row, c).value or "")
+        assert v.startswith("=ROUND(SUMPRODUCT("), (
+            f"col {c}: expected ROUND(SUMPRODUCT(…), got {v!r}"
+        )
+        assert '<>""' in v, v
+        assert "*1.25" in v, f"col {c}: expected ×1.25 wrap, got {v!r}"
+        checked += 1
+    assert checked == months
+
+
+def test_monthly_person_cost_row_precedes_summary_title(tlp):
+    """Person-cost row abuts PER-PERSON SUMMARY title with no spacer — this
+    anchors summary_person_first_row at the H33:H40 range the formula bakes in.
+    Bystander: Monthly total +i row above is still at person_cost_row - 1."""
+    person_cost_row = _monthly_total_row(tlp) + 1
+    # Monthly total +i row is the row above — confirms layout order.
+    assert (
+        str(tlp.cell(person_cost_row - 1, 1).value or "")
+        .lower().startswith("monthly total")
+    )
+    # Next row is the PER-PERSON SUMMARY section title (no spacer between).
+    next_val = tlp.cell(person_cost_row + 1, 1).value
+    assert next_val == SECTION_TITLE_PERSON_SUMMARY, (
+        f"expected PER-PERSON SUMMARY title at row "
+        f"{person_cost_row + 1}, got {next_val!r}"
+    )
+
+
+def test_monthly_person_cost_recalc_matches_monthly_total(recalced_assigned_path):
+    """Recalc'd values on the person-cost row equal the Monthly total +i row
+    cell-for-cell — same formula, same inputs. Aiko's workbook had both as a
+    two-row display; we preserve the port by duplicating values (the -i row
+    was intentionally NOT restored per Q-C session-2 answers)."""
+    wb = load_workbook(recalced_assigned_path, data_only=True)
+    ws = wb[SHEET_TIMELOG_PLAN]
+    params, _wps = _read_config(wb)
+    m_start = TIMELOG_MONTH_COL_START
+    m_end = m_start + params["months"] - 1
+    total_row = _monthly_total_row(ws)
+    person_cost_row = total_row + 1
+
+    for c in range(m_start, m_end + 1):
+        assert ws.cell(total_row, c).value == ws.cell(person_cost_row, c).value, (
+            f"col {c}: total={ws.cell(total_row, c).value!r} "
+            f"vs cost={ws.cell(person_cost_row, c).value!r}"
+        )
+    wb.close()
+
+
 # ── Yearly total € / Yearly budget € rows (Phase 4 enhancement) ─────────────
 
 

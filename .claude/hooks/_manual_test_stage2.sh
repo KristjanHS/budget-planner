@@ -8,7 +8,7 @@ set -u
 cd "$(dirname "$0")/../.."
 PROJ="$(pwd)"
 HOOK_PLAN=".claude/hooks/docs-only-plan-gate.py"
-HOOK_TEST=".claude/hooks/external-process-test-gate.py"
+HOOK_TEST="$HOME/.claude/hooks/external-process-test-gate.py"
 STAMP="$HOME/.claude/sessions/$(python3 -c "import hashlib; print(hashlib.md5(b'$PROJ').hexdigest()[:8])")/pytest-pass-stamp"
 
 pass=0; fail=0

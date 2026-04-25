@@ -2,7 +2,7 @@
 
 Hooks adapted from [pedrohcgs/claude-code-my-workflow](https://github.com/pedrohcgs/claude-code-my-workflow) (2026-04-15) plus project-specific gates.
 
-## Active hooks (7)
+## Active hooks (6)
 
 | File | Event | Purpose |
 |---|---|---|
@@ -12,7 +12,8 @@ Hooks adapted from [pedrohcgs/claude-code-my-workflow](https://github.com/pedroh
 | `verify-reminder.py` | `PostToolUse` (matcher: `Write\|Edit`) | On `.py` edits outside skip-dirs, nudges to run `pytest tests/ -q`. Throttled to 60s per file |
 | `docs-bloat-gate.py` | `PreToolUse` (matcher: `Write\|Edit\|Bash`) | Blocks net-positive Write/Edit to `docs/spec.md`, `docs/runbook.md`, `docs/refactor-incidents.md`, `.claude/rules/*.md`, plus Bash `>`/`>>`/`tee`/`sed -i` writes targeting those paths. Pass conditions: net delta ≤ 0, `→ see X` pointer, brand-new `## ` heading (lines under it exempt), or override sentinel. Design: `docs/plans/archived/2026-04-25-doc-bloat-root-causes-brainstorm.md` |
 | `docs-only-plan-gate.py` | `PreToolUse` Bash + `PostToolUse` Bash | **Pre:** blocks `git mv .*docs/plans/.*archived/` unless a pytest-pass stamp is fresh (≤30 min) or override sentinel present. **Post:** stamps `~/.claude/sessions/<hash>/pytest-pass-stamp` when a `pytest tests/...` invocation exits 0. Source: `docs/plans/archived/2026-04-25-prose-rules-to-hooks-audit.md` (W1.2) |
-| `external-process-test-gate.py` | `PreToolUse` (matcher: `Write\|Edit`) | Blocks Write/Edit to `tests/**/*.py` (excluding `tests/manual/`, `tests/conftest.py`, `tests/__init__.py`) when content matches docker / kubectl / playwright / selenium imports or subprocess calls, or `requests.<get\|post\|...>(`. Source: `docs/plans/archived/2026-04-25-prose-rules-to-hooks-audit.md` (W1.4) |
+
+`external-process-test-gate.py` was promoted to global (`~/.claude/hooks/`, registered in global `settings.json`) on 2026-04-25 since its source rule (`~/.claude/rules/testing.md`) is also global. Override log moved to `~/.claude/logs/external-process-test-overrides.log`. Behavior unchanged for this project.
 
 All hooks fail open (exit 0 on any exception) so a hook bug never blocks Claude.
 
@@ -76,35 +77,6 @@ echo '{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command
 ```
 
 **Inspect override log:** `cat docs/analysis/docs-only-plan-overrides.log`. ≥3 entries since last `/retro` is a signal to revisit gate calibration.
-
-## Troubleshooting `external-process-test-gate.py`
-
-**Symptom: legitimate test edit blocked.**
-Stderr lists the matched patterns (e.g. `subprocess to external CLI`, `requests HTTP call`). Pick whichever fits:
-- **Move the test under `tests/manual/`** (the carve-out — see `tests/manual/README.md`). Run with `pytest tests/manual/ -q` on demand.
-- **Add the override sentinel** in the new content: `<!-- external-process-test-gate-override: <reason ≥10 chars> -->`. The reason is appended to `docs/analysis/external-process-test-overrides.log` (gitignored).
-
-**Symptom: hook fires on legitimate `subprocess.run([...recalc.py...])`.**
-The hook's subprocess pattern only matches first-arg strings starting with `docker`/`kubectl`/`playwright`/`selenium`. If you're seeing a false-positive on `recalc.py` or another project tool, file it — the regex is intentionally narrow to avoid that case (see hook docstring "Why narrower than the W1.4 audit's `subprocess.run` blanket").
-
-**Known scope:**
-- **String-form `subprocess.run("docker run ...", shell=True)`** is matched the same as list-form `subprocess.run(["docker", ...])`. Both invoke docker; both belong in `tests/manual/`. If you genuinely need it elsewhere, use the override sentinel.
-- **Aliased imports `import requests as r; r.get(...)`** are NOT caught — the `requests.<verb>(` pattern requires the literal `requests.` prefix. New tests using HTTP via aliases will slip through; if you spot one in review, treat it as the override-sentinel case (the rule still applies, the hook just didn't catch it).
-- **Tuple-form `subprocess.run((\"docker\", ...))`** is NOT caught — by design, since none of the project's existing patterns use tuple-form. If a future test does, file the gap.
-
-**Test the hook in isolation:**
-```sh
-# block path
-echo '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"'$PWD'/tests/test_x.py","content":"import requests\nrequests.get(\"http://x\")"}}' \
-  | python3 .claude/hooks/external-process-test-gate.py
-# allow path (under tests/manual/)
-echo '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"'$PWD'/tests/manual/test_x.py","content":"import requests\nrequests.get(\"http://x\")"}}' \
-  | python3 .claude/hooks/external-process-test-gate.py
-```
-
-**Path scope (exempt):** `tests/__init__.py`, `tests/conftest.py`, anything under `tests/manual/**`. Files outside `tests/` are silently ignored.
-
-**Inspect override log:** `cat docs/analysis/external-process-test-overrides.log`.
 
 ## Regression-test scaffold
 

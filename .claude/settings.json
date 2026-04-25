@@ -44,16 +44,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/external-process-test-gate.py",
-            "timeout": 5
-          }
-        ]
       }
     ],
     "PostToolUse": [

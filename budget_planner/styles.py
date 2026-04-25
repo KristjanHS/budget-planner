@@ -39,7 +39,7 @@ DARK_GREY_FILL = PatternFill("solid", fgColor="A6A6A6")
 
 # Timelog Plan: pale yellow for vacation-month grid cells. Distinct tier —
 # direct fill (no CF), locked cells, always empty. See
-# `docs/design-invariants.md` § Vacation cells are always locked and empty.
+# `docs/spec.md` § Vacation cells are always locked and empty.
 VACATION_FILL = PatternFill("solid", fgColor="FFF2CC")
 
 # Timelog Plan: pastel palette cycled across WPs for the canvas background.

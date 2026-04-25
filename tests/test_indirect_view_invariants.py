@@ -1,5 +1,5 @@
 """Indirect-view cross-sheet invariants (see
-``docs/design-invariants.md`` § Indirect-view EUR header suffix).
+``docs/spec.md`` § Indirect-view EUR header suffix).
 
 Enforces the ``+i`` / ``-i`` convention across the 6 in-scope sheets
 (Config, Actuals, Plan-Forecast, Capacity, Actuals-Hours, Timelog Plan):

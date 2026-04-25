@@ -1,4 +1,25 @@
-"""Config sheet builder — project parameters, work packages, and team roster."""
+"""Config sheet builder — project parameters, work packages, and team roster.
+
+Stacked sections — blue-input project-parameters block (Title, Start,
+Months, FTE Rate, EU Annual Ceiling — the regulatory 215-day PM-per-FTE-year
+cap, preserved as grant vocabulary, Hours/FTE Month, Vacation Month),
+black-formula builder-written scalars (``Num Vacation Months``,
+``Version Stamp`` — Rule 3 carve-out, see ``.claude/rules/dev-workflow.md``),
+then the WP table (``tbl_WorkPackages``), then Team Roster.
+
+Source of truth for every named range listed in ``docs/spec.md``
+§ Named-range contract except the two through-month names (hosted on
+Actuals / Actuals-Hours). Returns ``config_layout`` with ``wp_first_row``,
+``wp_last_row``, ``person_rows``.
+
+Role: **primary planning surface** — all assignment/roster edits land here
+(PERSON-WP ASSIGNMENTS, EXTERNAL COMMITMENTS, WP tables, roster, grade
+rates, reporting periods).
+
+## Conditional formatting
+
+- WP start/end columns: **yellow** when start month > end month.
+"""
 
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -94,7 +115,7 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
                font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
 
     # Column headers. EUR-bearing columns carry +i / -i suffix and green/orange
-    # fill per the indirect-view convention (docs/grant-domain.md § Indirect view).
+    # fill per the indirect-view convention (docs/spec.md § Indirect-view EUR header suffix).
     budget_headers = [
         ("WP ID", LIGHT_BLUE_FILL),
         ("WP Name", LIGHT_BLUE_FILL),

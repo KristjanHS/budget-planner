@@ -1,4 +1,17 @@
-"""Plan sheet builder — compact header + planned FTE block."""
+"""Plan sheet builder — compact header + planned FTE block.
+
+Two-phase build. Phase 1 creates structure with empty FTE cells. Phase 2
+(``_apply_planned_formulas()``) fills cells with ``=SUM(Capacity!...)``
+after Capacity is built. Has validation columns: Sum, Budget FTE, Variance.
+
+Role: monthly cells are formula-driven (``=SUM(Capacity!...)``) — **do not
+edit directly**.
+
+## Conditional formatting
+
+- Planned variance column: **yellow** when ``ABS(value) > 0.01``.
+- Actual remaining column: **red** when ``value < 0``.
+"""
 
 from openpyxl.styles import Font, Protection
 from openpyxl.workbook.defined_name import DefinedName

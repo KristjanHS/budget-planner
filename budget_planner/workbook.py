@@ -1,23 +1,73 @@
 """Workbook orchestrator — init, rebuild, snapshot/restore modes.
 
-Build order (load-bearing — downstream builders consume layout dicts
+## Builder interface
+
+Each sheet is produced by a stateless builder function. Builders receive
+data + upstream layout dicts as parameters and return a layout dict of
+row/column positions consumed by downstream builders::
+
+    def build_<sheet>_sheet(ws, wb, ..., *, project_params=None,
+                            work_packages=None, ...):
+        # ws: openpyxl Worksheet
+        # wb: parent Workbook (named ranges, cross-sheet access)
+        # ...: upstream layout dicts
+        # Returns: layout dict with row/column numbers for downstream builders
+
+## Builder dependency chain
+
+| Builder        | Needs from upstream                                                                                             |
+|----------------|-----------------------------------------------------------------------------------------------------------------|
+| config_sheet   | (none)                                                                                                          |
+| plan           | config_layout.wp_first_row                                                                                      |
+| capacity       | config_layout.person_rows, plan_layout                                                                          |
+| plan (patch)   | capacity_layout.person_groups.wp_rows                                                                           |
+| timelog_plan   | config_layout + Trends-stub ``current_month`` named range + ``team_priorities`` / ``roster_lookup`` named ranges |
+| actuals        | plan_layout                                                                                                     |
+| summary        | plan_layout + actuals_layout                                                                                    |
+| trends         | all upstream layouts                                                                                            |
+
+## Build order (load-bearing — downstream builders consume layout dicts
 produced by upstream ones, so reordering silently breaks cross-sheet
 formulas)::
 
     Config ──► Capacity ──► Plan ──► (rewrite Plan FTE)
                                │
                                ├──► Trends(stub = current_month named range)
-                               └──► Actuals ──► Summary ──► Trends(full)
+                               │       │
+                               │       └──► Timelog Plan
+                               └──► Actuals-Hours ──► Plan-Forecast
+                                       └──► Actuals ──► Summary ──► Trends(full)
 
-Coupling points:
+Enforced by ``test_build_order_is_stable``. Build order differs from
+user-facing tab order — some builders are ordered by dependency, not
+display position. Tab order (set after build via ``wb.move_sheet``) is in
+``docs/spec.md`` § Cross-sheet formula graph.
+
+### Build-order rationale
+
 - Capacity consumes ``config_layout`` (param rows, first WP row).
 - Plan consumes ``config_layout`` (param rows, first WP row).
 - ``_apply_planned_formulas`` overwrites Plan FTE cells using
   ``capacity_layout`` — must run after both Capacity and Plan.
-- Actuals formulas reference the ``current_month`` named range — the Trends
-  stub that creates it must run before Actuals.
-- Summary and full Trends consume every prior layout dict and must
-  run last in that order.
+- Trends stub creates the ``current_month`` named range that Actuals
+  formulas depend on — must run before Actuals.
+- Timelog Plan is independent of the forecast chain; it only needs the
+  Config layout and the ``current_month`` stub, so it slots right after
+  Trends-stub.
+- Actuals-Hours must precede Plan-Forecast (forecast-EUR leaves exist
+  before they are SUMmed).
+- Plan-Forecast must precede Actuals (forecast-monitoring block green-
+  cross-refs Plan-Forecast).
+- Summary must follow Plan-Forecast (pulls Forecast EUR/year).
+- Trends is populated last so every upstream layout dict (including
+  ``helper_row_forecast``) is known.
+
+## Sheet role contract (one-line)
+
+Each sheet has a single role; derived views must not write to input
+surfaces and vice versa. Roles are encoded in the font-color rule
+(blue=input, black=formula, green=cross-sheet ref) plus the tab-color
+markers in ``docs/spec.md`` § Tab colors.
 
 ``BuildContext`` below threads the accumulated layout dicts through
 ``_build_all_sheets`` so the DAG is explicit rather than hidden in locals.
@@ -304,7 +354,7 @@ def _build_all_sheets(
     # `preserved_timelog["grid"]` was pruned in `rebuild_workbook` before
     # reaching here. Cells in months < rebuild_from_month are frozen and kept
     # verbatim by the builder; cells ≥ rebuild_from_month are discarded and
-    # the solver re-derives them. See `docs/design-invariants.md` § Timelog Plan merged grid.
+    # the solver re-derives them. See `docs/spec.md` § Timelog Plan merged grid.
     _preserved_grid = (preserved_timelog or {}).get("grid") or None
     _rebuild_from_month = (preserved_timelog or {}).get("rebuild_from_month", 1)
     assert ctx.config_layout is not None

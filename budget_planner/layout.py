@@ -168,7 +168,7 @@ VAL_OFFSET_BREACH = 6
 # Offsets 7..12 carry the with-indirect (+i) mirrors on the Actuals sheet.
 # The +i block is outside the collapsible -i band and forms the
 # default-visible rollup surface for external-facing use. See
-# ``docs/design-invariants.md`` § Indirect-view EUR header suffix.
+# ``docs/spec.md`` § Indirect-view EUR header suffix.
 VAL_OFFSET_SUM_PLUS_I = 7
 VAL_OFFSET_BUDGET_PLUS_I = 8
 VAL_OFFSET_DIFF_PLUS_I = 9

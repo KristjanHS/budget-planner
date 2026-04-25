@@ -1,4 +1,28 @@
-"""Summary sheet builder — annual budget overview with per-year and project-total columns."""
+"""Summary sheet builder — annual budget overview with per-year and project-total columns.
+
+Calendar-year column groups (5 sub-columns/year: Plan FTE, Plan EUR,
+Actual EUR, Forecast EUR, Variance EUR) + PROJECT TOTAL. Budget Overview
+applies the **25% indirect uplift** to Total Claimable. Reporting Period
+Summary emits **Form C preparation rows** grouped by Config reporting
+periods — compliance-load-bearing, not free to restructure.
+
+Role: read-only.
+
+## Conditional formatting
+
+- Remaining EUR column: **red** when ``value < 0``.
+- Variance EUR (per year + project total): **red** when negative.
+- Forecast EUR: **red** when ``Forecast < 0.8 * Plan EUR`` AND year is
+  fully covered (``hours_actuals_through_month >= year_end_pm``) — gated
+  so partial-coverage years don't trigger false-alarm underspend alerts;
+  those are instead shaded grey (see next point).
+- Per-year partial-coverage grey: Act € shaded by
+  ``eur_actuals_through_month < year_end_pm``; Fcst € by
+  ``hours_actuals_through_month < year_end_pm``; Var € by the stricter
+  MIN. PROJECT TOTAL columns have no grey CF (span all years).
+- Budget Overview Remaining: **amber** when < 10% of ceiling, **red**
+  when negative.
+"""
 
 from openpyxl.styles import Font
 from openpyxl.formatting.rule import FormulaRule

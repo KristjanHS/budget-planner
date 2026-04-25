@@ -1,4 +1,24 @@
-"""Trends sheet builder — WP burn rate, cumulative chart, person load."""
+"""Trends sheet builder — WP burn rate, cumulative chart, person load.
+
+Dashboard — WP Burn Rate & Exhaustion table, cumulative EUR LineChart
+(Planned / Actual / Forecast / Ceiling / RP End; Actual + Forecast series
+clip via ``NA()`` past their respective through-month),
+**Reconciliation: Forecast vs Actual EUR** section, per-WP Gap table, a
+gap-over-time LineChart, and a Person Load table.
+
+Role: read-only; ``current_month`` (B1) is the only user input.
+
+**Non-obvious invariant:** the **Reconciled through** value
+(``=MIN(eur_actuals_through_month, hours_actuals_through_month)``) is a
+**local helper cell on Trends** at ``$B$<recon_section_row+4>`` — it is
+**not a named range**; per-WP Gap SUMs and the gap chart both read it via
+absolute same-sheet ref.
+
+## Conditional formatting
+
+- Gap %: **red** > |10%|, **amber** > |5%|.
+- Variance to-date %: **red** > |20%|, **amber** > |10%|.
+"""
 
 from dateutil.relativedelta import relativedelta
 from openpyxl.chart import LineChart

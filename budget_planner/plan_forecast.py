@@ -1,8 +1,18 @@
 """Plan-Forecast sheet builder — forecast EUR aggregated from Actuals-Hours.
 
+WP × month forecast-EUR grid — pure aggregation, read-only (every cell is
+a formula). Shape mirrors Plan. Each monthly cell
+``=SUM(<Actuals-Hours forecast-EUR leaves for this WP × month across all
+assignments>)``. No user inputs.
+
 Mirrors the structure of ``plan.py`` but each monthly cell sums the
 forecast-EUR leaf cells on the Actuals-Hours sheet for the persons
 assigned to that WP.
+
+## Conditional formatting
+
+- Variance (Budget − Sum, ``-i`` and ``+i`` mirror rule): **red** when
+  negative (forecast exceeds budget).
 
 Formula shape per WP × active-month cell::
 

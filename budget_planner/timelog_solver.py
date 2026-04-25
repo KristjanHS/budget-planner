@@ -29,7 +29,7 @@ greedy leaves few such patterns; the algorithm trades optimality for
 determinism + bounded runtime. A future extension could add a second
 adjacent-pair pass with wider windows or a 3-way rotation primitive.
 
-Cross-sheet invariants in ``docs/design-invariants.md`` § Timelog Plan merged grid.
+Cross-sheet invariants in ``docs/spec.md`` § Timelog Plan merged grid.
 """
 
 from __future__ import annotations

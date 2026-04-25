@@ -1,4 +1,25 @@
-"""Actuals sheet builder — EUR actuals per WP per month from accountant."""
+"""Actuals sheet builder — EUR actuals per WP per month from accountant.
+
+Role: monthly cells are an input surface for EUR spend (accountant
+figures). Cross-sheet trust boundary (``eur_actuals_through_month`` named
+range at ``Actuals!$D$1``) and the through-month / two-cadence rules are
+canonical in ``docs/spec.md`` § Two-cadence actuals.
+
+## Conditional formatting
+
+- Negative variance: **red**.
+- % of Budget (``-i`` and ``+i`` mirror rule — scale-invariant): **amber**
+  > 85%, **red** > 100%.
+- Breach In: **amber** < 12 months, **red** < 6 months.
+- **Reconciliation grey (T8):** Actual-EUR monthly cells past
+  ``eur_actuals_through_month`` are greyed (not yet finance-closed).
+  Mirror rule on Actuals-Hours forecast band greys the *opposite* side
+  (months ≤ ``eur_actuals_through_month``) so users see at a glance which
+  side is authoritative per month.
+- Parallel forecast-monitoring block: same amber/red thresholds as
+  actual-EUR block on Cum Forecast Variance / % of Budget / Breach In
+  (each mirrored on the ``+i`` companion columns).
+"""
 
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.workbook.defined_name import DefinedName
@@ -114,7 +135,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     # ``first_wp_row``/``last_wp_row``, so we write the placeholder cells
     # here to claim the row geometry and back-patch formulas + comments
     # after the WP block has been written. Trust-boundary invariant lives
-    # in ``docs/design-invariants.md`` § Two-cadence actuals.
+    # in ``docs/spec.md`` § Two-cadence actuals.
     r = 2
 
     # -- "As of" header row (shifted to row 2 by the through-month strip) --

@@ -11,6 +11,17 @@ TOTAL hour rows, EU annual ceiling conditional formatting per calendar
 year, per-row forecast-EUR band (``-i`` — without-indirect; collapsible
 column outline), per-row ``Forecast EUR +i`` rollup column (with-indirect;
 default-visible, placed outside the column-outline band).
+
+Role: monthly cells are an input surface for hour timelog (primary hours
+surface). Trust boundary (``hours_actuals_through_month`` named range at
+``'Actuals-Hours'!$D$1``) and two-cadence rules are canonical in
+``docs/spec.md`` § Two-cadence actuals.
+
+## Conditional formatting
+
+- Annual EU hours ceiling: **red** when annual hour sum
+  ``> eu_annual_ceiling_pm * hours_per_fte_month``, **amber** within one
+  ``hours_per_fte_month`` of the ceiling.
 """
 
 from openpyxl.formatting.rule import FormulaRule

@@ -1,4 +1,43 @@
-"""Capacity sheet builder — per-person monthly FTE allocation."""
+"""Capacity sheet builder — per-person monthly FTE allocation.
+
+Per-person groups with WP rows (blue input, distribution-curve static
+values), TOTAL, REMAINING (Max - TOTAL), and **EU TOTAL** (programme WPs +
+EU-flagged externals — tracks the 215-day annual ceiling separately from
+TOTAL).
+
+Non-obvious conventions:
+
+- Per-person WP rows cover **only the assigned WPs** (from Config
+  PERSON-WP ASSIGNMENTS), not every WP.
+- Distribution curve type comes from the Type col on the merged WP BUDGET
+  row.
+- The right-side raw-monthly band sits at ``outline_level=1`` (default
+  collapsed).
+- The always-visible TO-DATE ``Variance PM`` column is populated only on
+  TOTAL + EU TOTAL rows.
+
+Returns ``capacity_layout`` with ``person_groups`` + ``todate_col_actual`` /
+``todate_col_var``.
+
+Role: monthly cells are auto-filled by distribution curves on rebuild;
+users can override for fine-tuning (overrides are lost on next rebuild).
+
+## Conditional formatting
+
+- TOTAL row per person: **amber** when ``TOTAL > 0.8 * Max FTE``,
+  **red** when ``TOTAL > Max FTE``.
+- REMAINING row per person: **red** when ``REMAINING < 0``.
+- EU TOTAL per calendar year: **amber** when annual sum approaches
+  ``eu_annual_ceiling_pm``, **red** when exceeds (215-day ceiling).
+- Raw-monthly Variance-FTE band: **red** when
+  ``|variance| > CAPACITY_VARIANCE_FTE_RED``.
+- Raw-monthly Actual-TOTAL utilisation vs Config Max FTE: amber/red same
+  thresholds as planned TOTAL.
+- To-date block ``Variance PM`` (TOTAL + EU TOTAL only): **red** when
+  ``< 0``. Block reduced to 2 cols (2026-04-14 simplification) — the
+  prior per-WP Variance-% and to-date util/ceil CF rules were dropped as
+  duplicates of planned-side signals.
+"""
 
 from openpyxl.styles import Font
 from openpyxl.formatting.rule import FormulaRule

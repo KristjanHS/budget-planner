@@ -803,12 +803,12 @@ def test_roster_priority_header_has_comment():
     assert "Timelog Plan" in text
 
 
-def test_config_named_range_targets_match_internals_doc():
+def test_config_named_range_targets_match_spec_doc():
     """Docs-drift detector: Config named-range targets in the generated
-    workbook must match the row numbers documented in ``docs/internals.md``
+    workbook must match the row numbers documented in ``docs/spec.md``
     (Per-Sheet Notes → Config prose).
 
-    When the builder shifts a param row or ``internals.md`` claims a wrong
+    When the builder shifts a param row or ``spec.md`` claims a wrong
     row, this test fails — forcing either the builder or the doc to resync.
     The doc is the source of truth that future agents load; a silent skew
     would mislead them about where each named range points.
@@ -822,7 +822,7 @@ def test_config_named_range_targets_match_internals_doc():
     ws.title = "Config"
     build_config_sheet(ws, wb, _sample_params(), _sample_wps())
 
-    internals_path = Path(__file__).parent.parent / "docs" / "internals.md"
+    internals_path = Path(__file__).parent.parent / "docs" / "spec.md"
     text = internals_path.read_text(encoding="utf-8")
 
     # Named-range cell mappings live in the Cross-Sheet Reference Map table
@@ -838,7 +838,7 @@ def test_config_named_range_targets_match_internals_doc():
         text,
     )
     assert pairs, (
-        "No named-range → cell mappings parsed from internals.md Cross-Sheet "
+        "No named-range → cell mappings parsed from spec.md Cross-Sheet "
         "Reference Map — doc format drifted from the "
         "`| `name` | Config!$B$N | Named range |` table convention"
     )
@@ -853,7 +853,7 @@ def test_config_named_range_targets_match_internals_doc():
     }
     missing = required - doc_map.keys()
     assert not missing, (
-        f"docs/internals.md Config paragraph is missing named-range rows "
+        f"docs/spec.md Config paragraph is missing named-range rows "
         f"for {sorted(missing)}"
     )
 
@@ -865,6 +865,6 @@ def test_config_named_range_targets_match_internals_doc():
         expected_attr = f"Config!$B${expected_row}"
         actual = wb.defined_names[name].attr_text
         assert actual == expected_attr, (
-            f"Named range {name!r}: internals.md says {expected_attr!r}, "
+            f"Named range {name!r}: spec.md says {expected_attr!r}, "
             f"workbook has {actual!r} — update whichever is wrong"
         )

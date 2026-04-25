@@ -10,16 +10,8 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 
 | Trigger | Read |
 |---------|------|
-| Programme cost model, funding rates, 25% indirect | `docs/grant-domain.md` |
-| Sheet builders, stateless pattern | `docs/internals.md` § Sheet Builders |
-| Reader breaks, rebuild loses data | `docs/internals.md` § Reader and Rebuild |
-| Column offsets, month positioning, styles, row/column shifts, new sheet/column, tab-color conventions | `budget_planner/layout.py` + `budget_planner/styles.py` + `docs/internals.md` § Styling conventions |
-| Cross-sheet invariant, trust boundary, derived-metric rule | `docs/design-invariants.md` |
-| C4 architecture, workflows, formula graph | `docs/architecture.md` |
+| Programme cost model, funding rates, 25% indirect; C4 architecture, workflows, formula graph; sheet builders, stateless pattern; reader breaks, rebuild loses data; column offsets, month positioning, styles, row/column shifts, new sheet/column, tab-color conventions; cross-sheet invariant, trust boundary, derived-metric rule; Timelog Plan, solver, 1.0-FTE logging allocation, WP fill order, merged grid, freeze-point, per-year EUR cols, monthly total, yearly total, yearly budget, vacation month, Pool reduction; rebuild drops rows, stale Config refs; WP schedule single range, migration from legacy workbook, multi-segment error | `docs/spec.md` (also `budget_planner/layout.py` + `budget_planner/styles.py` for live column/row constants; `budget_planner/timelog_plan.py` + `budget_planner/timelog_solver.py` for Timelog solver internals) |
 | Run commands, generate workbook, compare scenarios, dev setup, add WP / team member / actuals, cloud/LO env setup, code review & /impag, MCP tools for workbook inspection | `docs/runbook.md` (§ MCP Tools for openpyxl-read / mcp-excel) |
-| Timelog Plan, solver, 1.0-FTE logging allocation, WP fill order, merged grid, freeze-point, per-year EUR cols, monthly total, yearly total, yearly budget, vacation month, Pool reduction | `budget_planner/timelog_plan.py` + `budget_planner/timelog_solver.py` + `docs/design-invariants.md` § Timelog Plan merged grid |
-| Rebuild drops rows, stale Config refs | `docs/design-invariants.md` § Future invariants (reserved) → Reader/builder round-trip rule |
-| WP schedule single range, migration from legacy workbook, multi-segment error | `docs/design-invariants.md` § WP schedule — single active range |
 
 ## Critical Rules
 
@@ -28,8 +20,8 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 3. **Font color convention is sacred**: Blue = input, Black = formula, Green = cross-sheet ref. Never mix these.
 4. **Inactive month cells must be greyed out and empty.** Auditors flag time logged outside WP active periods.
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
-6. **New architectural invariants** (cross-sheet constraint, trust boundary, derived-metric rule) must be recorded in `docs/design-invariants.md` before merge. Rationale + scope carve-out in `.claude/rules/dev-workflow.md`.
-7. **Skills that emit markdown by default (retro, reflect, kaizen:*, mybrain, senior-architect, architecture-diagram-creator, brutal-honesty-review, deep-research) should output to conversation, not files, unless (a) the artifact survives past this session AND (b) no existing doc covers the topic. Prefer extending `docs/design-invariants.md` or a code docstring over creating a new file. One-off analyses that must be written go to `docs/analysis/` (`.claudeignore`'d).
+6. **New architectural invariants** (cross-sheet constraint, trust boundary, derived-metric rule) must be recorded in `docs/spec.md` before merge. Rationale + scope carve-out in `.claude/rules/dev-workflow.md`.
+7. **Skills that emit markdown by default (retro, reflect, kaizen:*, mybrain, senior-architect, architecture-diagram-creator, brutal-honesty-review, deep-research) should output to conversation, not files, unless (a) the artifact survives past this session AND (b) no existing doc covers the topic. Prefer extending `docs/spec.md` or a code docstring over creating a new file. One-off analyses that must be written go to `docs/analysis/` (`.claudeignore`'d).
 
 ## Large Files
 

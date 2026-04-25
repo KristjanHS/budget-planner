@@ -1390,7 +1390,7 @@ def read_timelog_plan(wb, project_months: int) -> dict:
     v2 surface: the merged "TIMELOG GRID" band holds literal WP codes (no
     `=<Proposed>` formulas anymore). The reader returns the ENTIRE preserved
     grid unconditionally; filtering against the freeze boundary is the
-    builder's job (see ``docs/design-invariants.md`` § Timelog Plan merged grid).
+    builder's job (see ``docs/spec.md`` § Timelog Plan merged grid).
 
     Anchoring strategy: scan col A for the exact GRID section-title string
     (imported from the builder so edits don't drift). The band layout is

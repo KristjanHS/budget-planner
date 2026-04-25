@@ -93,9 +93,7 @@ python -m budget_planner --restore output/budget_plan.xlsx
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](docs/architecture.md) | Project structure, C4 diagrams, build order, workflow sequences, cross-sheet formula graph |
-| [Internals](docs/internals.md) | Sheet builders, reader/rebuild, layout/styling, CF rules, cross-sheet refs |
-| [Programme Domain Reference](docs/grant-domain.md) | Cost categories, funding rates, 25% indirect rule |
+| [Spec](docs/spec.md) | Project structure, C4 diagrams, build order, workflow sequences, cross-sheet formula graph; sheet builders, reader/rebuild, layout/styling, CF rules, cross-sheet refs; cost categories, funding rates, 25% indirect rule; design invariants |
 | [Cloud Environment Setup](docs/human/cloud-env-setup.md) | LibreOffice install, pre-flight checks, failure modes |
 
 ## Dependencies

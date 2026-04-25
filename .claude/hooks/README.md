@@ -87,6 +87,11 @@ Stderr lists the matched patterns (e.g. `subprocess to external CLI`, `requests 
 **Symptom: hook fires on legitimate `subprocess.run([...recalc.py...])`.**
 The hook's subprocess pattern only matches first-arg strings starting with `docker`/`kubectl`/`playwright`/`selenium`. If you're seeing a false-positive on `recalc.py` or another project tool, file it — the regex is intentionally narrow to avoid that case (see hook docstring "Why narrower than the W1.4 audit's `subprocess.run` blanket").
 
+**Known scope:**
+- **String-form `subprocess.run("docker run ...", shell=True)`** is matched the same as list-form `subprocess.run(["docker", ...])`. Both invoke docker; both belong in `tests/manual/`. If you genuinely need it elsewhere, use the override sentinel.
+- **Aliased imports `import requests as r; r.get(...)`** are NOT caught — the `requests.<verb>(` pattern requires the literal `requests.` prefix. New tests using HTTP via aliases will slip through; if you spot one in review, treat it as the override-sentinel case (the rule still applies, the hook just didn't catch it).
+- **Tuple-form `subprocess.run((\"docker\", ...))`** is NOT caught — by design, since none of the project's existing patterns use tuple-form. If a future test does, file the gap.
+
 **Test the hook in isolation:**
 ```sh
 # block path

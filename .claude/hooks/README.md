@@ -1,8 +1,8 @@
 # .claude/hooks
 
-Hooks adapted from [pedrohcgs/claude-code-my-workflow](https://github.com/pedrohcgs/claude-code-my-workflow) (2026-04-15).
+Hooks adapted from [pedrohcgs/claude-code-my-workflow](https://github.com/pedrohcgs/claude-code-my-workflow) (2026-04-15) plus project-specific gates.
 
-## Adopted (4)
+## Active hooks (5)
 
 | File | Event | Purpose |
 |---|---|---|
@@ -10,8 +10,40 @@ Hooks adapted from [pedrohcgs/claude-code-my-workflow](https://github.com/pedroh
 | `post-compact-restore.py` | `SessionStart` (matcher: `compact\|resume`) | After compaction/resume: reads and deletes the saved state; echoes plan, log, and recovery actions |
 | `context-monitor.py` | `PostToolUse` (matcher: `Bash\|Task`) | Progressive context-usage warnings at 40/55/65% (capture reusable insights), 80% (info), 90% (critical). Heuristic: tool-call count ÷ 150 |
 | `verify-reminder.py` | `PostToolUse` (matcher: `Write\|Edit`) | On `.py` edits outside skip-dirs, nudges to run `pytest tests/ -q`. Throttled to 60s per file |
+| `docs-bloat-gate.py` | `PreToolUse` (matcher: `Write\|Edit\|Bash`) | Blocks net-positive Write/Edit to `docs/spec.md`, `docs/runbook.md`, `docs/refactor-incidents.md`, `.claude/rules/*.md`, plus Bash `>`/`>>`/`tee`/`sed -i` writes targeting those paths. Pass conditions: net delta ≤ 0, `→ see X` pointer, brand-new `## ` heading (lines under it exempt), or override sentinel. Design: `docs/plans/2026-04-25-doc-bloat-root-causes-brainstorm.md` |
 
 All hooks fail open (exit 0 on any exception) so a hook bug never blocks Claude.
+
+## Troubleshooting `docs-bloat-gate.py`
+
+**Symptom: legitimate edit blocked.**
+Read the stderr message — it reports the net-delta and the four bypass options. Pick whichever fits:
+- Add a `→ see <path> § <section>` pointer in the added text (regex: `→\s*see\s+\S+` or `->\s*see\s+\S+`).
+- Pair the addition with a removal so net delta ≤ 0.
+- Wrap the new content under a brand-new `## ` heading (an L2 heading not already in the file). Lines under that heading are exempt; lines outside still count.
+- Add `<!-- docs-bloat-gate-override: <reason ≥10 chars> -->` in the added content. The reason is appended to `docs/analysis/bloat-overrides.log` (gitignored).
+
+**Symptom: Bash command blocked.**
+Stderr lists the matched gated path(s). The matcher only fires on true write-actions: `>`/`>>` redirection, `tee`, or `sed -i`. Read-only commands (`cat`, `grep`, `git log`) and commit messages mentioning gated paths must pass — if they don't, that's a bug, file it.
+
+**Test the hook in isolation:**
+```sh
+echo '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/docs/spec.md","old_string":"x","new_string":"x\nA\nB"}}' \
+  | python3 .claude/hooks/docs-bloat-gate.py
+echo "exit code: $?"   # 2 = blocked, 0 = allowed; stderr has the reason
+```
+
+**Inspect override log:** `cat docs/analysis/bloat-overrides.log` — one line per override, format `<ISO-ts>  <path>  <±N> lines  reason="…"  tool=<Write|Edit|Bash>`. ≥3 entries since last `/retro` is a signal to revisit gate calibration.
+
+**Disable temporarily:**
+- For one Edit: add the override sentinel.
+- For all of CLAUDE.md (opt-in only): unset `DOCS_BLOAT_GATE_CLAUDE_MD` (default off).
+- For the whole hook: comment out the `PreToolUse` block in `.claude/settings.json` (and tell the user; restart for it to take effect).
+
+**Hook isn't firing on a path you expected:**
+Path scope is exact-list (`GATED_DOCS`) plus `.claude/rules/*.md` glob. Subdirs of `docs/` (`docs/plans/`, `docs/analysis/`, `docs/human/`, `docs/research/`) are intentionally out of scope per design §1.
+
+**Latency check:** `time for i in $(seq 1 10); do echo '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/docs/spec.md","old_string":"a","new_string":"a"}}' | python3 .claude/hooks/docs-bloat-gate.py >/dev/null 2>&1; done` — target <50ms per invocation.
 
 ## Dropped (2, intentional)
 

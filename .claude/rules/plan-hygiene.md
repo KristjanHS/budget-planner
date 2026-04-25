@@ -34,12 +34,6 @@ Docs-only plans still require a pytest gate. `tests/test_config_sheet.py::test_c
 
 Any design doc that lands a long ordered step list (≥10 steps, even a single-PR rollout) has the same cross-step re-write risk as a multi-phase plan. Walk each step's concrete edits and tag which file/function each touches. If the same file appears in two sequential steps where the first's change depends on state the second removes, merge them into one per-file pass. **Trigger is "same target, two steps," not "≥3 phases."** The mybrain skill's Step 7 item 5 phase-gate is a floor, not a ceiling.
 
-## Grep user-facing prose when designing a feature removal
+## Feature-removal grep
 
-Removals compile fine but leave contradictory strings behind — `raise ValueError("use X for ...")` where X is being deleted, docstrings describing the removed shape, data-validation list literals naming the removed option. These survive the refactor and actively mislead users at runtime. Before finalizing a removal design, grep:
-
-- `raise.*Error.*"`
-- `"""`-led docstrings
-- `\.value\s*=\s*"` string literals
-
-…for the thing being removed; rewrite or delete each in the same PR.
+Before finalizing a removal design, sweep `raise.*Error.*"`, `"""` docstrings, and `\.value\s*=\s*"` literals — see `~/.claude/references/pre-ship-sweeps.md` § "Grep user-facing prose when designing a feature removal".

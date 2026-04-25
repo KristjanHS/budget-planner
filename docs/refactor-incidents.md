@@ -1,20 +1,8 @@
----
-name: Refactor incident archive
-description: Project-specific incidents that drove the global Python/test/hook rules — kept here so the global rules stay generic.
-paths:
-  - "**/*.py"
-  - "tests/**"
-  - "**/test_*.py"
-  - "**/*_test.py"
-  - "**/hooks/*.py"
-last_verified: 2026-04-25
----
-
 # Refactor Incident Archive
 
-These incidents originally lived as "Why this rule exists" paragraphs in `~/.claude/rules/` (python-refactors, testing, hooks). Moved here 2026-04-25 because they only make sense inside this project.
+On-demand audit reference. Routed via `CLAUDE.md` trigger table; **not auto-loaded** — moved here from `.claude/rules/` 2026-04-25 because incident archives are L3 reference content, not L2 path-gated rules.
 
-The general rules still apply globally; consult those files first. This archive is for "which past incident drove that rule" audits.
+These incidents originally lived as "Why this rule exists" paragraphs in `~/.claude/rules/` (python-refactors, testing, hooks). The general rules still apply globally; consult those files first. This archive is for "which past incident drove that rule" audits.
 
 ## Lazy imports — `another-cli` (2026-03-20)
 

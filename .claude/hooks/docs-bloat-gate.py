@@ -23,7 +23,6 @@ GATED_DOCS = {"docs/spec.md", "docs/runbook.md", "docs/refactor-incidents.md"}
 GATED_RULES_PREFIX = ".claude/rules/"
 OVERRIDE_RE = re.compile(r"<!--\s*docs-bloat-gate-override:\s*(.{10,}?)\s*-->")
 POINTER_RE = re.compile(r"→\s*see\s+\S+|->\s*see\s+\S+")
-HEADING_RE = re.compile(r"(?m)^## (.+)$")
 # Bash write-action patterns that actually MUTATE a gated path. We don't
 # block on bare references to the path (e.g. `git log docs/spec.md`,
 # heredoc commit messages mentioning the path) — only on commands that
@@ -67,6 +66,32 @@ def line_count(s: str) -> int:
     return s.count("\n") + (0 if s.endswith("\n") else 1)
 
 
+def l2_headings(text: str) -> set[str]:
+    """Return the set of level-2 heading texts in `text`."""
+    return {ln[3:].rstrip() for ln in text.splitlines() if ln.startswith("## ")}
+
+
+def lines_outside_new_sections(added: str, new_headings: set[str]) -> int:
+    """Count lines in `added` not under a brand-new L2 heading.
+
+    Design §4.1: when an Edit introduces an L2 heading not present in the
+    on-disk file, lines from that heading until the next L2 heading (or
+    EOF) are exempt from net-delta accounting in the introducing edit.
+    """
+    counted = 0
+    in_exempt = False
+    for line in added.splitlines():
+        if line.startswith("## "):
+            head_text = line[3:].rstrip()
+            if head_text in new_headings:
+                in_exempt = True
+                continue
+            in_exempt = False
+        if not in_exempt:
+            counted += 1
+    return counted
+
+
 def append_log(rel: str, delta: int, reason: str, tool: str) -> None:
     log = project_dir() / LOG_REL
     try:
@@ -87,10 +112,14 @@ def gate(rel: str, added: str, removed: str, current: str, tool: str) -> int:
     if POINTER_RE.search(added):
         return 0
 
-    added_h = set(HEADING_RE.findall(added))
-    current_h = set(HEADING_RE.findall(current))
-    if added_h - current_h:
-        return 0
+    # §4.1 strict: lines under a brand-new L2 heading are exempt from
+    # net-delta accounting in this introducing edit. Only block if the
+    # *non-exempt* delta is still positive.
+    new_h = l2_headings(added) - l2_headings(current)
+    if new_h:
+        carved_delta = lines_outside_new_sections(added, new_h) - line_count(removed)
+        if carved_delta <= 0:
+            return 0
 
     m = OVERRIDE_RE.search(added)
     if m:

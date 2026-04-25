@@ -13,6 +13,9 @@ __pycache__/
 .claude/settings.local.json
 .claude/worktrees/
 
+# Session-generated audits + override log from docs-bloat-gate hook
+docs/analysis/
+
 # Shape-only reproducer artifacts (see docs/human/debugging-your-real-file.md)
 tmp/
 

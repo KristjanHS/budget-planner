@@ -22,7 +22,7 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 4. **Inactive month cells must be greyed out and empty.** Auditors flag time logged outside WP active periods.
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
 6. **New architectural invariants** (cross-sheet constraint, trust boundary, derived-metric rule) must be recorded in `docs/spec.md` before merge. Rationale + scope carve-out in `.claude/rules/dev-workflow.md`.
-7. **Skills that emit markdown by default (retro, reflect, kaizen:*, mybrain, senior-architect, architecture-diagram-creator, brutal-honesty-review, deep-research) should output to conversation, not files, unless (a) the artifact survives past this session AND (b) no existing doc covers the topic. Prefer extending `docs/spec.md` or a code docstring over creating a new file. One-off analyses that must be written go to `docs/analysis/` (`.claudeignore`'d).
+7. **Skills that emit markdown by default** (retro, reflect, kaizen:*, mybrain, senior-architect, architecture-diagram-creator, brutal-honesty-review, deep-research): prefer conversation output unless the artifact survives past this session. Structural gates (writes to reference docs, `.claude/rules/*.md`, audit-style files at `docs/` root, Bash sed/cat/`>` against gated paths) are enforced by `.claude/hooks/docs-bloat-gate.py`; override via `<!-- docs-bloat-gate-override: <reason ≥10 chars> -->`. One-off analyses go to `docs/analysis/` (`.claudeignore`'d).
 
 ## Large Files
 

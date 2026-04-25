@@ -296,6 +296,12 @@ All orphaned data printed to stderr at rebuild. Hard errors abort; warnings do n
 
 Reader functions for Config tables (`read_team_from_config`, `read_assignments_from_config`, `read_externals_from_config`) are **named-range primary**: they resolve `roster_ftes` / `assign_persons` / `ext_persons` via `wb.defined_names` as the authoritative row span, then iterate within and tolerate internal blanks. Excel auto-extends these named ranges when the user inserts rows inside them, so reader bounds stay in sync with live data after hand-edits. Only when a named range is missing (legacy workbooks) does the reader fall back to sentinel-based scanning that stops at the first blank. See `_iter_named_range_rows` in `reader.py` and shape-drift tests in `tests/test_rebuild_shape_drift.py` / `tests/test_rebuild_shapes.py`.
 
+### Reader column-shift invariant
+
+Inserting a new column into a structured section (WP BUDGET, Team Roster, etc.) requires every position-based reader to branch on layout detection AND shift `start_col/end_col/type_col`-style indices — not just the renamed cell. Readers index by numeric column, not header association: shifting `COL_WP_START` 8→9 invalidates every pre-shift workbook's Start read, surfacing as `int('flat')` when the shift misaligns End and Type.
+
+Detect legacy vs post-shift via header-string match at the inserted column's position (NOT `version_stamp` — that's a git-describe literal, not a schema version). Seed a test fixture that writes cells at the pre-shift physical positions and assert end-to-end rebuild parse to lock the contract.
+
 ### Known fragility
 
 1. **Person header detection** relies on specific font/fill styling. Manual restyling breaks detection.

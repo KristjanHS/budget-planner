@@ -19,7 +19,7 @@ Why this gate exists:
   change is restructuring that table breaks pytest, but the user — seeing
   "diff is docs/**-only" — may skip the pytest step. The gate enforces it.
 
-Source: docs/plans/2026-04-25-prose-rules-to-hooks-audit.md (W1.2).
+Source: docs/plans/archived/2026-04-25-prose-rules-to-hooks-audit.md (W1.2).
 """
 from __future__ import annotations
 

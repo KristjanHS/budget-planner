@@ -31,7 +31,7 @@ Why narrower than the W1.4 audit's `subprocess.run` blanket:
   every recalc test edit. The narrowed match enforces the source rule's
   actual scope (docker / kubectl / headless browser) without that noise.
 
-Source: docs/plans/2026-04-25-prose-rules-to-hooks-audit.md (W1.4).
+Source: docs/plans/archived/2026-04-25-prose-rules-to-hooks-audit.md (W1.4).
 """
 from __future__ import annotations
 

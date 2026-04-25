@@ -2,7 +2,7 @@
 
 **Date**: 2026-04-25
 **Status**: AUDIT — survey complete; awaiting decision on Wave-1 scope
-**Predecessor**: `docs/plans/2026-04-25-doc-bloat-root-causes-brainstorm.md` (docs-bloat-gate design)
+**Predecessor**: `docs/plans/archived/2026-04-25-doc-bloat-root-causes-brainstorm.md` (docs-bloat-gate design)
 **Lens (carry-over from predecessor)**: rule-level guards under-perform when the executing skill doesn't load the rule. Hook-level gates fire regardless of skill — the right shape for write-time-dependent enforcement.
 
 ---
@@ -137,4 +137,4 @@ Total Wave 1 effort estimate: ~3-4h (1 absorbed scope edit + 2 new hook scripts 
 
 ## Appendix: full audit table (30 rules surveyed)
 
-Lives in conversation history of this session's audit subagent run; not migrated here to keep this plan tight. Re-run audit if needed via subagent prompt: *"Survey rule files (project + global) for hook-convertible prose; output ranked table per ~/projects/budget-planner/docs/plans/2026-04-25-prose-rules-to-hooks-audit.md methodology."*
+Lives in conversation history of this session's audit subagent run; not migrated here to keep this plan tight. Re-run audit if needed via subagent prompt: *"Survey rule files (project + global) for hook-convertible prose; output ranked table per docs/plans/archived/2026-04-25-prose-rules-to-hooks-audit.md methodology."*

@@ -8,7 +8,7 @@ text, new '## ' heading introduced, or override sentinel present.
 
 Override sentinel:  <!-- docs-bloat-gate-override: <reason >=10 chars> -->
 
-Design: docs/plans/2026-04-25-doc-bloat-root-causes-brainstorm.md
+Design: docs/plans/archived/2026-04-25-doc-bloat-root-causes-brainstorm.md
 """
 from __future__ import annotations
 

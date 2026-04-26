@@ -14,7 +14,7 @@ When tests return None from `data_only=True`: verify recalc actually ran (`<v>` 
 **MCP-assisted verification**: use `openpyxl-read` MCP only to answer a specific question about the generated workbook; don't routinely MCP-scan — pytest covers structural validation. See `docs/runbook.md` § MCP Tools for openpyxl-read / mcp-excel.
 If a single test fails unexpectedly on an otherwise-passing suite, re-run after `uv pip install -e .` before investigating — stale editable installs cause phantom failures.
 Pass `timeout: 300000` up front for full `pytest tests/ -q` runs; the suite exceeds Bash's default. Targeted sub-suites don't need the override.
-Pytest runs mutate `output/*.xlsx` (openpyxl/LO zip metadata). Always include these in commits — user treats them as tracked artifacts.
+Pytest runs mutate `output/*.xlsx` (openpyxl/LO zip metadata). Generated workbooks are gitignored except `output/budget_plan_demo.xlsx`. Do NOT add other `output/*.xlsx` files to commits even if they appear in `git status` — `.gitignore` enforces this but `git add -f` would bypass it.
 Always include editor-config dirs (`.codex/`, `.cursor/`, `.vscode/`) in commits when present.
 
 ## Linting

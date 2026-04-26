@@ -8,6 +8,7 @@ workbook builders. These tests assert algorithmic properties of ``solve``,
 from __future__ import annotations
 
 from budget_planner.timelog_solver import (
+    MAX_BUFFER_PCT,
     Assignment,
     Person,
     PersonWPWindow,
@@ -217,6 +218,32 @@ def test_overshoot_tolerated():
     )
     # Crucially: never placed = ceiling + 2 or more.
     assert placed <= 4
+
+
+def test_buffer_cap_forces_undershoot_on_small_wp():
+    # Hard-cap policy (MAX_BUFFER_PCT): when the only candidate's rate is
+    # large enough that the next placement would cross
+    # ceiling × (1 + cap), greedy skips it — the WP ends up underfilled
+    # rather than overshooting. ceiling=1000, rate=600 → 1st placement
+    # (600 €) is fine (cap check 0+600 ≤ 1110); 2nd would land at 1200 €,
+    # cap check fires (600+600 > 1110), break. Without the cap the legacy
+    # check-after-placing would have placed 2 (1200 €, 20% buffer).
+    ceiling = 1000
+    rate = 600
+    persons = [Person("Alice", priority=1, pool=10, rate_eur_per_pm=rate)]
+    wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=ceiling)]
+    windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
+    assigned = greedy_pass(persons, wps, windows, project_months=10)
+    placed = _placed_count(assigned, "WP1")
+    placed_eur = placed * rate
+    assert placed_eur <= ceiling * (1 + MAX_BUFFER_PCT), (
+        f"cap breached: placed_eur={placed_eur}, "
+        f"limit={ceiling * (1 + MAX_BUFFER_PCT)}"
+    )
+    # Underfill is the chosen trade-off: 1 placement (600 €), undershoot
+    # 400 €. Loosening the cap or reverting to legacy check-after-placing
+    # would yield placed == 2 (1200 €, 20% overshoot).
+    assert placed == 1, f"expected 1 placement under cap, got {placed}"
 
 
 # ---------------------------------------------------------------------------

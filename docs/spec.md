@@ -318,7 +318,7 @@ Pure algorithmic modules — no openpyxl, no workbook I/O. Called by a builder, 
 
 Two-pass greedy allocator driving the Timelog Plan merged grid on init (and on rebuild for months `≥ timelog_rebuild_from_month`, against ceilings + pools narrowed by frozen pre-N consumption).
 
-- `greedy_pass(persons, wps, person_wp_windows, project_months)` — fills WPs in earliest-close order; within a WP, priority-1 persons before priority-2 before priority-3; continue-a-run preferred over starting a new run. Check-after-placing allows exactly one month of overshoot (the "buffer for auditor haircut" requirement).
+- `greedy_pass(persons, wps, person_wp_windows, project_months)` — fills WPs in earliest-close order; within a WP, priority-1 persons before priority-2 before priority-3; continue-a-run preferred over starting a new run. Check-after-placing allows month-of-overshoot (the "buffer for auditor haircut" requirement), bounded by `MAX_BUFFER_PCT` (currently 11% of the WP ceiling). Small WPs whose only candidates have rates that would breach the cap on a single placement may end up underfilled — hard-cap policy: undershoot accepted in this infeasibility case.
 - `switch_reduction_pass(assigned, ...)` — adjacent-pair local search: swaps `(p1, m, m+1) ↔ (p2, m, m+1)` whenever the swap is legal and strictly reduces the total switch count. **Known shape limitation:** only pair-wise adjacent swaps. Rearrangements requiring a 3+ month block swap or a same-month-window 3-person rotation are not found. Trades optimality for determinism + bounded runtime.
 - `solve(...)` — composed entry point: `greedy_pass` then `switch_reduction_pass`. Deterministic → reproducible tests in `tests/test_timelog_solver.py`.
 

@@ -4,7 +4,9 @@ Pure-Python, deterministic, no I/O and no openpyxl dependency. Assigns each
 (person, month) cell to exactly one WP code (or None) such that:
 
 - WP totals approach their ``ceiling_eur`` target (slight € overshoot
-  tolerated, bounded by the placing person's rate).
+  tolerated, bounded by ``MAX_BUFFER_PCT`` — currently 11% of the WP
+  ceiling). Small WPs whose only available candidates have rates that
+  would breach the cap on a single placement may end up underfilled.
 - Each cell stays inside the WP's active window AND inside the person's
   per-(person, WP) window (the PERSON-WP ASSIGNMENTS row).
 - Each person's total assigned months never exceeds their pool.
@@ -35,6 +37,12 @@ Cross-sheet invariants in ``docs/spec.md`` § Timelog Plan merged grid.
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+# Hard cap on per-WP buffer = (placed_eur − ceiling_eur) / ceiling_eur.
+# Greedy skips any placement that would push placed_eur past
+# ceiling_eur × (1 + MAX_BUFFER_PCT). Small WPs with high-rate-only
+# candidates may end up underfilled rather than overshooting this cap.
+MAX_BUFFER_PCT = 0.11
 
 
 @dataclass(frozen=True)
@@ -260,11 +268,25 @@ def greedy_pass(
                         # ceiling_eur / pool by the caller.
                         continue
                     if assigned[p.name][m] is None:
+                        # Hard 11% buffer cap (MAX_BUFFER_PCT). Skip the rest
+                        # of this person's months if the next placement would
+                        # push placed_eur past ceiling × (1 + MAX_BUFFER_PCT).
+                        # ``placed_eur`` only grows, so once the guard fires
+                        # for this person at this rate it fires for every
+                        # remaining month — break, don't continue. Small WPs
+                        # with only high-rate candidates may end up
+                        # underfilled; trade-off accepted under hard-cap.
+                        if (
+                            placed_eur + p.rate_eur_per_pm
+                            > wp.ceiling_eur * (1 + MAX_BUFFER_PCT)
+                        ):
+                            break
                         assigned[p.name][m] = wp.code
                         pool[p.name] -= 1
                         placed_eur += p.rate_eur_per_pm
                         # Check-after-placing: last placement may overshoot
-                        # the ceiling by up to ``p.rate_eur_per_pm − 1 €``.
+                        # the ceiling by up to ``p.rate_eur_per_pm − 1 €``,
+                        # bounded above by the MAX_BUFFER_PCT guard.
                         # Break stops further placements for this person;
                         # outer break then exits the WP pass.
                         if placed_eur >= wp.ceiling_eur:

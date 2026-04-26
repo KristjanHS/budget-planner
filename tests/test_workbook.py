@@ -252,7 +252,7 @@ class TestConfigAssignments:
 
 # ── Build-order enforcement (integration check) ──
 
-def test_build_order_yields_resolved_cross_sheet_dependencies(fresh_wb_path):
+def test_build_order_yields_resolved_cross_sheet_dependencies(assigned_wb_path):
     """Replaces a prior 9-spy chain that asserted patched-call order
     (anti-pattern: tested the patching mechanism, not workbook behavior;
     became unmaintainable if builders ever refactor for parallelization).
@@ -266,18 +266,23 @@ def test_build_order_yields_resolved_cross_sheet_dependencies(fresh_wb_path):
        sheets its builder depends on — proves cross-sheet formulas
        weren't silently emitted against not-yet-populated cells.
 
-    If Capacity/Plan-Forecast lost their Config refs, or Summary/Trends
-    lost Plan or Actuals refs, the build order has regressed in a way
-    that doesn't crash but produces a corrupted workbook.
+    Uses ``assigned_wb_path`` (not ``fresh_wb_path``) on purpose: the
+    Plan→Capacity dependency only emits ``=Capacity!...`` formulas when
+    ``_apply_planned_formulas`` finds non-empty cap_rows for a WP. A
+    no-assignment workbook leaves Plan with zero Capacity refs and the
+    test cannot distinguish "wrong build order with empty capacity_layout"
+    from "right order with no assignments." The assignment-bearing fixture
+    forces the Stage-2→Stage-4 layout-dict dependency to materialize as
+    visible formula refs that this test can check.
     """
-    wb = openpyxl.load_workbook(fresh_wb_path, data_only=False)
+    wb = openpyxl.load_workbook(assigned_wb_path, data_only=False)
 
     expected_upstream_refs = {
-        "Plan": {"Config!"},
+        "Plan": {"Config!", "Capacity!"},
         "Capacity": {"Config!"},
         "Plan-Forecast": {"Config!"},
         "Summary": {"Config!", "Plan!", "Actuals!"},
-        "Trends": {"Config!", "Plan!", "Actuals!"},
+        "Trends": {"Config!", "Plan!", "Actuals!", "Capacity!"},
     }
 
     for sheet_name, expected in expected_upstream_refs.items():

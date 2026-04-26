@@ -972,6 +972,149 @@ class TestActualsReaderValidation:
         wb.close()
 
 
+# ── read_actuals_values behavioral contract (restored 2026-04-26 after
+#    Phase 2 over-pruning; code-review found T8 blank-row preservation,
+#    =Plan!A{n} formula resolution, literal-WP-ID handling, and zero-row
+#    preservation each had no surviving test) ──
+
+
+def _make_actuals_wb():
+    """Minimal workbook with Plan + Actuals sheets for read_actuals_values."""
+    wb = Workbook()
+    plan_ws = wb.active
+    assert plan_ws is not None
+    plan_ws.title = "Plan"
+    plan_ws.cell(6, 1, "WP1")
+    plan_ws.cell(7, 1, "WP2")
+
+    actuals_ws = wb.create_sheet("Actuals")
+    actuals_ws.cell(1, 1, "ACTUAL EUR")
+    actuals_ws.cell(2, 1, "")
+    actuals_ws.cell(3, 1, "WP ID")
+    actuals_ws.cell(3, 2, "WP Name")
+    actuals_ws.cell(4, 1, "=Plan!A6")
+    actuals_ws.cell(4, 2, "=Plan!B6")
+    actuals_ws.cell(4, 3, 100.0)
+    actuals_ws.cell(4, 4, 200.0)
+    actuals_ws.cell(4, 5, 0)
+    actuals_ws.cell(5, 1, "=Plan!A7")
+    actuals_ws.cell(5, 2, "=Plan!B7")
+    actuals_ws.cell(5, 3, 0)
+    actuals_ws.cell(5, 4, 0)
+    actuals_ws.cell(5, 5, 0)
+    actuals_ws.cell(6, 1, "")
+    actuals_ws.cell(6, 2, "TOTAL")
+    return wb
+
+
+def test_read_actuals_values_resolves_formula_refs():
+    """read_actuals_values resolves =Plan!A{n} formulas to WP IDs.
+
+    Distinct codepath from the Config!A{n} refs the prod builder writes —
+    integration tests in test_rebuild.py exercise the Config!-ref branch,
+    so this is the only guard for the Plan!-ref branch in
+    reader.py::_resolve_plan_ref.
+    """
+    from budget_planner.reader import read_actuals_values
+    wb = _make_actuals_wb()
+    result = read_actuals_values(wb["Actuals"], project_months=3)
+    assert "WP1" in result
+    assert result["WP1"] == [100.0, 200.0, 0.0]
+    wb.close()
+
+
+def test_read_actuals_values_keeps_all_zero_rows():
+    """Rows with explicit numeric zero (not blank) survive the round-trip.
+
+    Distinct from test_read_actuals_values_preserves_all_blank_row, which
+    covers the all-None case introduced by T8.
+    """
+    from budget_planner.reader import read_actuals_values
+    wb = _make_actuals_wb()
+    result = read_actuals_values(wb["Actuals"], project_months=3)
+    assert "WP2" in result
+    assert result["WP2"] == [0.0, 0.0, 0.0]
+    wb.close()
+
+
+def test_read_actuals_values_stops_at_total():
+    """read_actuals_values stops scanning at the TOTAL row."""
+    from budget_planner.reader import read_actuals_values
+    wb = _make_actuals_wb()
+    result = read_actuals_values(wb["Actuals"], project_months=3)
+    assert len(result) == 2
+    wb.close()
+
+
+def test_read_actuals_values_preserves_all_blank_row():
+    """T8: WP row with all-None monthly cells is still preserved.
+
+    Previously the reader dropped rows whose monthly values were every None
+    ("never entered"), conflating them with untouched WPs. The round-trip
+    contract is now: every Actuals WP row is preserved, blank cells included.
+    """
+    from budget_planner.reader import read_actuals_values
+    wb = Workbook()
+    plan_ws = wb.active
+    assert plan_ws is not None
+    plan_ws.title = "Plan"
+    plan_ws.cell(6, 1, "WP1")
+    plan_ws.cell(7, 1, "WP2")
+
+    actuals_ws = wb.create_sheet("Actuals")
+    actuals_ws.cell(1, 1, "ACTUAL EUR")
+    actuals_ws.cell(3, 1, "WP ID")
+    actuals_ws.cell(3, 2, "WP Name")
+    actuals_ws.cell(4, 1, "=Plan!A6")
+    actuals_ws.cell(4, 2, "=Plan!B6")
+    actuals_ws.cell(4, 3, 100.0)
+    actuals_ws.cell(4, 4, 200.0)
+    actuals_ws.cell(4, 5, 300.0)
+    actuals_ws.cell(5, 1, "=Plan!A7")
+    actuals_ws.cell(5, 2, "=Plan!B7")
+    actuals_ws.cell(6, 1, "")
+    actuals_ws.cell(6, 2, "TOTAL")
+
+    result = read_actuals_values(actuals_ws, project_months=3)
+    assert "WP2" in result, (
+        "WP2 row was dropped even though it appears in the Actuals table. "
+        "Zero-spend / deliberately-cleared rows must survive the round-trip."
+    )
+    assert result["WP2"] == [None, None, None]
+    wb.close()
+
+
+def test_read_actuals_values_literal_wp_ids():
+    """read_actuals_values handles literal (non-formula) WP IDs.
+
+    Covers the early-return branch in reader.py::_resolve_plan_ref for cells
+    whose value does not start with '='. The prod builder always writes
+    formula refs, so this branch has no integration coverage.
+    """
+    from budget_planner.reader import read_actuals_values
+    wb = Workbook()
+    plan_ws = wb.active
+    assert plan_ws is not None
+    plan_ws.title = "Plan"
+
+    actuals_ws = wb.create_sheet("Actuals")
+    actuals_ws.cell(1, 1, "ACTUAL EUR")
+    actuals_ws.cell(2, 1, "")
+    actuals_ws.cell(3, 1, "WP ID")
+    actuals_ws.cell(3, 2, "WP Name")
+    actuals_ws.cell(4, 1, "WP1")
+    actuals_ws.cell(4, 2, "Mgmt")
+    actuals_ws.cell(4, 3, 500.0)
+    actuals_ws.cell(4, 4, 600.0)
+    actuals_ws.cell(5, 1, "")
+    actuals_ws.cell(5, 2, "TOTAL")
+
+    result = read_actuals_values(actuals_ws, project_months=2)
+    assert "WP1" in result
+    assert result["WP1"] == [500.0, 600.0]
+    wb.close()
+
+
 # ── T1: Formula rate round-trip ──
 
 

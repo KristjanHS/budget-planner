@@ -58,6 +58,8 @@ Three reader test files (`test_reader.py`, `test_reader_v2.py`, `test_reader_new
 
 **Project rule:** `testing-project.md` § "round-trip required" — when consolidating, prefer round-trip assertions over reader-only "does it parse?" tests.
 
+**2026-04-26 override during execution (resolves Phase 7 inline):** the audit cited `test_config_sheet.py:41 test_params_round_trip` as the surviving coverage for the deleted `test_read_config_sheet_roundtrip`. That symbol does not exist — line 41 lives inside `test_config_sheet_params` (writer-only) and the only `round_trip` test in that file is `test_config_round_trip_eu_ceiling` (line 181, EU-ceiling-only). The actual rebuild-loop coverage for `params["title"]` / `params["months"]` lives in `test_rebuild_e2e.py::test_multiple_changes_rebuild_produces_valid_workbook` (lines 648-649), which mutates Config + rebuilds + re-reads. WP id/name/fte round-trip is covered by `test_read_plan_config_extracts_wp_definitions` (fresh-init read) plus the same multi-change rebuild test for fte/end-month. The only assertion not duplicated elsewhere was `isinstance(params["rate"], float)` — fails 5-check gate #1 (testing the language). Phase 7 closes as no-op rolled into Phase 2 deletion.
+
 **Acceptance:** `pytest tests/test_reader*.py tests/test_config_sheet.py -q` green. Sum of test counts before/after: no net coverage loss (count behaviors covered, not tests).
 
 ---
@@ -157,18 +159,11 @@ Environment-variable monkeypatching is the right tool for env-gating tests. Audi
 
 ---
 
-## Phase 7 — Reader-only → round-trip strengthening
+## Phase 7 — Reader-only → round-trip strengthening — **CLOSED: rolled into Phase 2**
 
-**Effort:** 1 hour. **Impact:** Coverage strengthening (no test count delta).
+**2026-04-26 override during execution:** the audit cited `test_config_sheet.py:41 test_params_round_trip` as the comparison test, but that symbol does not exist. Resolution recorded in the Phase 2 override block above. Outcome: `test_read_config_sheet_roundtrip` deleted as part of Phase 2; surviving coverage is `test_rebuild_e2e.py::test_multiple_changes_rebuild_produces_valid_workbook` (full init→mutate→rebuild→read loop covering title / months / wp fte / wp end-month) plus `test_read_plan_config_extracts_wp_definitions` (fresh-init WP id/name/fte read).
 
-`tests/test_reader_new.py:51::test_read_config_sheet_roundtrip` — currently reader-only (Config sheet → read → assert). Per `testing-project.md`: "A reader-only 'does it parse?' assertion is a false green — the builder may still clobber the preserved value."
-
-**Decision tree:**
-1. Read `tests/test_config_sheet.py:41::test_params_round_trip` — does it cover the same Config cells via the full `init → read → mutate → rebuild → read` loop?
-   - **Yes:** delete `test_read_config_sheet_roundtrip` as duplicate (rolls into Phase 2 cleanup).
-   - **No:** extend `test_read_config_sheet_roundtrip` to be a true round-trip (init → read → mutate via openpyxl → `rebuild_workbook` → reopen → assert).
-
-**Acceptance:** Either the test is gone (and the deletion commit references `test_params_round_trip` as the surviving coverage), OR the test now mutates + rebuilds + reasserts.
+**No further work. Phase 7 closes as no-op with override recorded above.**
 
 ---
 

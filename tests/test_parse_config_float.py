@@ -1,7 +1,7 @@
 """Direct unit tests for reader._parse_config_float.
 
 Covers the locale-aware numeric-cell parser that underpins roster / assignments
-/ externals readers. Integration tests in test_reader_new.py exercise the
+/ externals readers. Integration tests in test_reader_capacity.py exercise the
 "European 0,35 in a roster" path; these tests pin the edge-case contract so
 future tweaks to separator logic, NBSP handling, or the None/0.0 sentinels
 don't regress silently.

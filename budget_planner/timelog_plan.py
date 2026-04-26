@@ -1075,7 +1075,7 @@ def _write_yearly_rows(
           flipped PER-WP SUMMARY col B to direct Config!F (Budget +i,
           ``COL_WP_BUDGET_PLUS_I``), so SUM(B) is already +i.
     - Cols B, D-H: intentionally blank.
-    - Per-year cols (J…):
+    - Per-year cols (K…):
       * yearly_total_row: =SUM(<year_col>{W1}:<year_col>{Wn}) — stacks the
         per-WP Y{yyyy} +i cells for that year (each cell is +i via the T7.3
         ×1.25 wrap at the display layer).

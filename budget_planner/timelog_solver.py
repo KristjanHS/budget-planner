@@ -536,6 +536,16 @@ def classify_wp_stop_reasons(
       signal of policy drift, not silently masked)
 
     Priority order: first match wins.
+
+    Precondition: greedy correctness — any candidate post-solve with
+    ``pool > 0`` AND legal unplaced months AND a rate that does NOT push
+    past the upper cap would have been placed. Because pass-2
+    (``switch_reduction_pass``) preserves per-WP €-totals (rate-equality
+    constraint), final ``Assignment`` is sufficient to disambiguate the
+    enum branches. If a future solver change violates this, ``"+12% cap"``
+    can over-fire on configurations a correct solver would have filled —
+    treat any unexpected ``"+12% cap"`` on a fillable WP as a solver-bug
+    signal, not a policy signal.
     """
     del project_months  # signature parity with ``solve``; not needed here.
     windows_idx = _build_windows_index(person_wp_windows)

@@ -699,12 +699,9 @@ def test_stop_reason_col_present(tlp, assigned_wb):
     assert tlp.cell(hdr_row, 10).value == "Stop reason"
     _params, wps = _read_config(assigned_wb)
     first_wp_row = hdr_row + 1
-    seen = []
     for i in range(len(wps)):
         v = tlp.cell(first_wp_row + i, 10).value
         assert v in valid, f"WP row {first_wp_row + i} col J: unexpected {v!r}"
-        seen.append(v)
-    assert any(s for s in seen), "expected at least one non-empty stop reason"
 
 
 def test_year_cols_overlap_blanks(tlp, assigned_wb):

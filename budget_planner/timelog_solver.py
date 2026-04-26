@@ -3,10 +3,13 @@
 Pure-Python, deterministic, no I/O and no openpyxl dependency. Assigns each
 (person, month) cell to exactly one WP code (or None) such that:
 
-- WP totals approach their ``ceiling_eur`` target (slight € overshoot
-  tolerated, bounded by ``MAX_BUFFER_PCT`` — currently 11% of the WP
-  ceiling). Small WPs whose only available candidates have rates that
-  would breach the cap on a single placement may end up underfilled.
+- WP totals approach their ``ceiling_eur`` target. Overshoot is bounded by
+  ``MAX_BUFFER_PCT`` (currently +12% of the WP ceiling); undershoot is
+  bounded by ``MIN_BUFFER_PCT`` (currently -11%). When the only candidate's
+  rate would push past +12% AND skipping would leave the WP below -11%, the
+  placement happens anyway — overshoot wins over undershoot. WPs with no
+  remaining candidates may still end up below -11%; that is a capacity
+  shortfall, not a policy choice.
 - Each cell stays inside the WP's active window AND inside the person's
   per-(person, WP) window (the PERSON-WP ASSIGNMENTS row).
 - Each person's total assigned months never exceeds their pool.
@@ -38,11 +41,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Hard cap on per-WP buffer = (placed_eur − ceiling_eur) / ceiling_eur.
+# Per-WP buffer = (placed_eur − ceiling_eur) / ceiling_eur.
 # Greedy skips any placement that would push placed_eur past
-# ceiling_eur × (1 + MAX_BUFFER_PCT). Small WPs with high-rate-only
-# candidates may end up underfilled rather than overshooting this cap.
-MAX_BUFFER_PCT = 0.11
+# ceiling_eur × (1 + MAX_BUFFER_PCT) — UNLESS skipping would leave the WP
+# below ceiling_eur × (1 − MIN_BUFFER_PCT). In that tie-break case the
+# placement happens (overshoot wins over deeper undershoot). WPs with no
+# remaining candidates can still finish below the lower cap; the policy
+# only fires when a placement is available.
+MAX_BUFFER_PCT = 0.12
+MIN_BUFFER_PCT = 0.11
 
 
 @dataclass(frozen=True)
@@ -268,25 +275,35 @@ def greedy_pass(
                         # ceiling_eur / pool by the caller.
                         continue
                     if assigned[p.name][m] is None:
-                        # Hard 11% buffer cap (MAX_BUFFER_PCT). Skip the rest
-                        # of this person's months if the next placement would
-                        # push placed_eur past ceiling × (1 + MAX_BUFFER_PCT).
-                        # ``placed_eur`` only grows, so once the guard fires
-                        # for this person at this rate it fires for every
-                        # remaining month — break, don't continue. Small WPs
-                        # with only high-rate candidates may end up
-                        # underfilled; trade-off accepted under hard-cap.
-                        if (
-                            placed_eur + p.rate_eur_per_pm
-                            > wp.ceiling_eur * (1 + MAX_BUFFER_PCT)
-                        ):
+                        # Two-sided buffer policy:
+                        #   upper cap = ceiling × (1 + MAX_BUFFER_PCT)   (+12%)
+                        #   lower cap = ceiling × (1 − MIN_BUFFER_PCT)   (-11%)
+                        # Default: skip placements that would push placed_eur
+                        # past the upper cap. ``placed_eur`` only grows, so
+                        # once the guard fires for this person at this rate
+                        # it fires for every remaining month — break.
+                        # Tie-break: if skipping would leave the WP below the
+                        # lower cap, place anyway. Overshoot beyond +12% is
+                        # preferred over undershoot worse than -11%.
+                        upper_limit = (
+                            wp.ceiling_eur * (1 + MAX_BUFFER_PCT)
+                        )
+                        lower_limit = (
+                            wp.ceiling_eur * (1 - MIN_BUFFER_PCT)
+                        )
+                        would_overshoot = (
+                            placed_eur + p.rate_eur_per_pm > upper_limit
+                        )
+                        already_above_lower = placed_eur >= lower_limit
+                        if would_overshoot and already_above_lower:
                             break
                         assigned[p.name][m] = wp.code
                         pool[p.name] -= 1
                         placed_eur += p.rate_eur_per_pm
                         # Check-after-placing: last placement may overshoot
-                        # the ceiling by up to ``p.rate_eur_per_pm − 1 €``,
-                        # bounded above by the MAX_BUFFER_PCT guard.
+                        # the ceiling, bounded above by MAX_BUFFER_PCT
+                        # except when the lower-cap tie-break fired (in
+                        # which case overshoot can exceed +12%).
                         # Break stops further placements for this person;
                         # outer break then exits the WP pass.
                         if placed_eur >= wp.ceiling_eur:

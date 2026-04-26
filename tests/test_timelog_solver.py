@@ -8,7 +8,7 @@ workbook builders. These tests assert algorithmic properties of ``solve``,
 from __future__ import annotations
 
 from budget_planner.timelog_solver import (
-    MAX_BUFFER_PCT,
+    MIN_BUFFER_PCT,
     Assignment,
     Person,
     PersonWPWindow,
@@ -220,14 +220,15 @@ def test_overshoot_tolerated():
     assert placed <= 4
 
 
-def test_buffer_cap_forces_undershoot_on_small_wp():
-    # Hard-cap policy (MAX_BUFFER_PCT): when the only candidate's rate is
-    # large enough that the next placement would cross
-    # ceiling × (1 + cap), greedy skips it — the WP ends up underfilled
-    # rather than overshooting. ceiling=1000, rate=600 → 1st placement
-    # (600 €) is fine (cap check 0+600 ≤ 1110); 2nd would land at 1200 €,
-    # cap check fires (600+600 > 1110), break. Without the cap the legacy
-    # check-after-placing would have placed 2 (1200 €, 20% buffer).
+def test_lower_cap_forces_overshoot_on_small_wp():
+    # Two-sided buffer policy: upper cap MAX_BUFFER_PCT (+12%), lower cap
+    # MIN_BUFFER_PCT (-11%). When the only candidate's rate would push past
+    # +12% AND skipping leaves the WP below -11%, place anyway.
+    # ceiling=1000, rate=600:
+    #   placement 1: 0+600=600 ≤ 1120 → place. State 600 (-40%, < -11%).
+    #   placement 2: 600+600=1200 > 1120 (would overshoot +12%), but
+    #     state 600 < 890 (lower cap), so place anyway. State 1200 (+20%).
+    #   placed_eur ≥ ceiling, break.
     ceiling = 1000
     rate = 600
     persons = [Person("Alice", priority=1, pool=10, rate_eur_per_pm=rate)]
@@ -236,14 +237,49 @@ def test_buffer_cap_forces_undershoot_on_small_wp():
     assigned = greedy_pass(persons, wps, windows, project_months=10)
     placed = _placed_count(assigned, "WP1")
     placed_eur = placed * rate
-    assert placed_eur <= ceiling * (1 + MAX_BUFFER_PCT), (
-        f"cap breached: placed_eur={placed_eur}, "
-        f"limit={ceiling * (1 + MAX_BUFFER_PCT)}"
+    # Lower cap holds: never finish below -11% when a placement was available.
+    assert placed_eur >= ceiling * (1 - MIN_BUFFER_PCT), (
+        f"undershoot below -11% with placement available: "
+        f"placed_eur={placed_eur}, lower={ceiling * (1 - MIN_BUFFER_PCT)}"
     )
-    # Underfill is the chosen trade-off: 1 placement (600 €), undershoot
-    # 400 €. Loosening the cap or reverting to legacy check-after-placing
-    # would yield placed == 2 (1200 €, 20% overshoot).
-    assert placed == 1, f"expected 1 placement under cap, got {placed}"
+    # Tie-break may exceed the upper cap (overshoot wins over undershoot).
+    assert placed == 2, f"expected 2 placements (overshoot), got {placed}"
+
+
+def test_undershoot_to_overshoot_jump_one_month():
+    # Decision: leave WP at -27% buffer or jump to +8% with one placement.
+    # ceiling=100. Alice (priority 1, pool 1, rate 73) places once → state
+    # 73 (-27%). Bob (priority 2, pool 10, rate 35) is the next candidate;
+    # his first placement: 73+35=108 (+8%). Both 108 ≤ ceiling × 1.12 (new
+    # cap) AND 108 ≤ ceiling × 1.11 (old cap), so this test passed under
+    # the old policy too — it does NOT exercise the tie-break path.
+    # Kept as a regression guard for the canonical "single-month jump from
+    # deep undershoot to small overshoot" case the user reported, ensuring
+    # the solver never leaves a WP at -27% when this jump is available.
+    # The tie-break itself is exercised by
+    # test_lower_cap_forces_overshoot_on_small_wp.
+    ceiling = 100
+    persons = [
+        Person("Alice", priority=1, pool=1, rate_eur_per_pm=73),
+        Person("Bob", priority=2, pool=10, rate_eur_per_pm=35),
+    ]
+    wps = [WP("WP1", active_start=1, active_end=12, ceiling_eur=ceiling)]
+    windows = [
+        PersonWPWindow("Alice", "WP1", 1, 12),
+        PersonWPWindow("Bob", "WP1", 1, 12),
+    ]
+    assigned = greedy_pass(persons, wps, windows, project_months=12)
+    rate_by_name = {"Alice": 73, "Bob": 35}
+    placed_eur = sum(
+        rate_by_name[name]
+        for name, row in assigned.items()
+        for code in row.values()
+        if code == "WP1"
+    )
+    assert placed_eur == 108, (
+        f"expected jump to 108 € (+8%), got {placed_eur} "
+        f"({(placed_eur - ceiling) / ceiling:+.0%})"
+    )
 
 
 # ---------------------------------------------------------------------------

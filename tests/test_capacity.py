@@ -5,7 +5,7 @@ import openpyxl
 
 from budget_planner.config import (
     TEAM, WORK_PACKAGES, EXTERNAL_COMMITMENTS, DEMO_CAPACITY_ASSIGNMENTS,
-    MONTH_COL_START, MONTH_COL_END, PROJECT_MONTHS,
+    MONTH_COL_START, MONTH_COL_END, PROJECT_MONTHS, PROJECT_START,
     VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
 )
 from budget_planner.styles import col_letter
@@ -34,7 +34,7 @@ def capacity_layout(tmp_path_factory):
     wb = WB()
     config_ws = wb.create_sheet("Config")
     config_layout = build_config_sheet(config_ws, wb,
-                                        {"title": "Test", "start": __import__("datetime").datetime(2026, 11, 1),
+                                        {"title": "Test", "start": PROJECT_START,
                                          "months": 14, "rate": 7500},
                                         WORK_PACKAGES,
                                         assignments=DEMO_CAPACITY_ASSIGNMENTS,

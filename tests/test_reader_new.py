@@ -1,10 +1,9 @@
 """Tests for new reader functions (Config sheet, Actuals values, grade rates)."""
 
-from datetime import datetime
-
 import pytest
 from openpyxl import Workbook
 
+from budget_planner.config import PROJECT_START
 from budget_planner.config_sheet import build_config_sheet
 from budget_planner.layout import COL_ROSTER_FTE, SECTION_HEADER_LABELS
 from budget_planner.reader import (
@@ -28,7 +27,7 @@ def _make_config_wb():
     ws.title = "Config"
     params = {
         "title": "Test",
-        "start": datetime(2026, 7, 1),
+        "start": PROJECT_START,
         "months": 24,
         "rate": 7500,
     }
@@ -48,7 +47,7 @@ def test_read_config_sheet_roundtrip():
     ws = wb["Config"]
     params, wps = read_config_sheet(ws)
     assert params["title"] == "Test"
-    assert params["start"] == datetime(2026, 7, 1)
+    assert params["start"] == PROJECT_START
     assert params["months"] == 24
     # FTE Rate is a numeric fallback — the builder regenerates the SUMPRODUCT
     # from live layout on every build, so the reader returns a float.
@@ -261,7 +260,7 @@ class TestConfigSheetValidation:
         ws.cell(2, 1, "Project Title")
         ws.cell(2, 2, "Test")
         ws.cell(3, 1, "Project Start")
-        ws.cell(3, 2, datetime(2026, 1, 1))
+        ws.cell(3, 2, PROJECT_START)
         ws.cell(4, 1, "Project Months")
         ws.cell(4, 2, 60)
         ws.cell(5, 1, "FTE Rate (EUR)")
@@ -310,7 +309,7 @@ class TestConfigSheetValidation:
         ws.title = "Config"
         params = {
             "title": "Test",
-            "start": datetime(2026, 7, 1),
+            "start": PROJECT_START,
             "months": 24,
             "rate": 7500,
         }
@@ -580,7 +579,7 @@ def _make_config_wb_with_assignments(assignments=None, externals=None):
     ws.title = "Config"
     params = {
         "title": "Test",
-        "start": datetime(2026, 7, 1),
+        "start": PROJECT_START,
         "months": 60,
         "rate": 7500,
         "eu_ceiling_pm": 12.0,

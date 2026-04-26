@@ -1,11 +1,11 @@
 """Tests for rebuild round-trip, preservation, orphaned data, and validation."""
 import os
-from datetime import datetime
 
 import pytest
 from openpyxl import load_workbook
 from openpyxl.cell import Cell
 
+from budget_planner.config import PROJECT_START
 from budget_planner.workbook import init_workbook, rebuild_workbook, _validate_config
 
 
@@ -100,7 +100,7 @@ class TestValidation:
     """_validate_config catches bad data."""
 
     def _params(self, **overrides):
-        p = {"title": "Test", "start": datetime(2026, 7, 1),
+        p = {"title": "Test", "start": PROJECT_START,
              "months": 60, "rate": 7500}
         p.update(overrides)
         return p

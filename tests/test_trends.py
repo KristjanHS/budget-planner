@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from budget_planner.config import (
     NUM_WPS, TEAM,
-    VAL_COL_BUDGET,
+    VAL_COL_BUDGET, PROJECT_START,
 )
 from budget_planner.layout import MONTH_COL_START
 from budget_planner.styles import col_letter
@@ -422,7 +422,6 @@ def _make_team(n, work_packages):
 
 def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
     """Build a workbook with given WP/team counts and return the Trends ws + layout."""
-    from datetime import datetime
     from openpyxl import Workbook as WB
     from openpyxl.worksheet.worksheet import Worksheet
     from budget_planner.workbook import _build_all_sheets
@@ -434,7 +433,7 @@ def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
     team = _make_team(num_team, work_packages)
     external_commitments: list[dict[str, object]] = []
     project_params = {
-        "title": "Test", "start": datetime(2026, 1, 1),
+        "title": "Test", "start": PROJECT_START,
         "months": 24, "rate": 7500,
     }
 

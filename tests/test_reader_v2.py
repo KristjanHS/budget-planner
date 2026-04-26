@@ -14,7 +14,7 @@ from budget_planner.reader import (
     read_config_sheet,
 )
 from budget_planner.config import (
-    WORK_PACKAGES, TEAM, PROJECT_MONTHS, EXTERNAL_COMMITMENTS,
+    WORK_PACKAGES, TEAM, PROJECT_MONTHS, PROJECT_START, EXTERNAL_COMMITMENTS,
     DEMO_CAPACITY_ASSIGNMENTS,
 )
 from budget_planner.layout import COL_WP_RATE, SECTION_HEADER_LABELS
@@ -412,7 +412,7 @@ class TestFormulaRateRoundTrip:
         out_ws.title = "Config"
         params_sample = {
             "title": "Rebuild Test",
-            "start": __import__("datetime").datetime(2026, 1, 1),
+            "start": PROJECT_START,
             "months": 60,
             "rate": 7500,
             "eu_ceiling_pm": 12.0,

@@ -1,13 +1,13 @@
 """Tests for Config sheet builder."""
-from datetime import datetime
 from openpyxl import Workbook
+from budget_planner.config import PROJECT_START
 from budget_planner.config_sheet import build_config_sheet
 
 
 def _sample_params():
     return {
         "title": "Test Project",
-        "start": datetime(2026, 7, 1),
+        "start": PROJECT_START,
         "months": 60,
         "rate": 7500,
         "eu_ceiling_pm": 12.0,
@@ -38,7 +38,7 @@ def test_config_sheet_params():
     ws.title = "Config"
     build_config_sheet(ws, wb, _sample_params(), _sample_wps())
     assert _find_param_value(ws, "Project Title") == "Test Project"
-    assert _find_param_value(ws, "Project Start") == datetime(2026, 7, 1)
+    assert _find_param_value(ws, "Project Start") == PROJECT_START
     assert _find_param_value(ws, "Project Months") == 60
     # FTE Rate is now a formula (weighted average of grade rates)
     from openpyxl.worksheet.formula import ArrayFormula

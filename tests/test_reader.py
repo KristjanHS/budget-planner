@@ -1,9 +1,8 @@
 """Tests for reader behaviour — indirect-view Ceiling→Budget migration."""
-from datetime import datetime
-
 import pytest
 from openpyxl import Workbook
 
+from budget_planner.config import PROJECT_START
 from budget_planner.config_sheet import build_config_sheet
 from budget_planner.reader import read_config_sheet
 
@@ -11,7 +10,7 @@ from budget_planner.reader import read_config_sheet
 def _sample_params():
     return {
         "title": "Reader Test",
-        "start": datetime(2026, 7, 1),
+        "start": PROJECT_START,
         "months": 60,
         "rate": 7500,
         "eu_ceiling_pm": 12.0,
@@ -39,7 +38,7 @@ def _seed_legacy_config(ws, wps):
     ``Ceiling (€)`` at col 5, Start/End/Type at cols 8/9/10."""
     param_rows = (
         ("Project Title", "Legacy Project"),
-        ("Project Start", datetime(2026, 7, 1)),
+        ("Project Start", PROJECT_START),
         ("Project Months", 60),
         ("FTE Rate (EUR)", 7500),
         ("EU Annual Ceiling (PM/FTE/year)", 12.0),

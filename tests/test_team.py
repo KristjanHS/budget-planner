@@ -2,16 +2,15 @@
 
 import pytest
 from openpyxl import Workbook
-from datetime import datetime
 
 from budget_planner.config_sheet import build_config_sheet
-from budget_planner.config import TEAM
+from budget_planner.config import PROJECT_START, TEAM
 
 
 def _sample_params():
     return {
         "title": "Test",
-        "start": datetime(2026, 7, 1),
+        "start": PROJECT_START,
         "months": 24,
         "rate": 7500,
     }

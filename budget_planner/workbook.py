@@ -279,6 +279,11 @@ def _build_all_sheets(
         reporting_periods = REPORTING_PERIODS
 
     # Stage 1 — Config (no dependencies)
+    # `Rebuild from month #` (Config!B9) is BLUE_INPUT — preserve the user's
+    # last value across rebuilds rather than resetting to 1, otherwise the
+    # second rebuild silently collapses the freeze point even though the
+    # first rebuild's solver honored the value.
+    _config_rebuild_from_month = (preserved_timelog or {}).get("rebuild_from_month", 1)
     config_ws = wb.create_sheet(SHEET_CONFIG)
     ctx.config_layout = build_config_sheet(
         config_ws,
@@ -291,6 +296,7 @@ def _build_all_sheets(
         assignments=assignments,
         external_commitments=external_commitments,
         version_stamp=version_stamp,
+        rebuild_from_month=_config_rebuild_from_month,
     )
 
     # Stage 2 — Capacity (consumes config_layout)

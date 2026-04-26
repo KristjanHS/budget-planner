@@ -113,7 +113,7 @@ def _wp_summary_first_row(ws) -> int:
 def _iter_person_rows(ws, first_row: int):
     """Yield rows from ``first_row`` until next section title / blank / total row.
 
-    Stops at PER- section titles, blank col A, and the "Monthly total +i" label
+    Stops at PER- section titles, blank col A, and the "Monthly total -i" label
     (phase-3 row that sits directly under the grid in the same outline group).
     """
     r = first_row
@@ -160,9 +160,10 @@ def test_layout_col_shift(tlp, assigned_wb):
     m1_letter = tlp.cell(month_row, TIMELOG_MONTH_COL_START).column_letter
     assert m1_letter == "B"
 
-    # Rate is at PER-PERSON SUMMARY col H (shifted left one after Largest gap drop).
+    # Rate (€/PM) -i lives at PER-PERSON SUMMARY col H (VLOOKUP source).
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_PERSON_SUMMARY) + 1
-    assert tlp.cell(hdr_row, 8).value == "Rate"
+    assert tlp.cell(hdr_row, 8).value == "Rate (€/PM) -i"
+    assert tlp.cell(hdr_row, 9).value == "Rate (€/PM) +i"
     first_person = _summary_person_first_row(tlp)
     rate_val = str(tlp.cell(first_person, 8).value or "")
     assert rate_val.startswith("=VLOOKUP(") and "roster_lookup" in rate_val, rate_val
@@ -444,51 +445,53 @@ def test_person_summary_headers_v2(tlp):
     assert tlp.cell(hdr_row, 1).value == "Person"
     expected = [
         "Assigned", "Pool", "Over-pool?", "Switches",
-        "First log", "Last log", "Rate",
+        "First log", "Last log", "Rate (€/PM) -i", "Rate (€/PM) +i",
     ]
     got = [tlp.cell(hdr_row, 2 + i).value for i in range(len(expected))]
     assert got == expected, got
 
 
 def test_person_summary_shape(tlp):
-    """PER-PERSON SUMMARY is 8 cols (Person + 7 metrics); no Largest gap header."""
+    """PER-PERSON SUMMARY is 9 cols (Person + 8 metrics, two rate cols)."""
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_PERSON_SUMMARY) + 1
-    headers = [tlp.cell(hdr_row, c).value for c in range(1, 10)]
-    # Cols 1..8 are populated; col 9 must be blank/None (was 9-col v2).
+    headers = [tlp.cell(hdr_row, c).value for c in range(1, 11)]
     assert headers[0] == "Person"
-    assert all(headers[i] is not None and headers[i] != "" for i in range(8)), headers
-    assert headers[8] in (None, ""), (
-        f"PER-PERSON SUMMARY col 9 should be empty after Largest gap drop, got {headers[8]!r}"
+    assert all(headers[i] is not None and headers[i] != "" for i in range(9)), headers
+    assert headers[9] in (None, ""), (
+        f"PER-PERSON SUMMARY col 10 should be empty, got {headers[9]!r}"
     )
     # "Largest gap" must not appear anywhere in the header row.
     assert "Largest gap" not in headers, headers
 
 
 def test_rate_col_h(tlp, assigned_wb):
-    """Rate lands at PER-PERSON SUMMARY col H; Assigned € SUMPRODUCT references col-H range."""
-    # Rate formula at col H on the first person row.
+    """Rate -i lives at col H (VLOOKUP); Rate +i at col I (= H × 1.25);
+    Assigned € SUMPRODUCT consumes the col-I (+i) range so its result is +i."""
+    # Rate -i VLOOKUP at col H on the first person row.
     first_person = _summary_person_first_row(tlp)
-    rate_val = str(tlp.cell(first_person, 8).value or "")
-    assert rate_val.startswith("=VLOOKUP(") and "roster_lookup" in rate_val, rate_val
+    rate_minus_i = str(tlp.cell(first_person, 8).value or "")
+    assert rate_minus_i.startswith("=VLOOKUP(") and "roster_lookup" in rate_minus_i, rate_minus_i
+    # Rate +i = H × 1.25 at col I on the same row.
+    rate_plus_i = str(tlp.cell(first_person, 9).value or "")
+    assert rate_plus_i == f"=H{first_person}*1.25", rate_plus_i
 
-    # PER-WP SUMMARY Assigned € SUMPRODUCT (col C on first WP row) must reference
-    # the col-H range for its rate vector, not col I.
+    # PER-WP SUMMARY Assigned € SUMPRODUCT (col C on first WP row) must
+    # reference the col-I (Rate +i) range for its rate vector.
     wp_first = _wp_summary_first_row(tlp)
     assigned_eur = str(tlp.cell(wp_first, 3).value or "")
     assert assigned_eur.startswith("=ROUND(SUMPRODUCT("), assigned_eur
-    # Rate-vector segment must be anchored at col H on the summary-person rows.
     summary_last_row = first_person
     for r in _iter_person_rows(tlp, first_person):
         summary_last_row = r
-    expected_fragment = f"H{first_person}:H{summary_last_row}"
+    expected_fragment = f"I{first_person}:I{summary_last_row}"
     assert expected_fragment in assigned_eur, (
         f"expected rate-vector range {expected_fragment!r} in Assigned € formula, "
         f"got {assigned_eur!r}"
     )
-    # Anti-assertion: the v2 col-I range must be gone.
-    stale_fragment = f"I{first_person}:I{summary_last_row}"
+    # Anti-assertion: -i range must NOT be the rate vector for Assigned €.
+    stale_fragment = f"H{first_person}:H{summary_last_row}"
     assert stale_fragment not in assigned_eur, (
-        f"Assigned € still references stale col-I rate vector: {assigned_eur!r}"
+        f"Assigned € incorrectly references col-H (-i) rate vector: {assigned_eur!r}"
     )
 
 
@@ -684,14 +687,12 @@ def test_year_cols_overlap_blanks(tlp, assigned_wb):
 
 
 def test_year_cols_sum_matches_assigned(recalced_assigned_path):
-    """Sum across year cols on each WP row ≈ that WP's Assigned € × 1.25.
+    """Sum across year cols on each WP row ≈ that WP's Assigned €.
 
-    Post-T7.3: year cells are +i (display-layer ×1.25 wrap inside
-    ROUND/SUMPRODUCT); col C Assigned € stays -i. So year-sum ≈ Assigned × 1.25.
-    Each year cell is independently ROUND'd per the EUR leaf-rounding rule,
-    so the sum of rounded-per-year can differ from the expected +i Assigned
-    by at most one EUR per year (round-half-even). We allow a tolerance of
-    ``num_years`` EUR.
+    Both the year cells and col C Assigned € are now +i (Assigned € consumes
+    the new col-I Rate +i vector), so the row-sum should equal Assigned €
+    directly. Each year cell is independently ROUND'd per the EUR
+    leaf-rounding rule; tolerance scales with ``num_years``.
     """
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
@@ -711,10 +712,10 @@ def test_year_cols_sum_matches_assigned(recalced_assigned_path):
             v = ws.cell(first + wi, base_cols + 1 + yi).value
             if isinstance(v, (int, float)):
                 year_sum += float(v)
-        expected_plus_i = float(assigned_eur) * 1.25
-        assert abs(year_sum - expected_plus_i) <= tolerance, (
-            f"WP {wp['id']}: sum of year cols {year_sum} vs Assigned × 1.25 "
-            f"{expected_plus_i} (tolerance ±{tolerance})"
+        expected = float(assigned_eur)
+        assert abs(year_sum - expected) <= tolerance, (
+            f"WP {wp['id']}: sum of year cols {year_sum} vs Assigned € "
+            f"{expected} (tolerance ±{tolerance})"
         )
         checked += 1
     assert checked > 0, "no numeric Assigned € values — recalc didn't populate"
@@ -899,22 +900,22 @@ def _monthly_total_row(ws) -> int:
 
 
 def test_monthly_total_row_present(tlp, assigned_wb):
-    """Monthly total +i row sits directly under the last person row with
-    ROUND(SUMPRODUCT(…)*1.25,0) formulas per month col and
-    WITH_INDIRECT_HEADER_FILL on the label cell (T7.3)."""
-    from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
+    """Monthly total -i row sits directly under the last person row with
+    ROUND(SUMPRODUCT(…),0) formulas per month col (no ×1.25 wrap — rates
+    are -i so the leaf is -i) and WITHOUT_INDIRECT_HEADER_FILL on the
+    label cell."""
+    from budget_planner.styles import WITHOUT_INDIRECT_HEADER_FILL
     months = _project_months(assigned_wb)
     m_start = TIMELOG_MONTH_COL_START
     m_end = m_start + months - 1
 
     total_row = _monthly_total_row(tlp)
     label_cell = tlp.cell(total_row, 1)
-    assert label_cell.value == "Monthly total +i"
+    assert label_cell.value == "Monthly total -i"
     assert (
-        label_cell.fill.fgColor.rgb == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
+        label_cell.fill.fgColor.rgb == WITHOUT_INDIRECT_HEADER_FILL.fgColor.rgb
     ), f"label fill {label_cell.fill.fgColor.rgb!r}"
 
-    # Every month col must carry a ROUND(SUMPRODUCT(…)*1.25,0) formula.
     checked = 0
     for c in range(m_start, m_end + 1):
         v = str(tlp.cell(total_row, c).value or "")
@@ -922,13 +923,13 @@ def test_monthly_total_row_present(tlp, assigned_wb):
             f"col {c}: expected ROUND(SUMPRODUCT(…), got {v!r}"
         )
         assert '<>""' in v, v
-        assert "*1.25" in v, f"col {c}: expected ×1.25 wrap, got {v!r}"
+        assert "*1.25" not in v, f"col {c}: -i row must NOT wrap ×1.25, got {v!r}"
         checked += 1
     assert checked == months
 
 
 def test_monthly_total_row_vacation_fill(tlp, assigned_wb):
-    """July cells on the Monthly total +i row carry VACATION_FILL; non-vacation
+    """July cells on the Monthly total -i row carry VACATION_FILL; non-vacation
     month cells on the same row do NOT (bystander for selectivity)."""
     from budget_planner.styles import VACATION_FILL
     params, _wps = _read_config(assigned_wb)
@@ -964,7 +965,7 @@ def test_monthly_total_row_vacation_fill(tlp, assigned_wb):
 
 
 def test_monthly_total_vacation_zero(recalced_assigned_path):
-    """Every vacation-month cell on the Monthly total +i row recalcs to 0."""
+    """Every vacation-month cell on the Monthly total -i row recalcs to 0."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
     params, _wps = _read_config(wb)
@@ -982,9 +983,9 @@ def test_monthly_total_vacation_zero(recalced_assigned_path):
 
 
 def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
-    """For each non-vacation month with ≥1 assigned person, the Monthly total +i
-    cell equals round(sum of those persons' Rate values × 1.25). Rates are -i
-    per D7; display-layer ×1.25 wrap flips to +i (T7.3)."""
+    """For each non-vacation month with ≥1 assigned person, the Monthly total -i
+    cell equals round(sum of those persons' Rate values). Rates are -i per D7;
+    no ×1.25 wrap on this row — the +i row sits directly below it."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
     params, _wps = _read_config(wb)
@@ -1014,10 +1015,10 @@ def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
             if v not in (None, ""):
                 expected += rate
         got = ws.cell(total_row, c).value
-        expected_plus_i = round(expected * 1.25)
-        assert got == expected_plus_i, (
-            f"month {month_num} (col {c}): expected {expected_plus_i} "
-            f"(= round({expected} × 1.25)), got {got!r}"
+        expected_minus_i = round(expected)
+        assert got == expected_minus_i, (
+            f"month {month_num} (col {c}): expected {expected_minus_i} "
+            f"(= round({expected})), got {got!r}"
         )
         if expected > 0:
             checked += 1
@@ -1027,28 +1028,28 @@ def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
     wb.close()
 
 
-# ── Monthly person cost +i row (Aiko-port T4) ───────────────────────────────
+# ── Monthly total +i row (always-visible, below the grid outline group) ────
 
 
-def test_monthly_person_cost_row_present(tlp, assigned_wb):
-    """Monthly person cost +i row sits directly under Monthly total +i with
-    the same ROUND(SUMPRODUCT(...)*1.25,0) formula shape per month col and
-    WITH_INDIRECT_HEADER_FILL on the label cell (Aiko-port T4, Q-D)."""
+def test_monthly_total_plus_i_row_present(tlp, assigned_wb):
+    """Monthly total +i row sits directly under Monthly total -i with
+    ROUND(SUMPRODUCT(...)*1.25,0) per month col and
+    WITH_INDIRECT_HEADER_FILL on the label cell."""
     from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
     months = _project_months(assigned_wb)
     m_start = TIMELOG_MONTH_COL_START
     m_end = m_start + months - 1
 
-    person_cost_row = _monthly_total_row(tlp) + 1
-    label_cell = tlp.cell(person_cost_row, 1)
-    assert label_cell.value == "Monthly person cost +i"
+    plus_i_row = _monthly_total_row(tlp) + 1
+    label_cell = tlp.cell(plus_i_row, 1)
+    assert label_cell.value == "Monthly total +i"
     assert (
         label_cell.fill.fgColor.rgb == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
     ), f"label fill {label_cell.fill.fgColor.rgb!r}"
 
     checked = 0
     for c in range(m_start, m_end + 1):
-        v = str(tlp.cell(person_cost_row, c).value or "")
+        v = str(tlp.cell(plus_i_row, c).value or "")
         assert v.startswith("=ROUND(SUMPRODUCT("), (
             f"col {c}: expected ROUND(SUMPRODUCT(…), got {v!r}"
         )
@@ -1058,23 +1059,22 @@ def test_monthly_person_cost_row_present(tlp, assigned_wb):
     assert checked == months
 
 
-def test_monthly_person_cost_row_precedes_summary_title(tlp):
-    """Person-cost row abuts PER-PERSON SUMMARY title with no spacer — this
-    anchors summary_person_first_row at its historical offset, which the
-    row-30 formula depends on (formula refs the Rate col range at
-    summary_person_first_row..summary_person_last_row). Bystander: Monthly
-    total +i row is still at person_cost_row - 1."""
-    person_cost_row = _monthly_total_row(tlp) + 1
-    # Monthly total +i row is the row above — confirms layout order.
+def test_monthly_total_plus_i_followed_by_blank_then_summary(tlp):
+    """+i row is followed by exactly one blank spacer row, then the
+    PER-PERSON SUMMARY title. Bystander: -i row is still at plus_i_row - 1."""
+    plus_i_row = _monthly_total_row(tlp) + 1
+    # -i row is the row above — confirms layout order.
     assert (
-        str(tlp.cell(person_cost_row - 1, 1).value or "")
+        str(tlp.cell(plus_i_row - 1, 1).value or "")
         .lower().startswith("monthly total")
     )
-    # Next row is the PER-PERSON SUMMARY section title (no spacer between).
-    next_val = tlp.cell(person_cost_row + 1, 1).value
+    # Spacer row (blank col A) sits between +i and summary title.
+    assert tlp.cell(plus_i_row + 1, 1).value in (None, "")
+    # Section title sits two rows below +i.
+    next_val = tlp.cell(plus_i_row + 2, 1).value
     assert next_val == SECTION_TITLE_PERSON_SUMMARY, (
         f"expected PER-PERSON SUMMARY title at row "
-        f"{person_cost_row + 1}, got {next_val!r}"
+        f"{plus_i_row + 2}, got {next_val!r}"
     )
 
 
@@ -1134,11 +1134,11 @@ def test_yearly_rows_present(tlp):
 
 
 def test_yearly_total_col_c_formula(tlp, assigned_wb):
-    """Yearly total col C cross-check = raw SUM(C{first}:C{last}) (Aiko-port Q-B).
+    """Yearly total col C cross-check = raw SUM(C{first}:C{last}).
 
-    PER-WP SUMMARY col C stays -i; the cross-check is -i by construction.
-    Per-year cells to the right of col C stay +i via the ×1.25 wrap at the
-    SUMPRODUCT leaf (T7.3), but the cross-check no longer wraps in ×1.25."""
+    Col C Assigned € is now +i (rate vector points at the new col-I Rate +i),
+    so SUM(C) is +i by construction — pairs with the +i year cells without
+    needing a ×1.25 wrap."""
     wps = _read_wps(assigned_wb)
     y_total, _ = _yearly_rows(tlp)
     first = _wp_summary_first_row(tlp)
@@ -1163,16 +1163,10 @@ def test_yearly_budget_col_c_formula(tlp, assigned_wb):
 def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
     """Col C value equals row-sum of year cells (within leaf-rounding tolerance).
 
-    Aiko-port Q-B dropped the ×1.25 from col C, so col C is -i and year cells
-    are +i. Drift-detection cross-check now compares ``col_c * 1.25`` vs
-    year_sum:
-      - col_c = SUM(C{first}:C{last}) — sums per-WP Assigned € leaves, each
-        independently rounded; error ≤ len(wps) * 0.5. ×1.25 scales both the
-        signal and the error for +i-parity comparison.
-      - year_sum = Σ ROUND(SUMPRODUCT_{wp,y} * 1.25, 0) over len(wps)×len(groups)
-        independently-rounded cells; error ≤ len(wps) * len(groups) * 0.5.
-    Safe tolerance: len(wps) * (len(groups) + 2) covers both paths with
-    slack for float64 noise."""
+    Col C Assigned € is now +i (rate vector points at col-I Rate +i), so it's
+    directly comparable to the year-cell row-sum (also +i). Tolerance covers
+    independent ROUND'ing of len(wps) per-WP leaves and len(wps)×len(groups)
+    year cells, plus float64 noise."""
     wb = load_workbook(recalced_assigned_path, data_only=True)
     ws = wb[SHEET_TIMELOG_PLAN]
     params, wps = _read_config(wb)
@@ -1188,9 +1182,8 @@ def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
             year_sum += float(v)
     assert isinstance(col_c, (int, float)), f"col C not numeric: {col_c!r}"
     tolerance = len(wps) * (len(groups) + 2)
-    col_c_plus_i = float(col_c) * 1.25
-    assert abs(year_sum - col_c_plus_i) <= tolerance, (
-        f"Yearly total: col C×1.25 {col_c_plus_i} vs year-sum {year_sum} "
+    assert abs(year_sum - float(col_c)) <= tolerance, (
+        f"Yearly total: col C {col_c} vs year-sum {year_sum} "
         f"(tolerance ±{tolerance})"
     )
     wb.close()

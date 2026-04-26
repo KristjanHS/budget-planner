@@ -688,7 +688,7 @@ def _write_external_section(ws, start_row, external_commitments):
 def build_config_sheet(ws, wb, project_params, work_packages,
                        team=None, reporting_periods=None, grade_rates=None,
                        assignments=None, external_commitments=None,
-                       version_stamp=None):
+                       version_stamp=None, rebuild_from_month: int = 1):
     """Build the Config sheet with project parameters, WP budget (incl. schedule), team roster, and grade rates.
 
     Args:
@@ -744,7 +744,7 @@ def build_config_sheet(ws, wb, project_params, work_packages,
         ("Hours per FTE Month", 143, "0", None),
         ("Vacation Month", vacation_month_str, None, None),
         ("Num Vacation Months", num_vacation_months, "0", None),
-        ("Rebuild from month #", 1, "0", None),
+        ("Rebuild from month #", int(rebuild_from_month), "0", None),
         # Code-written audit receipt — overwritten on every init/rebuild.
         # Default "unknown" survives when no git context is passed in.
         ("Version Stamp", version_stamp or "unknown", None, None),
@@ -845,6 +845,12 @@ def build_config_sheet(ws, wb, project_params, work_packages,
     }
     for row_num, text in _param_label_comments.items():
         ws.cell(row=row_num, column=1).comment = sized_comment(text)
+
+    # Collapsible group covering the project-parameter block + its trailing
+    # gap row (default summaryBelow=True puts the +/- toggle at the WP Budget
+    # header row, so the user can hide the params once configured).
+    for r in range(1, len(param_defs) + 2):
+        ws.row_dimensions[r].outline_level = 1
 
     # ── Section 2: WP Budget ──
     # Gap row sits AFTER the param block; budget section starts two rows below

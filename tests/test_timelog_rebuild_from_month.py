@@ -368,6 +368,36 @@ def test_pre_freeze_point_workbook_upgrades_cleanly(tmp_path: Path):
     wb3.close()
 
 
+# ── Case 5b: user value persists across rebuild ───────────────────────────
+
+
+def test_rebuild_preserves_user_rebuild_from_month(tmp_path: Path):
+    """Editing N then rebuilding leaves N at the user's value, not 1.
+
+    Regression: the builder hardcoded Config!B9 = 1 each rebuild even though
+    the reader threaded the user's value into the solver. The visible cell
+    silently reset, so the *next* rebuild collapsed the freeze point.
+    """
+    path = tmp_path / "wb.xlsx"
+    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
+
+    wb = openpyxl.load_workbook(path)
+    months = _project_months(wb)
+    user_value = max(2, months // 2)
+    _set_rebuild_from_month(wb, user_value)
+    wb.save(path)
+    wb.close()
+
+    rebuild_workbook(input_path=str(path))
+
+    wb2 = openpyxl.load_workbook(path)
+    out = read_timelog_plan(wb2, months)
+    assert out["rebuild_from_month"] == user_value, (
+        f"user-edited N must persist across rebuild, got {out['rebuild_from_month']!r}"
+    )
+    wb2.close()
+
+
 # ── Case 6: named-range sheet reference ───────────────────────────────────
 
 

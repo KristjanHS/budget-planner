@@ -12,7 +12,7 @@ Layout (v2 + 2026-04-19 enhancements — supersedes v1's PROPOSED + ASSIGNED twi
      blank spacer
   5. TIMELOG GRID — single editable band, literal WP codes + empty strings
      blank spacer
-  6. PER-PERSON SUMMARY band (8 cols: Person + 6 metrics + Rate)
+  6. PER-PERSON SUMMARY band (9 cols: Person + 6 metrics + Rate -i + Rate +i)
 
 Each data band is wrapped in an Excel row-group (``outline_level=1``) so the
 user can fold away sections not under review. Section-title rows stay at
@@ -20,9 +20,11 @@ level 0 and remain visible when the group collapses.
 
 Col A is Person (cross-ref into Config Team Roster) across the grid and the
 PER-PERSON SUMMARY band. No per-row metric column — the merged grid starts
-at col B (TIMELOG_MONTH_COL_START). The per-person Rate helper lives only
-once, on col H of the PER-PERSON SUMMARY band, and is consumed by the
-PER-WP SUMMARY Assigned-€ SUMPRODUCT via row-aligned vectors.
+at col B (TIMELOG_MONTH_COL_START). The per-person Rate helpers live on the
+PER-PERSON SUMMARY band: col H is Rate -i (VLOOKUP into roster_lookup, the
+canonical -i source) and col I is Rate +i (= H × 1.25). PER-WP SUMMARY
+Assigned-€ SUMPRODUCT consumes the +i col so its result lands in +i units,
+matching Budget +i in col B.
 
 Cross-sheet invariants: ``docs/spec.md`` § Timelog Plan merged grid.
 
@@ -71,6 +73,7 @@ from budget_planner.styles import (
     TITLE_FONT,
     VACATION_FILL,
     WITH_INDIRECT_HEADER_FILL,
+    WITHOUT_INDIRECT_HEADER_FILL,
     col_letter,
     sized_comment,
     style_cell,
@@ -85,18 +88,30 @@ SECTION_TITLE_GRID = (
 )
 SECTION_TITLE_PERSON_SUMMARY = "PER-PERSON SUMMARY"
 
-# PER-PERSON SUMMARY layout: col A = Person, cols B..H = 7 metric cols.
-# Metric headers start at col B. Rate is the last metric (col H) — single
-# source of the per-person rate, consumed by PER-WP Assigned-€ SUMPRODUCT.
+# PER-PERSON SUMMARY layout: col A = Person, cols B..I = 8 metric cols.
+# Metric headers start at col B. The two rate cols sit at the right edge:
+# col H = "Rate (€/PM) -i" (VLOOKUP from roster_lookup, the canonical -i
+# source); col I = "Rate (€/PM) +i" (= H × 1.25). Assigned-€ SUMPRODUCT on
+# PER-WP SUMMARY consumes the +i col so its result is +i, matching Budget +i.
+# The Monthly total -i row consumes the -i col directly.
 _PERSON_SUMMARY_METRIC_HEADERS = [
     "Assigned", "Pool", "Over-pool?",
     "Switches", "First log", "Last log",
-    "Rate",
+    "Rate (€/PM) -i", "Rate (€/PM) +i",
 ]
 _PERSON_SUMMARY_FIRST_METRIC_COL = 2   # col B (Assigned)
-_PERSON_SUMMARY_RATE_COL = (
-    _PERSON_SUMMARY_FIRST_METRIC_COL + len(_PERSON_SUMMARY_METRIC_HEADERS) - 1
+_PERSON_SUMMARY_RATE_MINUS_I_COL = (
+    _PERSON_SUMMARY_FIRST_METRIC_COL + len(_PERSON_SUMMARY_METRIC_HEADERS) - 2
 )  # col H
+_PERSON_SUMMARY_RATE_PLUS_I_COL = (
+    _PERSON_SUMMARY_FIRST_METRIC_COL + len(_PERSON_SUMMARY_METRIC_HEADERS) - 1
+)  # col I
+# Backwards-compat alias: existing call sites that consumed the single-rate
+# column treated it as -i. Keep the alias pointing at -i so Monthly total
+# rows + burn-rate CF stay anchored on -i (their math depends on it). The
+# Assigned-€ rate-vector (the only consumer that needs +i) targets
+# _PERSON_SUMMARY_RATE_PLUS_I_COL explicitly.
+_PERSON_SUMMARY_RATE_COL = _PERSON_SUMMARY_RATE_MINUS_I_COL
 
 # PER-WP SUMMARY metric columns live at A..I (WP code + 8 metrics).
 # Phase 3 appends dynamic "Y{yyyy} +i" cols right of col I — one per calendar
@@ -313,21 +328,18 @@ def build_timelog_plan_sheet(
         grid_person_first_row + num_persons - 1 if num_persons > 0
         else grid_person_first_row - 1
     )
-    # Monthly total +i row sits directly under the last person row (no spacer,
+    # Monthly total -i row sits directly under the last person row (no spacer,
     # same outline group). Only emitted when there are person rows.
     grid_total_row = grid_person_last_row + 1 if num_persons > 0 else None
-    # Aiko-port T4: Monthly person cost +i row sits directly below Monthly
-    # total +i — consumes the 1-row spacer that previously separated the grid
-    # band from PER-PERSON SUMMARY. Outside the grid outline group so it stays
-    # visible when the grid collapses. Abutting summary_title_row keeps
-    # summary_person_first_row at its anchor (H33), which the row-30 formula
-    # hard-codes via H{summary_first}:H{summary_last}.
+    # Monthly total +i row sits directly below the -i row, outside the grid
+    # outline group so it stays visible when the grid collapses. A blank
+    # spacer row separates it from PER-PERSON SUMMARY below.
     grid_person_cost_row = (
         grid_total_row + 1 if grid_total_row is not None else None
     )
 
     summary_title_row = (
-        (grid_total_row if grid_total_row is not None else grid_midx_row) + 2
+        (grid_total_row if grid_total_row is not None else grid_midx_row) + 3
     )
     summary_header_row = summary_title_row + 1
     summary_person_first_row = summary_header_row + 1
@@ -412,9 +424,12 @@ def build_timelog_plan_sheet(
                   if is_year_col or carries_plus_i else None),
         )
     cfg_wp_first_row = config_layout["wp_first_row"]
+    # Rate vector for Assigned-€ targets the +i col so the SUMPRODUCT result
+    # is +i (matches Budget +i in col B). Monthly total rows below construct
+    # their own ranges off the -i col directly.
     rate_col_range = (
-        f"{get_column_letter(_PERSON_SUMMARY_RATE_COL)}{summary_person_first_row}"
-        f":{get_column_letter(_PERSON_SUMMARY_RATE_COL)}{summary_person_last_row}"
+        f"{get_column_letter(_PERSON_SUMMARY_RATE_PLUS_I_COL)}{summary_person_first_row}"
+        f":{get_column_letter(_PERSON_SUMMARY_RATE_PLUS_I_COL)}{summary_person_last_row}"
     ) if num_persons > 0 else ""
     grid_range = _grid_range_ref(
         month_col_start, month_col_end,
@@ -477,16 +492,22 @@ def build_timelog_plan_sheet(
     # ── PER-PERSON SUMMARY band ──
     _write_section_title(
         ws, summary_title_row, SECTION_TITLE_PERSON_SUMMARY,
-        last_col=_PERSON_SUMMARY_RATE_COL,
+        last_col=_PERSON_SUMMARY_RATE_PLUS_I_COL,
     )
     style_cell(
         ws, summary_header_row, 1, value="Person",
         font=HEADER_FONT, alignment=CENTER,
     )
     for i, hdr in enumerate(_PERSON_SUMMARY_METRIC_HEADERS):
+        if hdr.endswith("+i"):
+            hdr_fill = WITH_INDIRECT_HEADER_FILL
+        elif hdr.endswith("-i"):
+            hdr_fill = WITHOUT_INDIRECT_HEADER_FILL
+        else:
+            hdr_fill = None
         style_cell(
             ws, summary_header_row, _PERSON_SUMMARY_FIRST_METRIC_COL + i,
-            value=hdr, font=HEADER_FONT, alignment=CENTER,
+            value=hdr, font=HEADER_FONT, alignment=CENTER, fill=hdr_fill,
         )
     if num_persons > 0:
         for r in range(summary_header_row, summary_person_last_row + 1):
@@ -539,7 +560,7 @@ def build_timelog_plan_sheet(
             cfg_row=cfg_row,
         )
 
-    # ── Monthly total +i row (under TIMELOG GRID, same outline group) ──
+    # ── Monthly total -i row (under TIMELOG GRID, same outline group) ──
     if grid_total_row is not None:
         _write_monthly_total_row(
             ws, row=grid_total_row,
@@ -550,9 +571,11 @@ def build_timelog_plan_sheet(
             summary_person_first_row=summary_person_first_row,
             summary_person_last_row=summary_person_last_row,
             vacation_months_project=vacation_months_project,
+            label="Monthly total -i",
+            with_indirect=False,
         )
 
-    # ── Monthly person cost +i row (Aiko-port T4, outside outline group) ──
+    # ── Monthly total +i row (outside outline group, always visible) ──
     if grid_person_cost_row is not None:
         _write_monthly_total_row(
             ws, row=grid_person_cost_row,
@@ -563,7 +586,7 @@ def build_timelog_plan_sheet(
             summary_person_first_row=summary_person_first_row,
             summary_person_last_row=summary_person_last_row,
             vacation_months_project=vacation_months_project,
-            label="Monthly person cost +i",
+            label="Monthly total +i",
         )
 
     # ── Patch traffic-light formulas (downstream rows now exist) ──
@@ -1147,29 +1170,33 @@ def _write_monthly_total_row(
     summary_person_last_row: int,
     vacation_months_project: frozenset[int],
     label: str = "Monthly total +i",
+    with_indirect: bool = True,
 ) -> None:
-    """Write a per-month +i aggregate row.
+    """Write a per-month aggregate row.
 
-    Each month cell: ``=ROUND(SUMPRODUCT((col<>"")*rate_vector)*1.25,0)``.
-    Non-empty grid cells (WP codes) contribute their person's rate; empty
-    cells (incl. vacation) contribute 0. The ×1.25 wrap flips the display
-    to with-indirect at the leaf (rates are -i). Vacation-month cells
-    additionally carry VACATION_FILL for visual column continuity (formula
-    still evaluates to 0).
+    Each month cell sums non-empty grid cells × the corresponding person's
+    rate. Rates are -i; ``with_indirect=True`` wraps the result in ×1.25 to
+    flip the display to +i. Vacation-month cells additionally carry
+    VACATION_FILL for visual column continuity (formula still evaluates to 0).
 
-    Used for both "Monthly total +i" (under the grid, inside the outline
-    group) and the Aiko-port "Monthly person cost +i" row (just above
-    PER-PERSON SUMMARY, always visible). Callers select via ``label``.
+    Used for both the "Monthly total -i" row (under the grid, inside the
+    outline group) and the "Monthly total +i" row (just above PER-PERSON
+    SUMMARY, always visible). Callers select via ``label`` + ``with_indirect``.
     """
+    header_fill = (
+        WITH_INDIRECT_HEADER_FILL if with_indirect
+        else WITHOUT_INDIRECT_HEADER_FILL
+    )
     style_cell(
         ws, row, 1, value=label,
-        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,
+        font=HEADER_FONT, fill=header_fill, alignment=CENTER,
     )
     rate_col_letter = get_column_letter(_PERSON_SUMMARY_RATE_COL)
     rate_range = (
         f"{rate_col_letter}{summary_person_first_row}"
         f":{rate_col_letter}{summary_person_last_row}"
     )
+    indirect_wrap = "*1.25" if with_indirect else ""
     for mi in range(month_col_end - month_col_start + 1):
         month_num = mi + 1
         col = month_col_start + mi
@@ -1185,7 +1212,7 @@ def _write_monthly_total_row(
             fill=VACATION_FILL if is_vacation else None,
         )
         cell.value = (
-            f'=ROUND(SUMPRODUCT(({grid_col_range}<>"")*{rate_range})*1.25,0)'
+            f'=ROUND(SUMPRODUCT(({grid_col_range}<>"")*{rate_range}){indirect_wrap},0)'
         )
 
 
@@ -1222,8 +1249,9 @@ def _write_wp_summary_row(
     style_cell(ws, row, 2, font=GREEN_XREF, fmt="€#,##0").value = f"={budget_ref}"
 
     # Col C: Assigned € = ROUND(SUMPRODUCT((grid="WP") * rate_vector), 0).
-    # Rate vector is the PER-PERSON SUMMARY's col H over the person-row range;
-    # grid rows match one-to-one with summary rows (same sort order).
+    # Rate vector is the PER-PERSON SUMMARY's col I (Rate +i) over the
+    # person-row range; grid rows match one-to-one with summary rows. Result
+    # is +i, so col B (Budget +i) − col C lands in matching units.
     if has_persons:
         style_cell(ws, row, 3, font=BLACK_FORMULA, fmt="€#,##0").value = (
             f'=ROUND(SUMPRODUCT(({grid_range}="{wp_code}")'
@@ -1286,10 +1314,9 @@ def _write_wp_summary_row(
 
     # Cols J..: Y{yyyy} +i — EUR placed by the solver in this WP × year slice.
     # (Col J on PER-WP SUMMARY — this band has 9 base cols A..I; year
-    # cols start at col J. Independent of the PER-PERSON SUMMARY Rate col.)
-    # Overlap with the WP's active window is checked at build time; non-
-    # overlap cells are blank. ×1.25 at the display layer flips the cell to
-    # with-indirect (rates are -i); rounded per the programme leaf-rounding rule.
+    # cols start at col J.) ``rate_col_range`` already targets the +i col on
+    # PER-PERSON SUMMARY, so the SUMPRODUCT result is +i without an extra
+    # ×1.25 wrap. Rounded per the programme leaf-rounding rule.
     for i, spec in enumerate(year_specs):
         col = _WP_SUMMARY_BASE_LAST_COL + 1 + i
         overlaps = (
@@ -1303,7 +1330,7 @@ def _write_wp_summary_row(
             )
             style_cell(ws, row, col, font=BLACK_FORMULA, fmt="€#,##0").value = (
                 f'=ROUND(SUMPRODUCT(({year_subrange}="{wp_code}")'
-                f"*{rate_col_range})*1.25,0)"
+                f"*{rate_col_range}),0)"
             )
         else:
             style_cell(ws, row, col, value="", font=BLACK_FORMULA, fmt="€#,##0")
@@ -1321,10 +1348,11 @@ def _write_person_summary_metrics(
     project_months_ref: str,
     cfg_row: int | None,
 ) -> None:
-    """Fill the 7 per-person-summary metric cells on cols B..H.
+    """Fill the 8 per-person-summary metric cells on cols B..I.
 
     All metrics target the merged grid's row for the same person — that's
-    the canonical edit surface. Cols B..G are metrics; col H is Rate.
+    the canonical edit surface. Cols B..G are non-rate metrics; col H is
+    Rate (€/PM) -i (VLOOKUP); col I is Rate (€/PM) +i (= H × 1.25).
     """
     c0 = _PERSON_SUMMARY_FIRST_METRIC_COL
 
@@ -1398,8 +1426,14 @@ def _write_person_summary_metrics(
         f"INDEX({month_headers_range},{last_log_max})),\"\")"
     )
 
-    # Col H: Rate — single-source VLOOKUP into roster_lookup. Consumed by
-    # PER-WP SUMMARY Assigned-€ SUMPRODUCT as the rate vector.
+    # Col H: Rate (€/PM) -i — single-source VLOOKUP into roster_lookup;
+    # roster rates are -i.
+    rate_minus_i_letter = col_letter(c0 + 6)
     style_cell(ws, row, c0 + 6, font=BLACK_FORMULA, fmt="€#,##0").value = (
         f"=VLOOKUP(A{row},roster_lookup,4,FALSE)"
+    )
+    # Col I: Rate (€/PM) +i = -i × 1.25. Consumed by PER-WP SUMMARY
+    # Assigned-€ SUMPRODUCT so the result lands in +i (matches Budget +i).
+    style_cell(ws, row, c0 + 7, font=BLACK_FORMULA, fmt="€#,##0").value = (
+        f"={rate_minus_i_letter}{row}*1.25"
     )

@@ -688,6 +688,25 @@ def test_year_cols_count_and_headers(tlp, assigned_wb):
     assert trailing in (None, ""), f"unexpected header past year cols: {trailing!r}"
 
 
+def test_stop_reason_col_present(tlp, assigned_wb):
+    """Col J on PER-WP SUMMARY header row reads ``Stop reason``; each WP row
+    carries a non-empty reason string from the closed enum."""
+    valid = {
+        "No candidates", "No window", "-11% override", "Filled",
+        "+12% cap", "Pool empty", "Window full", "Underfilled",
+    }
+    hdr_row = _find_section_title_row(tlp, SECTION_TITLE_WP_SUMMARY) + 1
+    assert tlp.cell(hdr_row, 10).value == "Stop reason"
+    _params, wps = _read_config(assigned_wb)
+    first_wp_row = hdr_row + 1
+    seen = []
+    for i in range(len(wps)):
+        v = tlp.cell(first_wp_row + i, 10).value
+        assert v in valid, f"WP row {first_wp_row + i} col J: unexpected {v!r}"
+        seen.append(v)
+    assert any(s for s in seen), "expected at least one non-empty stop reason"
+
+
 def test_year_cols_overlap_blanks(tlp, assigned_wb):
     """Cells where WP's active window doesn't overlap the year are literal ``""``."""
     params, wps = _read_config(assigned_wb)

@@ -704,10 +704,12 @@ def build_timelog_plan_sheet(
         )
 
         # Rule 5 (PER-WP SUMMARY CF): Burn rate (col H) exceeds max team rate.
-        # Shifted from col G when Buffer % was inserted at col E (Aiko-port T3).
+        # Burn rate is in +i units (= -D{row}/wallclock, where D = C − B with
+        # both C and B in +i), so the threshold must read from the +i rate
+        # col on PER-PERSON SUMMARY (col I) — not the -i alias.
         burn_range = f"H{wp_summary_first_row}:H{wp_summary_last_row}"
         if num_persons > 0:
-            rate_col_letter = get_column_letter(_PERSON_SUMMARY_RATE_COL)
+            rate_col_letter = get_column_letter(_PERSON_SUMMARY_RATE_PLUS_I_COL)
             max_rate_expr = (
                 f"MAX({rate_col_letter}{summary_person_first_row}"
                 f":{rate_col_letter}{summary_person_last_row})"

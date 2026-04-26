@@ -1447,10 +1447,10 @@ def read_timelog_plan(wb, project_months: int) -> dict:
             break
         # PER-PERSON SUMMARY title (or any PER- prefix) ends the grid band.
         # "Monthly total" label also ends the band — its cells hold formulas,
-        # not preserved literals. The prefix guard catches both the
-        # under-grid "Monthly total -i" row and the always-visible
-        # "Monthly total +i" row that follows; the +i row sits below the
-        # -i row and is therefore never reached by this scan.
+        # not preserved literals. The prefix guard breaks on the under-grid
+        # "Monthly total -i" row; the always-visible "Monthly total +i" row
+        # sits below a blank spacer further down and is never reached
+        # because the -i row terminates the scan first.
         if col_a_str.upper().startswith("PER-"):
             break
         if col_a_str.lower().startswith("monthly total"):

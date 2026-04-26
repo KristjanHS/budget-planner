@@ -495,6 +495,42 @@ def test_rate_col_h(tlp, assigned_wb):
     )
 
 
+def test_burn_rate_cf_uses_plus_i_max(tlp):
+    """Rule-5 burn-rate CF threshold reads from col I (Rate +i), not col H.
+
+    Burn rate (PER-WP SUMMARY col H) = −D/wallclock where D = C − B; both
+    C (Assigned €) and B (Budget +i) are in +i units, so D and the burn-
+    rate value are +i. The MAX(rate_range) threshold therefore must come
+    from the +i rate col on PER-PERSON SUMMARY — comparing burn rate to
+    MAX of -i rates would fire 25% too early."""
+    first_person = _summary_person_first_row(tlp)
+    summary_last_row = first_person
+    for r in _iter_person_rows(tlp, first_person):
+        summary_last_row = r
+    wp_first = _wp_summary_first_row(tlp)
+    burn_addr = f"H{wp_first}"
+
+    found = False
+    for cf_range in tlp.conditional_formatting:
+        if burn_addr not in str(cf_range.sqref):
+            continue
+        for rule in tlp.conditional_formatting[cf_range]:
+            for f in (rule.formula or []):
+                if "MAX(" in f and burn_addr in f:
+                    found = True
+                    expected_fragment = f"I{first_person}:I{summary_last_row}"
+                    assert expected_fragment in f, (
+                        f"burn-rate CF MAX must read col-I (+i) rate range, "
+                        f"got {f!r}"
+                    )
+                    stale = f"H{first_person}:H{summary_last_row}"
+                    assert stale not in f, (
+                        f"burn-rate CF still references stale col-H (-i) "
+                        f"rate range: {f!r}"
+                    )
+    assert found, "no burn-rate CF rule found on PER-WP SUMMARY col H"
+
+
 def test_first_log_formula_uses_sumproduct_min(tlp):
     """First log uses SUMPRODUCT(MIN(…)) pattern, NOT MATCH/LOOKUP."""
     first = _summary_person_first_row(tlp)

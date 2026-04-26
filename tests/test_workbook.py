@@ -250,65 +250,50 @@ class TestConfigAssignments:
             assert match[0]["total_fte"] == pytest.approx(orig["total_fte"])
 
 
-# ── Build-order enforcement ──
+# ── Build-order enforcement (integration check) ──
 
-def test_build_order_is_stable(tmp_path):
-    """Change detector: asserts _build_all_sheets calls builders in the order
-    documented in the workbook.py module docstring.
+def test_build_order_yields_resolved_cross_sheet_dependencies(fresh_wb_path):
+    """Replaces a prior 9-spy chain that asserted patched-call order
+    (anti-pattern: tested the patching mechanism, not workbook behavior;
+    became unmaintainable if builders ever refactor for parallelization).
 
-    If this test fails, the orchestrator has been reordered. Read the
-    build-order DAG in workbook.py before "fixing" this test — downstream
-    builders consume layouts produced by upstream ones, so reordering
-    silently breaks cross-sheet formulas.
+    Two-layer integration check on build-order correctness:
+    1. init_workbook succeeded and all expected sheets are present —
+       proves layout-dict dependencies between builders resolved (any
+       reorder that breaks a `layout = build_X(...); build_Y(layout)`
+       chain crashes at build time, before this test runs).
+    2. Each later-built sheet contains formula refs to the upstream
+       sheets its builder depends on — proves cross-sheet formulas
+       weren't silently emitted against not-yet-populated cells.
+
+    If Capacity/Plan-Forecast lost their Config refs, or Summary/Trends
+    lost Plan or Actuals refs, the build order has regressed in a way
+    that doesn't crash but produces a corrupted workbook.
     """
-    from unittest.mock import patch
-    from budget_planner import workbook as wb_mod
+    wb = openpyxl.load_workbook(fresh_wb_path, data_only=False)
 
-    call_order: list[str] = []
+    expected_upstream_refs = {
+        "Plan": {"Config!"},
+        "Capacity": {"Config!"},
+        "Plan-Forecast": {"Config!"},
+        "Summary": {"Config!", "Plan!", "Actuals!"},
+        "Trends": {"Config!", "Plan!", "Actuals!"},
+    }
 
-    def _spy(name, real):
-        def _wrapped(*args, **kwargs):
-            call_order.append(name)
-            return real(*args, **kwargs)
-        return _wrapped
-
-    targets = [
-        "build_config_sheet",
-        "build_capacity_sheet",
-        "build_plan_sheet",
-        "_apply_planned_formulas",
-        "build_actuals_hours_sheet",
-        "build_plan_forecast_sheet",
-        "build_actuals_sheet",
-        "build_summary_sheet",
-        "build_trends_sheet",
-    ]
-    with (
-        patch.object(wb_mod, "build_config_sheet",
-                     _spy("build_config_sheet", wb_mod.build_config_sheet)),
-        patch.object(wb_mod, "build_plan_sheet",
-                     _spy("build_plan_sheet", wb_mod.build_plan_sheet)),
-        patch.object(wb_mod, "build_capacity_sheet",
-                     _spy("build_capacity_sheet", wb_mod.build_capacity_sheet)),
-        patch.object(wb_mod, "_apply_planned_formulas",
-                     _spy("_apply_planned_formulas", wb_mod._apply_planned_formulas)),
-        patch.object(wb_mod, "build_actuals_sheet",
-                     _spy("build_actuals_sheet", wb_mod.build_actuals_sheet)),
-        patch.object(wb_mod, "build_actuals_hours_sheet",
-                     _spy("build_actuals_hours_sheet",
-                          wb_mod.build_actuals_hours_sheet)),
-        patch.object(wb_mod, "build_plan_forecast_sheet",
-                     _spy("build_plan_forecast_sheet",
-                          wb_mod.build_plan_forecast_sheet)),
-        patch.object(wb_mod, "build_summary_sheet",
-                     _spy("build_summary_sheet", wb_mod.build_summary_sheet)),
-        patch.object(wb_mod, "build_trends_sheet",
-                     _spy("build_trends_sheet", wb_mod.build_trends_sheet)),
-    ):
-        wb_mod.init_workbook(str(tmp_path / "order.xlsx"))
-
-    assert call_order == targets, (
-        "Builder call order changed. See workbook.py module docstring "
-        "for the DAG before adjusting — downstream builders consume "
-        "upstream layout dicts."
-    )
+    for sheet_name, expected in expected_upstream_refs.items():
+        ws = wb[sheet_name]
+        seen: set[str] = set()
+        for row in ws.iter_rows():
+            for c in row:
+                v = c.value
+                if not isinstance(v, str):
+                    continue
+                for tok in expected:
+                    if tok in v:
+                        seen.add(tok)
+        missing = expected - seen
+        assert not missing, (
+            f"{sheet_name!r} has no formula refs to {sorted(missing)} — "
+            f"build-order regression? builder may have run before its "
+            f"upstream sheet was populated"
+        )

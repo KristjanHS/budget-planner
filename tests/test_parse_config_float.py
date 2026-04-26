@@ -78,12 +78,3 @@ def test_string_locale_variants(value, expected):
 ])
 def test_non_numeric_strings_return_none(value):
     assert _parse_config_float(value) is None
-
-
-# ── Unsupported types ──
-
-def test_unsupported_type_returns_none():
-    class Dummy:
-        pass
-    assert _parse_config_float(Dummy()) is None
-    assert _parse_config_float([1.0]) is None

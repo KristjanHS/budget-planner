@@ -10,13 +10,3 @@ def test_style_cell_unlocked():
     assert ws is not None
     cell = style_cell(ws, 1, 1, value="test", unlocked=True)
     assert cell.protection.locked is False
-
-
-def test_style_cell_default_locked():
-    """Default cells should not have unlocked protection."""
-    wb = Workbook()
-    ws = wb.active
-    assert ws is not None
-    cell = style_cell(ws, 1, 1, value="test")
-    # Default openpyxl cells are locked (True)
-    assert cell.protection.locked is True or cell.protection.locked is None

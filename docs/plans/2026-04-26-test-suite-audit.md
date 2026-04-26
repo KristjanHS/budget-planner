@@ -62,18 +62,18 @@ Three reader test files (`test_reader.py`, `test_reader_v2.py`, `test_reader_new
 
 ---
 
-## Phase 3 — Delete redundant rebuild test file
+## Phase 3 — Delete redundant rebuild test file — **OVERRIDE: KEEP**
 
 **Effort:** 10 min. **Impact:** 1 file / 2 tests removed, ~0.3s savings.
 
-`tests/test_rebuild_followups.py` (2 tests) overlaps:
+**2026-04-26 override during execution:** verified both audit claims are wrong; `tests/test_rebuild_followups.py` is NOT redundant. Kept the file.
 
-- `test_rebuild_prunes_orphaned_hours_when_person_removed` — covered more thoroughly by `test_timelog_plan_roundtrip.py::test_orphan_wp_dropped_with_bystander` (which has the bystander assertion required by `~/.claude/rules/testing.md` § "Pruning / removal tests need a bystander").
-- `test_rebuild_falls_back_to_capacity_when_config_sections_absent` — covered by `test_rebuild_e2e.py` rebuild→re-read flow.
+- `test_rebuild_prunes_orphaned_hours_when_person_removed` covers `workbook.py` lines 781/789 (`Orphaned Hours: ...`) — the **Actuals-Hours** prune block, fired when a person is removed from the roster while having logged hours. `test_timelog_plan_roundtrip.py::test_orphan_wp_dropped_with_bystander` covers `workbook.py` lines 764/769 (`Orphaned Timelog Plan cell: ...`) — the **Timelog Plan grid** prune block, fired when a grid cell carries a now-missing WP code. Different `warnings.append` sites, different sheets, different stdout strings. Sibling code paths, not duplicates.
+- `test_rebuild_falls_back_to_capacity_when_config_sections_absent` exercises blanking the Config `PERSON-WP ASSIGNMENTS` / `EXTERNAL COMMITMENTS` section headers so `_find_header_row(required=False)` returns None and the rebuild falls back to `read_capacity_sheet`. `test_rebuild_e2e.py` calls `read_capacity_sheet` directly in helpers but never blanks Config sections — the fallback branch is otherwise unexercised.
 
-**Verify** both claims before deleting: `grep -n "orphan" tests/test_timelog_plan_roundtrip.py tests/test_rebuild_e2e.py` and `grep -n "fallback\|capacity_when_config" tests/test_rebuild_e2e.py`. Only delete if coverage is provably present elsewhere.
+The audit conflated two `Orphaned ...` warnings as one and assumed direct `read_capacity_sheet` calls equaled fallback coverage; they don't.
 
-**Acceptance:** `pytest tests/ -q` green. `git rm tests/test_rebuild_followups.py`.
+**No deletion. Phase 3 closes as no-op with override recorded above.**
 
 ---
 

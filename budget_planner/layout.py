@@ -58,16 +58,18 @@ MONTH_COL_START = 3
 # duplicated only once per person — on the summary row.
 TIMELOG_MONTH_COL_START = 2   # col B
 
-# PER-WP SUMMARY base-column span: A..I (9 cols: WP code + 8 metrics).
-# Year cols (``Y{yyyy} +i``) start at TIMELOG_WP_SUMMARY_BASE_LAST_COL + 1 = J.
+# PER-WP SUMMARY base-column span: A..J (10 cols: WP code + 9 metrics).
+# Year cols (``Y{yyyy} +i``) start at TIMELOG_WP_SUMMARY_BASE_LAST_COL + 1 = K.
 # Aiko-port T3 (2026-04-23) inserted Buffer % at col E; cols E→F, F→G, G→H, H→I
-# shifted right by one, and the year band shifted I..M → J..N.
-TIMELOG_WP_SUMMARY_BASE_LAST_COL = 9
+# shifted right by one. 2026-04-26 appended "Stop reason" at col J; year band
+# shifted J..N → K..O.
+TIMELOG_WP_SUMMARY_BASE_LAST_COL = 10
 
-# ``Yearly Assigned +i`` / ``Yearly Budget +i`` row labels sit at col I (last
-# base col of PER-WP SUMMARY), immediately left of the per-year breakdown
-# cols (J..). Shift from col A decided in plan D9 (2026-04-22); post-Aiko-port
-# T3 shifted one col right (H → I) when Buffer % was inserted.
+# ``Yearly Assigned +i`` / ``Yearly Budget +i`` row labels sit at col I, the
+# last numeric metric col of PER-WP SUMMARY, immediately left of the new
+# "Stop reason" col J (2026-04-26) and the per-year breakdown cols (K..).
+# Shift from col A decided in plan D9 (2026-04-22); post-Aiko-port T3 shifted
+# one col right (H → I) when Buffer % was inserted.
 TIMELOG_YEARLY_LABEL_COL = 9
 
 # ── Section header contract ──

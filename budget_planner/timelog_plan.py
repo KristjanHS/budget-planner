@@ -78,7 +78,13 @@ from budget_planner.styles import (
     sized_comment,
     style_cell,
 )
-from budget_planner.timelog_solver import Person, PersonWPWindow, WP, solve
+from budget_planner.timelog_solver import (
+    Person,
+    PersonWPWindow,
+    WP,
+    classify_wp_stop_reasons,
+    solve,
+)
 
 # Section-title strings — exported so the reader can anchor on the grid title
 # via the same literal the builder writes. Update here, not at the callsite.
@@ -121,9 +127,9 @@ _PERSON_SUMMARY_RATE_COL = _PERSON_SUMMARY_RATE_MINUS_I_COL
 _WP_SUMMARY_BASE_HEADERS = [
     "WP code", "Budget +i", "Assigned €", "Buffer €", "Buffer %",
     "Assigned months", "WP sched months", "Burn rate needed",
-    "Any out-of-window?",
+    "Any out-of-window?", "Stop reason",
 ]
-_WP_SUMMARY_BASE_LAST_COL = len(_WP_SUMMARY_BASE_HEADERS)  # 9
+_WP_SUMMARY_BASE_LAST_COL = len(_WP_SUMMARY_BASE_HEADERS)  # 10
 # Drift guard: layout.py exposes this boundary publicly for tests and future
 # cross-module callers; the header-count derivation here must stay in sync.
 assert _WP_SUMMARY_BASE_LAST_COL == TIMELOG_WP_SUMMARY_BASE_LAST_COL
@@ -289,6 +295,9 @@ def build_timelog_plan_sheet(
     for pname, month_wp in frozen_placements.items():
         for mi, wp_code in month_wp.items():
             assigned_map.setdefault(pname, {})[mi] = wp_code
+    stop_reasons = classify_wp_stop_reasons(
+        assigned_map, persons, wps, windows, project_months,
+    )
     person_windows: dict[str, list[tuple[str, int, int]]] = {}
     for w in windows:
         person_windows.setdefault(w.person_name, []).append(
@@ -450,6 +459,7 @@ def build_timelog_plan_sheet(
             year_specs=year_specs,
             grid_person_first_row=grid_person_first_row,
             grid_person_last_row=grid_person_last_row,
+            stop_reason=stop_reasons.get(wp.code, "Underfilled"),
         )
     if num_wps > 0:
         assert yearly_total_row is not None and yearly_budget_row is not None
@@ -1231,12 +1241,14 @@ def _write_wp_summary_row(
     year_specs: list["_YearColSpec"],
     grid_person_first_row: int,
     grid_person_last_row: int,
+    stop_reason: str,
 ) -> None:
     """Fill the per-WP-summary cells on a single WP row.
 
-    Cols A..I are the 9 base metrics; cols J.. hold one ``Y{yyyy} +i`` column
-    per calendar year spanned by the project. Year cells where the WP's
-    active window does not overlap the year are blank (build-time check).
+    Cols A..J are the 10 base metrics (col J = solver "Stop reason"); cols
+    K.. hold one ``Y{yyyy} +i`` column per calendar year spanned by the
+    project. Year cells where the WP's active window does not overlap the
+    year are blank (build-time check).
     """
     wp_code = wp.code
 
@@ -1314,9 +1326,17 @@ def _write_wp_summary_row(
     else:
         style_cell(ws, row, 9, value=0, font=BLACK_FORMULA, fmt="0")
 
-    # Cols J..: Y{yyyy} +i — EUR placed by the solver in this WP × year slice.
-    # (Col J on PER-WP SUMMARY — this band has 9 base cols A..I; year
-    # cols start at col J.) ``rate_col_range`` already targets the +i col on
+    # Col J: Stop reason — 1–2-word literal from the solver post-pass
+    # classifier. Rule 3 carve-out: BLACK_FORMULA on a literal — signals
+    # "builder-written, do not edit." Recomputed on rebuild.
+    style_cell(
+        ws, row, 10, value=stop_reason,
+        font=BLACK_FORMULA, alignment=CENTER,
+    )
+
+    # Cols K..: Y{yyyy} +i — EUR placed by the solver in this WP × year slice.
+    # (Col K on PER-WP SUMMARY — this band has 10 base cols A..J; year
+    # cols start at col K.) ``rate_col_range`` already targets the +i col on
     # PER-PERSON SUMMARY, so the SUMPRODUCT result is +i without an extra
     # ×1.25 wrap. Rounded per the programme leaf-rounding rule.
     for i, spec in enumerate(year_specs):

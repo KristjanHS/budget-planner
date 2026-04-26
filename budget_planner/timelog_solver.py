@@ -459,3 +459,129 @@ def solve(
         assigned, persons, wps, person_wp_windows, project_months
     )
     return assigned
+
+
+# ---------------------------------------------------------------------------
+# Stop-reason classifier (post-pass UI metadata)
+# ---------------------------------------------------------------------------
+
+
+def _placed_eur_for_wp(
+    assigned: Assignment,
+    persons: list[Person],
+    wp_code: str,
+) -> int:
+    rate_by_name = {p.name: p.rate_eur_per_pm for p in persons}
+    total = 0
+    for name, row in assigned.items():
+        rate = rate_by_name.get(name, 0)
+        for code in row.values():
+            if code == wp_code:
+                total += rate
+    return total
+
+
+def _remaining_pool(
+    assigned: Assignment, person_name: str, person_pool: int
+) -> int:
+    row = assigned.get(person_name, {})
+    used = sum(1 for v in row.values() if v is not None)
+    return person_pool - used
+
+
+def _legal_unplaced_months(
+    person: Person,
+    wp: WP,
+    pw_window: tuple[int, int],
+    assigned: Assignment,
+) -> list[int]:
+    lo = max(wp.active_start, pw_window[0])
+    hi = min(wp.active_end, pw_window[1])
+    row = assigned.get(person.name, {})
+    return [
+        m
+        for m in range(lo, hi + 1)
+        if m not in person.vacation_months
+        and m not in person.frozen_months
+        and row.get(m) is None
+    ]
+
+
+def classify_wp_stop_reasons(
+    assigned: Assignment,
+    persons: list[Person],
+    wps: list[WP],
+    person_wp_windows: list[PersonWPWindow],
+    project_months: int,
+) -> dict[str, str]:
+    """Return ``{wp_code: reason_string}`` for every WP in ``wps``.
+
+    Pure; classifies each WP's solver termination reason from the final
+    ``Assignment`` plus the same inputs ``solve`` consumes. Reason strings
+    are 1–2 words from a closed enum:
+
+    - ``"No candidates"`` — no PersonWPWindow row references this WP
+    - ``"No window"`` — rows exist but none overlaps the WP's active range
+    - ``"-11% override"`` — placed beyond +12% cap because skipping would
+      have left the WP below -11% (lower-cap tie-break)
+    - ``"Filled"`` — ``placed_eur >= ceiling_eur``
+    - ``"+12% cap"`` — under ceiling; an eligible candidate has remaining
+      pool, a legal unplaced month, and a rate that would push the next
+      placement past the upper cap
+    - ``"Pool empty"`` — under ceiling; no eligible candidate has remaining
+      pool
+    - ``"Window full"`` — under ceiling; eligible candidates have pool but
+      no legal unplaced months remain
+    - ``"Underfilled"`` — catch-all (should be unreachable; surfaces as a
+      signal of policy drift, not silently masked)
+
+    Priority order: first match wins.
+    """
+    del project_months  # signature parity with ``solve``; not needed here.
+    windows_idx = _build_windows_index(person_wp_windows)
+    reasons: dict[str, str] = {}
+    for wp in wps:
+        rows_for_wp = [w for w in person_wp_windows if w.wp_code == wp.code]
+        if not rows_for_wp:
+            reasons[wp.code] = "No candidates"
+            continue
+        any_overlap = any(
+            max(w.start_month, wp.active_start)
+            <= min(w.end_month, wp.active_end)
+            for w in rows_for_wp
+        )
+        if not any_overlap:
+            reasons[wp.code] = "No window"
+            continue
+        placed_eur = _placed_eur_for_wp(assigned, persons, wp.code)
+        upper_limit = wp.ceiling_eur * (1 + MAX_BUFFER_PCT)
+        if placed_eur > upper_limit:
+            reasons[wp.code] = "-11% override"
+            continue
+        if placed_eur >= wp.ceiling_eur:
+            reasons[wp.code] = "Filled"
+            continue
+        eligible = [p for p in persons if (p.name, wp.code) in windows_idx]
+        cap_blocked = False
+        any_pool = False
+        any_pool_with_legal = False
+        for p in eligible:
+            if _remaining_pool(assigned, p.name, p.pool) <= 0:
+                continue
+            any_pool = True
+            legal = _legal_unplaced_months(
+                p, wp, windows_idx[(p.name, wp.code)], assigned
+            )
+            if legal:
+                any_pool_with_legal = True
+                if placed_eur + p.rate_eur_per_pm > upper_limit:
+                    cap_blocked = True
+        if cap_blocked:
+            reasons[wp.code] = "+12% cap"
+        elif not any_pool:
+            reasons[wp.code] = "Pool empty"
+        elif not any_pool_with_legal:
+            reasons[wp.code] = "Window full"
+        else:
+            reasons[wp.code] = "Underfilled"
+    return reasons

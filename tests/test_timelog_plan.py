@@ -672,7 +672,7 @@ def test_year_cols_count_and_headers(tlp, assigned_wb):
     groups = _expected_year_groups(params["start"], months)
 
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_WP_SUMMARY) + 1
-    base_cols = 9  # cols A..I hold the base metrics (Aiko-port T3 added Buffer % at col E)
+    base_cols = 10  # cols A..J hold the base metrics (col J = "Stop reason", appended 2026-04-26)
     expected_fill_rgb = WITH_INDIRECT_HEADER_FILL.fgColor.rgb
     for i, (year, _fm, _lm) in enumerate(groups):
         cell = tlp.cell(hdr_row, base_cols + 1 + i)
@@ -693,7 +693,7 @@ def test_year_cols_overlap_blanks(tlp, assigned_wb):
     params, wps = _read_config(assigned_wb)
     groups = _expected_year_groups(params["start"], params["months"])
     first = _wp_summary_first_row(tlp)
-    base_cols = 9
+    base_cols = 10
 
     checked_nonoverlap = 0
     checked_overlap = 0
@@ -735,7 +735,7 @@ def test_year_cols_sum_matches_assigned(recalced_assigned_path):
     params, wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     first = _wp_summary_first_row(ws)
-    base_cols = 9
+    base_cols = 10
     tolerance = len(groups)
 
     checked = 0
@@ -1208,7 +1208,7 @@ def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
     params, wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     y_total, _ = _yearly_rows(ws)
-    base_cols = 9
+    base_cols = 10
 
     col_c = ws.cell(y_total, 3).value
     year_sum = 0.0
@@ -1232,7 +1232,7 @@ def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
     params, _wps = _read_config(wb)
     groups = _expected_year_groups(params["start"], params["months"])
     _, y_budget = _yearly_rows(ws)
-    base_cols = 9
+    base_cols = 10
 
     col_c = ws.cell(y_budget, 3).value
     year_sum = 0.0
@@ -1263,7 +1263,7 @@ def test_yearly_budget_single_wp_single_year(tlp, assigned_wb):
     params, wps = _read_wps_and_schedule_and_params(assigned_wb)
     groups = _expected_year_groups(params["start"], params["months"])
     _, y_budget = _yearly_rows(tlp)
-    base_cols = 9
+    base_cols = 10
 
     # Find a WP fully contained in one year (existence, not every-row).
     candidates = []

@@ -14,6 +14,7 @@ from budget_planner.timelog_solver import (
     PersonWPWindow,
     WP,
     _count_switches,
+    classify_wp_stop_reasons,
     greedy_pass,
     solve,
     switch_reduction_pass,
@@ -556,3 +557,111 @@ def test_vacation_months_default_empty():
     so existing callers (and legacy tests) don't need to pass the field."""
     p = Person("Alice", priority=1, pool=1, rate_eur_per_pm=1)
     assert p.vacation_months == frozenset()
+
+
+# ---------------------------------------------------------------------------
+# 17. Stop-reason classifier (closed enum, priority-ordered)
+# ---------------------------------------------------------------------------
+
+
+def test_stop_reason_filled():
+    persons = [Person("Alice", priority=1, pool=10, rate_eur_per_pm=10)]
+    wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=50)]
+    windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
+    assigned = greedy_pass(persons, wps, windows, project_months=10)
+    reasons = classify_wp_stop_reasons(
+        assigned, persons, wps, windows, project_months=10
+    )
+    assert reasons["WP1"] == "Filled"
+
+
+def test_stop_reason_overshoot_override():
+    # Mirrors test_lower_cap_forces_overshoot_on_small_wp: rate=600, ceiling=
+    # 1000. Placement 2 lands at 1200 > ceiling × 1.12 = 1120 → "-11% override".
+    persons = [Person("Alice", priority=1, pool=10, rate_eur_per_pm=600)]
+    wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=1000)]
+    windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
+    assigned = greedy_pass(persons, wps, windows, project_months=10)
+    reasons = classify_wp_stop_reasons(
+        assigned, persons, wps, windows, project_months=10
+    )
+    assert reasons["WP1"] == "-11% override"
+
+
+def test_stop_reason_upper_cap():
+    # ceiling=100, upper cap = 112, lower cap = 89.
+    # Priority-1 fills: Alice (rate=15, pool=1) places once → 15. Bob (rate=80,
+    # pool=1) places once → 95. Both pools now exhausted.
+    # Priority-2: Carol (rate=20, pool=10). 95+20=115 > 112 (would overshoot)
+    # AND 95 ≥ 89 (already above lower cap) → break, no placement.
+    # Final placed_eur = 95 < ceiling. Classifier: Carol has remaining pool
+    # AND legal months AND rate pushes past +12% → "+12% cap".
+    persons = [
+        Person("Alice", priority=1, pool=1, rate_eur_per_pm=15),
+        Person("Bob", priority=1, pool=1, rate_eur_per_pm=80),
+        Person("Carol", priority=2, pool=10, rate_eur_per_pm=20),
+    ]
+    wps = [WP("WP1", active_start=1, active_end=12, ceiling_eur=100)]
+    windows = [
+        PersonWPWindow("Alice", "WP1", 1, 12),
+        PersonWPWindow("Bob", "WP1", 1, 12),
+        PersonWPWindow("Carol", "WP1", 1, 12),
+    ]
+    assigned = greedy_pass(persons, wps, windows, project_months=12)
+    reasons = classify_wp_stop_reasons(
+        assigned, persons, wps, windows, project_months=12
+    )
+    assert reasons["WP1"] == "+12% cap"
+
+
+def test_stop_reason_pool_empty():
+    # ceiling=10000, lower cap = 8900. Alice pool=2, rate=1000 → places twice
+    # (1000 then 2000); pool exhausted at 2000 < 8900 < ceiling. No overshoot
+    # tie-break fires.
+    persons = [Person("Alice", priority=1, pool=2, rate_eur_per_pm=1000)]
+    wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=10000)]
+    windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
+    assigned = greedy_pass(persons, wps, windows, project_months=10)
+    reasons = classify_wp_stop_reasons(
+        assigned, persons, wps, windows, project_months=10
+    )
+    assert reasons["WP1"] == "Pool empty"
+
+
+def test_stop_reason_window_full():
+    # Alice has ample pool (10) but PersonWPWindow only at month 5; WP active
+    # 1..10. Greedy places once at m=5 (placed_eur=1). Pool remains 9 but no
+    # legal unplaced month survives → "Window full".
+    persons = [Person("Alice", priority=1, pool=10, rate_eur_per_pm=1)]
+    wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=100)]
+    windows = [PersonWPWindow("Alice", "WP1", 5, 5)]
+    assigned = greedy_pass(persons, wps, windows, project_months=10)
+    reasons = classify_wp_stop_reasons(
+        assigned, persons, wps, windows, project_months=10
+    )
+    assert reasons["WP1"] == "Window full"
+
+
+def test_stop_reason_no_window():
+    # PersonWPWindow exists but does not overlap WP active range. Greedy
+    # places nothing; classifier short-circuits at the overlap check.
+    persons = [Person("Alice", priority=1, pool=10, rate_eur_per_pm=10)]
+    wps = [WP("WP1", active_start=10, active_end=12, ceiling_eur=100)]
+    windows = [PersonWPWindow("Alice", "WP1", 1, 5)]
+    assigned = greedy_pass(persons, wps, windows, project_months=12)
+    reasons = classify_wp_stop_reasons(
+        assigned, persons, wps, windows, project_months=12
+    )
+    assert reasons["WP1"] == "No window"
+
+
+def test_stop_reason_no_candidates():
+    # WP1 exists but no PersonWPWindow row references it.
+    persons = [Person("Alice", priority=1, pool=10, rate_eur_per_pm=10)]
+    wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=100)]
+    windows: list[PersonWPWindow] = []
+    assigned = greedy_pass(persons, wps, windows, project_months=10)
+    reasons = classify_wp_stop_reasons(
+        assigned, persons, wps, windows, project_months=10
+    )
+    assert reasons["WP1"] == "No candidates"

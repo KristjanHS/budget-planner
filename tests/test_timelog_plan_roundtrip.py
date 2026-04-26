@@ -12,10 +12,12 @@ mechanism is gone. The tests here cover:
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
 import openpyxl
+import pytest
 from openpyxl.cell import Cell
 
 from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
@@ -26,6 +28,7 @@ from budget_planner.layout import (
 from budget_planner.reader import read_timelog_plan
 from budget_planner.timelog_plan import SECTION_TITLE_GRID
 from budget_planner.workbook import init_workbook, rebuild_workbook
+from tests.conftest import SCRIPTS_DIR
 
 
 def _project_months(wb) -> int:
@@ -60,27 +63,38 @@ def _set(ws, row: int, col: int, value) -> None:
     cell.value = value
 
 
-def _recalc(path: Path) -> None:
-    subprocess.run(
-        ["python", "scripts/recalc.py", str(path)],
-        check=True, capture_output=True,
+@pytest.fixture(scope="module")
+def recalced_timelog_wb_path(tmp_path_factory) -> str:
+    """Module-scoped: init_workbook(... DEMO_CAPACITY_ASSIGNMENTS) + recalc.
+
+    Returns a path to a recalc'd workbook. Read-only consumers use the path
+    directly; mutating consumers must shutil.copy first.
+
+    rebuild_workbook reads with data_only=False (workbook.py:616), so
+    sharing a recalc'd source has no effect on the rebuild flow exercised
+    by test_orphan_wp_dropped_with_bystander.
+    """
+    out = tmp_path_factory.mktemp("tl_rt") / "wb.xlsx"
+    init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
+    result = subprocess.run(
+        ["python3", str(SCRIPTS_DIR / "recalc.py"), str(out)],
+        capture_output=True, text=True,
     )
+    if result.returncode != 0:
+        pytest.skip("LibreOffice not available")
+    return str(out)
 
 
 # ── Init + recalc round-trip ────────────────────────────────────────────────
 
 
-def test_init_solver_output_preserved(tmp_path: Path):
+def test_init_solver_output_preserved(recalced_timelog_wb_path: str):
     """Init → recalc → reread: grid holds solver-placed WP codes as literals.
 
     Bystander: at least one non-empty grid cell and at least one row anchored
     to Config via ``=Config!A{r}`` (person col-A cross-ref).
     """
-    path = tmp_path / "wb.xlsx"
-    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    _recalc(path)
-
-    wb = openpyxl.load_workbook(path)
+    wb = openpyxl.load_workbook(recalced_timelog_wb_path)
     ws = wb[SHEET_TIMELOG_PLAN]
     months = _project_months(wb)
     first = _grid_first_person_row(ws)
@@ -113,13 +127,15 @@ def test_init_solver_output_preserved(tmp_path: Path):
 # ── Orphan pruning on rebuild ───────────────────────────────────────────────
 
 
-def test_orphan_wp_dropped_with_bystander(tmp_path: Path, capsys):
+def test_orphan_wp_dropped_with_bystander(
+    tmp_path: Path, capsys, recalced_timelog_wb_path: str
+):
     """Rebuild drops a grid cell whose WP code no longer exists in the roster.
 
     Bystander: a valid WP-code cell on the same row must survive the rebuild.
     """
     path = tmp_path / "wb.xlsx"
-    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
+    shutil.copy(recalced_timelog_wb_path, path)
 
     wb = openpyxl.load_workbook(path)
     ws = wb[SHEET_TIMELOG_PLAN]
@@ -155,11 +171,11 @@ def test_orphan_wp_dropped_with_bystander(tmp_path: Path, capsys):
 # ── Reader shape contract ──────────────────────────────────────────────────
 
 
-def test_reader_returns_grid_and_rebuild_from_month(tmp_path: Path):
+def test_reader_returns_grid_and_rebuild_from_month(
+    recalced_timelog_wb_path: str,
+):
     """Reader returns {'grid': dict, 'rebuild_from_month': int}."""
-    path = tmp_path / "wb.xlsx"
-    init_workbook(str(path), assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    wb = openpyxl.load_workbook(path)
+    wb = openpyxl.load_workbook(recalced_timelog_wb_path)
     months = _project_months(wb)
     out = read_timelog_plan(wb, months)
     assert set(out.keys()) == {"grid", "rebuild_from_month"}, out.keys()

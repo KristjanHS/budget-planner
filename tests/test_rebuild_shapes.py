@@ -13,6 +13,7 @@ Variants covered here:
 ``default`` — init → rebuild with no edits — is a no-op implicitly
 exercised by every other rebuild test.)
 """
+import shutil
 from pathlib import Path
 
 import openpyxl
@@ -25,7 +26,7 @@ from budget_planner.reader import (
     read_grade_rates,
     read_team_from_config,
 )
-from budget_planner.workbook import init_workbook, rebuild_workbook
+from budget_planner.workbook import rebuild_workbook
 from tests.test_rebuild_shape_drift import _simulate_excel_insert_in_named_range
 
 
@@ -48,9 +49,11 @@ def _first_data_row_after(ws, section_label: str) -> int:
     "variant",
     ["extra_wp", "extra_external", "extra_grade"],
 )
-def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str):
+def test_rebuild_roundtrip_shape_variant(
+    tmp_path: Path, variant: str, fresh_wb_path: str
+):
     path = tmp_path / f"wb_{variant}.xlsx"
-    init_workbook(str(path))
+    shutil.copy(fresh_wb_path, path)
 
     wb = openpyxl.load_workbook(path)
     config_ws = wb["Config"]

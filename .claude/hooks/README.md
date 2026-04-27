@@ -10,7 +10,7 @@ Hooks adapted from [pedrohcgs/claude-code-my-workflow](https://github.com/pedroh
 | `post-compact-restore.py` | `SessionStart` (matcher: `compact\|resume`) | After compaction/resume: reads and deletes the saved state; echoes plan, log, and recovery actions |
 | `context-monitor.py` | `PostToolUse` (matcher: `Bash\|Task`) | Progressive context-usage warnings at 40/55/65% (capture reusable insights), 80% (info), 90% (critical). Heuristic: tool-call count ÷ 150 |
 | `verify-reminder.py` | `PostToolUse` (matcher: `Write\|Edit`) | On `.py` edits outside skip-dirs, nudges to run `pytest tests/ -q`. Throttled to 60s per file |
-| `docs-bloat-gate.py` | `PreToolUse` (matcher: `Write\|Edit\|Bash`) | Blocks net-positive Write/Edit to `docs/spec.md`, `docs/runbook.md`, `docs/refactor-incidents.md`, `.claude/rules/*.md`, plus Bash `>`/`>>`/`tee`/`sed -i` writes targeting those paths. Pass conditions: net delta ≤ 0, `→ see X` pointer, brand-new `## ` heading (lines under it exempt), or override sentinel. Design: `docs/plans/archived/2026-04-25-doc-bloat-root-causes-brainstorm.md` |
+| `docs-bloat-gate.py` | `PreToolUse` (matcher: `Write\|Edit\|Bash`) | Three signals on Write/Edit to `docs/spec.md`, `docs/runbook.md`, `docs/refactor-incidents.md`, `.claude/rules/*.md` (any blocks): **S1** char-delta vs tier cap (rule<50 lines=150 chars, doc=800, spec=2000) — bypassable; **S2** ~30-pattern slop stoplist (transition adverbs, hedges, AI tells) — UNBYPASSABLE; **S3** lexical density <0.45 on >100-char addition — UNBYPASSABLE. S1 bypasses: brand-new `## ` heading (≤30 lines / 1500 chars exempt on the introducing edit) or override sentinel (hard cap **1/session**, reason ≥30 chars, no anti-stopwords). Bash gate blocks `>`/`>>`/`tee`/`sed -i` to gated paths; same sentinel cap applies. Design: `docs/plans/2026-04-26-docs-bloat-gate-redesign.md` |
 | `docs-only-plan-gate.py` | `PreToolUse` Bash + `PostToolUse` Bash | **Pre:** blocks `git mv .*docs/plans/.*archived/` unless a pytest-pass stamp is fresh (≤30 min) or override sentinel present. **Post:** stamps `~/.claude/sessions/<hash>/pytest-pass-stamp` when a `pytest tests/...` invocation exits 0. Source: `docs/plans/archived/2026-04-25-prose-rules-to-hooks-audit.md` (W1.2) |
 
 `external-process-test-gate.py` was promoted to global (`~/.claude/hooks/`, registered in global `settings.json`) on 2026-04-25 since its source rule (`~/.claude/rules/testing.md`) is also global. Override log moved to `~/.claude/logs/external-process-test-overrides.log`. Behavior unchanged for this project.
@@ -19,15 +19,18 @@ All hooks fail open (exit 0 on any exception) so a hook bug never blocks Claude.
 
 ## Troubleshooting `docs-bloat-gate.py`
 
-**Symptom: legitimate edit blocked.**
-Read the stderr message — it reports the net-delta and the four bypass options. Pick whichever fits:
-- Add a `→ see <path> § <section>` pointer in the added text (regex: `→\s*see\s+\S+` or `->\s*see\s+\S+`).
-- Pair the addition with a removal so net delta ≤ 0.
-- Wrap the new content under a brand-new `## ` heading (an L2 heading not already in the file). Lines under that heading are exempt; lines outside still count.
-- Add `<!-- docs-bloat-gate-override: <reason ≥10 chars> -->` in the added content. The reason is appended to `docs/analysis/bloat-overrides.log` (gitignored).
+**Symptom: edit blocked. Which signal fired?** Read the stderr prefix:
 
-**Symptom: Bash command blocked.**
-Stderr lists the matched gated path(s). The matcher only fires on true write-actions: `>`/`>>` redirection, `tee`, or `sed -i`. Read-only commands (`cat`, `grep`, `git log`) and commit messages mentioning gated paths must pass — if they don't, that's a bug, file it.
+- **`AI-slop phrases detected: …`** (S2, UNBYPASSABLE). Remove the listed phrase(s) from the added text. Sentinel and L2-heading bypasses do NOT apply. Stoplist covers transition adverbs (`furthermore`, `moreover`, …), hedges (`it's worth noting`, `having said that`, `in essence`, …), and AI tells (`comprehensive`, `robust`, `leverage`, `delve into`, …). The check subtracts hits already in `old_string`, so paragraph rewrites that preserve the phrase are not flagged.
+- **`lexical density <D> below 0.45 …`** (S3, UNBYPASSABLE). Function-word ratio is too high — tighten by removing hedges, articles, and transition phrases. Only fires on additions >100 chars.
+- **`char_delta=N exceeds cap=C (<tier> tier, …)`** (S1, bypassable). Three options:
+  1. Revise the edit to fit the tier cap (rule<50 lines=150, doc=800, spec=2000 chars).
+  2. Wrap new content under a brand-new `## ` heading (not already in the file). The introducing edit gets a 30-line / 1500-char carve-out, whichever hits first; lines past that count toward S1 normally.
+  3. Add `<!-- docs-bloat-gate-override: <reason ≥30 chars> -->`. **Hard cap: 1 sentinel per session.** The reason must contain no anti-stopwords (`update`, `rewrite`, `improvement`, `cleanup`, `fix`).
+
+**Symptom: sentinel cap exhausted.** Stderr shows `K/1 used`. All gated-doc edits hard-block until the next session — by design (per design §6). Either land the change differently or end the session.
+
+**Symptom: Bash command blocked.** Stderr lists the matched gated path(s). The matcher fires only on true write-actions: `>`/`>>`, `tee`, or `sed -i`. Read-only commands (`cat`, `grep`, `git log`) and heredoc commit messages mentioning gated paths must pass — if they don't, that's a bug, file it. Bash blocks honor the same 1/session sentinel cap.
 
 **Test the hook in isolation:**
 ```sh
@@ -36,15 +39,18 @@ echo '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/docs/spec.md","old_s
 echo "exit code: $?"   # 2 = blocked, 0 = allowed; stderr has the reason
 ```
 
-**Inspect override log:** `cat docs/analysis/bloat-overrides.log` — one line per override, format `<ISO-ts>  <path>  <±N> lines  reason="…"  tool=<Write|Edit|Bash>`. ≥3 entries since last `/retro` is a signal to revisit gate calibration.
+**Inspect override log:** `cat docs/analysis/bloat-overrides.log | jq -c .` — JSONL, one entry per bypass use. Fields: `ts`, `file`, `signal` (always `S1` in v2), `bypass_type` (`l2_heading` or `sentinel`), `char_delta`, optional `reason`/`carved_delta`/`headings`, `session_id`, `tool`. ≥3 entries since last `/retro` is a signal to revisit calibration.
+
+**Sentinel counter file:** `~/.claude/state/docs-bloat-gate-sentinels-<session_id>.txt` (single integer). Session ID resolves from `CLAUDE_SESSION_ID` env → hash of `CLAUDE_TRANSCRIPT_PATH` → hourly-rolling token. Counter auto-resets when the session ID changes. Safe to delete to reset within a session for debugging.
 
 **Disable temporarily:**
-- For one Edit: add the override sentinel.
-- For all of CLAUDE.md (opt-in only): unset `DOCS_BLOAT_GATE_CLAUDE_MD` (default off).
-- For the whole hook: comment out the `PreToolUse` block in `.claude/settings.json` (and tell the user; restart for it to take effect).
+- For one S1 edit: use the override sentinel (subject to the 1/session cap).
+- For S2/S3: not bypassable. Revise the prose.
+- For CLAUDE.md gating (opt-in only): unset `DOCS_BLOAT_GATE_CLAUDE_MD` (default off).
+- For the whole hook: comment out the `PreToolUse` block in `.claude/settings.json` (tell the user; restart for it to take effect).
 
 **Hook isn't firing on a path you expected:**
-Path scope is exact-list (`GATED_DOCS`) plus `.claude/rules/*.md` glob. Subdirs of `docs/` (`docs/plans/`, `docs/analysis/`, `docs/human/`, `docs/research/`) are intentionally out of scope per design §1.
+Path scope is exact-list (`GATED_DOCS`) plus `.claude/rules/*.md` glob. Subdirs of `docs/` (`docs/plans/`, `docs/analysis/`, `docs/human/`, `docs/research/`) are intentionally out of scope. New `docs/*.md` root files containing audit/analysis/report/research keywords are blocked separately (move to `docs/analysis/` or use the sentinel).
 
 **Latency check:** `time for i in $(seq 1 10); do echo '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/docs/spec.md","old_string":"a","new_string":"a"}}' | python3 .claude/hooks/docs-bloat-gate.py >/dev/null 2>&1; done` — target <50ms per invocation.
 

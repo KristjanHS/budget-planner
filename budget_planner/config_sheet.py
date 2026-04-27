@@ -470,6 +470,49 @@ def _write_rate_by_grade_section(ws, start_row, grade_rates):
     return next_row, layout
 
 
+def _write_stop_reasons_section(ws, start_row):
+    """Write the TIMELOG SOLVER — STOP REASONS reference section.
+
+    Two-column reference table: col A = reason code (1-2 words, exactly the
+    literal that surfaces in Timelog Plan!J{wp_row} "Stop reason"), col B =
+    one-line explanation. Pulled from ``timelog_solver.STOP_REASON_DEFINITIONS``
+    so the in-sheet doc cannot drift from the classifier.
+
+    Returns:
+        (next_row, layout_dict) where layout_dict has keys:
+        stop_section_row, stop_header_row, stop_first_row, stop_last_row.
+    """
+    from budget_planner.timelog_solver import STOP_REASON_DEFINITIONS
+
+    section_row = start_row
+    ws.merge_cells(start_row=section_row, start_column=1,
+                   end_row=section_row, end_column=2)
+    style_cell(ws, section_row, 1, value=SECTION_HEADER_LABELS["stop_reasons"],
+               font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER, border=False)
+
+    header_row = section_row + 1
+    style_cell(ws, header_row, 1, value="Reason", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    style_cell(ws, header_row, 2, value="Meaning", font=HEADER_FONT,
+               fill=LIGHT_BLUE_FILL, alignment=CENTER)
+
+    first_row = header_row + 1
+    for i, (reason, explanation) in enumerate(STOP_REASON_DEFINITIONS):
+        r = first_row + i
+        style_cell(ws, r, 1, value=reason, font=BLACK_FORMULA, border=False)
+        style_cell(ws, r, 2, value=explanation, font=BLACK_FORMULA, border=False)
+    last_row = first_row + len(STOP_REASON_DEFINITIONS) - 1
+
+    next_row = last_row + 1
+    layout = {
+        "stop_section_row": section_row,
+        "stop_header_row": header_row,
+        "stop_first_row": first_row,
+        "stop_last_row": last_row,
+    }
+    return next_row, layout
+
+
 def _write_assignments_section(ws, start_row, assignments):
     """Write the PERSON-WP ASSIGNMENTS section (section header, column headers, data rows, formulas).
 
@@ -873,6 +916,9 @@ def build_config_sheet(ws, wb, project_params, work_packages,
 
     # ── Section 6: Rate by Grade ──
     next_row, grade_layout = _write_rate_by_grade_section(ws, next_row + 1, grade_rates)
+
+    # ── Section 7: Timelog Solver — Stop Reasons (reference table) ──
+    next_row, stop_layout = _write_stop_reasons_section(ws, next_row + 1)
 
     # ── Data validation: Grade dropdown for roster (references grade table) ──
     dv_grade = DataValidation(

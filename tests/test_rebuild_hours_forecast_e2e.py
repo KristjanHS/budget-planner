@@ -41,6 +41,8 @@ from budget_planner.config import (
     GRADE_RATES,
     PROJECT_MONTHS,
     PROJECT_START,
+    TEAM,
+    WORK_PACKAGES,
 )
 from budget_planner.layout import (
     MONTH_COL_START,
@@ -245,22 +247,43 @@ def test_hours_propagate_through_rebuild_and_recalc(tmp_path):
             pytest.skip(
                 f"cannot pick 3 same-year months <= current_month={current_month}"
             )
+    # Pick a Senior person and that person's in-window WP assignments
+    # dynamically (per project testing rule — derive from DEMO, don't
+    # hardcode WP names). The test verifies the Senior rate edit propagates
+    # through forecast leaves; all edits must be on a Senior so the
+    # NEW_SENIOR_RATE-based expected leaf math holds.
+    senior_names = {m["name"] for m in TEAM if m["grade"] == TARGET_GRADE}
+    senior_wp_assignments = [
+        a for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] in senior_names
+    ]
+    # Filter to assignments whose person+WP active window covers all of
+    # [m_lo, m_hi] (else the cell at one of those months is greyed and
+    # hours are dropped on rebuild).
+    wp_active = {wp["id"]: (int(wp["start"]), int(wp["end"])) for wp in WORK_PACKAGES}
+    eligible = []
+    for a in senior_wp_assignments:
+        wp_lo, wp_hi = wp_active[a["wp"]]
+        # Both the WP active range AND the assignment range must cover [m_lo, m_hi].
+        if (wp_lo <= m_lo and wp_hi >= m_hi
+                and a["start"] <= m_lo and a["end"] >= m_hi):
+            eligible.append(a)
+    if len(eligible) < 2:
+        pytest.skip(
+            f"need ≥2 Senior in-window WP assignments covering [{m_lo},{m_hi}], "
+            f"got {len(eligible)}"
+        )
+    # Use up to 3 edits; pair each with a distinct month from m_lo..m_hi.
+    months_available = [m_lo, m_mid, m_hi]
+    chosen = eligible[: min(3, len(eligible))]
     edits: list[tuple[str, str, int, float]] = [
-        # (person, wp_id, month_num (1-based), hours)
-        ("Alice", "WP1", m_lo,  100.0),
-        ("Alice", "WP2", m_mid,  80.0),
-        ("Alice", "WP3", m_hi,   60.0),
+        (a["person"], a["wp"], months_available[i], 100.0 - i * 20.0)
+        for i, a in enumerate(chosen)
     ]
 
-    # Sanity: target grade and assignments line up with demo data.
+    # Sanity: rate edit will produce a visible delta.
     assert GRADE_RATES[TARGET_GRADE] != NEW_SENIOR_RATE, (
         "NEW_SENIOR_RATE must differ from default to prove the rate edit took"
     )
-    for person, wp_id, _m, _h in edits:
-        assert any(
-            a["person"] == person and a["wp"] == wp_id
-            for a in DEMO_CAPACITY_ASSIGNMENTS
-        ), f"demo data must assign {person} to {wp_id}"
 
     # --- Write hour inputs + grade rate edit ---
     wb = openpyxl.load_workbook(path)

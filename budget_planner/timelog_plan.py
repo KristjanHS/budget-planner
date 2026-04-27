@@ -60,6 +60,7 @@ from budget_planner.styles import (
     BLACK_FORMULA,
     BLUE_INPUT,
     CENTER,
+    CENTER_WRAP,
     CF_GREEN_FILL,
     CF_PASTEL_FILLS,
     CF_RED_FILL,
@@ -392,9 +393,10 @@ def build_timelog_plan_sheet(
         "Total switches",
     ]
     for c, lbl in zip(tl_label_cols, tl_labels):
-        style_cell(ws, tl_row, c, value=lbl, font=HEADER_FONT, alignment=CENTER)
+        style_cell(ws, tl_row, c, value=lbl, font=HEADER_FONT, alignment=CENTER_WRAP)
     for c in tl_value_cols:
-        style_cell(ws, tl_row, c, font=BLACK_FORMULA, alignment=CENTER, fmt="0")
+        style_cell(ws, tl_row, c, font=BLACK_FORMULA, alignment=CENTER_WRAP, fmt="0")
+    ws.row_dimensions[tl_row].height = 26.4
     # Toggle-row legacy cells (cols 9-10) are no longer written. The rebuild
     # control is now the Config!B{Rebuild from month #} integer param (see
     # config_sheet.py + docs/spec.md § Timelog Plan merged grid).
@@ -428,10 +430,11 @@ def build_timelog_plan_sheet(
         carries_plus_i = hdr.endswith("+i")
         style_cell(
             ws, wp_summary_header_row, 1 + i,
-            value=hdr, font=HEADER_FONT, alignment=CENTER,
+            value=hdr, font=HEADER_FONT, alignment=CENTER_WRAP,
             fill=(WITH_INDIRECT_HEADER_FILL
                   if is_year_col or carries_plus_i else None),
         )
+    ws.row_dimensions[wp_summary_header_row].height = 26.4
     cfg_wp_first_row = config_layout["wp_first_row"]
     # Rate vector for Assigned-€ targets the +i col so the SUMPRODUCT result
     # is +i (matches Budget +i in col B). Monthly total rows below construct
@@ -1061,6 +1064,9 @@ def _write_yearly_rows(
       via TIMELOG_YEARLY_LABEL_COL so the label sits adjacent-left to the
       per-year breakdown. Aiko-port T3 shifted col H → I when Buffer % was
       inserted at col E.)
+    - Col B: row label (``TOTAL Assigned +i`` / ``TOTAL Budget +i``) with
+      ``WITH_INDIRECT_HEADER_FILL`` — names the col C cross-check sum sitting
+      directly to its right.
     - Col I (``TIMELOG_YEARLY_LABEL_COL``): row label (HEADER_FONT) with
       ``WITH_INDIRECT_HEADER_FILL`` — the per-year cells on this row are +i,
       so the label carries the +i header fill.
@@ -1074,7 +1080,7 @@ def _write_yearly_rows(
         * ``yearly_budget_row`` col C = ``=SUM(B{first}:B{last})``. Q-B
           flipped PER-WP SUMMARY col B to direct Config!F (Budget +i,
           ``COL_WP_BUDGET_PLUS_I``), so SUM(B) is already +i.
-    - Cols B, D-H: intentionally blank.
+    - Cols D-H: intentionally blank.
     - Per-year cols (K…):
       * yearly_total_row: =SUM(<year_col>{W1}:<year_col>{Wn}) — stacks the
         per-WP Y{yyyy} +i cells for that year (each cell is +i via the T7.3
@@ -1088,6 +1094,14 @@ def _write_yearly_rows(
         Formula stays live to Config edits; rebuild re-derives the proportions
         when the WP schedule changes.
     """
+    style_cell(
+        ws, yearly_total_row, 2, value="TOTAL Assigned +i",
+        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER_WRAP,
+    )
+    style_cell(
+        ws, yearly_budget_row, 2, value="TOTAL Budget +i",
+        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER_WRAP,
+    )
     style_cell(
         ws, yearly_total_row, TIMELOG_YEARLY_LABEL_COL, value="Yearly Assigned +i",
         font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,

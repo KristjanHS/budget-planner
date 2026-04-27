@@ -176,8 +176,12 @@ def test_actuals_hours_active_month_is_blue_and_empty(hrs):
 def test_actuals_hours_total_row_sums_data_rows(hrs):
     """TOTAL row M1 formula = SUM of the data rows above for that person."""
     alice_header = _find_person_header_row(hrs, "Alice")
-    # Alice has 3 WP rows (WP1, WP2, WP3) + 1 external (ProjectX)
-    expected_data_rows = 3 + 1
+    # Derive Alice's expected data-row count from DEMO_CAPACITY_ASSIGNMENTS +
+    # EXTERNAL_COMMITMENTS so this test tracks demo edits per the project
+    # testing rule (no hardcoded seed values).
+    alice_wps = sum(1 for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == "Alice")
+    alice_externals = sum(1 for e in EXTERNAL_COMMITMENTS if e["person"] == "Alice")
+    expected_data_rows = alice_wps + alice_externals
     data_row_start = alice_header + 1
     data_row_end = alice_header + expected_data_rows
     # +2 for the hours-to-date summary rows between externals and TOTAL.
@@ -196,16 +200,30 @@ def test_actuals_hours_total_row_sums_data_rows(hrs):
 # ── EU TOTAL row formula ──
 
 def test_actuals_hours_eu_total_references_grant_wps_and_eu_externals(hrs):
-    """Bob has WP4/WP5/WP6 + ProjectX (non-EU) + HorizonEU-Alpha (EU).
-    EU TOTAL must reference WP rows + HorizonEU-Alpha only, not ProjectX."""
+    """EU TOTAL must reference Bob's WP rows + EU external (HorizonEU-Alpha)
+    only, not the non-EU external (ProjectX). Row layout per person:
+    WP rows → externals (in DEMO order) → 2 hours-to-date summary rows →
+    TOTAL → EU TOTAL.
+    """
     bob_header = _find_person_header_row(hrs, "Bob")
-    # Bob: 3 WP rows (WP4, WP5, WP6) + 2 externals (ProjectX, HorizonEU-Alpha)
-    wp_rows = [bob_header + 1, bob_header + 2, bob_header + 3]
-    ext_projectx_row = bob_header + 4  # first external = ProjectX (not EU)
-    ext_horizon_row = bob_header + 5   # second external = HorizonEU-Alpha (EU)
-    # +2 for the hours-to-date summary rows inserted above TOTAL.
-    total_row = bob_header + 8
-    eu_total_row = bob_header + 9
+    # Derive Bob's row layout from DEMO_CAPACITY_ASSIGNMENTS + EXTERNAL_COMMITMENTS
+    # rather than hardcoding WP4/WP5/WP6 (per project testing rule).
+    bob_wps = [a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == "Bob"]
+    bob_externals = [e for e in EXTERNAL_COMMITMENTS if e["person"] == "Bob"]
+    num_wp = len(bob_wps)
+    wp_rows = list(range(bob_header + 1, bob_header + 1 + num_wp))
+    # External rows follow WP rows; pick the first non-EU and first EU rows
+    # for the (don't-include) / (must-include) assertions below.
+    ext_first_row = bob_header + 1 + num_wp
+    ext_projectx_row = next(
+        ext_first_row + i for i, e in enumerate(bob_externals) if not e["is_eu"]
+    )
+    ext_horizon_row = next(
+        ext_first_row + i for i, e in enumerate(bob_externals) if e["is_eu"]
+    )
+    # +2 hours-to-date summary rows between externals and TOTAL.
+    total_row = bob_header + num_wp + len(bob_externals) + 3
+    eu_total_row = total_row + 1
 
     assert hrs.cell(total_row, 2).value == "TOTAL"
     assert hrs.cell(eu_total_row, 2).value == "EU TOTAL"

@@ -85,6 +85,7 @@ SECTION_HEADER_LABELS = {
     "assignments": "PERSON-WP ASSIGNMENTS",
     "externals": "EXTERNAL COMMITMENTS",
     "planned_fte": "PLANNED FTE (PERSON-MONTHS)",
+    "stop_reasons": "TIMELOG SOLVER — STOP REASONS",
     "wp_id_column": "WP ID",  # column-header marker in Capacity/Actuals month header row
 }
 

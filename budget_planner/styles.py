@@ -73,6 +73,7 @@ THIN_BORDER = Border(
     top=Side(style="thin"), bottom=Side(style="thin")
 )
 CENTER = Alignment(horizontal="center", vertical="center")
+CENTER_WRAP = Alignment(horizontal="center", vertical="center", wrap_text=True)
 WRAP = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
 

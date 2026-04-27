@@ -51,6 +51,30 @@ from dataclasses import dataclass
 MAX_BUFFER_PCT = 0.12
 MIN_BUFFER_PCT = 0.11
 
+# Canonical list of stop-reason codes emitted by ``classify_wp_stop_reasons``,
+# paired with one-line user-facing explanations. Single source of truth — the
+# Config sheet's STOP REASONS section pulls directly from this list, so any
+# branch added/renamed in the classifier should be mirrored here in the same
+# commit. Order matches classifier priority (first-match-wins).
+STOP_REASON_DEFINITIONS: list[tuple[str, str]] = [
+    ("No candidates",
+     "No PERSON-WP ASSIGNMENTS row references this WP — solver has nobody to place."),
+    ("No window",
+     "Assignment rows exist, but none of their [start, end] ranges overlap the WP's active window."),
+    ("Filled",
+     "Solver reached the WP budget (placed € ≥ ceiling €). Normal terminal state."),
+    ("+12% cap",
+     "Under budget, but next placement's rate would push placed € past the +12% upper buffer. Solver skips to avoid overshoot."),
+    ("-11% override",
+     "Placed € is past the +12% upper cap because skipping the last placement would have left the WP below the −11% lower cap. Lower-cap tie-break wins over upper-cap guard."),
+    ("Pool empty",
+     "Under budget; eligible candidates exist but all have exhausted their FTE pool on earlier WPs."),
+    ("Window full",
+     "Under budget; eligible candidates have remaining pool, but no legal unplaced months remain inside the WP's active range (months already filled by other WPs, vacations, or frozen)."),
+    ("Underfilled",
+     "Catch-all — should be unreachable given greedy correctness. If it appears, treat as a solver-policy-drift signal, not a config issue."),
+]
+
 
 @dataclass(frozen=True)
 class Person:

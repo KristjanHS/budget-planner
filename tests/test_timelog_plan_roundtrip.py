@@ -143,8 +143,17 @@ def test_orphan_wp_dropped_with_bystander(
     person_name = _resolve_person_name(ws, first)
     m_start = TIMELOG_MONTH_COL_START
 
-    # Stamp a known-valid WP code (bystander) and a zombie code on the same row.
-    _set(ws, first, m_start, "WP2")           # bystander (real WP)
+    # Bystander: re-stamp the WP code the solver naturally placed at this
+    # cell. Rebuild re-runs the solver (no freeze by default) so the cell's
+    # post-rebuild value comes from the solver, not the stamp — but a valid
+    # WP code stamped before rebuild MUST survive orphan-pruning along the
+    # way. Deriving from solver output keeps the assertion stable across
+    # demo-data changes.
+    bystander_wp = ws.cell(first, m_start).value
+    assert (
+        isinstance(bystander_wp, str) and bystander_wp.startswith("WP")
+    ), f"expected solver-placed WP code at first cell, got {bystander_wp!r}"
+    _set(ws, first, m_start, bystander_wp)     # bystander (real WP)
     _set(ws, first, m_start + 1, "WP_ZOMBIE")  # orphan
     wb.save(path)
     wb.close()
@@ -159,7 +168,7 @@ def test_orphan_wp_dropped_with_bystander(
     first2 = _grid_first_person_row(ws2)
     assert _resolve_person_name(ws2, first2) == person_name
     # Bystander survives.
-    assert ws2.cell(first2, m_start).value == "WP2"
+    assert ws2.cell(first2, m_start).value == bystander_wp
     # Orphan has been cleared / re-solved; must not carry the zombie value forward.
     orphan_val = ws2.cell(first2, m_start + 1).value
     assert orphan_val != "WP_ZOMBIE", (

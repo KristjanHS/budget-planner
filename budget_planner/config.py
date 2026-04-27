@@ -87,16 +87,24 @@ DEMO_CURRENT_MONTH = 12
 
 # Capacity assignments for demo mode — passed to init_workbook(assignments=...).
 # Each entry: person, WP id, total FTE, start month, end month.
+#
+# Engineered to surface multiple Timelog Solver stop-reason branches so the
+# Stop reason column on Timelog Plan can be sanity-checked manually against
+# the STOP REASONS reference table on the Config sheet:
+#   WP1 → "+12% cap"      (Alice fills to 71400; 8th placement would breach +12%)
+#   WP2 → "No window"     (Dave's row [20,24] does not overlap WP2's [1,18])
+#   WP4 → "No candidates" (no PERSON-WP ASSIGNMENTS row references WP4)
+#   WP9 → "-11% override" (Alice forced past +12% cap; skipping would breach -11%)
+#   WP3, WP5, WP6, WP7, WP8 → "Filled"
 DEMO_CAPACITY_ASSIGNMENTS = [
     {"person": "Alice", "wp": "WP1", "start": 1,  "end": 14, "total_fte": 4.0},
-    {"person": "Alice", "wp": "WP2", "start": 1,  "end": 6, "total_fte": 3.0},
     {"person": "Alice", "wp": "WP3", "start": 1,  "end": 7, "total_fte": 3.0},
-    {"person": "Bob",   "wp": "WP4", "start": 2,  "end": 11, "total_fte": 2.0},
+    {"person": "Alice", "wp": "WP9", "start": 12, "end": 14, "total_fte": 3.0},
     {"person": "Bob",   "wp": "WP5", "start": 4, "end": 13, "total_fte": 5.0},
     {"person": "Bob",   "wp": "WP6", "start": 4, "end": 13, "total_fte": 2.0},
     {"person": "Carol", "wp": "WP7", "start": 6, "end": 14, "total_fte": 3.0},
     {"person": "Carol", "wp": "WP8", "start": 10, "end": 14, "total_fte": 3.0},
-    {"person": "Carol", "wp": "WP9", "start": 12, "end": 14, "total_fte": 3.0},
+    {"person": "Dave",  "wp": "WP2", "start": 6, "end": 7, "total_fte": 1.00},
     {"person": "Dave",  "wp": "WP3", "start": 1,  "end": 7, "total_fte": 6.0},
     {"person": "Dave",  "wp": "WP5", "start": 4, "end": 13, "total_fte": 1.0},
     {"person": "Dave",  "wp": "WP6", "start": 4, "end": 13, "total_fte": 1.0},

@@ -147,11 +147,16 @@ class TestS1SpecTier:
 
 class TestS1L2HeadingBypass:
     def test_new_section_under_line_budget_passes(self, tmp_path):
-        """30-line/1500-char carve-out: 25 lines under new heading passes."""
+        """Carve-out is load-bearing: raw char_delta exceeds the rule cap (150)
+        but fits inside the 30-line / 1500-char carve-out, so the edit passes
+        only because the carve-out subtracts the new-heading body.
+        """
         f = make_file(tmp_path, ".claude/rules/a.md", lines=10)
-        # 25-line block under brand-new ## heading; lines short so under char cap.
-        body = "\n".join(["x"] * 25)
+        # 10 body lines × 20 chars + heading = ~225 chars raw → > 150 cap.
+        # 11 lines / ~225 chars all fit under 30-line / 1500-char exemption.
+        body = "\n".join(["a" * 20] * 10)
         new = f"## New Section\n{body}\n"
+        assert len(new) > 150, "test premise: raw delta must exceed rule cap"
         rc, _, _ = run_hook(tmp_path, edit_payload(f, old="", new=new))
         assert rc == 0
 
@@ -229,6 +234,22 @@ class TestS2Slop:
             ),
         )
         assert rc == 0
+
+    def test_added_extra_occurrence_of_existing_slop_blocks(self, tmp_path):
+        """Counter-based net detection: old has 1× 'leverage', new has 2×.
+        A set-difference would miss this; the count comparison must catch it.
+        """
+        f = make_file(tmp_path, ".claude/rules/a.md", lines=10)
+        rc, err, _ = run_hook(
+            tmp_path,
+            edit_payload(
+                f,
+                old="we leverage the system",
+                new="we leverage the system and leverage the API",
+            ),
+        )
+        assert rc == 2
+        assert "leverage" in err
 
     def test_sentinel_does_not_bypass_s2(self, tmp_path):
         f = make_file(tmp_path, ".claude/rules/a.md", lines=10)

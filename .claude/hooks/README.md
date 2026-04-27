@@ -39,7 +39,7 @@ echo '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/docs/spec.md","old_s
 echo "exit code: $?"   # 2 = blocked, 0 = allowed; stderr has the reason
 ```
 
-**Inspect override log:** `cat docs/analysis/bloat-overrides.log | jq -c .` — JSONL, one entry per bypass use. Fields: `ts`, `file`, `signal` (always `S1` in v2), `bypass_type` (`l2_heading` or `sentinel`), `char_delta`, optional `reason`/`carved_delta`/`headings`, `session_id`, `tool`. ≥3 entries since last `/retro` is a signal to revisit calibration.
+**Inspect override log:** `jq -Rc 'try fromjson' docs/analysis/bloat-overrides.log` — JSONL, one entry per bypass use. (`-R 'try fromjson'` skips any pre-v2 plain-text lines that may co-exist in the file.) Fields: `ts`, `file`, `signal` (always `S1` in v2), `bypass_type` (`l2_heading` or `sentinel`), `char_delta`, optional `reason`/`carved_delta`/`headings`, `session_id`, `tool`. ≥3 entries since last `/retro` is a signal to revisit calibration.
 
 **Sentinel counter file:** `~/.claude/state/docs-bloat-gate-sentinels-<session_id>.txt` (single integer). Session ID resolves from `CLAUDE_SESSION_ID` env → hash of `CLAUDE_TRANSCRIPT_PATH` → hourly-rolling token. Counter auto-resets when the session ID changes. Safe to delete to reset within a session for debugging.
 
@@ -50,7 +50,7 @@ echo "exit code: $?"   # 2 = blocked, 0 = allowed; stderr has the reason
 - For the whole hook: comment out the `PreToolUse` block in `.claude/settings.json` (tell the user; restart for it to take effect).
 
 **Hook isn't firing on a path you expected:**
-Path scope is exact-list (`GATED_DOCS`) plus `.claude/rules/*.md` glob. Subdirs of `docs/` (`docs/plans/`, `docs/analysis/`, `docs/human/`, `docs/research/`) are intentionally out of scope. The audit-keyword block is a separate check that fires ONLY on a brand-new file written directly under `docs/` (depth=1, e.g. `docs/weekly-report.md`) when its content matches `audit|analysis|report|research`; plans under `docs/plans/`, analyses under `docs/analysis/`, and any other subdir are unaffected.
+Path scope is exact-list (`GATED_DOCS`) plus any `.md` under `.claude/rules/` (recursive — subdirs are gated). Subdirs of `docs/` (`docs/plans/`, `docs/analysis/`, `docs/human/`, `docs/research/`) are intentionally out of scope. The audit-keyword block is a separate check that fires ONLY on a brand-new file written directly under `docs/` (depth=1, e.g. `docs/weekly-report.md`) when its content matches `audit|analysis|report|research`; plans under `docs/plans/`, analyses under `docs/analysis/`, and any other subdir are unaffected.
 
 **Latency check:** `time for i in $(seq 1 10); do echo '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/docs/spec.md","old_string":"a","new_string":"a"}}' | python3 .claude/hooks/docs-bloat-gate.py >/dev/null 2>&1; done` — target <50ms per invocation.
 

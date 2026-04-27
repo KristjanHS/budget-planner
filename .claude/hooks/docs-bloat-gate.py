@@ -22,6 +22,7 @@ import json
 import os
 import re
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -244,15 +245,28 @@ _SLOP_WORD_RE = re.compile(
 )
 
 
-def slop_hits(text: str) -> set[str]:
+def slop_hit_counts(text: str) -> Counter[str]:
+    """Return a Counter of slop-pattern occurrences in `text`.
+
+    Counts (not just presence) so that net-added detection in
+    `gate_text_edit` catches "added one more occurrence" cases — a
+    set-difference would miss the second instance when the first already
+    appears in `removed`.
+    """
+    counts: Counter[str] = Counter()
     if not text:
-        return set()
-    found: set[str] = {m.group(1).lower() for m in _SLOP_WORD_RE.finditer(text)}
+        return counts
+    for m in _SLOP_WORD_RE.finditer(text):
+        counts[m.group(1).lower()] += 1
     lower = text.lower()
     for ph in SLOP_PHRASES:
-        if ph in lower:
-            found.add(ph)
-    return found
+        n, start = 0, 0
+        while (idx := lower.find(ph, start)) != -1:
+            n += 1
+            start = idx + len(ph)
+        if n:
+            counts[ph] += n
+    return counts
 
 
 # --- S3: lexical density -------------------------------------------------
@@ -296,7 +310,11 @@ def gate_text_edit(rel: str, added: str, removed: str, current: str, tool: str) 
     char_delta = len(added) - len(removed)
 
     # S2: slop list (UNBYPASSABLE) - compute net-added phrases only.
-    new_hits = sorted(slop_hits(added) - slop_hits(removed))
+    added_counts = slop_hit_counts(added)
+    removed_counts = slop_hit_counts(removed)
+    new_hits = sorted(
+        p for p, n in added_counts.items() if n > removed_counts.get(p, 0)
+    )
     if new_hits:
         sys.stderr.write(
             f"docs-bloat-gate: AI-slop phrases detected: {', '.join(new_hits)}. "

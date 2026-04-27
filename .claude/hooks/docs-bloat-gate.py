@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 """
-docs-bloat-gate — PreToolUse hook on Write/Edit/Bash.
+docs-bloat-gate v2 — PreToolUse hook on Write/Edit/Bash.
 
-Blocks Write/Edit to gated docs/rule paths (and Bash commands targeting them)
-unless the change passes one of: net delta <= 0, '-> see ' pointer in added
-text, new '## ' heading introduced, or override sentinel present.
+Three signals (any blocks):
+  S1: char-delta exceeds tier cap (rule<50ln=150, doc=800, spec=2000)  bypassable
+  S2: AI-slop stoplist phrase present in net-added text                UNBYPASSABLE
+  S3: lexical density < 0.45 on >100-char addition                     UNBYPASSABLE
 
-Override sentinel:  <!-- docs-bloat-gate-override: <reason >=10 chars> -->
+S1 bypasses: brand-new L2 heading (<=30 lines / 1500 chars exempt) or
+override sentinel (hard cap N=1 per session, reason >=30 chars, no
+anti-stopwords).
 
-Design: docs/plans/archived/2026-04-25-doc-bloat-root-causes-brainstorm.md
+Override sentinel: <!-- docs-bloat-gate-override: <reason >=30 chars> -->
+
+Design: docs/plans/2026-04-26-docs-bloat-gate-redesign.md
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -19,14 +25,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# --- Gated paths ---------------------------------------------------------
 GATED_DOCS = {"docs/spec.md", "docs/runbook.md", "docs/refactor-incidents.md"}
 GATED_RULES_PREFIX = ".claude/rules/"
-OVERRIDE_RE = re.compile(r"<!--\s*docs-bloat-gate-override:\s*(.{10,}?)\s*-->")
-POINTER_RE = re.compile(r"→\s*see\s+\S+|->\s*see\s+\S+")
-# Bash write-action patterns that actually MUTATE a gated path. We don't
-# block on bare references to the path (e.g. `git log docs/spec.md`,
-# heredoc commit messages mentioning the path) — only on commands that
-# would write to it: redirection (>, >>), `tee`, or `sed -i`.
+
+# --- Bash write-pattern detection ----------------------------------------
 _GATED_PATH_RE = (
     r"(?:docs/(?:spec|runbook|refactor-incidents)\.md|\.claude/rules/\S+\.md)"
 )
@@ -36,9 +39,90 @@ BASH_WRITE_PATTERNS = [
     re.compile(r"\bsed\b[^|;&]*?(?:-i|--in-place)\b[^|;&]*?\s" + _GATED_PATH_RE),
 ]
 AUDIT_KEYWORDS_RE = re.compile(r"\b(audit|analysis|report|research)\b", re.IGNORECASE)
+
+# --- Sentinel + log ------------------------------------------------------
+OVERRIDE_RE = re.compile(r"<!--\s*docs-bloat-gate-override:\s*(.+?)\s*-->", re.DOTALL)
+ANTI_STOPWORDS = {"update", "rewrite", "improvement", "cleanup", "fix"}
 LOG_REL = "docs/analysis/bloat-overrides.log"
+SENTINEL_CAP = 1
+STATE_DIR = Path.home() / ".claude" / "state"
+SENTINEL_REASON_MIN = 30
+
+# --- Tier thresholds -----------------------------------------------------
+TIER_CAPS = {"rule": 150, "doc": 800, "spec": 2000}
+
+# --- L2 heading exemption ------------------------------------------------
+NEW_SECTION_LINE_EXEMPT = 30
+NEW_SECTION_CHAR_EXEMPT = 1500
+
+# --- S3 thresholds -------------------------------------------------------
+DENSITY_THRESHOLD = 0.45
+DENSITY_DELTA_GUARD = 100
+
+# --- S2 stoplist (~30 patterns) ------------------------------------------
+SLOP_WORDS = {
+    # transition adverbs
+    "furthermore", "moreover", "additionally", "consequently",
+    "subsequently", "accordingly", "nevertheless", "notwithstanding",
+    # hedge adverbs
+    "fundamentally", "essentially", "ultimately",
+    # AI tells (single-word)
+    "comprehensive", "robust", "seamless", "leverage", "utilize",
+}
+SLOP_PHRASES = (
+    # hedges (multi-word)
+    "it's worth noting", "it should be noted", "it is important to",
+    "that said", "having said that", "in essence", "at its core",
+    "while this may vary", "in the context of",
+    # AI tells (multi-word)
+    "delve into", "navigate the", "landscape of", "realm of", "tapestry of",
+)
+
+# ~150 English function words for S3 lexical-density stoplist.
+FUNCTION_WORDS = {
+    # articles
+    "a", "an", "the",
+    # pronouns
+    "i", "me", "my", "mine", "we", "us", "our", "ours",
+    "you", "your", "yours", "he", "him", "his",
+    "she", "her", "hers", "it", "its",
+    "they", "them", "their", "theirs",
+    "this", "that", "these", "those",
+    "who", "whom", "whose", "which", "what",
+    # conjunctions / subordinators
+    "and", "or", "but", "nor", "so", "yet", "for",
+    "if", "then", "than", "while", "although", "though",
+    "because", "since", "unless", "until", "when",
+    "where", "whether", "how", "why", "as",
+    # prepositions
+    "in", "on", "at", "to", "of", "by", "with",
+    "from", "into", "onto", "upon", "about", "above",
+    "across", "after", "against", "along", "among",
+    "around", "before", "behind", "below", "beneath",
+    "beside", "between", "beyond", "during", "except",
+    "inside", "near", "outside", "over", "through",
+    "throughout", "toward", "towards", "under", "underneath",
+    "up", "down", "off", "out",
+    # auxiliaries / be / have / do / modals
+    "be", "am", "is", "are", "was", "were", "been", "being",
+    "have", "has", "had", "having",
+    "do", "does", "did", "doing",
+    "will", "would", "shall", "should", "can", "could",
+    "may", "might", "must", "ought",
+    # determiners / quantifiers
+    "no", "not", "all", "any", "some", "none", "both",
+    "each", "every", "much", "many", "more", "most",
+    "less", "least", "few", "several", "such", "same",
+    "other", "another", "own",
+    # discourse / fillers
+    "only", "just", "very", "too", "also", "even", "again",
+    "here", "there", "now", "well", "like", "yes", "ok",
+    # contraction stubs (after \w+ tokenization)
+    "s", "t", "re", "ve", "ll", "d", "m",
+}
 
 
+# --- Helpers -------------------------------------------------------------
 def project_dir() -> Path:
     return Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
 
@@ -66,70 +150,249 @@ def line_count(s: str) -> int:
     return s.count("\n") + (0 if s.endswith("\n") else 1)
 
 
+def file_tier(current_lines: int) -> str:
+    if current_lines < 50:
+        return "rule"
+    if current_lines < 500:
+        return "doc"
+    return "spec"
+
+
+def _safe_sid(s: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", s)[:64] or "default"
+
+
+def session_id() -> str:
+    sid = os.environ.get("CLAUDE_SESSION_ID")
+    if sid:
+        return _safe_sid(sid)
+    transcript = os.environ.get("CLAUDE_TRANSCRIPT_PATH")
+    if transcript:
+        return hashlib.md5(transcript.encode()).hexdigest()[:12]
+    seed = f"{project_dir()}|{datetime.now(timezone.utc).strftime('%Y%m%d%H')}"
+    return hashlib.md5(seed.encode()).hexdigest()[:12]
+
+
+def sentinel_counter_path() -> Path:
+    return STATE_DIR / f"docs-bloat-gate-sentinels-{session_id()}.txt"
+
+
+def read_sentinel_count() -> int:
+    p = sentinel_counter_path()
+    try:
+        return int(p.read_text().strip() or "0")
+    except (OSError, ValueError):
+        return 0
+
+
+def increment_sentinel_count() -> int:
+    p = sentinel_counter_path()
+    new = read_sentinel_count() + 1
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(str(new))
+    except OSError:
+        pass
+    return new
+
+
+# --- L2-heading carve-out ------------------------------------------------
 def l2_headings(text: str) -> set[str]:
-    """Return the set of level-2 heading texts in `text`."""
     return {ln[3:].rstrip() for ln in text.splitlines() if ln.startswith("## ")}
 
 
-def lines_outside_new_sections(added: str, new_headings: set[str]) -> int:
-    """Count lines in `added` not under a brand-new L2 heading.
+def carved_char_delta(added: str, removed: str, current: str) -> int:
+    """Char-delta with brand-new L2 sections exempted (<=30 lines / 1500 chars).
 
-    Design §4.1: when an Edit introduces an L2 heading not present in the
-    on-disk file, lines from that heading until the next L2 heading (or
-    EOF) are exempt from net-delta accounting in the introducing edit.
+    Lines from a brand-new ``## `` heading until the next L2 heading (or EOF)
+    are exempt up to whichever limit hits first.
     """
-    counted = 0
+    delta = len(added) - len(removed)
+    new_h = l2_headings(added) - l2_headings(current)
+    if not new_h:
+        return delta
+
     in_exempt = False
-    for line in added.splitlines():
+    exempt_lines = 0
+    exempt_chars = 0
+    for line in added.splitlines(keepends=True):
         if line.startswith("## "):
-            head_text = line[3:].rstrip()
-            if head_text in new_headings:
+            head_text = line[3:].rstrip("\r\n")
+            if head_text in new_h:
                 in_exempt = True
-                continue
-            in_exempt = False
-        if not in_exempt:
-            counted += 1
-    return counted
+                exempt_lines = 0
+                exempt_chars = 0
+            else:
+                in_exempt = False
+        if in_exempt:
+            if (
+                exempt_lines < NEW_SECTION_LINE_EXEMPT
+                and exempt_chars + len(line) <= NEW_SECTION_CHAR_EXEMPT
+            ):
+                exempt_lines += 1
+                exempt_chars += len(line)
+                delta -= len(line)
+            else:
+                in_exempt = False
+    return delta
 
 
-def append_log(rel: str, delta: int, reason: str, tool: str) -> None:
+# --- S2: slop detection --------------------------------------------------
+_SLOP_WORD_RE = re.compile(
+    r"\b(" + "|".join(re.escape(w) for w in sorted(SLOP_WORDS)) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def slop_hits(text: str) -> set[str]:
+    if not text:
+        return set()
+    found: set[str] = {m.group(1).lower() for m in _SLOP_WORD_RE.finditer(text)}
+    lower = text.lower()
+    for ph in SLOP_PHRASES:
+        if ph in lower:
+            found.add(ph)
+    return found
+
+
+# --- S3: lexical density -------------------------------------------------
+def lexical_density(added: str) -> tuple[float, int]:
+    tokens = re.findall(r"\w+", added.lower())
+    if not tokens:
+        return 1.0, 0
+    content = sum(1 for t in tokens if t not in FUNCTION_WORDS)
+    return content / len(tokens), len(tokens)
+
+
+# --- Override log --------------------------------------------------------
+def now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def append_log(entry: dict) -> None:
     log = project_dir() / LOG_REL
     try:
         log.parent.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         with log.open("a", encoding="utf-8") as fh:
-            fh.write(f'{ts}  {rel}  {delta:+d} lines  reason="{reason}"  tool={tool}\n')
+            fh.write(json.dumps(entry, separators=(",", ":")) + "\n")
     except OSError:
         pass
 
 
-def gate(rel: str, added: str, removed: str, current: str, tool: str) -> int:
-    """Return 0 (pass) or 2 (block) per the four §2 pass conditions."""
-    delta = line_count(added) - line_count(removed)
+def validate_reason(reason: str) -> str | None:
+    r = reason.strip()
+    if len(r) < SENTINEL_REASON_MIN:
+        return f"reason too short ({len(r)} < {SENTINEL_REASON_MIN} chars)"
+    lower = r.lower()
+    for sw in ANTI_STOPWORDS:
+        if re.search(rf"\b{sw}\b", lower):
+            return f"anti-stopword in reason: {sw!r}"
+    return None
 
-    if delta <= 0:
-        return 0
-    if POINTER_RE.search(added):
+
+# --- Gate ---------------------------------------------------------------
+def gate_text_edit(rel: str, added: str, removed: str, current: str, tool: str) -> int:
+    """Return 0 (pass) or 2 (block) per design §4 signal composition."""
+    char_delta = len(added) - len(removed)
+
+    # S2: slop list (UNBYPASSABLE) - compute net-added phrases only.
+    new_hits = sorted(slop_hits(added) - slop_hits(removed))
+    if new_hits:
+        sys.stderr.write(
+            f"docs-bloat-gate: AI-slop phrases detected: {', '.join(new_hits)}. "
+            "UNBYPASSABLE.\nRemove these phrases - they signal LLM-generated "
+            "bloat regardless of edit size.\n"
+        )
+        return 2
+
+    # S3: lexical density (UNBYPASSABLE), gated on char_delta > 100.
+    if char_delta > DENSITY_DELTA_GUARD:
+        density, _ = lexical_density(added)
+        if density < DENSITY_THRESHOLD:
+            sys.stderr.write(
+                f"docs-bloat-gate: lexical density {density:.2f} below "
+                f"{DENSITY_THRESHOLD} on {char_delta}-char addition. "
+                "Function-word ratio too high - prose is filler-dense. "
+                "UNBYPASSABLE.\nTighten by removing hedges, articles, and "
+                "transition phrases.\n"
+            )
+            return 2
+
+    # S1: tier-cap (bypassable).
+    tier = file_tier(line_count(current))
+    cap = TIER_CAPS[tier]
+
+    if char_delta <= cap:
         return 0
 
-    # §4.1 strict: lines under a brand-new L2 heading are exempt from
-    # net-delta accounting in this introducing edit. Only block if the
-    # *non-exempt* delta is still positive.
+    # L2-heading carve-out.
     new_h = l2_headings(added) - l2_headings(current)
     if new_h:
-        carved_delta = lines_outside_new_sections(added, new_h) - line_count(removed)
-        if carved_delta <= 0:
+        carved = carved_char_delta(added, removed, current)
+        if carved <= cap:
+            append_log({
+                "ts": now_iso(),
+                "file": rel,
+                "signal": "S1",
+                "bypass_type": "l2_heading",
+                "char_delta": char_delta,
+                "carved_delta": carved,
+                "headings": sorted(new_h),
+                "session_id": session_id(),
+                "tool": tool,
+            })
             return 0
 
+    # Sentinel bypass (cap-gated).
+    used = read_sentinel_count()
     m = OVERRIDE_RE.search(added)
     if m:
-        append_log(rel, delta, m.group(1).strip(), tool)
+        if used >= SENTINEL_CAP:
+            sys.stderr.write(
+                f"docs-bloat-gate: session sentinel cap exhausted "
+                f"({used}/{SENTINEL_CAP} used).\n"
+                "All gated-doc edits hard-block until next session.\n"
+            )
+            return 2
+        reason = m.group(1).strip()
+        err = validate_reason(reason)
+        if err:
+            sys.stderr.write(
+                f"docs-bloat-gate: override sentinel rejected ({err}). "
+                f"Reason must be >={SENTINEL_REASON_MIN} chars and contain no "
+                f"anti-stopwords ({', '.join(sorted(ANTI_STOPWORDS))}).\n"
+            )
+            return 2
+        new_count = increment_sentinel_count()
+        append_log({
+            "ts": now_iso(),
+            "file": rel,
+            "signal": "S1",
+            "bypass_type": "sentinel",
+            "reason": reason,
+            "char_delta": char_delta,
+            "session_id": session_id(),
+            "tool": tool,
+        })
+        sys.stderr.write(
+            f"docs-bloat-gate: sentinel burned ({new_count}/{SENTINEL_CAP} "
+            "this session). Edit allowed.\n"
+        )
         return 0
 
     sys.stderr.write(
-        f"docs-bloat-gate: net +{delta} lines to {rel} without pointer / "
-        f"removal / new section / override. Add a '-> see X §Y' pointer, pair "
-        f"with a removal, or add <!-- docs-bloat-gate-override: <reason> -->.\n"
+        f"docs-bloat-gate: char_delta={char_delta} exceeds cap={cap} "
+        f"({tier} tier, file={rel}).\nOptions:\n"
+        "  1. Revise edit to fit within budget\n"
+        "  2. Add L2 heading if introducing genuinely new section "
+        f"(<={NEW_SECTION_LINE_EXEMPT} lines / "
+        f"{NEW_SECTION_CHAR_EXEMPT} chars exempt)\n"
+        "  3. Override: <!-- docs-bloat-gate-override: "
+        f"<reason >={SENTINEL_REASON_MIN} chars, no stopwords> -->\n"
+        f"     WARNING: {SENTINEL_CAP} sentinel per session. After use, all "
+        "further edits\n"
+        "     to gated docs hard-block until next session.\n"
+        f"Sentinels used this session: {used}/{SENTINEL_CAP}.\n"
     )
     return 2
 
@@ -143,8 +406,7 @@ def handle_write_edit(payload: dict, tool: str) -> int:
     if rel is None:
         return 0
 
-    # W1.1 — block new audit-style files at docs/ root (depth=1, not in GATED_DOCS).
-    # Existing reference docs and subdirs (analysis/, plans/, human/, research/) bypass.
+    # W1.1 - block new audit-style files at docs/ root (depth=1, not gated).
     if (
         tool == "Write"
         and rel.startswith("docs/")
@@ -158,7 +420,8 @@ def handle_write_edit(payload: dict, tool: str) -> int:
                 "docs-bloat-gate: new docs/*.md root file with "
                 "audit/analysis/report/research keywords. Move to "
                 "docs/analysis/ (gitignored), use a docs/ subdir, or add "
-                "<!-- docs-bloat-gate-override: <reason> -->.\n"
+                f"<!-- docs-bloat-gate-override: <reason >={SENTINEL_REASON_MIN} "
+                "chars> -->.\n"
             )
             return 2
 
@@ -180,7 +443,7 @@ def handle_write_edit(payload: dict, tool: str) -> int:
     except (OSError, UnicodeDecodeError):
         current = ""
 
-    return gate(rel, added, removed, current, tool)
+    return gate_text_edit(rel, added, removed, current, tool)
 
 
 def handle_bash(payload: dict) -> int:
@@ -190,15 +453,47 @@ def handle_bash(payload: dict) -> int:
     matches = [m for pat in BASH_WRITE_PATTERNS for m in pat.findall(cmd)]
     if not matches:
         return 0
+
+    used = read_sentinel_count()
     m = OVERRIDE_RE.search(cmd)
     if m:
-        append_log("|".join(matches), 0, m.group(1).strip(), "Bash")
+        if used >= SENTINEL_CAP:
+            sys.stderr.write(
+                f"docs-bloat-gate: session sentinel cap exhausted "
+                f"({used}/{SENTINEL_CAP} used). Bash write blocked.\n"
+            )
+            return 2
+        reason = m.group(1).strip()
+        err = validate_reason(reason)
+        if err:
+            sys.stderr.write(
+                f"docs-bloat-gate: override sentinel rejected ({err}).\n"
+            )
+            return 2
+        new_count = increment_sentinel_count()
+        append_log({
+            "ts": now_iso(),
+            "file": "|".join(sorted(set(matches))),
+            "signal": "S1",
+            "bypass_type": "sentinel",
+            "reason": reason,
+            "char_delta": 0,
+            "session_id": session_id(),
+            "tool": "Bash",
+        })
+        sys.stderr.write(
+            f"docs-bloat-gate: sentinel burned ({new_count}/{SENTINEL_CAP} "
+            "this session). Bash write allowed.\n"
+        )
         return 0
+
     sys.stderr.write(
         "docs-bloat-gate: Bash command writes to a gated doc/rule path "
         f"({', '.join(sorted(set(matches)))}). Use Write/Edit (gate "
-        "computes delta), or include "
-        "<!-- docs-bloat-gate-override: <reason> --> in the command.\n"
+        "computes delta + density), or include "
+        f"<!-- docs-bloat-gate-override: <reason >={SENTINEL_REASON_MIN} "
+        "chars> --> in the command. "
+        f"Sentinels used: {used}/{SENTINEL_CAP}.\n"
     )
     return 2
 

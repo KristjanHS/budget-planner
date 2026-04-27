@@ -13,7 +13,7 @@ anti-stopwords).
 
 Override sentinel: <!-- docs-bloat-gate-override: <reason >=30 chars> -->
 
-Design: docs/plans/2026-04-26-docs-bloat-gate-redesign.md
+Design: docs/plans/archived/2026-04-26-docs-bloat-gate-redesign.md
 """
 from __future__ import annotations
 

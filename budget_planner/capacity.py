@@ -204,6 +204,8 @@ def _write_wp_rows(
         wp = wp_by_id.get(wp_id)
         if wp is None:
             continue
+        if wp_id not in layout.wp_rows:
+            continue
         config_row = config_first_wp_row + wp_idx[wp_id]
         # Row position is pre-assigned by plan_person_layout; keep `r` in sync
         # with the inline cell-write sequence below.

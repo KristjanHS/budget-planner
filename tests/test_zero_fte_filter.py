@@ -8,7 +8,7 @@ mirror invariant holds across both sheets.
 Empty-window intersection (non-zero ``total_fte`` but the assignment window
 has no overlap with the WP active range) is **not** addressed by this
 filter — those rows still render as all-grey rows. See plan
-``2026-04-28-capacity-row-cleanup-and-skip-cumulate-plan.md`` § Risks.
+``docs/plans/archived/2026-04-28-capacity-row-cleanup-and-skip-cumulate-plan.md`` § Risks.
 """
 
 import openpyxl
@@ -131,7 +131,7 @@ def test_rebuild_drops_hours_when_assignment_total_fte_zeroed(tmp_path):
     """A1 (accepted): hours logged on a row whose Config assignment is later
     set to ``total_fte == 0`` are silently discarded on rebuild.
 
-    Per ``2026-04-28-capacity-row-cleanup-and-skip-cumulate-plan.md`` Q2.2,
+    Per ``docs/plans/archived/2026-04-28-capacity-row-cleanup-and-skip-cumulate-plan.md`` Q2.2,
     there is no preserved-hours carve-out for the zero-FTE filter — the
     row drops everywhere on rebuild even if hours were previously entered.
     No telemetry, no warning. ``git log output/budget_plan*.xlsx`` is

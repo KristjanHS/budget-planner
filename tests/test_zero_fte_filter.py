@@ -108,6 +108,14 @@ def test_capacity_and_actuals_hours_wp_row_order_mirror(zero_fte_wb_path):
     refs target WP positions on both sheets and rely on the order matching.
     Asserts identical WP-id sequences (intersection-with-Config-WPs to
     drop external rows that read_actuals_hours_sheet folds in).
+
+    Order-preservation assumption: both readers return ``dict[wp_id, …]``
+    where insertion order matches the top-to-bottom row scan, which in
+    turn matches the builder's ``ordered_wp_ids`` write order. If a
+    future reader change buckets WPs differently (e.g. lookup-table
+    style), this comparison can pass with out-of-order keys while the
+    actual row positions are wrong — a stronger anchor would be
+    asserting against the row numbers in col-A of each sheet.
     """
     wb = openpyxl.load_workbook(zero_fte_wb_path)
     _, wps = read_config_sheet(wb["Config"])

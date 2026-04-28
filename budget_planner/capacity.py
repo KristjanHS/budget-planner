@@ -150,7 +150,7 @@ def _resolve_grid_state(
     ordered_wp_ids: list[str] = []
     for asgn in person_assignments:
         wp_id = asgn["wp"]
-        if wp_id in wp_by_id:
+        if wp_id in wp_by_id and wp_id not in ordered_wp_ids:
             ordered_wp_ids.append(wp_id)
     ordered_wp_ids = filter_zero_fte_wps(person_assignments, ordered_wp_ids)
     ordered_external_names = [e["project"] for e in person_externals]

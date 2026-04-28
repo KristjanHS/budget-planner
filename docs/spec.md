@@ -45,6 +45,7 @@ Per-person × per-WP × per-month cells on `Actuals-Hours`.
 
 - **Granularity:** monthly, per person per WP.
 - **Entry convention:** skip-and-cumulate is valid. A user may leave intermediate months blank and enter the cumulative hours-to-date in a later month. A single-month cell is **NOT** authoritative for that month — only the running cumulative total is.
+- **Calendar-year-boundary caveat (skip-and-cumulate × EU ceiling CF):** if a skip crosses a calendar-year boundary, the cumulative dump lands in the *later* year's annual SUM, so the per-calendar-year EU ceiling CF on Actuals-Hours mis-fires on **both** years (early year underreports, late year overshoots). The cumulative figure remains correct — only the per-year colorization is misleading. Reviewers consulting the EU ceiling CF on Actuals-Hours must spot-check around year boundaries when skip-and-cumulate is in use.
 - **Trust boundary:** `hours_actuals_through_month` — named range at `'Actuals-Hours'!$D$1` (black-formula effective cell; sheet name single-quoted because of the hyphen). D1 is `=IF(ISNUMBER(B1),B1,C1)` where B1 is an optional blue-input user override and C1 is an auto-derived scan of the programme-WP hour data (largest 1-based month-index with any numeric value, external/subtotal rows excluded). Months `1..hours_actuals_through_month` are closed for hours; later months are forecast-only territory.
 
 ### EUR cadence
@@ -52,7 +53,7 @@ Per-person × per-WP × per-month cells on `Actuals-Hours`.
 WP-level totals on the `Actuals` sheet.
 
 - **Granularity:** monthly, per WP (no per-person EUR on `Actuals`).
-- **Entry convention:** driven by accountant/finance close, which runs with a 2–3 month lag behind the hours timelog.
+- **Entry convention:** driven by accountant/finance close, which runs with a 2–3 month lag behind the hours timelog. Skip-and-cumulate mirrors the Hours cadence: a user may leave intermediate months blank and enter the cumulative EUR-to-date in a later month. A single-month cell is **NOT** authoritative for that month — only the running cumulative total is. The trust-boundary scan (largest month-index with any numeric value) absorbs blanks correctly; downstream rate-derivations divide by `MAX(1, eur_actuals_through_month)`, not by a populated-cell count.
 - **Trust boundary:** `eur_actuals_through_month` — named range at `Actuals!$D$1` (black-formula effective cell). D1 is `=IF(ISNUMBER(B1),B1,C1)` where B1 is an optional blue-input user override and C1 is an auto-derived scan of the WP EUR data (largest 1-based month-index with any numeric value, TOTAL row excluded). Months past this index are not yet reconciled.
 
 ### Derived boundary
@@ -173,7 +174,7 @@ Cross-sheet formulas (Plan's `=SUM(Capacity!...)`, Trends person-load refs, Summ
 
 - **Capacity person order matches Config TEAM ROSTER order.** Adding a roster row shifts every downstream Capacity person group.
 - **Plan WP row order matches Config WP BUDGET order.** Same for Actuals, Plan-Forecast, Summary.
-- **Capacity per-person WP rows are ordered by Config PERSON-WP ASSIGNMENTS** for that person (intersection filter — not all WPs).
+- **Capacity per-person WP rows are ordered by Config PERSON-WP ASSIGNMENTS** for that person (intersection filter — not all WPs), further reduced to assignments with non-zero `total_fte`. Zero-FTE assignments stay in the Config auditor table but their per-person grid row is suppressed on Capacity AND Actuals-Hours so the row-order mirror invariant holds. Empty-window intersection rows (non-zero `total_fte` but the assignment window has no overlap with the WP active range) still render as all-grey rows — out of scope for the zero-FTE filter.
 - **Actuals-Hours person + WP row order mirrors Capacity at the WP rows.** Actuals-Hours carries an extra EU TOTAL row beneath each person's TOTAL (the EU-ceiling enforcement surface, dropped from Capacity 2026-04-28); cross-sheet refs from Capacity to Actuals-Hours target WP row positions, never EU TOTAL.
 
 ### Per-person Capacity geometry

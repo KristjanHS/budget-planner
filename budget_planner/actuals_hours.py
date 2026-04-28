@@ -4,7 +4,9 @@ Mirrors the Capacity sheet geometry 1:1 (same WPs, same externals, same
 months, same header rows) but holds **hours** rather than FTE. Hour input
 cells are blank blue inputs the user fills in at month-end; inactive WP
 months are greyed and locked, matching the Capacity behavior the auditors
-expect.
+expect. The shared ``person_section.filter_zero_fte_wps`` drops WPs whose
+Config assignment has ``total_fte == 0`` from BOTH sheets so the row-order
+mirror invariant holds — see ``docs/spec.md`` § Row-order contracts.
 
 Surfaces: hour inputs, per-row validation Sum, per-person TOTAL and EU
 TOTAL hour rows, EU annual ceiling conditional formatting per calendar

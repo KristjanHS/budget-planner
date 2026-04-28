@@ -9,7 +9,9 @@ Actuals-Hours (the auditor enforcement surface — see ``actuals_hours.py``).
 Non-obvious conventions:
 
 - Per-person WP rows cover **only the assigned WPs** (from Config
-  PERSON-WP ASSIGNMENTS), not every WP.
+  PERSON-WP ASSIGNMENTS) with non-zero ``total_fte``. Zero-FTE
+  assignments remain in the Config auditor table but their grid row
+  is suppressed here and on Actuals-Hours (mirror invariant).
 - Distribution curve type comes from the Type col on the merged WP BUDGET
   row.
 - The right-side raw-monthly band sits at ``outline_level=1`` (default

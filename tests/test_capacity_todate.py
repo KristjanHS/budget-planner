@@ -111,8 +111,8 @@ def test_wp_actual_pm_is_cross_sheet_ref(cap_formulas, todate_cols):
 
 
 def test_wp_variance_pm_is_blank(cap_formulas, todate_cols):
-    """WP-row Variance PM is blank (grey placeholder) — only TOTAL/EU TOTAL
-    rows carry the variance signal per the simplification design."""
+    """WP-row Variance PM is blank (grey placeholder) — only the TOTAL row
+    carries the variance signal per the simplification design."""
     row = _find_person_header_row(cap_formulas, "Alice") + 1
     v = cap_formulas.cell(row, todate_cols["var"]).value
     assert v in (None, "")

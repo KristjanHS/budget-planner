@@ -347,8 +347,9 @@ def _write_total_row(
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
     ws.cell(row=r, column=2).comment = sized_comment("Per-month SUM of all programme WP rows above for this person. External "
-        "project rows are NOT included here — see EU TOTAL for the "
-        "EU-ceiling view that includes EU-flagged externals.")
+        "project rows are NOT included here — for the EU-ceiling view "
+        "that includes EU-flagged externals, see Actuals-Hours's "
+        "EU TOTAL row (the auditor enforcement surface).")
     for mi in range(project_params["months"]):
         c = month_col_start + mi
         cl = col_letter(c)

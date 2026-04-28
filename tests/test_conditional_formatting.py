@@ -41,39 +41,36 @@ def _collect_cf_rules(ws):
 # ── Capacity sheet conditional formatting ──
 
 class TestCapacityConditionalFormatting:
-    """Capacity sheet CF: yellow per WP variance + 4 per person (amber/red TOTAL,
-    amber/red REMAINING) + 2*years per person (EU ceiling red/amber)."""
+    """Capacity sheet CF: yellow per WP variance + 2 per person (amber/red TOTAL).
+
+    REMAINING + EU TOTAL rows dropped from Capacity (2026-04-28); per-year EU
+    ceiling CF lives on Actuals-Hours only. REMAINING < 0 CF folded onto
+    TOTAL > Max FTE (still red, single rule per person)."""
 
     def test_capacity_rule_count(self, workbook):
-        """Planned-side CF + T9 Actual-view band CF + simplified to-date CF.
+        """Planned-side CF + Actual-view band CF + simplified to-date CF.
 
         Planned side:
           - yellow per WP row (variance < 0)
-          - 4 per person (TOTAL amber+red, REMAINING amber+red)
-          - 2 × years per person (EU ceiling red+amber on planned EU TOTAL)
-        T9 actual-view band (right-side grouped, raw monthly):
+          - 2 per person (TOTAL amber+red — folded REMAINING < 0 onto
+            TOTAL > Max FTE, same red rule)
+        Actual-view band (right-side grouped, raw monthly):
           - 1 variance-red rule per (WP row + external row) per person
           - 2 per person (utilisation amber+red on Actual TOTAL row)
-          - 1 × years per person (red on Actual EU TOTAL annual ceiling)
-        To-date block (kaizen simplification 2026-04-14 — 2 cols only):
-          - 2 per person (Variance PM red < 0 on TOTAL + EU TOTAL only).
-            Variance-% CF and util/ceil CF dropped as duplicates of
-            planned-side signals (see ``docs/spec.md``
-            § Capacity Sheet CF).
+        To-date block (2 cols):
+          - 1 per person (Variance PM red < 0 on TOTAL only).
         """
         from budget_planner.config import EXTERNAL_COMMITMENTS
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
         total_wp_rows = len(DEMO_CAPACITY_ASSIGNMENTS)
         total_ext_rows = len(EXTERNAL_COMMITMENTS)
-        num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
-        planned = total_wp_rows + (4 + 2 * num_years) * len(TEAM)
+        planned = total_wp_rows + 2 * len(TEAM)
         actual_band = (
             total_wp_rows + total_ext_rows              # variance reds
             + 2 * len(TEAM)                              # utilisation amber+red
-            + num_years * len(TEAM)                      # EU annual ceiling red
         )
-        todate = 2 * len(TEAM)                           # Variance PM < 0 on TOTAL + EU TOTAL
+        todate = 1 * len(TEAM)                           # Variance PM < 0 on TOTAL only
         expected = planned + actual_band + todate
         assert len(rules) == expected, (
             f"Expected {expected} CF rules on Capacity, got {len(rules)}"
@@ -84,8 +81,8 @@ class TestCapacityConditionalFormatting:
         """Each person's TOTAL row has an amber fill for >0.8 * Max FTE."""
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        # Rules per person: N yellow (one per WP row) + amber TOTAL + red TOTAL + red REMAINING
-        # Find the amber rule by scanning for FFD966 fill with >0.8 pattern
+        # Rules per person: N yellow (one per WP row) + amber TOTAL + red TOTAL.
+        # Find the amber rule by scanning for FFD966 fill with >0.8 pattern.
         amber_rules = [(i, r) for i, r in enumerate(rules)
                         if r[2] is not None and r[2].endswith("FFD966")
                         and any(">0.8*Config!$B$" in f for f in r[1])]
@@ -99,10 +96,14 @@ class TestCapacityConditionalFormatting:
 
     @pytest.mark.parametrize("person_idx", range(len(TEAM)))
     def test_capacity_total_red_rule(self, workbook, person_idx):
-        """Each person's TOTAL row has a red fill for > Max FTE."""
+        """Each person's TOTAL row has a red fill for > Max FTE.
+
+        Folds the prior REMAINING-row red CF onto TOTAL: a monthly TOTAL >
+        Max FTE is by definition REMAINING < 0.
+        """
         ws = workbook["Capacity"]
         rules = _collect_cf_rules(ws)
-        # Find red TOTAL rules: FFC7CE fill with >Config! pattern (no 0.8, no SUM — excludes EU ceiling)
+        # Find red TOTAL rules: FFC7CE fill with >Config! pattern (no 0.8, no SUM).
         red_total_rules = [(i, r) for i, r in enumerate(rules)
                            if r[2] is not None and r[2].endswith("FFC7CE")
                            and any(">Config!$B$" in f for f in r[1])
@@ -114,51 +115,6 @@ class TestCapacityConditionalFormatting:
         _, (sqref, formulas, fg_color) = red_total_rules[person_idx]
         assert ">Config!$B$" in formulas[0]
         assert "0.8" not in formulas[0]
-
-    @pytest.mark.parametrize("person_idx", range(len(TEAM)))
-    def test_capacity_remaining_red_rule(self, workbook, person_idx):
-        """Each person's REMAINING row has a red fill for < 0."""
-        ws = workbook["Capacity"]
-        rules = _collect_cf_rules(ws)
-        # Find red REMAINING rules: FFC7CE fill with <0 pattern
-        red_remaining_rules = [(i, r) for i, r in enumerate(rules)
-                               if r[2] is not None and r[2].endswith("FFC7CE")
-                               and any("<0" in f for f in r[1])
-                               and not any("Config" in f for f in r[1])]
-        assert len(red_remaining_rules) >= person_idx + 1, (
-            f"Expected at least {person_idx + 1} red REMAINING rules, got {len(red_remaining_rules)}"
-        )
-        _, (sqref, formulas, fg_color) = red_remaining_rules[person_idx]
-        assert "<0" in formulas[0]
-
-    def test_capacity_eu_ceiling_red_rules(self, workbook):
-        """Each person's EU TOTAL row has red CF for annual EU total > ceiling."""
-        ws = workbook["Capacity"]
-        rules = _collect_cf_rules(ws)
-        # Red rules referencing SUM(...) > Config!$B$ (annual ceiling)
-        # These have FFC7CE fill and SUM formula with Config ref
-        eu_red_rules = [
-            r for r in rules
-            if r[2] is not None and r[2].endswith("FFC7CE")
-            and any("SUM(" in f and "Config!$B$" in f for f in r[1])
-        ]
-        # At least one per person per calendar year
-        assert len(eu_red_rules) >= len(TEAM), (
-            f"Expected at least {len(TEAM)} EU ceiling red rules, got {len(eu_red_rules)}"
-        )
-
-    def test_capacity_eu_ceiling_amber_rules(self, workbook):
-        """Each person's EU TOTAL row has amber CF for annual EU total > ceiling-1."""
-        ws = workbook["Capacity"]
-        rules = _collect_cf_rules(ws)
-        eu_amber_rules = [
-            r for r in rules
-            if r[2] is not None and r[2].endswith("FFD966")
-            and any("SUM(" in f and "Config!$B$" in f for f in r[1])
-        ]
-        assert len(eu_amber_rules) >= len(TEAM), (
-            f"Expected at least {len(TEAM)} EU ceiling amber rules, got {len(eu_amber_rules)}"
-        )
 
 
 # ── Summary sheet conditional formatting ──

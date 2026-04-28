@@ -1,9 +1,10 @@
 """Capacity sheet builder — per-person monthly FTE allocation.
 
 Per-person groups with WP rows (blue input, distribution-curve static
-values), TOTAL, REMAINING (Max - TOTAL), and **EU TOTAL** (programme WPs +
-EU-flagged externals — tracks the 215-day annual ceiling separately from
-TOTAL).
+values) and a TOTAL row (SUM across the WP rows for that person). REMAINING
+and EU TOTAL rows were dropped 2026-04-28 — REMAINING < 0 folded onto the
+TOTAL > Max FTE red CF, and the per-year EU ceiling now lives only on
+Actuals-Hours (the auditor enforcement surface — see ``actuals_hours.py``).
 
 Non-obvious conventions:
 
@@ -14,7 +15,7 @@ Non-obvious conventions:
 - The right-side raw-monthly band sits at ``outline_level=1`` (default
   collapsed).
 - The always-visible TO-DATE ``Variance PM`` column is populated only on
-  TOTAL + EU TOTAL rows.
+  the TOTAL row.
 
 Returns ``capacity_layout`` with ``person_groups`` + ``todate_col_actual`` /
 ``todate_col_var``.
@@ -25,18 +26,16 @@ users can override for fine-tuning (overrides are lost on next rebuild).
 ## Conditional formatting
 
 - TOTAL row per person: **amber** when ``TOTAL > 0.8 * Max FTE``,
-  **red** when ``TOTAL > Max FTE``.
-- REMAINING row per person: **red** when ``REMAINING < 0``.
-- EU TOTAL per calendar year: **amber** when annual sum approaches
-  ``eu_annual_ceiling_pm``, **red** when exceeds (215-day ceiling).
+  **red** when ``TOTAL > Max FTE`` (the red also signals what the prior
+  REMAINING < 0 rule signalled).
 - Raw-monthly Variance-FTE band: **red** when
   ``|variance| > CAPACITY_VARIANCE_FTE_RED``.
 - Raw-monthly Actual-TOTAL utilisation vs Config Max FTE: amber/red same
   thresholds as planned TOTAL.
-- To-date block ``Variance PM`` (TOTAL + EU TOTAL only): **red** when
-  ``< 0``. Block reduced to 2 cols (2026-04-14 simplification) — the
-  prior per-WP Variance-% and to-date util/ceil CF rules were dropped as
-  duplicates of planned-side signals.
+- To-date block ``Variance PM`` (TOTAL only): **red** when ``< 0``. Block
+  reduced to 2 cols (2026-04-14 simplification) — the prior per-WP
+  Variance-% and to-date util/ceil CF rules were dropped as duplicates of
+  planned-side signals.
 """
 
 from openpyxl.styles import Font
@@ -44,7 +43,6 @@ from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.properties import Outline
 
 from budget_planner.layout import (
-    ConfigParamRows,
     MONTH_COL_START, SHEET_CONFIG, SHEET_ACTUALS_HOURS,
     CAPACITY_AMBER_LOAD, CAPACITY_VARIANCE_FTE_RED, COL_ROSTER_FTE,
     build_year_month_headers, cell_ref, month_range_ref,
@@ -61,6 +59,7 @@ from budget_planner.styles import (
     CF_AMBER_FILL, CF_RED_FILL, CENTER, style_cell, col_letter,
     sized_comment,
 )
+from budget_planner import config
 
 # Band labels for the raw monthly Actual/Variance bands (row 1 merged).
 # Both bands default to collapsed (see the column_dimensions setup in
@@ -118,95 +117,85 @@ def distribute(total_fte: float, num_months: int, curve: str) -> list[float]:
     return [per_month] * num_months
 
 
-def _write_person_grid(
-    ws, r: int, member: dict, *,
-    ctx: PersonGridContext,
-    person_assignments: list[dict],
-    wp_type_map: dict[str, str],
-    assign_config_rows: dict[tuple[str, str], int],
-    external_config_rows: dict[tuple[str, str], int],
-    person_rows: dict[str, int],
-    val_col_budget: int,
-    val_col_diff: int,
+def _resolve_grid_state(
+    *, start_row: int, member: dict, ctx: PersonGridContext,
+    person_assignments: list[dict], person_rows: dict[str, int],
     team_layout: dict,
-    actual_col_start: int,
-) -> tuple[int, dict]:
-    """Write one person's grid section (header, WP rows, externals, totals).
+) -> dict:
+    """Bundle loop-invariant state for one person's grid into a single dict.
 
-    Returns:
-        (next_row, person_group_dict) where person_group_dict has keys
-        header_row, wp_rows, external_rows, total_row, remaining_row,
-        eu_total_row.
+    Skips assignments whose WP is not in ``work_packages`` (matches the
+    legacy inline loop that ``continue``d past missing WPs without
+    incrementing ``r``). When the person has no data rows, bumps the
+    layout start by 1 so TOTAL lands one row lower (legacy placeholder).
+
+    Returns dict with: name, roster_row, wp_by_id, wp_idx,
+    person_externals, layout.
     """
-    # Unpack loop-invariant context into locals — keeps the cell-write body
-    # unchanged vs. the pre-refactor signature.
-    work_packages = ctx.work_packages
-    external_commitments = ctx.external_commitments
-    wp_active_map = ctx.wp_active_map
-    project_params = ctx.project_params
-    month_col_start = ctx.month_col_start
-    month_col_end = ctx.month_col_end
-    val_col_sum = ctx.val_col_sum
-    config_first_wp_row = ctx.config_first_wp_row
-
     name = member["name"]
     roster_row = person_rows[name]
-
-    # Config!B ceiling row — used by CF rules in both the planned and actual
-    # bands. Extract once; access is via ``ConfigParamRows``-typed local so
-    # pyright flags literal-key typos.
-    config_param_rows: ConfigParamRows = team_layout["param_rows"]
-    ceiling_row = config_param_rows["EU Annual Ceiling (PM/FTE/year)"]
 
     # O(1) WP lookups — avoid O(N²) linear scans in the per-assignment loops
     # below (one scan for filtering, another for data-write, plus a third for
     # the Config-row offset).
-    wp_by_id = {w["id"]: w for w in work_packages}
-    wp_idx = {w["id"]: i for i, w in enumerate(work_packages)}
+    wp_by_id = {w["id"]: w for w in ctx.work_packages}
+    wp_idx = {w["id"]: i for i, w in enumerate(ctx.work_packages)}
 
-    # Pre-compute ordered WP ids and external project names that will actually
-    # be emitted so plan_person_layout can assign row numbers up front. Skip
-    # assignments whose WP is not in work_packages — matches the old inline
-    # loop which `continue`d past missing WPs without incrementing r.
+    person_externals = [e for e in ctx.external_commitments
+                        if e["person"] == name]
+
     ordered_wp_ids: list[str] = []
     for asgn in person_assignments:
         wp_id = asgn["wp"]
         if wp_id in wp_by_id:
             ordered_wp_ids.append(wp_id)
-    person_externals = [e for e in external_commitments
-                        if e["person"] == name]
     ordered_external_names = [e["project"] for e in person_externals]
 
-    # Preserve legacy behavior for a person with no data rows: the old code
-    # advanced past one placeholder row so TOTAL/REMAINING/EU TOTAL landed one
-    # row lower. Emulate by bumping the layout start by 1 in that case.
-    layout_start = r
+    layout_start = start_row
     if not ordered_wp_ids and not ordered_external_names:
-        layout_start = r + 1
+        layout_start = start_row + 1
+    # Capacity drops REMAINING + EU TOTAL: REMAINING CF folded onto TOTAL,
+    # EU-ceiling enforcement lives on Actuals-Hours (the per-year CF on the
+    # EU TOTAL row over there is the auditor surface).
     layout = plan_person_layout(
         start_row=layout_start,
         wp_ids=ordered_wp_ids,
         external_names=ordered_external_names,
-        include_remaining=True,
-        include_eu_total=True,
+        include_remaining=False,
+        include_eu_total=False,
     )
+    return {
+        "name": name,
+        "roster_row": roster_row,
+        "wp_by_id": wp_by_id,
+        "wp_idx": wp_idx,
+        "person_externals": person_externals,
+        "layout": layout,
+    }
 
-    # Person header row
-    header_row = r
+
+def _write_header_row(ws, r: int, roster_row: int) -> None:
+    """Write the merged person-header row (col A formula → Config!A<roster>)."""
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
     style_cell(ws, r, 1, font=HEADER_FONT, fill=SECTION_FILL)
     ws.cell(row=r, column=1).value = f"={SHEET_CONFIG}!A{roster_row}"
     ws.cell(row=r, column=1).font = Font(name="Arial", bold=True, size=10,
                                           color="FFFFFF")
     style_cell(ws, r, 2, fill=SECTION_FILL)
-    r += 1
 
-    # Track all data rows for this person (for TOTAL formula)
-    data_row_start = r
+
+def _write_wp_rows(
+    ws, *, start_row: int, name: str, person_assignments: list[dict],
+    wp_by_id: dict, wp_idx: dict[str, int], wp_active_map: dict,
+    wp_type_map: dict[str, str],
+    assign_config_rows: dict[tuple[str, str], int],
+    config_first_wp_row: int, layout,
+    project_params: dict, month_col_start: int, month_col_end: int,
+    val_col_sum: int, val_col_budget: int, val_col_diff: int,
+) -> tuple[int, dict[str, int]]:
+    """Write programme WP rows (only assigned WPs); return (next_row, wp_rows)."""
+    r = start_row
     wp_rows: dict[str, int] = {}
-    external_rows: dict[str, int] = {}
-
-    # Programme WP rows — only assigned WPs for this person
     first_wp_row_for_person = True
     for asgn in person_assignments:
         wp_id = asgn["wp"]
@@ -286,8 +275,18 @@ def _write_person_grid(
         wp_rows[wp_id] = r
         first_wp_row_for_person = False
         r += 1
+    return r, wp_rows
 
-    # External project rows (person_externals computed above for layout)
+
+def _write_external_rows(
+    ws, *, start_row: int, name: str, person_externals: list[dict],
+    external_config_rows: dict[tuple[str, str], int], layout,
+    project_params: dict, month_col_start: int, month_col_end: int,
+    val_col_sum: int, val_col_budget: int, val_col_diff: int,
+) -> tuple[int, dict[str, int]]:
+    """Write external project rows; return (next_row, external_rows)."""
+    r = start_row
+    external_rows: dict[str, int] = {}
     for entry in person_externals:
         ext_config_row = external_config_rows[(name, entry["project"])]
         assert r == layout.external_rows[entry["project"]]
@@ -334,16 +333,15 @@ def _write_person_grid(
 
         external_rows[entry["project"]] = r
         r += 1
+    return r, external_rows
 
-    data_row_end = r - 1
 
-    # Handle case where person has no data rows: layout_start was bumped by 1
-    # above so TOTAL sits one row lower, matching the legacy placeholder.
-    if data_row_end < data_row_start:
-        data_row_end = data_row_start
-        r += 1
-
-    # TOTAL row
+def _write_total_row(
+    ws, *, r: int, layout, data_row_start: int, data_row_end: int,
+    project_params: dict, month_col_start: int,
+    val_col_sum: int, val_col_budget: int, val_col_diff: int,
+) -> int:
+    """Write the per-person TOTAL row; return total_row."""
     assert r == layout.total_row
     total_row = layout.total_row
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
@@ -366,82 +364,23 @@ def _write_person_grid(
                fmt="0.00").value = f"=SUM({bcl}{data_row_start}:{bcl}{data_row_end})"
     style_cell(ws, r, val_col_diff, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
                fmt="0.00").value = f"={bcl}{r}-{scl}{r}"
-    r += 1
+    return total_row
 
-    # REMAINING row
-    assert layout.remaining_row is not None
-    assert r == layout.remaining_row
-    remaining_row = layout.remaining_row
-    style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
-    style_cell(ws, r, 2, "REMAINING", font=HEADER_FONT,
-               fill=LIGHT_GREEN_FILL)
-    ws.cell(row=r, column=2).comment = sized_comment("Per-month = max_fte (from Config roster) − TOTAL. Negative means "
-        "this person is over-allocated to programme work in that month. External "
-        "commitments are NOT subtracted here — they shrink available "
-        "capacity via Balance on the Config Assignments table.")
-    for mi in range(project_params["months"]):
-        c = month_col_start + mi
-        cl = col_letter(c)
-        style_cell(ws, r, c, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-                   fmt="0.00").value = (
-            f"={SHEET_CONFIG}!B{roster_row}-{cl}{total_row}"
-        )
-    # Sum/Budget/Variance for REMAINING row (all empty — per-month only)
-    style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="0.00")
-    style_cell(ws, r, val_col_budget, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="0.00")
-    style_cell(ws, r, val_col_diff, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="0.00")
-    r += 1
 
-    # EU TOTAL row — sum of programme WP rows + EU-flagged external rows
-    assert layout.eu_total_row is not None
-    assert r == layout.eu_total_row
-    eu_total_row = layout.eu_total_row
-    style_cell(ws, r, 1, fill=LIGHT_BLUE_FILL)
-    style_cell(ws, r, 2, "EU TOTAL", font=HEADER_FONT, fill=LIGHT_BLUE_FILL)
-    ws.cell(row=r, column=2).comment = sized_comment("Per-month SUM of programme WP rows + EU-flagged external project rows. "
-        "Used against the EU annual ceiling (~12 PM/year/person total "
-        "across ALL EU grants). Non-EU externals are excluded.")
+def _apply_planned_total_overalloc_cf(
+    ws, *, total_row: int, roster_row: int,
+    month_col_start: int, month_col_end: int,
+) -> None:
+    """Apply over-allocation CF for the planned TOTAL row (red before amber).
 
-    # Build list of rows that count toward EU total
-    eu_row_refs = list(wp_rows.values())  # All programme WPs are EU
-    for proj, ext_row in external_rows.items():
-        # Check if this external commitment is EU
-        entry = next((e for e in person_externals
-                      if e["project"] == proj), None)
-        if entry and entry.get("is_eu", False):
-            eu_row_refs.append(ext_row)
+    Folds the previous REMAINING-row CF onto TOTAL: red when monthly TOTAL
+    exceeds Max FTE (i.e. REMAINING < 0), amber when TOTAL crosses the
+    CAPACITY_AMBER_LOAD * Max FTE warning band.
 
-    for mi in range(project_params["months"]):
-        c = month_col_start + mi
-        cl = col_letter(c)
-        if eu_row_refs:
-            cell_refs = ",".join(f"{cl}{row}" for row in eu_row_refs)
-            formula = f"=SUM({cell_refs})"
-        else:
-            formula = "=0"
-        style_cell(ws, r, c, font=BLACK_FORMULA, fill=LIGHT_BLUE_FILL,
-                   fmt="0.00").value = formula
-
-    # Sum validation column for EU TOTAL
-    if eu_row_refs:
-        sum_refs = ",".join(f"{col_letter(val_col_sum)}{row}"
-                            for row in eu_row_refs)
-        style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
-                   fill=LIGHT_BLUE_FILL, fmt="0.00").value = f"=SUM({sum_refs})"
-    else:
-        style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
-                   fill=LIGHT_BLUE_FILL, fmt="0.00").value = "=0"
-    # Budget and Variance columns left empty for EU TOTAL
-    style_cell(ws, r, val_col_budget, fill=LIGHT_BLUE_FILL, fmt="0.00")
-    style_cell(ws, r, val_col_diff, fill=LIGHT_BLUE_FILL, fmt="0.00")
-    r += 1
-
-    # Conditional formatting for TOTAL row
-    # Excel CF priority: lower number = higher priority = wins conflicts.
-    # openpyxl assigns priority sequentially, so add red first (wins when both match).
+    Excel CF priority: lower number = higher priority = wins conflicts.
+    openpyxl assigns priority sequentially, so add red first (wins when
+    both match).
+    """
     total_range = month_range_ref(total_row, month_col_start, month_col_end)
     max_fte_ref = cell_ref(SHEET_CONFIG, roster_row, COL_ROSTER_FTE)
     # Red if > Max FTE (added first = highest priority, wins over amber)
@@ -449,104 +388,76 @@ def _write_person_grid(
         formula=[f"{col_letter(month_col_start)}{total_row}>{max_fte_ref}"],
         fill=CF_RED_FILL,
     ))
-    # Amber if > CAPACITY_AMBER_LOAD x Max FTE (lower priority, only visible when red doesn't match)
+    # Amber if > CAPACITY_AMBER_LOAD x Max FTE (lower priority).
     ws.conditional_formatting.add(total_range, FormulaRule(
         formula=[f"{col_letter(month_col_start)}{total_row}>{CAPACITY_AMBER_LOAD}*{max_fte_ref}"],
         fill=CF_AMBER_FILL,
     ))
 
-    # Conditional formatting for REMAINING row
-    remaining_range = month_range_ref(remaining_row, month_col_start, month_col_end)
-    remaining_amber_threshold = 1 - CAPACITY_AMBER_LOAD
-    # Red if < 0 (added first = highest priority, wins over amber)
-    ws.conditional_formatting.add(remaining_range, FormulaRule(
-        formula=[f"{col_letter(month_col_start)}{remaining_row}<0"],
-        fill=CF_RED_FILL,
-    ))
-    # Amber if remaining < 20% of Max FTE (lower priority, only visible when red doesn't match)
-    ws.conditional_formatting.add(remaining_range, FormulaRule(
-        formula=[f"{col_letter(month_col_start)}{remaining_row}<{remaining_amber_threshold}*{SHEET_CONFIG}!$B${roster_row}"],
-        fill=CF_AMBER_FILL,
-    ))
 
-    # Conditional formatting for EU TOTAL — per calendar year
-    for group_start, span in _calendar_year_groups(
-        project_params["start"], project_params["months"]
-    ):
-        yr_first_col = month_col_start + group_start
-        yr_last_col = yr_first_col + span - 1
-        yr_range = (f"{col_letter(yr_first_col)}{eu_total_row}:"
-                    f"{col_letter(yr_last_col)}{eu_total_row}")
-        # Absolute refs so formula doesn't shift across the range
-        sum_expr = (f"SUM(${col_letter(yr_first_col)}${eu_total_row}"
-                    f":${col_letter(yr_last_col)}${eu_total_row})")
-        # Red if annual EU total > ceiling (added first = higher priority)
-        ws.conditional_formatting.add(yr_range, FormulaRule(
-            formula=[f"{sum_expr}>{SHEET_CONFIG}!$B${ceiling_row}"],
-            fill=CF_RED_FILL,
-        ))
-        # Amber if annual EU total > ceiling - 1
-        ws.conditional_formatting.add(yr_range, FormulaRule(
-            formula=[f"{sum_expr}>{SHEET_CONFIG}!$B${ceiling_row}-1"],
-            fill=CF_AMBER_FILL,
-        ))
-
-    # ── Right-side grouped band: Actual FTE / Variance / Utilisation ──
-    # Parallel to the planned month columns, starting at ``actual_col_start``:
-    #   - Actual FTE band: one column per month (from Actuals-Hours /
-    #     hours_per_fte_month), ``months`` columns wide.
-    #   - Variance band: Planned - Actual, offset by ``months + 1`` (1-col
-    #     gutter) so the full right-side block reads Actual | Variance.
-    #   - Utilisation CF sits on the Actual TOTAL row cells.
-    months = project_params["months"]
-    variance_col_start = actual_col_start + months + 1  # gutter of 1 col
-
-    # Header styling on the person-header row so banding aligns.
+def _setup_actual_band_header(
+    ws, *, header_row: int, actual_col_start: int, variance_col_start: int,
+    months: int,
+) -> None:
+    """Style the actual + variance band cells on the person-header row."""
     for mi in range(months):
         style_cell(ws, header_row, actual_col_start + mi, fill=SECTION_FILL)
         style_cell(ws, header_row, variance_col_start + mi, fill=SECTION_FILL)
 
-    # Max FTE cell reference for this person (used by utilisation CF).
-    max_fte_ref = cell_ref(SHEET_CONFIG, roster_row, COL_ROSTER_FTE)
 
-    def _write_actual_pair(row: int, *, is_active_month):
-        """Write Actual FTE + Variance cells for a single row.
+def _write_actual_pair(
+    ws, row: int, *, is_active_month, months: int,
+    month_col_start: int, actual_col_start: int, variance_col_start: int,
+) -> None:
+    """Write Actual FTE + Variance cells for a single row.
 
-        is_active_month(month_num_1based) -> bool determines greying.
-        """
-        for mi in range(months):
-            month_num = mi + 1
-            planned_c = month_col_start + mi
-            actual_c = actual_col_start + mi
-            variance_c = variance_col_start + mi
-            if is_active_month(month_num):
-                hours_cell = (
-                    f"'{SHEET_ACTUALS_HOURS}'!"
-                    f"{col_letter(planned_c)}{row}"
-                )
-                # Actual FTE — green cross-sheet font (pulls from Actuals-Hours).
-                style_cell(
-                    ws, row, actual_c, font=GREEN_XREF, fmt="0.00",
-                ).value = (
-                    f'=IF({hours_cell}="","",'
-                    f"{hours_cell}/hours_per_fte_month)"
-                )
-                # Variance FTE — Planned - Actual, black formula font.
-                planned_ref = f"{col_letter(planned_c)}{row}"
-                actual_ref = f"{col_letter(actual_c)}{row}"
-                style_cell(
-                    ws, row, variance_c, font=BLACK_FORMULA, fmt="0.00",
-                ).value = (
-                    f'=IF({actual_ref}="","",{planned_ref}-{actual_ref})'
-                )
-            else:
-                style_cell(ws, row, actual_c, "", font=GREEN_XREF,
-                           fill=GREY_FILL, fmt="0.00")
-                style_cell(ws, row, variance_c, "", font=BLACK_FORMULA,
-                           fill=GREY_FILL, fmt="0.00")
+    is_active_month(month_num_1based) -> bool determines greying.
+    """
+    for mi in range(months):
+        month_num = mi + 1
+        planned_c = month_col_start + mi
+        actual_c = actual_col_start + mi
+        variance_c = variance_col_start + mi
+        if is_active_month(month_num):
+            hours_cell = (
+                f"'{SHEET_ACTUALS_HOURS}'!"
+                f"{col_letter(planned_c)}{row}"
+            )
+            # Actual FTE — green cross-sheet font (pulls from Actuals-Hours).
+            style_cell(
+                ws, row, actual_c, font=GREEN_XREF, fmt="0.00",
+            ).value = (
+                f'=IF({hours_cell}="","",'
+                f"{hours_cell}/hours_per_fte_month)"
+            )
+            # Variance FTE — Planned - Actual, black formula font.
+            planned_ref = f"{col_letter(planned_c)}{row}"
+            actual_ref = f"{col_letter(actual_c)}{row}"
+            style_cell(
+                ws, row, variance_c, font=BLACK_FORMULA, fmt="0.00",
+            ).value = (
+                f'=IF({actual_ref}="","",{planned_ref}-{actual_ref})'
+            )
+        else:
+            style_cell(ws, row, actual_c, "", font=GREEN_XREF,
+                       fill=GREY_FILL, fmt="0.00")
+            style_cell(ws, row, variance_c, "", font=BLACK_FORMULA,
+                       fill=GREY_FILL, fmt="0.00")
 
-    # WP rows — active months = WP active schedule intersected with assignment
-    # window (mirrors planned-side greying).
+
+def _write_actual_pairs_for_data_rows(
+    ws, *, wp_rows: dict[str, int], external_rows: dict[str, int],
+    person_assignments: list[dict], person_externals: list[dict],
+    wp_active_map: dict, project_params: dict,
+    months: int, month_col_start: int, actual_col_start: int,
+    variance_col_start: int,
+) -> None:
+    """Fill Actual+Variance band cells for WP rows + external rows.
+
+    Active-month predicates mirror planned-side greying:
+      - WP rows: WP active schedule ∩ assignment window.
+      - External rows: external commitment start/end window.
+    """
     wp_windows: dict[str, tuple[int, int, frozenset[int]]] = {}
     for asgn in person_assignments:
         wp_id = asgn["wp"]
@@ -563,7 +474,12 @@ def _write_person_grid(
         def _wp_active(mn, _s=asgn_start, _e=asgn_end, _w=wp_active):
             return _s <= mn <= _e and mn in _w
 
-        _write_actual_pair(wp_row, is_active_month=_wp_active)
+        _write_actual_pair(
+            ws, wp_row, is_active_month=_wp_active, months=months,
+            month_col_start=month_col_start,
+            actual_col_start=actual_col_start,
+            variance_col_start=variance_col_start,
+        )
 
     # External rows — active months = external commitment start/end window.
     for proj, ext_row in external_rows.items():
@@ -576,9 +492,20 @@ def _write_person_grid(
         def _ext_active(mn, _s=ext_start, _e=ext_end):
             return _s <= mn <= _e
 
-        _write_actual_pair(ext_row, is_active_month=_ext_active)
+        _write_actual_pair(
+            ws, ext_row, is_active_month=_ext_active, months=months,
+            month_col_start=month_col_start,
+            actual_col_start=actual_col_start,
+            variance_col_start=variance_col_start,
+        )
 
-    # ── Actual TOTAL row (SUM of Actual FTE cells across wp_rows ∪ external_rows) ──
+
+def _write_actual_total_band(
+    ws, *, total_row: int, wp_rows: dict[str, int],
+    external_rows: dict[str, int], months: int,
+    actual_col_start: int, variance_col_start: int,
+) -> None:
+    """Fill Actual TOTAL row band cells (SUM across wp_rows ∪ external_rows)."""
     data_rows_for_total = list(wp_rows.values()) + list(external_rows.values())
     for mi in range(months):
         ac = actual_col_start + mi
@@ -607,40 +534,18 @@ def _write_person_grid(
         style_cell(ws, total_row, vc, font=BLACK_FORMULA,
                    fill=LIGHT_GREEN_FILL, fmt="0.00").value = var_total_formula
 
-    # REMAINING row — leave band cells empty (no actual-side remaining concept).
-    for mi in range(months):
-        style_cell(ws, remaining_row, actual_col_start + mi,
-                   fill=LIGHT_GREEN_FILL, fmt="0.00")
-        style_cell(ws, remaining_row, variance_col_start + mi,
-                   fill=LIGHT_GREEN_FILL, fmt="0.00")
 
-    # ── Actual EU TOTAL row (SUM of programme WPs only — excludes externals) ──
-    # Mirrors the planned EU TOTAL's programme-vs-external split but ALSO excludes
-    # EU-flagged externals: the twin view compares programme WP hours to the programme
-    # portion of planned FTE so variance stays apples-to-apples.
-    eu_actual_refs = list(wp_rows.values())
-    for mi in range(months):
-        ac = actual_col_start + mi
-        vc = variance_col_start + mi
-        acl = col_letter(ac)
-        vcl = col_letter(vc)
-        if eu_actual_refs:
-            eu_terms = ",".join(
-                f'IF({acl}{dr}="",0,{acl}{dr})' for dr in eu_actual_refs
-            )
-            eu_actual_formula = f"=SUM({eu_terms})"
-            eu_var_terms = ",".join(
-                f'IF({vcl}{dr}="",0,{vcl}{dr})' for dr in eu_actual_refs
-            )
-            eu_var_formula = f"=SUM({eu_var_terms})"
-        else:
-            eu_actual_formula = "=0"
-            eu_var_formula = "=0"
-        style_cell(ws, eu_total_row, ac, font=BLACK_FORMULA,
-                   fill=LIGHT_BLUE_FILL, fmt="0.00").value = eu_actual_formula
-        style_cell(ws, eu_total_row, vc, font=BLACK_FORMULA,
-                   fill=LIGHT_BLUE_FILL, fmt="0.00").value = eu_var_formula
+def _apply_actual_band_cf(
+    ws, *, wp_rows: dict[str, int], external_rows: dict[str, int],
+    total_row: int, roster_row: int,
+    months: int,
+    actual_col_start: int, variance_col_start: int,
+) -> None:
+    """Apply CF for actual band: variance reds + Actual TOTAL utilisation.
 
+    EU per-year ceiling CF moved to Actuals-Hours (the enforcement surface);
+    Capacity no longer carries the EU TOTAL row.
+    """
     # ── CF: Variance band — red if ABS(variance) > CAPACITY_VARIANCE_FTE_RED ──
     all_variance_rows = (list(wp_rows.values())
                          + list(external_rows.values()))
@@ -658,6 +563,7 @@ def _write_person_grid(
             ))
 
     # ── CF: Utilisation on Actual TOTAL row — red ≥ Max FTE, amber ≥ 0.8 × Max FTE ──
+    max_fte_ref = cell_ref(SHEET_CONFIG, roster_row, COL_ROSTER_FTE)
     actual_start_cl = col_letter(actual_col_start)
     actual_end_cl = col_letter(actual_col_start + months - 1)
     actual_total_range = (
@@ -676,23 +582,111 @@ def _write_person_grid(
         fill=CF_AMBER_FILL,
     ))
 
-    # ── CF: Actual EU TOTAL — per calendar year annual ceiling (red) ──
-    # ceiling_row already extracted at function top (config_param_rows).
-    for group_start, span in _calendar_year_groups(
-        project_params["start"], project_params["months"]
-    ):
-        yr_first_col = actual_col_start + group_start
-        yr_last_col = yr_first_col + span - 1
-        yr_range = (f"{col_letter(yr_first_col)}{eu_total_row}:"
-                    f"{col_letter(yr_last_col)}{eu_total_row}")
-        sum_expr = (
-            f"SUM(${col_letter(yr_first_col)}${eu_total_row}"
-            f":${col_letter(yr_last_col)}${eu_total_row})"
-        )
-        ws.conditional_formatting.add(yr_range, FormulaRule(
-            formula=[f"{sum_expr}>{SHEET_CONFIG}!$B${ceiling_row}"],
-            fill=CF_RED_FILL,
-        ))
+
+def _write_person_grid(
+    ws, r: int, member: dict, *,
+    ctx: PersonGridContext,
+    person_assignments: list[dict],
+    wp_type_map: dict[str, str],
+    assign_config_rows: dict[tuple[str, str], int],
+    external_config_rows: dict[tuple[str, str], int],
+    person_rows: dict[str, int],
+    val_col_budget: int,
+    val_col_diff: int,
+    team_layout: dict,
+    actual_col_start: int,
+) -> tuple[int, dict]:
+    """Write one person's grid section (header, WP rows, externals, TOTAL).
+
+    Returns:
+        (next_row, person_group_dict) where person_group_dict has keys
+        header_row, wp_rows, external_rows, total_row.
+    """
+    state = _resolve_grid_state(
+        start_row=r, member=member, ctx=ctx,
+        person_assignments=person_assignments, person_rows=person_rows,
+        team_layout=team_layout,
+    )
+    name = state["name"]
+    roster_row = state["roster_row"]
+    person_externals = state["person_externals"]
+    layout = state["layout"]
+    project_params = ctx.project_params
+    month_col_start = ctx.month_col_start
+    month_col_end = ctx.month_col_end
+    val_col_sum = ctx.val_col_sum
+
+    header_row = r
+    _write_header_row(ws, r, roster_row)
+    r += 1
+    data_row_start = r
+
+    r, wp_rows = _write_wp_rows(
+        ws, start_row=r, name=name, person_assignments=person_assignments,
+        wp_by_id=state["wp_by_id"], wp_idx=state["wp_idx"],
+        wp_active_map=ctx.wp_active_map,
+        wp_type_map=wp_type_map, assign_config_rows=assign_config_rows,
+        config_first_wp_row=ctx.config_first_wp_row, layout=layout,
+        project_params=project_params, month_col_start=month_col_start,
+        month_col_end=month_col_end, val_col_sum=val_col_sum,
+        val_col_budget=val_col_budget, val_col_diff=val_col_diff,
+    )
+    r, external_rows = _write_external_rows(
+        ws, start_row=r, name=name, person_externals=person_externals,
+        external_config_rows=external_config_rows, layout=layout,
+        project_params=project_params, month_col_start=month_col_start,
+        month_col_end=month_col_end, val_col_sum=val_col_sum,
+        val_col_budget=val_col_budget, val_col_diff=val_col_diff,
+    )
+
+    # Empty-data placeholder: layout_start was bumped by 1 in
+    # _resolve_grid_state so TOTAL sits one row lower.
+    data_row_end = r - 1
+    if data_row_end < data_row_start:
+        data_row_end = data_row_start
+        r += 1
+
+    total_row = _write_total_row(
+        ws, r=r, layout=layout, data_row_start=data_row_start,
+        data_row_end=data_row_end, project_params=project_params,
+        month_col_start=month_col_start, val_col_sum=val_col_sum,
+        val_col_budget=val_col_budget, val_col_diff=val_col_diff,
+    )
+    r += 1
+
+    _apply_planned_total_overalloc_cf(
+        ws, total_row=total_row, roster_row=roster_row,
+        month_col_start=month_col_start, month_col_end=month_col_end,
+    )
+
+    # Right-side band: Actual FTE | gutter | Variance. Variance offset by
+    # months+1 (1-col gutter); utilisation CF sits on Actual TOTAL.
+    months = project_params["months"]
+    variance_col_start = actual_col_start + months + 1
+    _setup_actual_band_header(
+        ws, header_row=header_row, actual_col_start=actual_col_start,
+        variance_col_start=variance_col_start, months=months,
+    )
+    _write_actual_pairs_for_data_rows(
+        ws, wp_rows=wp_rows, external_rows=external_rows,
+        person_assignments=person_assignments,
+        person_externals=person_externals, wp_active_map=ctx.wp_active_map,
+        project_params=project_params, months=months,
+        month_col_start=month_col_start, actual_col_start=actual_col_start,
+        variance_col_start=variance_col_start,
+    )
+    _write_actual_total_band(
+        ws, total_row=total_row, wp_rows=wp_rows, external_rows=external_rows,
+        months=months, actual_col_start=actual_col_start,
+        variance_col_start=variance_col_start,
+    )
+    _apply_actual_band_cf(
+        ws, wp_rows=wp_rows, external_rows=external_rows,
+        total_row=total_row, roster_row=roster_row,
+        months=months,
+        actual_col_start=actual_col_start,
+        variance_col_start=variance_col_start,
+    )
 
     assert r == layout.next_row
     apply_person_row_outline(ws, layout)
@@ -701,8 +695,6 @@ def _write_person_grid(
         "wp_rows": wp_rows,
         "external_rows": external_rows,
         "total_row": total_row,
-        "remaining_row": remaining_row,
-        "eu_total_row": eu_total_row,
         "actual_col_start": actual_col_start,
         "variance_col_start": variance_col_start,
     }
@@ -738,9 +730,8 @@ def build_capacity_sheet(ws, team_layout, *,
     Returns:
         capacity_layout dict with row/column positions for all key elements.
     """
-    # ── Lazy-import fallback for backward compatibility ──
+    # ── Default-arg fallback (load-bearing for bare-call test fixtures) ──
     if any(v is None for v in [project_params, work_packages, team, external_commitments]):
-        from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:
@@ -841,7 +832,7 @@ def build_capacity_sheet(ws, team_layout, *,
         "named range (`'Actuals-Hours'!$D$1`). "
         "Actual PM: logged hours through that month / hours_per_fte_month "
         "(reads from Actuals-Hours cum-hours col). "
-        "Variance PM: Plan − Actual on TOTAL + EU TOTAL rows only; red when < 0. "
+        "Variance PM: Plan − Actual on TOTAL row only; red when < 0. "
         "WP and external rows show values only where they carry signal."
     )
 
@@ -991,12 +982,8 @@ def apply_capacity_todate_formulas(
       * External row: blank + grey across both cols (non-programme).
       * TOTAL row: Actual PM = SUM(WP Actual cells); Variance PM =
         (windowed plan sum on same-row planned cells) − Actual.
-      * EU TOTAL row: same pattern (EU TOTAL's planned monthly cells
-        already sum EU-flagged WPs per month, so the same windowed SUM
-        suffices).
-      * REMAINING row: blank + grey.
 
-    CF: Variance PM < 0 red on TOTAL + EU TOTAL only (2·TEAM rules).
+    CF: Variance PM < 0 red on TOTAL only (1·TEAM rules).
     """
     months = project_params["months"]
     month_col_start_l = col_letter(MONTH_COL_START)
@@ -1055,7 +1042,7 @@ def apply_capacity_todate_formulas(
                 style_cell(ws, ext_row, c, value="",
                            font=BLACK_FORMULA, fill=GREY_FILL)
 
-        # TOTAL + EU TOTAL rows — Actual = SUM(WP actuals);
+        # TOTAL row — Actual = SUM(WP actuals);
         # Variance = windowed plan sum − Actual.
         wp_rows = list(cap_group["wp_rows"].values())
 
@@ -1066,34 +1053,24 @@ def apply_capacity_todate_formulas(
             return f"=SUM({refs})"
 
         total_row = cap_group["total_row"]
-        eu_total_row = cap_group["eu_total_row"]
 
-        for summary_row in (total_row, eu_total_row):
-            style_cell(ws, summary_row, actual_col, font=BLACK_FORMULA,
-                       fill=LIGHT_GREEN_FILL,
-                       fmt="0.00").value = _sum_wp_actuals(wp_rows)
-            var_formula = (
-                f"={_windowed_plan_sum_expr(summary_row)}"
-                f"-{actual_cl}{summary_row}"
-            )
-            style_cell(ws, summary_row, var_col, font=BLACK_FORMULA,
-                       fill=LIGHT_GREEN_FILL,
-                       fmt="0.00").value = var_formula
+        style_cell(ws, total_row, actual_col, font=BLACK_FORMULA,
+                   fill=LIGHT_GREEN_FILL,
+                   fmt="0.00").value = _sum_wp_actuals(wp_rows)
+        var_formula = (
+            f"={_windowed_plan_sum_expr(total_row)}"
+            f"-{actual_cl}{total_row}"
+        )
+        style_cell(ws, total_row, var_col, font=BLACK_FORMULA,
+                   fill=LIGHT_GREEN_FILL,
+                   fmt="0.00").value = var_formula
 
-        # REMAINING row — leave empty/grey; no meaningful to-date value.
-        rem_row = cap_group.get("remaining_row")
-        if rem_row is not None:
-            for c in (actual_col, var_col):
-                style_cell(ws, rem_row, c, value="",
-                           font=BLACK_FORMULA, fill=GREY_FILL)
-
-        # CF: Variance PM red when < 0 on TOTAL + EU TOTAL rows only.
-        for rr in (total_row, eu_total_row):
-            cell_ref_str = f"{var_cl}{rr}"
-            ws.conditional_formatting.add(
-                cell_ref_str,
-                FormulaRule(
-                    formula=[f"{cell_ref_str}<0"],
-                    fill=CF_RED_FILL,
-                ),
-            )
+        # CF: Variance PM red when < 0 on TOTAL row only.
+        cell_ref_str = f"{var_cl}{total_row}"
+        ws.conditional_formatting.add(
+            cell_ref_str,
+            FormulaRule(
+                formula=[f"{cell_ref_str}<0"],
+                fill=CF_RED_FILL,
+            ),
+        )

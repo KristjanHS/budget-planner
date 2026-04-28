@@ -2,8 +2,8 @@
 
 Used by the Capacity sheet and the Actuals-Hours sheet so both share the same
 per-person block layout (header → WP rows → external rows → TOTAL → optional
-REMAINING → optional EU TOTAL). Capacity needs the REMAINING row (budget
-view); Actuals-Hours does not (hours log, not a budget).
+EU TOTAL). Actuals-Hours opts into EU TOTAL (the EU-ceiling enforcement
+surface); Capacity passes both optional flags False.
 """
 
 from dataclasses import dataclass

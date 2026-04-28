@@ -46,6 +46,7 @@ from budget_planner.layout import (
     COL_EXT_PERSON, COL_EXT_PROJECT, COL_EXT_FTE,
     COL_EXT_START, COL_EXT_END, COL_EXT_EU, EXT_LAST_COL,
 )
+from budget_planner.timelog_solver import STOP_REASON_DEFINITIONS
 from budget_planner.styles import (
     BLACK_FORMULA,
     BLUE_INPUT,
@@ -63,6 +64,7 @@ from budget_planner.styles import (
     sized_comment,
     style_cell,
 )
+from budget_planner import config
 
 
 _MONTH_ABBREVS = (
@@ -482,8 +484,6 @@ def _write_stop_reasons_section(ws, start_row):
         (next_row, layout_dict) where layout_dict has keys:
         stop_section_row, stop_header_row, stop_first_row, stop_last_row.
     """
-    from budget_planner.timelog_solver import STOP_REASON_DEFINITIONS
-
     section_row = start_row
     ws.merge_cells(start_row=section_row, start_column=1,
                    end_row=section_row, end_column=2)
@@ -741,11 +741,11 @@ def build_config_sheet(ws, wb, project_params, work_packages,
         work_packages: list of dicts with keys 'id', 'name', 'fte', 'start',
             'end', 'type' (single-range schedule merged into WP BUDGET).
         team: list of dicts with keys 'name', 'max_fte', 'grade'.
-            When None, lazy-imports from config.
+            When None, falls back to config.TEAM.
         reporting_periods: list of dicts with keys 'id', 'start', 'end'.
-            When None, lazy-imports from config.
+            When None, falls back to config.REPORTING_PERIODS.
         grade_rates: dict mapping grade name to EUR/PM rate.
-            When None, lazy-imports from config.
+            When None, falls back to config.GRADE_RATES.
         assignments: list of dicts with keys 'person', 'wp', 'total_fte', 'start', 'end'.
             When None, defaults to empty list.
         external_commitments: list of dicts with keys 'person', 'project', 'fte',
@@ -756,11 +756,9 @@ def build_config_sheet(ws, wb, project_params, work_packages,
         rp_*, grade_*, assign_*, ext_*.
     """
     if team is None:
-        from budget_planner import config
         team = config.TEAM
     if grade_rates is None:
-        from budget_planner import config as _cfg
-        grade_rates = _cfg.GRADE_RATES
+        grade_rates = config.GRADE_RATES
     if assignments is None:
         assignments = []
     if external_commitments is None:
@@ -1132,4 +1130,8 @@ def build_config_sheet(ws, wb, project_params, work_packages,
         "person_rows": roster_layout["person_rows"],
         "rp_first_row": rp_layout["rp_first_row"],
         "rp_last_row": rp_layout["rp_last_row"],
+        "stop_section_row": stop_layout["stop_section_row"],
+        "stop_header_row": stop_layout["stop_header_row"],
+        "stop_first_row": stop_layout["stop_first_row"],
+        "stop_last_row": stop_layout["stop_last_row"],
     }

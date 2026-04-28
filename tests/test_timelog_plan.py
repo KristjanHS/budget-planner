@@ -19,12 +19,12 @@ import pytest
 from openpyxl import load_workbook
 
 from budget_planner.layout import (
+    SECTION_TITLE_GRID,
     SHEET_TIMELOG_PLAN,
     TIMELOG_MONTH_COL_START,
 )
 from budget_planner.styles import CF_GREEN_FILL, CF_RED_FILL
 from budget_planner.timelog_plan import (
-    SECTION_TITLE_GRID,
     SECTION_TITLE_PERSON_SUMMARY,
     SECTION_TITLE_WP_SUMMARY,
 )
@@ -1137,13 +1137,13 @@ def _yearly_rows(tlp) -> tuple[int, int]:
     """Return (yearly_total_row, yearly_budget_row) — two rows directly beneath
     the last WP row in PER-WP SUMMARY (no spacer, same outline group).
 
-    Post-D9 (2026-04-22): row labels live at col H (TIMELOG_YEARLY_LABEL_COL),
-    not col A."""
+    Post-D9 (2026-04-22): row labels live at col J (TIMELOG_YEARLY_LABEL_COL),
+    not col A. 2026-04-28 shifted col I → J under "Stop reason"."""
     from budget_planner.layout import TIMELOG_YEARLY_LABEL_COL
     first = _wp_summary_first_row(tlp)
-    # Walk down col H until we hit a cell whose text starts with "Yearly ".
-    # Blank cells at WP rows are normal (col H at WP rows is the
-    # "Any out-of-window?" formula output, not a label) — keep scanning.
+    # Walk down col J until we hit a cell whose text starts with "Yearly ".
+    # Blank cells at WP rows are normal (col J at WP rows holds the
+    # "Stop reason" literal — never starts with "yearly ") — keep scanning.
     r = first
     while r <= tlp.max_row:
         v = tlp.cell(r, TIMELOG_YEARLY_LABEL_COL).value
@@ -1157,7 +1157,8 @@ def _yearly_rows(tlp) -> tuple[int, int]:
 
 def test_yearly_rows_present(tlp):
     """Both rows exist directly below the last WP row with expected labels
-    at col I (post-D9 col-H shift + Aiko-port T3 one-col right shift)."""
+    at col J (post-D9 col-H shift + Aiko-port T3 H→I + 2026-04-28 I→J under
+    Stop reason)."""
     from budget_planner.layout import TIMELOG_YEARLY_LABEL_COL
     from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
     y_total, y_budget = _yearly_rows(tlp)
@@ -1166,7 +1167,7 @@ def test_yearly_rows_present(tlp):
     assert tlp.cell(y_total, TIMELOG_YEARLY_LABEL_COL).value == "Yearly Assigned +i"
     assert tlp.cell(y_budget, TIMELOG_YEARLY_LABEL_COL).value == "Yearly Budget +i"
 
-    # Col A on these rows is blank (label shifted to col H).
+    # Col A on these rows is blank (label shifted to col J).
     assert tlp.cell(y_total, 1).value in (None, "")
     assert tlp.cell(y_budget, 1).value in (None, "")
 
@@ -1179,6 +1180,11 @@ def test_yearly_rows_present(tlp):
         tlp.cell(y_budget, TIMELOG_YEARLY_LABEL_COL).fill.fgColor.rgb
         == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
     )
+
+    # Right-aligned: labels hug the first per-year cell at col K (2026-04-28
+    # I→J shift). Guards against accidental revert to CENTER.
+    assert tlp.cell(y_total, TIMELOG_YEARLY_LABEL_COL).alignment.horizontal == "right"
+    assert tlp.cell(y_budget, TIMELOG_YEARLY_LABEL_COL).alignment.horizontal == "right"
 
     # Outline level: rows must be in the PER-WP SUMMARY outline group (level 1).
     assert tlp.row_dimensions[y_total].outline_level == 1

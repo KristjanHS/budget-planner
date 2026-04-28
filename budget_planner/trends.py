@@ -50,22 +50,14 @@ from budget_planner.styles import CF_AMBER_FILL as _AMBER_CF_FILL
 from budget_planner.styles import CF_RED_FILL as _RED_CF_FILL
 
 
-def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout, *,
-                       project_params, work_packages,
-                       team, reporting_periods,
-                       plan_forecast_layout=None):
-    """Build the Trends sheet: WP burn rate, cumulative chart, person load.
+def _resolve_trends_layout(layout, actuals_layout, project_params, work_packages,
+                           team, plan_forecast_layout):
+    """Resolve every column letter and row anchor for the Trends sheet
+    into a single dict consumed by the helpers below.
 
-    Args:
-        ws: The Trends worksheet (already has current_month in B1).
-        layout: Plan layout dict (config_first_wp_row, etc).
-        actuals_layout: Actuals layout dict (first_wp_row, cum_col, etc).
-        capacity_layout: Capacity layout dict (person_groups with total_row per person).
-        team_layout: Team layout dict (person_rows mapping name->row).
-        project_params: Dict with keys title, start, months, rate.
-        work_packages: List of WP dicts with single-range 'start'/'end'/'type'.
-        team: List of team member dicts.
-        reporting_periods: Reporting period entries.
+    Pure function — no worksheet writes. All Trends row anchors are
+    statically derivable from ``num_wps`` + ``len(team)``; lifting them
+    out of ``build_trends_sheet`` keeps the orchestrator readable.
     """
     wp_start_col_letter = get_column_letter(COL_WP_START)
     wp_end_col_letter = get_column_letter(COL_WP_END)
@@ -79,14 +71,120 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     ms = col_letter(month_col_start)
     me = col_letter(month_col_end)
 
+    # Section 1: WP Burn Rate & Exhaustion
+    section1_row = 3
+    header_row = 4
+    first_wp_data_row = header_row + 1
+    last_wp_data_row = first_wp_data_row + num_wps - 1
+    total_row = last_wp_data_row + 1
+
+    # Cumulative chart anchor (chart height 7.5 cm ≈ 14 rows)
+    chart_anchor_row = total_row + 2
+
+    # Section 2a: Reconciliation block
+    recon_section_row = chart_anchor_row + 14
+    recon_health_eur_through_row = recon_section_row + 2
+    recon_health_hours_through_row = recon_section_row + 3
+    recon_health_reconciled_row = recon_section_row + 4
+    recon_table_header_row = recon_section_row + 6
+    recon_first_wp_row = recon_table_header_row + 1
+    recon_last_wp_row = recon_first_wp_row + num_wps - 1
+    recon_total_row = recon_last_wp_row + 1
+
+    # Section 2b: Gap chart sits two rows below the recon TOTAL row.
+    recon_gap_chart_anchor_row = recon_total_row + 2
+
+    # Section 3: Person Load (gap chart anchor + 14 rows chart + 1 spacer)
+    person_section_row = recon_gap_chart_anchor_row + 15
+    person_header_row = person_section_row + 1
+    person_first_row = person_header_row + 1
+    person_last_row = person_first_row + len(team) - 1
+
+    # Hidden helper rows (chart data, 2-row gap below person load)
+    helper_start_row = person_last_row + 2
+    helper_row_planned = helper_start_row
+    helper_row_actual = helper_start_row + 1
+    helper_row_forecast = helper_start_row + 2
+    helper_row_ceiling = helper_start_row + 3
+    helper_row_labels = helper_row_ceiling + 1
+    helper_row_rp = helper_row_labels + 1
+    helper_row_gap = helper_row_rp + 1
+    helper_row_zero = helper_row_gap + 1
+
+    pf_first_wp_row = (
+        plan_forecast_layout["forecast_first_wp_row"]
+        if plan_forecast_layout is not None
+        else None
+    )
+    pf_total_row = (
+        plan_forecast_layout["forecast_total_row"]
+        if plan_forecast_layout is not None
+        else None
+    )
+
+    return {
+        "wp_start_col_letter": wp_start_col_letter,
+        "wp_end_col_letter": wp_end_col_letter,
+        "month_col_start": month_col_start,
+        "num_wps": num_wps,
+        "month_col_end": month_col_end,
+        "val_col_budget": val_col_budget,
+        "cum_col_letter": cum_col_letter,
+        "ceiling_col_letter": ceiling_col_letter,
+        "ms": ms,
+        "me": me,
+        "section1_row": section1_row,
+        "header_row": header_row,
+        "first_wp_data_row": first_wp_data_row,
+        "last_wp_data_row": last_wp_data_row,
+        "total_row": total_row,
+        "chart_anchor_row": chart_anchor_row,
+        "recon_section_row": recon_section_row,
+        "recon_health_eur_through_row": recon_health_eur_through_row,
+        "recon_health_hours_through_row": recon_health_hours_through_row,
+        "recon_health_reconciled_row": recon_health_reconciled_row,
+        "recon_table_header_row": recon_table_header_row,
+        "recon_first_wp_row": recon_first_wp_row,
+        "recon_last_wp_row": recon_last_wp_row,
+        "recon_total_row": recon_total_row,
+        "recon_gap_chart_anchor_row": recon_gap_chart_anchor_row,
+        "person_section_row": person_section_row,
+        "person_header_row": person_header_row,
+        "person_first_row": person_first_row,
+        "person_last_row": person_last_row,
+        "helper_row_planned": helper_row_planned,
+        "helper_row_actual": helper_row_actual,
+        "helper_row_forecast": helper_row_forecast,
+        "helper_row_ceiling": helper_row_ceiling,
+        "helper_row_labels": helper_row_labels,
+        "helper_row_rp": helper_row_rp,
+        "helper_row_gap": helper_row_gap,
+        "helper_row_zero": helper_row_zero,
+        "pf_first_wp_row": pf_first_wp_row,
+        "pf_total_row": pf_total_row,
+    }
+
+
+def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
+    """Section 1: WP Burn Rate & Exhaustion — section header, column headers,
+    and per-WP data rows (cols A–G)."""
+    section1_row = tlayout["section1_row"]
+    header_row = tlayout["header_row"]
+    first_wp_data_row = tlayout["first_wp_data_row"]
+    num_wps = tlayout["num_wps"]
+    cum_col_letter = tlayout["cum_col_letter"]
+    ceiling_col_letter = tlayout["ceiling_col_letter"]
+    wp_start_col_letter = tlayout["wp_start_col_letter"]
+    wp_end_col_letter = tlayout["wp_end_col_letter"]
+    ms = tlayout["ms"]
+    me = tlayout["me"]
+
     # ================================================================
     # Section 1: WP Burn Rate & Exhaustion Table
     # ================================================================
-    section1_row = 3
     write_section_header(ws, section1_row, "WP BURN RATE & EXHAUSTION", merge_end=7)
 
     # Column headers (row 4)
-    header_row = 4
     headers = [
         "WP ID", "WP Name", "% Time Elapsed", "% Budget EUR",
         "Burn Delta", "Status", "Exhaustion Mo.",
@@ -100,9 +198,6 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         "Accuracy improves after Q2.")
 
     # WP data rows
-    first_wp_data_row = header_row + 1
-    last_wp_data_row = first_wp_data_row + num_wps - 1
-
     for i, wp in enumerate(work_packages):
         row = first_wp_data_row + i
         config_row = layout["config_first_wp_row"] + i
@@ -166,6 +261,17 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         style_cell(ws, row, 7, font=BLACK_FORMULA, fmt="0").value = (
             f'=IF(current_month<{wp_start},"\u2014",{exhaustion_formula})'
         )
+
+    _ = num_wps  # parity hint: helper width drives WP loop count
+
+
+def _apply_burn_rate_cf(ws, tlayout, work_packages):
+    """CF on Burn Rate columns E (Burn Delta), F (Status), and G (per-WP
+    Exhaustion Month). Add-order is sacred — first added = highest priority.
+    """
+    first_wp_data_row = tlayout["first_wp_data_row"]
+    last_wp_data_row = tlayout["last_wp_data_row"]
+    num_wps = tlayout["num_wps"]
 
     # -- Conditional formatting: Burn Delta (col E, rows 5-12) --
     e_range = f"E{first_wp_data_row}:E{last_wp_data_row}"
@@ -237,9 +343,16 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
             fill=_RED_CF_FILL,
         ))
 
-    # -- TOTAL row --
-    total_row = last_wp_data_row + 1
+
+def _write_burn_rate_total(ws, tlayout, actuals_layout):
+    """TOTAL row of the Burn Rate table — weighted-average burn delta in col E."""
+    first_wp_data_row = tlayout["first_wp_data_row"]
+    num_wps = tlayout["num_wps"]
+    total_row = tlayout["total_row"]
+    ceiling_col_letter = tlayout["ceiling_col_letter"]
     act_first = actuals_layout["first_wp_row"]
+
+    # -- TOTAL row --
     style_cell(ws, total_row, 1, "", fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 2, "TOTAL", font=HEADER_FONT,
                fill=LIGHT_GREEN_FILL)
@@ -261,34 +374,46 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     style_cell(ws, total_row, 6, "", fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 7, "", fill=LIGHT_GREEN_FILL)
 
+
+def _write_reconciliation_section(ws, tlayout, layout, actuals_layout):
+    """Section 2a: Reconciliation block — section header, three health rows,
+    per-WP table (header + WP rows + TOTAL row).
+
+    Layout inside reconciliation block (offsets from recon_section_row):
+      +0: section header
+      +1: blank
+      +2: Actuals EUR through
+      +3: Hours through
+      +4: Reconciled through
+      +5: blank
+      +6: table header
+      +7..+6+num_wps: WP data rows
+      +7+num_wps:     TOTAL row
+      +8+num_wps:     blank spacer
+    """
+    num_wps = tlayout["num_wps"]
+    ms = tlayout["ms"]
+    me = tlayout["me"]
+    recon_section_row = tlayout["recon_section_row"]
+    recon_health_eur_through_row = tlayout["recon_health_eur_through_row"]
+    recon_health_hours_through_row = tlayout["recon_health_hours_through_row"]
+    recon_health_reconciled_row = tlayout["recon_health_reconciled_row"]
+    recon_table_header_row = tlayout["recon_table_header_row"]
+    recon_first_wp_row = tlayout["recon_first_wp_row"]
+    recon_last_wp_row = tlayout["recon_last_wp_row"]
+    recon_total_row = tlayout["recon_total_row"]
+    pf_first_wp_row = tlayout["pf_first_wp_row"]
+
     # ================================================================
     # Section 2a: Reconciliation — Forecast vs Actual EUR
     # ================================================================
     # Chart is anchored 2 rows below total. Chart height is 7.5 cm (~14
     # rows at default row height), so the Reconciliation block starts at
     # chart_anchor_row + 14 (immediately after the chart).
-    chart_anchor_row = total_row + 2
-    recon_section_row = chart_anchor_row + 14
-
-    # Layout inside reconciliation block (offsets from recon_section_row):
-    #   +0: section header
-    #   +1: blank
-    #   +2: Actuals EUR through
-    #   +3: Hours through
-    #   +4: Reconciled through
-    #   +5: blank
-    #   +6: table header
-    #   +7..+6+num_wps: WP data rows
-    #   +7+num_wps:     TOTAL row
-    #   +8+num_wps:     blank spacer
     write_section_header(
         ws, recon_section_row,
         "RECONCILIATION: FORECAST vs ACTUAL EUR", merge_end=5,
     )
-
-    recon_health_eur_through_row = recon_section_row + 2
-    recon_health_hours_through_row = recon_section_row + 3
-    recon_health_reconciled_row = recon_section_row + 4
 
     # Health row 1: Actuals EUR through — green cross-sheet (named range → Config)
     style_cell(ws, recon_health_eur_through_row, 1,
@@ -311,21 +436,12 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     )
 
     # Per-WP reconciliation table header
-    recon_table_header_row = recon_section_row + 6
     recon_headers = ["WP", "Cum Forecast EUR", "Cum Actual EUR", "Gap EUR", "Gap %"]
     for ci, h in enumerate(recon_headers, 1):
         style_cell(ws, recon_table_header_row, ci, h, font=HEADER_FONT,
                    fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
-    recon_first_wp_row = recon_table_header_row + 1
-    recon_last_wp_row = recon_first_wp_row + num_wps - 1
-
     # Data refs
-    pf_first_wp_row = (
-        plan_forecast_layout["forecast_first_wp_row"]
-        if plan_forecast_layout is not None
-        else None
-    )
     act_first_wp_row = actuals_layout["first_wp_row"]
     cfg_first_wp = layout["config_first_wp_row"]
 
@@ -374,7 +490,6 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
                    fmt="0.0%").value = f"=IFERROR(D{row}/B{row},0)"
 
     # TOTAL row immediately after last WP row
-    recon_total_row = recon_last_wp_row + 1
     style_cell(ws, recon_total_row, 1, "TOTAL", font=HEADER_FONT,
                fill=LIGHT_GREEN_FILL)
     style_cell(ws, recon_total_row, 2, font=BLACK_FORMULA,
@@ -394,6 +509,14 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         f"=IFERROR(D{recon_total_row}/B{recon_total_row},0)"
     )
 
+
+def _apply_reconciliation_cf(ws, tlayout):
+    """CF on the Reconciliation Gap % column (E, data rows + TOTAL row).
+    Red added FIRST so it wins at |gap| > 10%.
+    """
+    recon_first_wp_row = tlayout["recon_first_wp_row"]
+    recon_total_row = tlayout["recon_total_row"]
+
     # -- Conditional formatting: Gap % (col E), data rows + TOTAL row --
     # Red added first (highest priority) so red wins at |gap| > 10%.
     recon_e_range = f"E{recon_first_wp_row}:E{recon_total_row}"
@@ -407,24 +530,22 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         formula=[f"ABS({recon_e_ref})>0.05"], fill=_AMBER_CF_FILL,
     ))
 
-    # ================================================================
-    # Section 2b: Reconciliation gap-over-time chart anchor
-    # ================================================================
-    # Gap chart sits immediately below the RECONCILIATION TOTAL row, with
-    # one blank spacer in between. Chart height is 7.5 cm (~14 rows); add
-    # one trailing spacer before PERSON LOAD.
-    recon_gap_chart_anchor_row = recon_total_row + 2
+
+def _write_person_load_table(ws, tlayout, capacity_layout, team_layout, team):
+    """Section 3: Person Load — section header, column headers, per-person
+    data rows (cols A–D)."""
+    person_section_row = tlayout["person_section_row"]
+    person_header_row = tlayout["person_header_row"]
+    person_first_row = tlayout["person_first_row"]
 
     # ================================================================
     # Section 3: Person Load Table
     # ================================================================
     # Push Person Load below the gap chart (chart anchor + 14 rows chart
     # + 1 trailing spacer = + 15).
-    person_section_row = recon_gap_chart_anchor_row + 15
     write_section_header(ws, person_section_row, "PERSON LOAD", merge_end=4)
 
     # Column headers
-    person_header_row = person_section_row + 1
     person_headers = [
         "Person",
         "Avg FTE to date",
@@ -436,7 +557,6 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
                    fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
     # Person data rows
-    person_first_row = person_header_row + 1
     person_groups = capacity_layout["person_groups"]
     person_rows_map = team_layout["person_rows"]
     # Capacity TO-DATE band column letters: Actual PM + Variance PM columns
@@ -478,7 +598,13 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
             f"=IFERROR({cap_var}/({cap_actual}+{cap_var}),0)"
         )
 
-    person_last_row = person_first_row + len(team) - 1
+
+def _apply_person_load_cf(ws, tlayout):
+    """CF on Person Load Variance to-date % (col D) — across all person rows.
+    Red added BEFORE amber so red wins at |variance| >= 20%.
+    """
+    person_first_row = tlayout["person_first_row"]
+    person_last_row = tlayout["person_last_row"]
 
     # -- Conditional formatting: Variance to-date % (col D) — across all person rows --
     # Red BEFORE amber so red wins at >=20% drift (openpyxl: first rule added
@@ -495,17 +621,24 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         formula=[f'ABS({d_ref})>0.10'], fill=_AMBER_CF_FILL,
     ))
 
+
+def _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params):
+    """Hidden helper rows for the cumulative chart: Planned, Actual,
+    Forecast, Ceiling. Hides each helper row.
+    """
     # ================================================================
     # Section 3: Cumulative LineChart + hidden helper rows
     # ================================================================
     # Helper rows placed below person load section (2-row gap).
     # Order matches series stacking on the chart for readability:
     # Planned, Actual, Forecast, Ceiling, (labels), RP markers.
-    helper_start_row = person_last_row + 2
-    helper_row_planned = helper_start_row
-    helper_row_actual = helper_start_row + 1
-    helper_row_forecast = helper_start_row + 2
-    helper_row_ceiling = helper_start_row + 3
+    num_wps = tlayout["num_wps"]
+    month_col_start = tlayout["month_col_start"]
+    helper_row_planned = tlayout["helper_row_planned"]
+    helper_row_actual = tlayout["helper_row_actual"]
+    helper_row_forecast = tlayout["helper_row_forecast"]
+    helper_row_ceiling = tlayout["helper_row_ceiling"]
+    pf_total_row = tlayout["pf_total_row"]
 
     plan_first_wp = layout["planned_first_wp_row"]
     plan_last_wp = layout["planned_last_wp_row"]
@@ -513,11 +646,6 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     # Plan-Forecast MONTHLY TOTAL row (sums forecast EUR per month).
     # plan_forecast_layout is wired through _build_all_sheets; falls back
     # to None only when callers wire trends in isolation (tests would catch).
-    pf_total_row = (
-        plan_forecast_layout["forecast_total_row"]
-        if plan_forecast_layout is not None
-        else None
-    )
 
     # Per-WP rate range from Config column D (for SUMPRODUCT)
     cfg_wp_first = layout["config_first_wp_row"]
@@ -594,6 +722,84 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     ws.row_dimensions[helper_row_forecast].hidden = True
     ws.row_dimensions[helper_row_ceiling].hidden = True
 
+
+def _write_chart_label_and_rp_rows(ws, tlayout, project_params, reporting_periods):
+    """Month-label row (X-axis categories) and RP boundary marker row for
+    the cumulative chart. Both rows hidden.
+    """
+    month_col_start = tlayout["month_col_start"]
+    month_col_end = tlayout["month_col_end"]
+    helper_row_labels = tlayout["helper_row_labels"]
+    helper_row_rp = tlayout["helper_row_rp"]
+
+    # X-axis category labels (month-year, e.g. "Nov 25")
+    project_start = project_params["start"]
+    for m_idx in range(project_params["months"]):
+        c = month_col_start + m_idx
+        cal_date = project_start + relativedelta(months=m_idx)
+        ws.cell(row=helper_row_labels, column=c,
+                value=f"M{m_idx + 1}-{cal_date.strftime('%b%y')}")
+    ws.row_dimensions[helper_row_labels].hidden = True
+
+    # Helper Row 5: RP boundary markers (ceiling value at each RP end month)
+    for rp in reporting_periods:
+        boundary_col = month_col_start + rp["end"] - 1
+        if boundary_col <= month_col_end:
+            style_cell(ws, helper_row_rp, boundary_col,
+                       font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+                "=partner_ceiling"
+            )
+    ws.row_dimensions[helper_row_rp].hidden = True
+
+
+def _write_gap_helper_rows(ws, tlayout, project_params):
+    """Hidden helper rows for the gap-over-time chart: gap (actual-forecast)
+    and zero reference line.
+    """
+    month_col_start = tlayout["month_col_start"]
+    helper_row_actual = tlayout["helper_row_actual"]
+    helper_row_forecast = tlayout["helper_row_forecast"]
+    helper_row_gap = tlayout["helper_row_gap"]
+    helper_row_zero = tlayout["helper_row_zero"]
+
+    # Helper Rows 7 + 8: gap-over-time + zero reference line.
+    # Gap = cumulative actual - cumulative forecast per month. Because the
+    # actual and forecast helper rows already emit NA() past their
+    # respective through-months, subtraction naturally propagates NA()
+    # past reconciled_through_month (= MIN of the two).
+    for m_idx in range(project_params["months"]):
+        c = month_col_start + m_idx
+        cl = col_letter(c)
+        # Gap helper: actual - forecast. Black same-sheet derived.
+        style_cell(ws, helper_row_gap, c,
+                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+            f"={cl}{helper_row_actual}-{cl}{helper_row_forecast}"
+        )
+        # Zero reference: formula =0 (Rule 1: formulas only).
+        style_cell(ws, helper_row_zero, c,
+                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = "=0"
+    ws.row_dimensions[helper_row_gap].hidden = True
+    ws.row_dimensions[helper_row_zero].hidden = True
+
+
+def _build_cumulative_chart(ws, tlayout):
+    """Build the cumulative-EUR LineChart (Planned / Actual / Forecast /
+    Ceiling / RP End) and anchor it at ``chart_anchor_row``.
+
+    Series are constructed manually (NumDataSource/NumRef/AxDataSource)
+    rather than via ``chart.add_data`` because LibreOffice's recalc macro
+    strips val/tx/cat from add_data-created series.
+    """
+    ms = tlayout["ms"]
+    me = tlayout["me"]
+    chart_anchor_row = tlayout["chart_anchor_row"]
+    helper_row_planned = tlayout["helper_row_planned"]
+    helper_row_actual = tlayout["helper_row_actual"]
+    helper_row_forecast = tlayout["helper_row_forecast"]
+    helper_row_ceiling = tlayout["helper_row_ceiling"]
+    helper_row_labels = tlayout["helper_row_labels"]
+    helper_row_rp = tlayout["helper_row_rp"]
+
     # -- Build the LineChart --
     # NOTE: Series are constructed manually (not via chart.add_data) because
     # LibreOffice's recalc macro strips val/tx/cat from add_data-created series.
@@ -610,48 +816,6 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
 
     sheet_name = "Trends"
     range_str = f"'{sheet_name}'!${ms}${{}}:${me}${{}}"
-
-    # X-axis category labels (month-year, e.g. "Nov 25")
-    helper_row_labels = helper_row_ceiling + 1
-    project_start = project_params["start"]
-    for m_idx in range(project_params["months"]):
-        c = month_col_start + m_idx
-        cal_date = project_start + relativedelta(months=m_idx)
-        ws.cell(row=helper_row_labels, column=c,
-                value=f"M{m_idx + 1}-{cal_date.strftime('%b%y')}")
-    ws.row_dimensions[helper_row_labels].hidden = True
-
-    # Helper Row 5: RP boundary markers (ceiling value at each RP end month)
-    helper_row_rp = helper_row_labels + 1
-    for rp in reporting_periods:
-        boundary_col = month_col_start + rp["end"] - 1
-        if boundary_col <= month_col_end:
-            style_cell(ws, helper_row_rp, boundary_col,
-                       font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                "=partner_ceiling"
-            )
-    ws.row_dimensions[helper_row_rp].hidden = True
-
-    # Helper Rows 7 + 8: gap-over-time + zero reference line.
-    # Gap = cumulative actual - cumulative forecast per month. Because the
-    # actual and forecast helper rows already emit NA() past their
-    # respective through-months, subtraction naturally propagates NA()
-    # past reconciled_through_month (= MIN of the two).
-    helper_row_gap = helper_row_rp + 1
-    helper_row_zero = helper_row_gap + 1
-    for m_idx in range(project_params["months"]):
-        c = month_col_start + m_idx
-        cl = col_letter(c)
-        # Gap helper: actual - forecast. Black same-sheet derived.
-        style_cell(ws, helper_row_gap, c,
-                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-            f"={cl}{helper_row_actual}-{cl}{helper_row_forecast}"
-        )
-        # Zero reference: formula =0 (Rule 1: formulas only).
-        style_cell(ws, helper_row_zero, c,
-                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = "=0"
-    ws.row_dimensions[helper_row_gap].hidden = True
-    ws.row_dimensions[helper_row_zero].hidden = True
 
     cat_ref = AxDataSource(strRef=StrRef(
         f=range_str.format(helper_row_labels, helper_row_labels)))
@@ -715,6 +879,23 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     chart.height = 7.5
     ws.add_chart(chart, f"A{chart_anchor_row}")
 
+
+def _build_gap_chart(ws, tlayout):
+    """Build the gap-over-time LineChart (cumulative Actual EUR − cumulative
+    Forecast EUR) and anchor it at ``recon_gap_chart_anchor_row``.
+
+    Single-series line showing drift of actual vs forecast. Clips via NA()
+    past reconciled_through_month (inherited from the actual / forecast
+    helper rows). A second dashed-grey zero reference line makes sign of
+    drift visually obvious.
+    """
+    ms = tlayout["ms"]
+    me = tlayout["me"]
+    recon_gap_chart_anchor_row = tlayout["recon_gap_chart_anchor_row"]
+    helper_row_labels = tlayout["helper_row_labels"]
+    helper_row_gap = tlayout["helper_row_gap"]
+    helper_row_zero = tlayout["helper_row_zero"]
+
     # ================================================================
     # Gap-over-time chart (cumulative Actual EUR − cumulative Forecast EUR)
     # ================================================================
@@ -732,6 +913,9 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     gap_chart.x_axis.axPos = "b"
     gap_chart.x_axis.tickLblPos = "nextTo"
     gap_chart.x_axis.delete = False
+
+    sheet_name = "Trends"
+    range_str = f"'{sheet_name}'!${ms}${{}}:${me}${{}}"
 
     # Reuse the month-label helper row from the cumulative chart.
     gap_cat_ref = AxDataSource(strRef=StrRef(
@@ -760,6 +944,9 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     gap_chart.height = 7.5
     ws.add_chart(gap_chart, f"A{recon_gap_chart_anchor_row}")
 
+
+def _apply_column_widths(ws):
+    """Auto-fit columns then pin A/B widths for label readability."""
     # ================================================================
     # Column widths
     # ================================================================
@@ -767,35 +954,83 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     ws.column_dimensions["A"].width = 16
     ws.column_dimensions["B"].width = 25
 
+
+def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout, *,
+                       project_params, work_packages,
+                       team, reporting_periods,
+                       plan_forecast_layout=None):
+    """Build the Trends sheet: WP burn rate, cumulative chart, person load.
+
+    Args:
+        ws: The Trends worksheet (already has current_month in B1).
+        layout: Plan layout dict (config_first_wp_row, etc).
+        actuals_layout: Actuals layout dict (first_wp_row, cum_col, etc).
+        capacity_layout: Capacity layout dict (person_groups with total_row per person).
+        team_layout: Team layout dict (person_rows mapping name->row).
+        project_params: Dict with keys title, start, months, rate.
+        work_packages: List of WP dicts with single-range 'start'/'end'/'type'.
+        team: List of team member dicts.
+        reporting_periods: Reporting period entries.
+    """
+    tlayout = _resolve_trends_layout(
+        layout, actuals_layout, project_params, work_packages, team,
+        plan_forecast_layout,
+    )
+
+    # Section 1: WP Burn Rate & Exhaustion (table + CF + TOTAL row)
+    _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages)
+    _apply_burn_rate_cf(ws, tlayout, work_packages)
+    _write_burn_rate_total(ws, tlayout, actuals_layout)
+
+    # Section 2a: Reconciliation block (header + health rows + per-WP table + CF)
+    _write_reconciliation_section(ws, tlayout, layout, actuals_layout)
+    _apply_reconciliation_cf(ws, tlayout)
+
+    # Section 3: Person Load (table + CF)
+    _write_person_load_table(ws, tlayout, capacity_layout, team_layout, team)
+    _apply_person_load_cf(ws, tlayout)
+
+    # Hidden helper rows feeding both charts.
+    _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params)
+    _write_chart_label_and_rp_rows(ws, tlayout, project_params, reporting_periods)
+    _write_gap_helper_rows(ws, tlayout, project_params)
+
+    # Charts (order matters: cumulative first, then gap — preserves
+    # ws._charts[0]/[1] index assertions in tests).
+    _build_cumulative_chart(ws, tlayout)
+    _build_gap_chart(ws, tlayout)
+
+    _apply_column_widths(ws)
+
     # ================================================================
     # Return layout dict
     # ================================================================
     return {
-        "section_header_row": section1_row,
-        "burn_rate_header_row": header_row,
-        "burn_rate_first_wp_row": first_wp_data_row,
-        "burn_rate_last_wp_row": last_wp_data_row,
-        "burn_rate_total_row": total_row,
-        "chart_anchor_row": chart_anchor_row,
-        "recon_section_row": recon_section_row,
-        "recon_health_eur_through_row": recon_health_eur_through_row,
-        "recon_health_hours_through_row": recon_health_hours_through_row,
-        "recon_health_reconciled_row": recon_health_reconciled_row,
-        "recon_table_header_row": recon_table_header_row,
-        "recon_first_wp_row": recon_first_wp_row,
-        "recon_last_wp_row": recon_last_wp_row,
-        "recon_total_row": recon_total_row,
-        "person_load_section_row": person_section_row,
-        "person_load_header_row": person_header_row,
-        "person_load_first_row": person_first_row,
-        "person_load_last_row": person_last_row,
-        "helper_row_planned": helper_row_planned,
-        "helper_row_actual": helper_row_actual,
-        "helper_row_forecast": helper_row_forecast,
-        "helper_row_ceiling": helper_row_ceiling,
-        "helper_row_labels": helper_row_labels,
-        "helper_row_rp": helper_row_rp,
-        "helper_row_gap": helper_row_gap,
-        "helper_row_zero": helper_row_zero,
-        "recon_gap_chart_anchor_row": recon_gap_chart_anchor_row,
+        "section_header_row": tlayout["section1_row"],
+        "burn_rate_header_row": tlayout["header_row"],
+        "burn_rate_first_wp_row": tlayout["first_wp_data_row"],
+        "burn_rate_last_wp_row": tlayout["last_wp_data_row"],
+        "burn_rate_total_row": tlayout["total_row"],
+        "chart_anchor_row": tlayout["chart_anchor_row"],
+        "recon_section_row": tlayout["recon_section_row"],
+        "recon_health_eur_through_row": tlayout["recon_health_eur_through_row"],
+        "recon_health_hours_through_row": tlayout["recon_health_hours_through_row"],
+        "recon_health_reconciled_row": tlayout["recon_health_reconciled_row"],
+        "recon_table_header_row": tlayout["recon_table_header_row"],
+        "recon_first_wp_row": tlayout["recon_first_wp_row"],
+        "recon_last_wp_row": tlayout["recon_last_wp_row"],
+        "recon_total_row": tlayout["recon_total_row"],
+        "person_load_section_row": tlayout["person_section_row"],
+        "person_load_header_row": tlayout["person_header_row"],
+        "person_load_first_row": tlayout["person_first_row"],
+        "person_load_last_row": tlayout["person_last_row"],
+        "helper_row_planned": tlayout["helper_row_planned"],
+        "helper_row_actual": tlayout["helper_row_actual"],
+        "helper_row_forecast": tlayout["helper_row_forecast"],
+        "helper_row_ceiling": tlayout["helper_row_ceiling"],
+        "helper_row_labels": tlayout["helper_row_labels"],
+        "helper_row_rp": tlayout["helper_row_rp"],
+        "helper_row_gap": tlayout["helper_row_gap"],
+        "helper_row_zero": tlayout["helper_row_zero"],
+        "recon_gap_chart_anchor_row": tlayout["recon_gap_chart_anchor_row"],
     }

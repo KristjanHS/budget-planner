@@ -2,7 +2,7 @@
 
 The block has 2 cols. WP-row Actual PM is a single cross-sheet ref
 to the Actuals-Hours ``cum_hours_col``; Variance PM is populated only
-on TOTAL + EU TOTAL rows as ``windowed-plan-sum − Actual``.
+on TOTAL rows as ``windowed-plan-sum − Actual``.
 """
 
 import pytest
@@ -82,13 +82,6 @@ def _find_total_row(ws, after_row: int) -> int:
         if ws.cell(r, 2).value == "TOTAL":
             return r
     raise AssertionError("TOTAL row not found")
-
-
-def _find_eu_total_row(ws, after_row: int) -> int:
-    for r in range(after_row + 1, after_row + 25):
-        if ws.cell(r, 2).value == "EU TOTAL":
-            return r
-    raise AssertionError("EU TOTAL row not found")
 
 
 def test_todate_headers(cap_formulas, todate_cols):
@@ -189,11 +182,3 @@ def test_total_variance_resolves_nonnegative_under_demo_seed(cap_values, todate_
     assert isinstance(var, (int, float))
 
 
-def test_eu_total_variance_windowed(cap_formulas, todate_cols):
-    """EU TOTAL row also carries Variance PM using windowed plan sum."""
-    alice_header = _find_person_header_row(cap_formulas, "Alice")
-    eu_row = _find_eu_total_row(cap_formulas, alice_header)
-    formula = cap_formulas.cell(eu_row, todate_cols["var"]).value
-    assert isinstance(formula, str)
-    assert "INDEX" in formula
-    assert "hours_actuals_through_month" in formula

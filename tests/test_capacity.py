@@ -109,16 +109,6 @@ def test_capacity_person_has_total_row(cap_ws, capacity_layout):
         assert cap_ws.cell(row=total_row, column=2).value == "TOTAL"
 
 
-# ── Test: REMAINING row ──
-
-def test_capacity_person_has_remaining_row(cap_ws, capacity_layout):
-    """REMAINING row exists per person."""
-    for member in TEAM:
-        group = capacity_layout["person_groups"][member["name"]]
-        remaining_row = group["remaining_row"]
-        assert cap_ws.cell(row=remaining_row, column=2).value == "REMAINING"
-
-
 # ── Test: WP rows are blue input ──
 
 def test_capacity_wp_rows_are_blue_input(cap_ws, capacity_layout):
@@ -148,19 +138,6 @@ def test_capacity_total_row_is_sum_formula(cap_ws, capacity_layout):
         val = cap_ws.cell(row=total_row, column=MONTH_COL_START).value
         assert isinstance(val, str) and val.startswith("=SUM("), (
             f"{member['name']} TOTAL M1: expected SUM formula, got {val}"
-        )
-
-
-# ── Test: REMAINING row formula ──
-
-def test_capacity_remaining_row_formula(cap_ws, capacity_layout):
-    """REMAINING references Config max_fte minus TOTAL."""
-    for member in TEAM:
-        group = capacity_layout["person_groups"][member["name"]]
-        remaining_row = group["remaining_row"]
-        val = cap_ws.cell(row=remaining_row, column=MONTH_COL_START).value
-        assert isinstance(val, str) and "Config!" in val, (
-            f"{member['name']} REMAINING M1: expected Config! ref, got {val}"
         )
 
 
@@ -327,49 +304,41 @@ def test_distribute_zero_months():
     assert result == []
 
 
-# ── Test: EU TOTAL row ──
+# ── Test: TOTAL-row over-allocation CF (folded REMAINING-row CF) ──
 
-def test_capacity_person_has_eu_total_row(cap_ws, capacity_layout):
-    """EU TOTAL row exists per person."""
-    for member in TEAM:
-        group = capacity_layout["person_groups"][member["name"]]
-        eu_total_row = group.get("eu_total_row")
-        assert eu_total_row is not None, f"{member['name']} missing eu_total_row"
-        assert cap_ws.cell(row=eu_total_row, column=2).value == "EU TOTAL"
+def test_capacity_total_row_overalloc_red_cf(cap_ws, capacity_layout):
+    """TOTAL row has a red CF rule per person whose formula compares the
+    monthly TOTAL cell against Config Max FTE (folds the dropped REMAINING
+    < 0 CF onto TOTAL > Max FTE)."""
+    from openpyxl.styles import PatternFill
 
-
-def test_capacity_eu_total_row_formula(cap_ws, capacity_layout):
-    """EU TOTAL monthly cells have SUM formulas referencing WP rows."""
-    for member in TEAM:
-        name = member["name"]
-        group = capacity_layout["person_groups"][name]
-        eu_total_row = group["eu_total_row"]
-        val = cap_ws.cell(row=eu_total_row, column=MONTH_COL_START).value
-        # Should be a SUM formula (or =0 if no WP rows)
-        assert isinstance(val, str) and val.startswith("="), (
-            f"{name} EU TOTAL M1: expected formula, got {val}"
-        )
-
-
-def test_capacity_eu_total_includes_eu_external(cap_ws, capacity_layout):
-    """EU TOTAL formula includes EU-flagged external rows, excludes non-EU."""
-    from budget_planner.config import EXTERNAL_COMMITMENTS
-    for member in TEAM:
-        name = member["name"]
-        group = capacity_layout["person_groups"][name]
-        eu_total_row = group["eu_total_row"]
-        formula = str(cap_ws.cell(row=eu_total_row, column=MONTH_COL_START).value)
-        # EU-flagged externals should be in the formula
-        for ext in EXTERNAL_COMMITMENTS:
-            if ext["person"] == name and ext.get("is_eu"):
-                ext_row = group["external_rows"][ext["project"]]
-                assert str(ext_row) in formula, (
-                    f"{name} EU TOTAL should reference EU external row {ext_row}"
-                )
-        # Non-EU externals should NOT be in the formula
-        for ext in EXTERNAL_COMMITMENTS:
-            if ext["person"] == name and not ext.get("is_eu"):
-                ext_row = group["external_rows"][ext["project"]]
-                assert str(ext_row) not in formula, (
-                    f"{name} EU TOTAL should NOT reference non-EU external row {ext_row}"
-                )
+    expected_total_rows = {
+        capacity_layout["person_groups"][m["name"]]["total_row"]
+        for m in TEAM
+    }
+    matched: set[int] = set()
+    for cf_range in cap_ws.conditional_formatting:
+        rules = cap_ws.conditional_formatting[cf_range]
+        for rule in rules:
+            if not (rule.dxf and rule.dxf.fill):
+                continue
+            fill = rule.dxf.fill
+            if not isinstance(fill, PatternFill):
+                continue
+            bg = fill.bgColor and str(fill.bgColor.rgb)
+            if not bg or not bg.endswith("FFC7CE"):
+                continue
+            formulas = list(rule.formula or [])
+            for f in formulas:
+                # Red TOTAL over-alloc CF: "<col><row>>Config!$B$<row>"
+                # (no 0.8 amber multiplier, no SUM, no <0 — distinguishes
+                # from amber TOTAL, EU CF, and variance reds.)
+                if (">Config!$B$" in f and "0.8" not in f
+                        and "SUM(" not in f):
+                    for total_row in expected_total_rows:
+                        if f"{total_row}>Config!$B$" in f:
+                            matched.add(total_row)
+    assert matched == expected_total_rows, (
+        f"Expected red over-alloc CF on every TOTAL row {sorted(expected_total_rows)},"
+        f" matched {sorted(matched)}"
+    )

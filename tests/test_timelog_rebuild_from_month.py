@@ -25,9 +25,13 @@ from openpyxl.cell import Cell
 from openpyxl.workbook.defined_name import DefinedName
 
 from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
-from budget_planner.layout import SHEET_CONFIG, SHEET_TIMELOG_PLAN, TIMELOG_MONTH_COL_START
+from budget_planner.layout import (
+    SECTION_TITLE_GRID,
+    SHEET_CONFIG,
+    SHEET_TIMELOG_PLAN,
+    TIMELOG_MONTH_COL_START,
+)
 from budget_planner.reader import read_timelog_plan
-from budget_planner.timelog_plan import SECTION_TITLE_GRID
 from budget_planner.workbook import init_workbook, rebuild_workbook
 
 

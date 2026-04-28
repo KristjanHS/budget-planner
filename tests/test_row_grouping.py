@@ -1,8 +1,8 @@
 """Row-grouping tests for Capacity + Actuals-Hours (W1 row grouping).
 
 Each person block collapses as a unit: header row stays at ``outline_level
-== 0``; every body row (WP rows, external rows, TOTAL, optional REMAINING,
-optional EU TOTAL) has ``outline_level == 1``. The sheet's
+== 0``; every body row (WP rows, external rows, TOTAL, and on Actuals-Hours
+the optional EU TOTAL) has ``outline_level == 1``. The sheet's
 ``outlinePr.summaryBelow`` is set to ``False`` so the collapse button sits
 next to the person header (above the block), not below it.
 
@@ -74,7 +74,7 @@ def _assert_person_blocks_grouped(ws, sheet_name: str) -> None:
             f"{ws.row_dimensions[hr].outline_level})"
         )
         # Every body row must be level 1 — including WP rows, externals,
-        # TOTAL, REMAINING (capacity only), and EU TOTAL.
+        # TOTAL, and EU TOTAL (Actuals-Hours only).
         for br in body:
             level = ws.row_dimensions[br].outline_level or 0
             assert level == 1, (

@@ -31,6 +31,7 @@ from budget_planner.styles import (
     CF_RED_FILL, style_cell, col_letter, write_section_header,
     sized_comment,
 )
+from budget_planner import config
 
 
 def _apply_planned_formulas(ws, layout, capacity_layout, *,
@@ -49,7 +50,6 @@ def _apply_planned_formulas(ws, layout, capacity_layout, *,
         project_params: Project params dict; falls back to config values.
     """
     if project_params is None or work_packages is None:
-        from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:
@@ -97,7 +97,6 @@ def build_plan_sheet(ws, wb, *, project_params=None, work_packages=None,
         Layout dict with row numbers for all key positions.
     """
     if project_params is None or work_packages is None:
-        from budget_planner import config
         if project_params is None:
             project_params = config.default_project_params()
         if work_packages is None:

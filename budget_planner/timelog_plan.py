@@ -48,6 +48,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from budget_planner.layout import (
     COL_WP_BUDGET_PLUS_I,
+    SECTION_TITLE_GRID,
     SHEET_CONFIG,
     SHEET_TIMELOG_PLAN,
     TIMELOG_MONTH_COL_START,
@@ -61,6 +62,7 @@ from budget_planner.styles import (
     BLUE_INPUT,
     CENTER,
     CENTER_WRAP,
+    RIGHT,
     CF_GREEN_FILL,
     CF_PASTEL_FILLS,
     CF_RED_FILL,
@@ -87,12 +89,9 @@ from budget_planner.timelog_solver import (
     solve,
 )
 
-# Section-title strings — exported so the reader can anchor on the grid title
-# via the same literal the builder writes. Update here, not at the callsite.
+# Section-title strings used by the builder + sibling tests. SECTION_TITLE_GRID
+# is the cross-domain reader anchor and lives in layout.py — imported above.
 SECTION_TITLE_WP_SUMMARY = "PER-WP SUMMARY"
-SECTION_TITLE_GRID = (
-    "TIMELOG GRID (edit freely — rebuild re-solves from Config!B9 onward)"
-)
 SECTION_TITLE_PERSON_SUMMARY = "PER-PERSON SUMMARY"
 
 # PER-PERSON SUMMARY layout: col A = Person, cols B..I = 8 metric cols.
@@ -197,21 +196,87 @@ def build_timelog_plan_sheet(
           rebuild_from_month_cell (Config!B{row} coordinate string).
     """
     project_months: int = project_params["months"]
+    ws.sheet_properties.tabColor = "FF8C00"  # orange — distinguishes from existing tabs
+    solver_state = _resolve_solver_state(
+        project_params, work_packages, team, assignments, grade_rates,
+        preserved_grid, rebuild_from_month,
+    )
+    tlayout = _resolve_timelog_layout(project_months, solver_state)
+
+    _write_banner_row(ws, tlayout)
+    _write_traffic_light_labels(ws, wb, tlayout)
+    # row 3: blank spacer (no write)
+
+    year_specs = _year_col_specs(
+        project_params["start"], project_months, tlayout["month_col_start"],
+    )
+    cfg_wp_first_row = config_layout["wp_first_row"]
+    rate_col_range, grid_range, midx_range = _build_band_ranges(tlayout)
+    _write_wp_summary_band(
+        ws, tlayout, solver_state, year_specs, cfg_wp_first_row,
+        rate_col_range=rate_col_range, grid_range=grid_range,
+        midx_range=midx_range,
+    )
+    _write_grid_band(ws, tlayout, project_params)
+    _write_person_summary_band(ws, tlayout)
+    _fill_person_rows(ws, tlayout, solver_state, config_layout)
+    _write_monthly_total_rows(ws, tlayout, solver_state)
+    _patch_traffic_light_values(ws, tlayout)
+    _apply_traffic_light_cf(ws, tlayout)
+    _apply_grid_cf(ws, tlayout, solver_state, grid_range=grid_range)
+    _apply_summary_cf(ws, tlayout)
+    _apply_freeze_and_widths(ws)
+
+    return {
+        "sheet": SHEET_TIMELOG_PLAN,
+        "month_col_start": tlayout["month_col_start"],
+        "month_col_end": tlayout["month_col_end"],
+        "grid_person_first_row": tlayout["grid_person_first_row"],
+        "grid_person_last_row": tlayout["grid_person_last_row"],
+        "summary_person_first_row": tlayout["summary_person_first_row"],
+        "summary_person_last_row": tlayout["summary_person_last_row"],
+        "person_rows_by_band": tlayout["person_rows_by_band"],
+        "wp_summary_first_row": tlayout["wp_summary_first_row"],
+        "wp_summary_last_row": tlayout["wp_summary_last_row"],
+        "rebuild_from_month_cell": (
+            f"B{config_layout['param_rows']['Rebuild from month #']}"
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_solver_state(
+    project_params: dict,
+    work_packages: list[dict],
+    team: list[dict],
+    assignments: list[dict],
+    grade_rates: Mapping[str, float],
+    preserved_grid: Mapping[tuple[str, int], str] | None,
+    rebuild_from_month: int,
+) -> dict:
+    """Build solver inputs, run the solver, and bundle the resulting state.
+
+    Pure function over the orchestrator's kwargs — no worksheet writes.
+    Freeze semantics: months strictly below ``rebuild_from_month`` are
+    preserved verbatim from ``preserved_grid`` and their € / pool usage is
+    subtracted from WP ceilings + Person pools before solving (see
+    docs/spec.md § Timelog Plan merged grid).
+
+    Returns a dict with keys consumed by downstream helpers: ``persons``,
+    ``wps``, ``assigned_map``, ``stop_reasons``, ``person_windows``,
+    ``vacation_months_project``, ``num_persons``, ``num_wps``.
+    """
+    project_months: int = project_params["months"]
     project_start = project_params["start"]
     vacation_month_num = int(project_params.get("vacation_month_num", 7))
     vacation_months_project = _vacation_months_in_span(
         vacation_month_num, project_start, project_months,
     )
 
-    # ── Tab appearance ──
-    ws.sheet_properties.tabColor = "FF8C00"  # orange — distinguishes from existing tabs
-
-    # ── Column geometry ──
-    month_col_start = TIMELOG_MONTH_COL_START
-    month_col_end = month_col_start + project_months - 1
-    canvas_last_col = month_col_end
-
-    # ── Solver input prep ──
     # Freeze semantics: months strictly below ``rebuild_from_month`` are
     # preserved verbatim from ``preserved_grid`` and their € / pool usage
     # is subtracted from WP ceilings + Person pools before solving. See
@@ -304,10 +369,33 @@ def build_timelog_plan_sheet(
         person_windows.setdefault(w.person_name, []).append(
             (w.wp_code, w.start_month, w.end_month)
         )
-    num_persons = len(persons)
-    num_wps = len(wps)
 
-    # ── Row layout ──
+    return {
+        "persons": persons,
+        "wps": wps,
+        "assigned_map": assigned_map,
+        "stop_reasons": stop_reasons,
+        "person_windows": person_windows,
+        "vacation_months_project": vacation_months_project,
+        "num_persons": len(persons),
+        "num_wps": len(wps),
+    }
+
+
+def _resolve_timelog_layout(project_months: int, solver_state: dict) -> dict:
+    """Compute every column index, row anchor, and person-row map for the sheet.
+
+    Pure function — no worksheet writes. Lifts the dense row-layout block
+    out of the orchestrator. Mirrors ``actuals._resolve_actuals_layout``.
+    """
+    num_persons = solver_state["num_persons"]
+    num_wps = solver_state["num_wps"]
+    persons = solver_state["persons"]
+
+    month_col_start = TIMELOG_MONTH_COL_START
+    month_col_end = month_col_start + project_months - 1
+    canvas_last_col = month_col_end
+
     banner_row = 1
     tl_row = 2
     # row 3: blank spacer
@@ -367,7 +455,76 @@ def build_timelog_plan_sheet(
         },
     }
 
-    # ── Row 1: title banner (merged across canvas) ──
+    return {
+        "project_months": project_months,
+        "month_col_start": month_col_start,
+        "month_col_end": month_col_end,
+        "canvas_last_col": canvas_last_col,
+        "banner_row": banner_row,
+        "tl_row": tl_row,
+        "wp_summary_title_row": wp_summary_title_row,
+        "wp_summary_header_row": wp_summary_header_row,
+        "wp_summary_first_row": wp_summary_first_row,
+        "wp_summary_last_row": wp_summary_last_row,
+        "yearly_total_row": yearly_total_row,
+        "yearly_budget_row": yearly_budget_row,
+        "wp_summary_band_end_row": wp_summary_band_end_row,
+        "grid_title_row": grid_title_row,
+        "grid_year_row": grid_year_row,
+        "grid_month_row": grid_month_row,
+        "grid_midx_row": grid_midx_row,
+        "grid_person_first_row": grid_person_first_row,
+        "grid_person_last_row": grid_person_last_row,
+        "grid_total_row": grid_total_row,
+        "grid_person_cost_row": grid_person_cost_row,
+        "summary_title_row": summary_title_row,
+        "summary_header_row": summary_header_row,
+        "summary_person_first_row": summary_person_first_row,
+        "summary_person_last_row": summary_person_last_row,
+        "person_rows_by_band": person_rows_by_band,
+    }
+
+
+def _build_band_ranges(tlayout: dict) -> tuple[str, str, str]:
+    """Build the three repeated A1 ranges consumed by the WP-summary helpers.
+
+    - ``rate_col_range``: PER-PERSON SUMMARY's +i rate column over the person
+      rows. Empty string when there are no persons (callers gate on
+      ``has_persons``).
+    - ``grid_range``: TIMELOG GRID's full rectangular range. Empty string
+      when there are no persons.
+    - ``midx_range``: hidden 1..N month-index helper row over the month cols.
+      Always populated (the row exists regardless of person count).
+    """
+    num_persons = tlayout["person_rows_by_band"]
+    has_persons = bool(num_persons["grid"])
+    summary_person_first_row = tlayout["summary_person_first_row"]
+    summary_person_last_row = tlayout["summary_person_last_row"]
+    month_col_start = tlayout["month_col_start"]
+    month_col_end = tlayout["month_col_end"]
+    grid_person_first_row = tlayout["grid_person_first_row"]
+    grid_person_last_row = tlayout["grid_person_last_row"]
+    grid_midx_row = tlayout["grid_midx_row"]
+
+    rate_col_range = (
+        f"{get_column_letter(_PERSON_SUMMARY_RATE_PLUS_I_COL)}{summary_person_first_row}"
+        f":{get_column_letter(_PERSON_SUMMARY_RATE_PLUS_I_COL)}{summary_person_last_row}"
+    ) if has_persons else ""
+    grid_range = _grid_range_ref(
+        month_col_start, month_col_end,
+        grid_person_first_row, grid_person_last_row,
+    ) if has_persons else ""
+    midx_range = (
+        f"{get_column_letter(month_col_start)}{grid_midx_row}"
+        f":{get_column_letter(month_col_end)}{grid_midx_row}"
+    )
+    return rate_col_range, grid_range, midx_range
+
+
+def _write_banner_row(ws: Worksheet, tlayout: dict) -> None:
+    """Write row 1: the merged TIMELOG PLAN title banner across the canvas."""
+    banner_row = tlayout["banner_row"]
+    canvas_last_col = tlayout["canvas_last_col"]
     ws.merge_cells(
         start_row=banner_row, start_column=1,
         end_row=banner_row, end_column=canvas_last_col,
@@ -383,7 +540,19 @@ def build_timelog_plan_sheet(
         name="Arial", bold=True, size=14, color="FFFFFF"
     )
 
-    # ── Row 2: traffic-light labels + toggle; values patched in below ──
+
+def _write_traffic_light_labels(
+    ws: Worksheet, wb: Workbook, tlayout: dict,
+) -> None:
+    """Write row 2 traffic-light labels + value-cell placeholders.
+
+    Values are patched in ``_patch_traffic_light_values`` once downstream
+    rows exist. Also drops the legacy ``timelog_resolve_flag`` workbook-
+    scoped defined name on rebuild — no BC shim. Toggle-row legacy cells
+    (cols 9-10) are no longer written; the rebuild control is now the
+    Config!B{Rebuild from month #} integer param.
+    """
+    tl_row = tlayout["tl_row"]
     tl_label_cols = [1, 3, 5, 7]
     tl_value_cols = [2, 4, 6, 8]
     tl_labels = [
@@ -397,20 +566,36 @@ def build_timelog_plan_sheet(
     for c in tl_value_cols:
         style_cell(ws, tl_row, c, font=BLACK_FORMULA, alignment=CENTER_WRAP, fmt="0")
     ws.row_dimensions[tl_row].height = 26.4
-    # Toggle-row legacy cells (cols 9-10) are no longer written. The rebuild
-    # control is now the Config!B{Rebuild from month #} integer param (see
-    # config_sheet.py + docs/spec.md § Timelog Plan merged grid).
-    # Any pre-v2 workbook carrying the old ``timelog_resolve_flag`` defined
-    # name is actively unregistered on rebuild — no BC shim.
     if _LEGACY_RESOLVE_FLAG_NAMED_RANGE in wb.defined_names:
         del wb.defined_names[_LEGACY_RESOLVE_FLAG_NAMED_RANGE]
 
-    # row 3: blank spacer (no write)
 
-    # ── PER-WP SUMMARY band ──
-    year_specs = _year_col_specs(
-        project_params["start"], project_months, month_col_start,
-    )
+def _write_wp_summary_band(
+    ws: Worksheet,
+    tlayout: dict,
+    solver_state: dict,
+    year_specs: list["_YearColSpec"],
+    cfg_wp_first_row: int,
+    *,
+    rate_col_range: str,
+    grid_range: str,
+    midx_range: str,
+) -> None:
+    """Write PER-WP SUMMARY: section title, headers, per-WP rows, yearly rows + outline."""
+    wp_summary_title_row = tlayout["wp_summary_title_row"]
+    wp_summary_header_row = tlayout["wp_summary_header_row"]
+    wp_summary_first_row = tlayout["wp_summary_first_row"]
+    wp_summary_last_row = tlayout["wp_summary_last_row"]
+    wp_summary_band_end_row = tlayout["wp_summary_band_end_row"]
+    yearly_total_row = tlayout["yearly_total_row"]
+    yearly_budget_row = tlayout["yearly_budget_row"]
+    grid_person_first_row = tlayout["grid_person_first_row"]
+    grid_person_last_row = tlayout["grid_person_last_row"]
+    wps = solver_state["wps"]
+    stop_reasons = solver_state["stop_reasons"]
+    num_persons = solver_state["num_persons"]
+    num_wps = solver_state["num_wps"]
+
     wp_summary_last_col = _WP_SUMMARY_BASE_LAST_COL + len(year_specs)
     _write_section_title(
         ws, wp_summary_title_row, SECTION_TITLE_WP_SUMMARY,
@@ -435,22 +620,7 @@ def build_timelog_plan_sheet(
                   if is_year_col or carries_plus_i else None),
         )
     ws.row_dimensions[wp_summary_header_row].height = 26.4
-    cfg_wp_first_row = config_layout["wp_first_row"]
-    # Rate vector for Assigned-€ targets the +i col so the SUMPRODUCT result
-    # is +i (matches Budget +i in col B). Monthly total rows below construct
-    # their own ranges off the -i col directly.
-    rate_col_range = (
-        f"{get_column_letter(_PERSON_SUMMARY_RATE_PLUS_I_COL)}{summary_person_first_row}"
-        f":{get_column_letter(_PERSON_SUMMARY_RATE_PLUS_I_COL)}{summary_person_last_row}"
-    ) if num_persons > 0 else ""
-    grid_range = _grid_range_ref(
-        month_col_start, month_col_end,
-        grid_person_first_row, grid_person_last_row,
-    ) if num_persons > 0 else ""
-    midx_range = (
-        f"{get_column_letter(month_col_start)}{grid_midx_row}"
-        f":{get_column_letter(month_col_end)}{grid_midx_row}"
-    )
+
     for i, wp in enumerate(wps):
         _write_wp_summary_row(
             ws, wp_summary_first_row + i, wp,
@@ -479,7 +649,27 @@ def build_timelog_plan_sheet(
         for r in range(wp_summary_header_row, wp_summary_band_end_row + 1):
             ws.row_dimensions[r].outline_level = 1
 
-    # ── TIMELOG GRID band ──
+
+def _write_grid_band(
+    ws: Worksheet, tlayout: dict, project_params: dict,
+) -> None:
+    """Write TIMELOG GRID: section title, year/month axis, midx helper row, outline group.
+
+    Person rows (the actual edit surface) are written separately by
+    ``_fill_person_rows`` after the band scaffolding lands.
+    """
+    grid_title_row = tlayout["grid_title_row"]
+    grid_year_row = tlayout["grid_year_row"]
+    grid_month_row = tlayout["grid_month_row"]
+    grid_midx_row = tlayout["grid_midx_row"]
+    grid_person_first_row = tlayout["grid_person_first_row"]
+    grid_person_last_row = tlayout["grid_person_last_row"]
+    grid_total_row = tlayout["grid_total_row"]
+    canvas_last_col = tlayout["canvas_last_col"]
+    month_col_start = tlayout["month_col_start"]
+    project_months = tlayout["project_months"]
+    has_persons = bool(tlayout["person_rows_by_band"]["grid"])
+
     _write_section_title(
         ws, grid_title_row, SECTION_TITLE_GRID, last_col=canvas_last_col,
     )
@@ -489,7 +679,7 @@ def build_timelog_plan_sheet(
     _write_month_index_row(
         ws, grid_midx_row, project_months, month_col_start,
     )
-    if num_persons > 0:
+    if has_persons:
         assert grid_total_row is not None
         for r in (
             grid_year_row, grid_month_row,
@@ -502,7 +692,17 @@ def build_timelog_plan_sheet(
         for r in (grid_year_row, grid_month_row, grid_midx_row):
             ws.row_dimensions[r].outline_level = 1
 
-    # ── PER-PERSON SUMMARY band ──
+
+def _write_person_summary_band(ws: Worksheet, tlayout: dict) -> None:
+    """Write PER-PERSON SUMMARY: section title, header row, outline group.
+
+    Per-person metric values are written by ``_fill_person_rows``.
+    """
+    summary_title_row = tlayout["summary_title_row"]
+    summary_header_row = tlayout["summary_header_row"]
+    summary_person_last_row = tlayout["summary_person_last_row"]
+    has_persons = bool(tlayout["person_rows_by_band"]["summary"])
+
     _write_section_title(
         ws, summary_title_row, SECTION_TITLE_PERSON_SUMMARY,
         last_col=_PERSON_SUMMARY_RATE_PLUS_I_COL,
@@ -522,16 +722,40 @@ def build_timelog_plan_sheet(
             ws, summary_header_row, _PERSON_SUMMARY_FIRST_METRIC_COL + i,
             value=hdr, font=HEADER_FONT, alignment=CENTER, fill=hdr_fill,
         )
-    if num_persons > 0:
+    if has_persons:
         for r in range(summary_header_row, summary_person_last_row + 1):
             ws.row_dimensions[r].outline_level = 1
 
-    # ── Fill person rows (grid + summary) ──
+
+def _fill_person_rows(
+    ws: Worksheet,
+    tlayout: dict,
+    solver_state: dict,
+    config_layout: dict,
+) -> None:
+    """Fill per-person rows on both bands: TIMELOG GRID and PER-PERSON SUMMARY.
+
+    Each iteration writes one person's grid row (col A xref + month cells)
+    and the same person's summary row (col A xref + 8 metric cols). Vacation
+    months drop preserved WP codes defensively (vacation cells are always
+    empty + locked).
+    """
+    persons = solver_state["persons"]
+    assigned_map = solver_state["assigned_map"]
+    person_windows = solver_state["person_windows"]
+    vacation_months_project = solver_state["vacation_months_project"]
+    person_rows_by_band = tlayout["person_rows_by_band"]
+    project_months = tlayout["project_months"]
+    month_col_start = tlayout["month_col_start"]
+    month_col_end = tlayout["month_col_end"]
+    grid_month_row = tlayout["grid_month_row"]
+    grid_midx_row = tlayout["grid_midx_row"]
+
     cfg_person_rows: dict[str, int] = config_layout.get("person_rows", {})
     months_row_cfg = config_layout["param_rows"]["Project Months"]
     project_months_ref = cell_ref(SHEET_CONFIG, months_row_cfg, 2)
 
-    for i, person in enumerate(persons):
+    for person in persons:
         name = person.name
         grid_row = person_rows_by_band["grid"][name]
         summary_row = person_rows_by_band["summary"][name]
@@ -573,7 +797,26 @@ def build_timelog_plan_sheet(
             cfg_row=cfg_row,
         )
 
-    # ── Monthly total -i row (under TIMELOG GRID, same outline group) ──
+
+def _write_monthly_total_rows(
+    ws: Worksheet, tlayout: dict, solver_state: dict,
+) -> None:
+    """Write the two Monthly total rows under the grid band.
+
+    -i row sits inside the outline group (collapses with the grid); +i row
+    sits below it outside the group so it stays visible when the grid
+    collapses, with a blank spacer row separating it from PER-PERSON SUMMARY.
+    """
+    grid_total_row = tlayout["grid_total_row"]
+    grid_person_cost_row = tlayout["grid_person_cost_row"]
+    month_col_start = tlayout["month_col_start"]
+    month_col_end = tlayout["month_col_end"]
+    grid_person_first_row = tlayout["grid_person_first_row"]
+    grid_person_last_row = tlayout["grid_person_last_row"]
+    summary_person_first_row = tlayout["summary_person_first_row"]
+    summary_person_last_row = tlayout["summary_person_last_row"]
+    vacation_months_project = solver_state["vacation_months_project"]
+
     if grid_total_row is not None:
         _write_monthly_total_row(
             ws, row=grid_total_row,
@@ -587,8 +830,6 @@ def build_timelog_plan_sheet(
             label="Monthly total -i",
             with_indirect=False,
         )
-
-    # ── Monthly total +i row (outside outline group, always visible) ──
     if grid_person_cost_row is not None:
         _write_monthly_total_row(
             ws, row=grid_person_cost_row,
@@ -602,8 +843,25 @@ def build_timelog_plan_sheet(
             label="Monthly total +i",
         )
 
-    # ── Patch traffic-light formulas (downstream rows now exist) ──
-    if num_wps > 0:
+
+def _patch_traffic_light_values(ws: Worksheet, tlayout: dict) -> None:
+    """Patch the four traffic-light value cells in row 2.
+
+    Called after PER-WP SUMMARY + PER-PERSON SUMMARY rows have been written
+    so the COUNTIF/SUM formulas can target their final ranges. When a band
+    is empty (num_wps == 0 or num_persons == 0), the corresponding cells
+    are written as a literal 0 instead.
+    """
+    tl_row = tlayout["tl_row"]
+    tl_value_cols = [2, 4, 6, 8]
+    wp_summary_first_row = tlayout["wp_summary_first_row"]
+    wp_summary_last_row = tlayout["wp_summary_last_row"]
+    summary_person_first_row = tlayout["summary_person_first_row"]
+    summary_person_last_row = tlayout["summary_person_last_row"]
+    has_persons = bool(tlayout["person_rows_by_band"]["summary"])
+    has_wps = wp_summary_last_row >= wp_summary_first_row
+
+    if has_wps:
         # 1) Any undershoot? — Buffer € < 0 at col D of PER-WP SUMMARY.
         style_cell(
             ws, tl_row, tl_value_cols[0], font=BLACK_FORMULA,
@@ -621,7 +879,7 @@ def build_timelog_plan_sheet(
         for c in tl_value_cols[:2]:
             ws.cell(row=tl_row, column=c, value=0)
 
-    if num_persons > 0:
+    if has_persons:
         # 3) Any over-pool person? — Over-pool? at col D of PER-PERSON SUMMARY.
         op_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + 2)  # D
         style_cell(
@@ -644,8 +902,16 @@ def build_timelog_plan_sheet(
         for c in tl_value_cols[2:]:
             ws.cell(row=tl_row, column=c, value=0)
 
-    # CF on first three traffic-light value cells: red when > 0. Toggle cell
-    # (col 10) is a TRUE/FALSE control — intentionally not flagged.
+
+def _apply_traffic_light_cf(ws: Worksheet, tlayout: dict) -> None:
+    """Add the row-2 traffic-light CF rules: red when value > 0.
+
+    Targets the first three traffic-light value cells (cols 2, 4, 6). The
+    fourth (col 8 = Total switches) is intentionally not flagged — it's a
+    diagnostic counter, not a status indicator.
+    """
+    tl_row = tlayout["tl_row"]
+    tl_value_cols = [2, 4, 6, 8]
     for c in tl_value_cols[:3]:
         cell_addr = f"{get_column_letter(c)}{tl_row}"
         ws.conditional_formatting.add(
@@ -653,39 +919,69 @@ def build_timelog_plan_sheet(
             FormulaRule(formula=[f"{cell_addr}>0"], fill=CF_RED_FILL),
         )
 
-    # ── CF rules on canvas ──
-    # Per ``openpyxl-patterns.md``: first rule added gets highest priority.
-    if num_persons > 0 and num_wps > 0:
-        # Rule 1: per-WP cell-level red for WP code outside its active window.
-        # Targets the merged grid's month-idx helper row.
-        top_left = grid_range.split(":")[0]
-        tl_col_letter = "".join(ch for ch in top_left if ch.isalpha())
-        tl_row_num = "".join(ch for ch in top_left if ch.isdigit())
-        idx_ref = f"{tl_col_letter}${grid_midx_row}"
-        cell_ref_inline = f"{tl_col_letter}{tl_row_num}"
-        for wp in wps:
-            formula = (
-                f'AND({cell_ref_inline}="{wp.code}",'
-                f"OR({idx_ref}<{wp.active_start},{idx_ref}>{wp.active_end}))"
-            )
-            ws.conditional_formatting.add(
-                grid_range,
-                FormulaRule(formula=[formula], fill=CF_RED_FILL),
-            )
 
-        # Rule 2: pastel fill per WP across the merged grid.
-        for i, wp in enumerate(wps):
-            pastel = CF_PASTEL_FILLS[i % len(CF_PASTEL_FILLS)]
-            ws.conditional_formatting.add(
-                grid_range,
-                FormulaRule(
-                    formula=[f'{cell_ref_inline}="{wp.code}"'],
-                    fill=pastel,
-                ),
-            )
+def _apply_grid_cf(
+    ws: Worksheet, tlayout: dict, solver_state: dict, *, grid_range: str,
+) -> None:
+    """Apply CF rules 1+2 to the merged TIMELOG GRID range.
+
+    Per ``openpyxl-patterns.md``: first rule added gets highest priority.
+    Rule 1 (per-WP red for out-of-window cells) is added first so it wins
+    against Rule 2 (per-WP pastel fill) on conflict.
+    """
+    num_persons = solver_state["num_persons"]
+    num_wps = solver_state["num_wps"]
+    if not (num_persons > 0 and num_wps > 0):
+        return
+
+    wps = solver_state["wps"]
+    grid_midx_row = tlayout["grid_midx_row"]
+
+    # Rule 1: per-WP cell-level red for WP code outside its active window.
+    # Targets the merged grid's month-idx helper row.
+    top_left = grid_range.split(":")[0]
+    tl_col_letter = "".join(ch for ch in top_left if ch.isalpha())
+    tl_row_num = "".join(ch for ch in top_left if ch.isdigit())
+    idx_ref = f"{tl_col_letter}${grid_midx_row}"
+    cell_ref_inline = f"{tl_col_letter}{tl_row_num}"
+    for wp in wps:
+        formula = (
+            f'AND({cell_ref_inline}="{wp.code}",'
+            f"OR({idx_ref}<{wp.active_start},{idx_ref}>{wp.active_end}))"
+        )
+        ws.conditional_formatting.add(
+            grid_range,
+            FormulaRule(formula=[formula], fill=CF_RED_FILL),
+        )
+
+    # Rule 2: pastel fill per WP across the merged grid.
+    for i, wp in enumerate(wps):
+        pastel = CF_PASTEL_FILLS[i % len(CF_PASTEL_FILLS)]
+        ws.conditional_formatting.add(
+            grid_range,
+            FormulaRule(
+                formula=[f'{cell_ref_inline}="{wp.code}"'],
+                fill=pastel,
+            ),
+        )
+
+
+def _apply_summary_cf(ws: Worksheet, tlayout: dict) -> None:
+    """Apply CF rules 3-6 to the PER-PERSON SUMMARY and PER-WP SUMMARY bands.
+
+    Rule add-order is load-bearing (first rule = highest priority). Rule 3
+    (Over-pool? red) lands first; rules 4-6 land on PER-WP SUMMARY in order
+    Buffer red → Buffer green → Burn rate red → Out-of-window red.
+    """
+    wp_summary_first_row = tlayout["wp_summary_first_row"]
+    wp_summary_last_row = tlayout["wp_summary_last_row"]
+    summary_person_first_row = tlayout["summary_person_first_row"]
+    summary_person_last_row = tlayout["summary_person_last_row"]
+    has_persons = bool(tlayout["person_rows_by_band"]["summary"])
+    has_wps = wp_summary_last_row >= wp_summary_first_row
 
     # Rule 3 (PER-PERSON SUMMARY CF): Over-pool? = TRUE → red. Col D.
-    if num_persons > 0:
+    if has_persons:
         op_col_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + 2)  # D
         op_range = (
             f"{op_col_letter}{summary_person_first_row}"
@@ -700,7 +996,7 @@ def build_timelog_plan_sheet(
         )
 
     # Rule 4 (PER-WP SUMMARY CF): Buffer € (col D) — green>0, red<0.
-    if num_wps > 0:
+    if has_wps:
         buffer_range = f"D{wp_summary_first_row}:D{wp_summary_last_row}"
         # Red first (higher-priority conflict wins), then green.
         ws.conditional_formatting.add(
@@ -721,7 +1017,7 @@ def build_timelog_plan_sheet(
         # both C and B in +i), so the threshold must read from the +i rate
         # col on PER-PERSON SUMMARY (col I) — not the -i alias.
         burn_range = f"H{wp_summary_first_row}:H{wp_summary_last_row}"
-        if num_persons > 0:
+        if has_persons:
             rate_col_letter = get_column_letter(_PERSON_SUMMARY_RATE_PLUS_I_COL)
             max_rate_expr = (
                 f"MAX({rate_col_letter}{summary_person_first_row}"
@@ -749,7 +1045,14 @@ def build_timelog_plan_sheet(
             ),
         )
 
-    # ── Freeze panes + column widths + outline ──
+
+def _apply_freeze_and_widths(ws: Worksheet) -> None:
+    """Freeze rows 1–2 + col A; set col widths on Person + summary metric cols.
+
+    Col A holds Person names across both bands; the merged grid and summary
+    metrics scroll horizontally. PER-PERSON SUMMARY metric cols (B..H)
+    widen slightly past the openpyxl default for readability.
+    """
     # Freeze rows 1–2 (banner + traffic lights) and col A (Person). Month grid
     # and summary metrics scroll — col A stays visible.
     ws.freeze_panes = ws.cell(
@@ -761,27 +1064,6 @@ def build_timelog_plan_sheet(
     for i in range(len(_PERSON_SUMMARY_METRIC_HEADERS)):
         c_letter = get_column_letter(_PERSON_SUMMARY_FIRST_METRIC_COL + i)
         ws.column_dimensions[c_letter].width = 12
-
-    return {
-        "sheet": SHEET_TIMELOG_PLAN,
-        "month_col_start": month_col_start,
-        "month_col_end": month_col_end,
-        "grid_person_first_row": grid_person_first_row,
-        "grid_person_last_row": grid_person_last_row,
-        "summary_person_first_row": summary_person_first_row,
-        "summary_person_last_row": summary_person_last_row,
-        "person_rows_by_band": person_rows_by_band,
-        "wp_summary_first_row": wp_summary_first_row,
-        "wp_summary_last_row": wp_summary_last_row,
-        "rebuild_from_month_cell": (
-            f"B{config_layout['param_rows']['Rebuild from month #']}"
-        ),
-    }
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _build_wps(
@@ -1060,16 +1342,18 @@ def _write_yearly_rows(
 ) -> None:
     """Write the Yearly Assigned +i and Yearly Budget +i rows under PER-WP SUMMARY.
 
-    - Col A: blank. (Pre-D9 layout placed the row label here; shifted to col I
+    - Col A: blank. (Pre-D9 layout placed the row label here; shifted to col J
       via TIMELOG_YEARLY_LABEL_COL so the label sits adjacent-left to the
       per-year breakdown. Aiko-port T3 shifted col H → I when Buffer % was
-      inserted at col E.)
+      inserted at col E; 2026-04-28 shifted I → J under "Stop reason" with
+      right alignment so the label hugs the year value it describes.)
     - Col B: row label (``TOTAL Assigned +i`` / ``TOTAL Budget +i``) with
       ``WITH_INDIRECT_HEADER_FILL`` — names the col C cross-check sum sitting
       directly to its right.
-    - Col I (``TIMELOG_YEARLY_LABEL_COL``): row label (HEADER_FONT) with
-      ``WITH_INDIRECT_HEADER_FILL`` — the per-year cells on this row are +i,
-      so the label carries the +i header fill.
+    - Col J (``TIMELOG_YEARLY_LABEL_COL``): row label (HEADER_FONT, RIGHT) with
+      ``WITH_INDIRECT_HEADER_FILL`` — stacked beneath the "Stop reason" header
+      and right-aligned so it hugs the first per-year cell at col K. The
+      per-year cells on this row are +i, so the label carries the +i header fill.
     - Col C: cross-check sum (across-WP SUM of the PER-WP SUMMARY column
       that feeds the row's aggregate). Aiko-port Q-B dropped the inline
       ``*1.25`` from both rows:
@@ -1104,11 +1388,11 @@ def _write_yearly_rows(
     )
     style_cell(
         ws, yearly_total_row, TIMELOG_YEARLY_LABEL_COL, value="Yearly Assigned +i",
-        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,
+        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=RIGHT,
     )
     style_cell(
         ws, yearly_budget_row, TIMELOG_YEARLY_LABEL_COL, value="Yearly Budget +i",
-        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=CENTER,
+        font=HEADER_FONT, fill=WITH_INDIRECT_HEADER_FILL, alignment=RIGHT,
     )
 
     # Col C cross-checks (Aiko-port Q-B: raw SUMs, no inline ×1.25):

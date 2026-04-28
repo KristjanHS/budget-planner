@@ -5,11 +5,11 @@ import openpyxl
 
 from budget_planner.config import (
     TEAM, EXTERNAL_COMMITMENTS, DEMO_CAPACITY_ASSIGNMENTS,
-    MONTH_COL_START, PROJECT_MONTHS, PROJECT_START,
+    MONTH_COL_START, PROJECT_MONTHS,
 )
 from budget_planner.layout import (
     SHEET_ACTUALS_HOURS, CAPACITY_VARIANCE_FTE_RED, CAPACITY_AMBER_LOAD,
-    val_columns, _calendar_year_groups,
+    val_columns,
 )
 from budget_planner.styles import col_letter
 
@@ -228,29 +228,6 @@ def _sqref_first_col_index(sqref: str) -> int:
     for ch in letters:
         idx = idx * 26 + (ord(ch) - ord("A") + 1)
     return idx
-
-
-def test_eu_annual_ceiling_cf_red_on_actual_band(cap_ws, band_cols):
-    """Actual EU TOTAL row has per-year red CF when annual actual > ceiling."""
-    rules = _collect_cf_rules(cap_ws)
-    a_start = band_cols["actual_start"]
-    a_end = band_cols["actual_end"]
-    num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
-    ceiling_rules = [
-        r for r in rules
-        if a_start <= _sqref_first_col_index(r[0]) <= a_end
-        and any("SUM(" in f and "Config!$B$" in f for f in r[1])
-    ]
-    # At least one per person per calendar year.
-    expected = num_years * len(TEAM)
-    assert len(ceiling_rules) >= expected, (
-        f"Expected ≥ {expected} Actual EU ceiling rules, got {len(ceiling_rules)}"
-    )
-    # All should be red.
-    for _sqref, _formulas, fg in ceiling_rules:
-        assert fg and fg.endswith("FFC7CE"), (
-            f"Actual EU ceiling CF should be red, got {fg}"
-        )
 
 
 # ── Font color tests ──

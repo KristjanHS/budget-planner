@@ -313,30 +313,6 @@ def test_rp_summary_has_wp_rows(fresh_wb_path):
     wb.close()
 
 
-# ── Rebuild round-trip: EU TOTAL row preservation ──────────────────────────
-
-def test_rebuild_preserves_eu_total_structure(tmp_path):
-    """Rebuild preserves person groups despite EU TOTAL row."""
-    from budget_planner.workbook import init_workbook, rebuild_workbook
-    from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS, TEAM
-    import openpyxl
-
-    out = str(tmp_path / "test.xlsx")
-    init_workbook(out, assignments=DEMO_CAPACITY_ASSIGNMENTS)
-    rebuild_workbook(out)
-    wb = openpyxl.load_workbook(out, data_only=False)
-    cap = wb["Capacity"]
-    # Verify EU TOTAL rows exist after rebuild
-    eu_total_count = sum(
-        1 for r in range(1, cap.max_row + 1)
-        if cap.cell(r, 2).value == "EU TOTAL"
-    )
-    assert eu_total_count == len(TEAM), (
-        f"Expected {len(TEAM)} EU TOTAL rows after rebuild, got {eu_total_count}"
-    )
-    wb.close()
-
-
 # ── Form C preparation rows ─────────────────────────────────────────────
 
 def test_form_c_rows_exist(fresh_wb_path):

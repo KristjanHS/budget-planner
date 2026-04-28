@@ -65,12 +65,20 @@ TIMELOG_MONTH_COL_START = 2   # col B
 # shifted J..N → K..O.
 TIMELOG_WP_SUMMARY_BASE_LAST_COL = 10
 
-# ``Yearly Assigned +i`` / ``Yearly Budget +i`` row labels sit at col I, the
-# last numeric metric col of PER-WP SUMMARY, immediately left of the new
-# "Stop reason" col J (2026-04-26) and the per-year breakdown cols (K..).
-# Shift from col A decided in plan D9 (2026-04-22); post-Aiko-port T3 shifted
-# one col right (H → I) when Buffer % was inserted.
-TIMELOG_YEARLY_LABEL_COL = 9
+# ``Yearly Assigned +i`` / ``Yearly Budget +i`` row labels sit at col J,
+# stacked beneath the "Stop reason" header col, immediately left of the
+# per-year breakdown cols (K..) and right-aligned so the label hugs the
+# year value it describes. Shift from col A decided in plan D9 (2026-04-22);
+# post-Aiko-port T3 shifted H → I when Buffer % was inserted; 2026-04-28
+# shifted I → J under "Stop reason" with right alignment.
+TIMELOG_YEARLY_LABEL_COL = 10
+
+# Timelog Plan grid section title — written by the builder into col A and used
+# by the reader as the row anchor for the merged grid band. Lives here (not in
+# timelog_plan) so the reader doesn't depend on a sheet builder for layout.
+SECTION_TITLE_GRID = (
+    "TIMELOG GRID (edit freely — rebuild re-solves from Config!B9 onward)"
+)
 
 # ── Section header contract ──
 # Every labelled section on the Config sheet uses: title row, header row,

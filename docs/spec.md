@@ -174,7 +174,11 @@ Cross-sheet formulas (Plan's `=SUM(Capacity!...)`, Trends person-load refs, Summ
 - **Capacity person order matches Config TEAM ROSTER order.** Adding a roster row shifts every downstream Capacity person group.
 - **Plan WP row order matches Config WP BUDGET order.** Same for Actuals, Plan-Forecast, Summary.
 - **Capacity per-person WP rows are ordered by Config PERSON-WP ASSIGNMENTS** for that person (intersection filter — not all WPs).
-- **Actuals-Hours person + WP row order mirrors Capacity** — the Actual-FTE band on Capacity sibling-refs Actuals-Hours by matched row position.
+- **Actuals-Hours person + WP row order mirrors Capacity at the WP rows.** Actuals-Hours carries an extra EU TOTAL row beneath each person's TOTAL (the EU-ceiling enforcement surface, dropped from Capacity 2026-04-28); cross-sheet refs from Capacity to Actuals-Hours target WP row positions, never EU TOTAL.
+
+### Per-person Capacity geometry
+
+Per-person sequence: header → WP rows (assigned only) → external rows → TOTAL. REMAINING + EU TOTAL dropped 2026-04-28: REMAINING < 0 folded onto TOTAL > Max FTE (same red); per-year EU ceiling enforcement lives only on Actuals-Hours's EU TOTAL. The shared `person_section.plan_person_layout` helper still supports `include_eu_total=True` — Actuals-Hours opts in, Capacity passes False.
 
 ---
 

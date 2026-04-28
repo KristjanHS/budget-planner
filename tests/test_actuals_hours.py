@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 
 from budget_planner.config import (
     DEMO_CAPACITY_ASSIGNMENTS, EXTERNAL_COMMITMENTS, TEAM,
-    PROJECT_MONTHS,
+    PROJECT_MONTHS, WORK_PACKAGES,
 )
 from budget_planner.layout import MONTH_COL_START, val_columns
 from budget_planner.styles import GREY_FILL, col_letter
@@ -131,21 +131,37 @@ def test_actuals_hours_person_has_assigned_wp_rows(hrs):
 # ── Inactive months: grey + empty ──
 
 def test_actuals_hours_inactive_month_is_empty_and_grey(hrs):
-    """Bob's WP4 row is inactive at M1 (WP4 schedule starts M2)."""
+    """The first WP row for Bob, at any month before that WP's active start,
+    must be empty + grey-filled. Per project testing rule, derive Bob's
+    first WP and its active_start from DEMO_CAPACITY_ASSIGNMENTS +
+    WORK_PACKAGES — don't hardcode WP IDs."""
+    bob_wps = [a for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == "Bob"]
+    if not bob_wps:
+        pytest.skip("Bob has no WP assignments in current demo")
+    first_wp_code = bob_wps[0]["wp"]  # row order matches DEMO list order
+    wp_def = next(w for w in WORK_PACKAGES if w["id"] == first_wp_code)
+    if wp_def["start"] <= 1:
+        pytest.skip(
+            f"Bob's first WP {first_wp_code} is active at M1 — "
+            f"no inactive cell available for this assertion"
+        )
     bob_header = _find_person_header_row(hrs, "Bob")
-    wp4_row = bob_header + 1  # first WP row for Bob is WP4
+    first_wp_row = bob_header + 1
     m1_col = MONTH_COL_START  # M1
-    cell = hrs.cell(wp4_row, m1_col)
+    cell = hrs.cell(first_wp_row, m1_col)
     assert cell.value in (None, ""), (
-        f"Bob WP4 @ M1 should be empty (inactive); got {cell.value!r}"
+        f"Bob {first_wp_code} @ M1 should be empty (inactive); "
+        f"got {cell.value!r}"
     )
-    # Grey fill
     fill = cell.fill
     assert fill is not None
     # PatternFill equality is stricter — compare by fgColor rgb
     assert str(getattr(fill.fgColor, "rgb", "")).upper().endswith(
         str(GREY_FILL.fgColor.rgb).upper()
-    ), f"Bob WP4 @ M1 fill should be GREY_FILL, got {fill.fgColor.rgb!r}"
+    ), (
+        f"Bob {first_wp_code} @ M1 fill should be GREY_FILL, "
+        f"got {fill.fgColor.rgb!r}"
+    )
 
 
 # ── Active months: blue input + empty (no demo hours pre-filled) ──
@@ -369,11 +385,21 @@ def test_forecast_eur_external_row_empty(hrs):
 
 def test_forecast_eur_inactive_month_empty_and_grey(hrs):
     """Inactive-month forecast-band cells carry GREY_FILL and are empty —
-    mirror the hour side so the band visually aligns."""
-    # Bob's WP4 row is inactive at M1 (WP4 starts M2).
+    mirror the hour side so the band visually aligns. Derives Bob's first
+    WP + its active_start from demo data per project testing rule."""
+    bob_wps = [a for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == "Bob"]
+    if not bob_wps:
+        pytest.skip("Bob has no WP assignments in current demo")
+    first_wp_code = bob_wps[0]["wp"]
+    wp_def = next(w for w in WORK_PACKAGES if w["id"] == first_wp_code)
+    if wp_def["start"] <= 1:
+        pytest.skip(
+            f"Bob's first WP {first_wp_code} is active at M1 — "
+            f"no inactive forecast cell available"
+        )
     bob_header = _find_person_header_row(hrs, "Bob")
-    wp4_row = bob_header + 1
-    cell = hrs.cell(wp4_row, FORECAST_COL_START)  # M1 on forecast side
+    first_wp_row = bob_header + 1
+    cell = hrs.cell(first_wp_row, FORECAST_COL_START)  # M1 on forecast side
     assert cell.value in (None, "")
     assert str(getattr(cell.fill.fgColor, "rgb", "")).upper().endswith(
         str(GREY_FILL.fgColor.rgb).upper()
@@ -382,12 +408,16 @@ def test_forecast_eur_inactive_month_empty_and_grey(hrs):
 
 def test_forecast_eur_total_row_sums_wp_rows(hrs):
     """Per-person TOTAL row in the forecast band = SUM of WP-row forecast
-    cells for that month. Externals are blank so they aren't in the SUM."""
+    cells for that month. Externals are blank so they aren't in the SUM.
+    Row layout per person: WP rows → externals → 2 hours-to-date summary
+    rows → TOTAL → EU TOTAL (per project testing rule, derived from demo)."""
     alice_header = _find_person_header_row(hrs, "Alice")
-    # Alice: 3 WP rows (header+1..+3) + 1 external (+4) + 2 hours-to-date
-    # summary rows (+5, +6) → TOTAL at +7.
-    wp_rows = [alice_header + 1, alice_header + 2, alice_header + 3]
-    total_row = alice_header + 7
+    alice_wps = [a for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == "Alice"]
+    alice_externals = [e for e in EXTERNAL_COMMITMENTS if e["person"] == "Alice"]
+    num_wp = len(alice_wps)
+    wp_rows = list(range(alice_header + 1, alice_header + 1 + num_wp))
+    # +2 hours-to-date summary rows between externals and TOTAL.
+    total_row = alice_header + num_wp + len(alice_externals) + 3
     assert hrs.cell(total_row, 2).value == "TOTAL"
     fcl = col_letter(FORECAST_COL_START)
     formula = hrs.cell(total_row, FORECAST_COL_START).value

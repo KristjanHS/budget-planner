@@ -74,6 +74,7 @@ THIN_BORDER = Border(
 )
 CENTER = Alignment(horizontal="center", vertical="center")
 CENTER_WRAP = Alignment(horizontal="center", vertical="center", wrap_text=True)
+RIGHT = Alignment(horizontal="right", vertical="center")
 WRAP = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
 

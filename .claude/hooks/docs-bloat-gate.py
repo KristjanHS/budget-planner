@@ -27,12 +27,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # --- Gated paths ---------------------------------------------------------
-GATED_DOCS = {"docs/spec.md", "docs/runbook.md", "docs/refactor-incidents.md"}
+GATED_DOCS = {"docs/spec.md"}
 GATED_RULES_PREFIX = ".claude/rules/"
 
 # --- Bash write-pattern detection ----------------------------------------
 _GATED_PATH_RE = (
-    r"(?:docs/(?:spec|runbook|refactor-incidents)\.md|\.claude/rules/\S+\.md)"
+    r"(?:docs/spec\.md|\.claude/rules/\S+\.md)"
 )
 BASH_WRITE_PATTERNS = [
     re.compile(r">>?\s*['\"]?" + _GATED_PATH_RE),

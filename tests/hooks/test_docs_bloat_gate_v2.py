@@ -438,8 +438,6 @@ class TestPathScope:
         "rel",
         [
             "docs/spec.md",
-            "docs/runbook.md",
-            "docs/refactor-incidents.md",
             ".claude/rules/foo.md",
             ".claude/rules/sub/bar.md",
         ],
@@ -528,7 +526,7 @@ class TestBashGate:
 
     def test_sed_inplace_to_gated_path_blocks(self, tmp_path):
         rc, _, _ = run_hook(
-            tmp_path, bash_payload("sed -i 's/x/y/' docs/runbook.md")
+            tmp_path, bash_payload("sed -i 's/x/y/' docs/spec.md")
         )
         assert rc == 2
 
@@ -560,7 +558,7 @@ class TestBashGate:
             "# <!-- docs-bloat-gate-override: " + VALID_REASON + " -->"
         )
         cmd2 = (
-            "echo b >> docs/runbook.md  "
+            "echo b >> .claude/rules/foo.md  "
             "# <!-- docs-bloat-gate-override: another genuinely load-bearing "
             "rationale text here -->"
         )

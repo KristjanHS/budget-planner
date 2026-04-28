@@ -11,8 +11,8 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 | Trigger | Read |
 |---------|------|
 | Programme cost model, funding rates, 25% indirect; C4 architecture, workflows, formula graph; sheet builders, stateless pattern; reader breaks, rebuild loses data; column offsets, month positioning, styles, row/column shifts, new sheet/column, tab-color conventions; cross-sheet invariant, trust boundary, derived-metric rule; Timelog Plan, solver, 1.0-FTE logging allocation, WP fill order, merged grid, freeze-point, per-year EUR cols, monthly total, yearly total, yearly budget, vacation month, Pool reduction; rebuild drops rows, stale Config refs; WP schedule single range, migration from legacy workbook, multi-segment error | `docs/spec.md` (also `budget_planner/layout.py` + `budget_planner/styles.py` for live column/row constants; `budget_planner/timelog_plan.py` + `budget_planner/timelog_solver.py` for Timelog solver internals) |
-| Run commands, generate workbook, compare scenarios, dev setup, add WP / team member / actuals, cloud/LO env setup, code review & /impag, MCP tools for workbook inspection | `docs/runbook.md` (§ MCP Tools for openpyxl-read / mcp-excel) |
-| Audit "which past incident drove this rule" — lazy imports, optional→required params, constant renames, kwarg drops, F401 echoes, hook bounded reads, multiset bystanders | `docs/refactor-incidents.md` |
+| Run commands, generate workbook, compare scenarios, dev setup, add WP / team member / actuals, cloud/LO env setup, code review & /impag, MCP tools for workbook inspection | `docs/spec.md` (§ Commands / § Ops Quickref / § Dev Workflow — Review, Planning, Worktrees, MCP) |
+| Audit "which past incident drove this rule" — lazy imports, optional→required params, constant renames, kwarg drops, F401 echoes, hook bounded reads, multiset bystanders | `docs/spec.md` § Refactor Incidents |
 
 ## Critical Rules
 

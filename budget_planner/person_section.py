@@ -96,6 +96,22 @@ def plan_person_layout(
     )
 
 
+def filter_zero_fte_wps(person_assignments: list[dict],
+                         ordered_wp_ids: list[str]) -> list[str]:
+    """Drop WP IDs whose Config PERSON-WP ASSIGNMENT row has total_fte == 0.
+
+    Q2.1 = (a)-only suppression: zero-FTE assignments stay in the Config
+    auditor table but their per-person grid row is suppressed on Capacity
+    AND Actuals-Hours so the row-order mirror invariant holds. Empty-window
+    intersection (non-zero total_fte but the assignment window has no
+    overlap with the WP active range) is NOT addressed here — those rows
+    still render as all-grey. See plan 2026-04-28 § Risks.
+    """
+    zero_fte = {asgn["wp"] for asgn in person_assignments
+                if asgn.get("total_fte", 0) == 0}
+    return [wp for wp in ordered_wp_ids if wp not in zero_fte]
+
+
 def apply_person_row_outline(ws, layout: PersonLayout) -> None:
     """Mark every body row of a person block as ``outline_level=1``.
 

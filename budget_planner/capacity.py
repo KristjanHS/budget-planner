@@ -52,6 +52,7 @@ from budget_planner.layout import (
 )
 from budget_planner.person_section import (
     plan_person_layout, PersonGridContext, apply_person_row_outline,
+    filter_zero_fte_wps,
 )
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
@@ -117,22 +118,6 @@ def distribute(total_fte: float, num_months: int, curve: str) -> list[float]:
     return [per_month] * num_months
 
 
-def _filter_zero_fte_wps(person_assignments: list[dict],
-                          ordered_wp_ids: list[str]) -> list[str]:
-    """Drop WP IDs whose Config PERSON-WP ASSIGNMENT row has total_fte == 0.
-
-    Q2.1 = (a)-only suppression: zero-FTE assignments are kept in Config
-    (they remain authoritative for the assignment table) but their per-person
-    grid row is suppressed on Capacity and Actuals-Hours. Empty-window
-    intersection (non-zero total_fte but the assignment window has no overlap
-    with the WP active range) is NOT addressed here — those rows still
-    render as all-grey. See plan 2026-04-28 Q2.1 / Risks § (a)-only suppression.
-    """
-    zero_fte = {asgn["wp"] for asgn in person_assignments
-                if asgn.get("total_fte", 0) == 0}
-    return [wp for wp in ordered_wp_ids if wp not in zero_fte]
-
-
 def _resolve_grid_state(
     *, start_row: int, member: dict, ctx: PersonGridContext,
     person_assignments: list[dict], person_rows: dict[str, int],
@@ -165,7 +150,7 @@ def _resolve_grid_state(
         wp_id = asgn["wp"]
         if wp_id in wp_by_id:
             ordered_wp_ids.append(wp_id)
-    ordered_wp_ids = _filter_zero_fte_wps(person_assignments, ordered_wp_ids)
+    ordered_wp_ids = filter_zero_fte_wps(person_assignments, ordered_wp_ids)
     ordered_external_names = [e["project"] for e in person_externals]
 
     layout_start = start_row

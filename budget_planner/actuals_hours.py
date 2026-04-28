@@ -38,6 +38,7 @@ from budget_planner.layout import (
 )
 from budget_planner.person_section import (
     plan_person_layout, PersonGridContext, apply_person_row_outline,
+    filter_zero_fte_wps,
 )
 from budget_planner.styles import (
     BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
@@ -149,6 +150,7 @@ def _write_person_hours_grid(
         wp_id = asgn["wp"]
         if wp_id in wp_by_id and wp_id not in ordered_wp_ids:
             ordered_wp_ids.append(wp_id)
+    ordered_wp_ids = filter_zero_fte_wps(person_assignments, ordered_wp_ids)
     person_externals = [e for e in external_commitments if e["person"] == name]
     ordered_external_names = [e["project"] for e in person_externals]
 

@@ -349,7 +349,7 @@ Don't change without updating this mapping.
 
 `apply_year_groups()` creates collapsible column groups per calendar year. The group containing `current_month` is expanded; others collapse.
 
-<!-- docs-bloat-gate-override: M7 collapse: absorb runbook + refactor-incidents into single trigger-indexed spec source -->
+---
 
 ## Commands
 

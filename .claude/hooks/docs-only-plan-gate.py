@@ -81,13 +81,51 @@ def write_stamp() -> None:
         pass
 
 
-def append_log(cmd_summary: str, reason: str) -> None:
+def _safe_sid(s: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", s)[:64] or "default"
+
+
+def session_id() -> str:
+    sid = os.environ.get("CLAUDE_SESSION_ID")
+    if sid:
+        return _safe_sid(sid)
+    transcript = os.environ.get("CLAUDE_TRANSCRIPT_PATH")
+    if transcript:
+        return hashlib.md5(transcript.encode()).hexdigest()[:12]
+    seed = f"{project_dir()}|{datetime.now(timezone.utc).strftime('%Y%m%d%H')}"
+    return hashlib.md5(seed.encode()).hexdigest()[:12]
+
+
+def _write_schema_header(log: Path, fields: str) -> None:
+    if log.exists() and log.stat().st_size > 0:
+        return
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(f"# JSONL fields: {fields} (since 2026-05-08)\n")
+    except OSError:
+        pass
+
+
+def append_log(cmd: str, reason: str) -> None:
     log = project_dir() / LOG_REL
     try:
         log.parent.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        _write_schema_header(
+            log,
+            "ts, tool, session_id, cwd, reason, command_snippet, regression_test",
+        )
+        entry = {
+            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "tool": "Bash",
+            "session_id": session_id(),
+            "cwd": str(project_dir().resolve()),
+            "reason": reason,
+            "command_snippet": cmd[:120],
+            "regression_test": os.environ.get("HOOK_REGRESSION_TEST") == "1",
+        }
         with log.open("a", encoding="utf-8") as fh:
-            fh.write(f'{ts}  {cmd_summary}  reason="{reason}"\n')
+            fh.write(json.dumps(entry, separators=(",", ":")) + "\n")
     except OSError:
         pass
 
@@ -102,7 +140,7 @@ def handle_pre_tool_use(payload: dict) -> int:
 
     m = OVERRIDE_RE.search(cmd)
     if m:
-        append_log("git mv (override)", m.group(1).strip())
+        append_log(cmd, m.group(1).strip())
         return 0
 
     age_msg = "absent" if not stamp_path().exists() else "stale (>30 min)"

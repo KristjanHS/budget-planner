@@ -13,7 +13,7 @@ Hooks adapted from [pedrohcgs/claude-code-my-workflow](https://github.com/pedroh
 | `docs-bloat-gate.py` | `PreToolUse` (matcher: `Write\|Edit\|Bash`) | Three signals on Write/Edit to `docs/spec.md`, `.claude/rules/*.md` (any blocks): **S1** char-delta vs tier cap (rule<50 lines=150 chars, doc=800, spec=2000) — bypassable; **S2** ~30-pattern slop stoplist (transition adverbs, hedges, AI tells) — UNBYPASSABLE; **S3** lexical density <0.45 on >100-char addition — UNBYPASSABLE. S1 bypasses: brand-new `## ` heading (≤30 lines / 1500 chars exempt on the introducing edit) or override sentinel (hard cap **1/session**, reason ≥30 chars, no anti-stopwords). Bash gate blocks `>`/`>>`/`tee`/`sed -i` to gated paths; same sentinel cap applies. Design: `docs/plans/archived/2026-04-26-docs-bloat-gate-redesign.md` |
 | `docs-only-plan-gate.py` | `PreToolUse` Bash + `PostToolUse` Bash | **Pre:** blocks `git mv .*docs/plans/.*archived/` unless a pytest-pass stamp is fresh (≤30 min) or override sentinel present. **Post:** stamps `~/.claude/sessions/<hash>/pytest-pass-stamp` when a `pytest tests/...` invocation exits 0. Source: `docs/plans/archived/2026-04-25-prose-rules-to-hooks-audit.md` (W1.2) |
 
-`external-process-test-gate.py` was promoted to global (`~/.claude/hooks/`, registered in global `settings.json`) on 2026-04-25 since its source rule (`~/.claude/rules/testing.md`) is also global. Override log moved to `~/.claude/logs/external-process-test-overrides.log`. Behavior unchanged for this project.
+`external-process-test-gate.py` was promoted to global (`~/.claude/hooks/`, registered in global `settings.json`) on 2026-04-25 since its source rule (`~/.claude/rules/testing.md`) is also global. Behavior unchanged for this project. Inspect overrides at `jq -Rc 'try fromjson | select(.regression_test != true)' ~/.claude/logs/external-process-test-overrides.log` (project's `docs/analysis/external-process-test-overrides.log` was the pre-promotion path — removed 2026-05-08).
 
 All hooks fail open (exit 0 on any exception) so a hook bug never blocks Claude.
 
@@ -39,7 +39,7 @@ echo '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/docs/spec.md","old_s
 echo "exit code: $?"   # 2 = blocked, 0 = allowed; stderr has the reason
 ```
 
-**Inspect override log:** `jq -Rc 'try fromjson' docs/analysis/bloat-overrides.log` — JSONL, one entry per bypass use. (`-R 'try fromjson'` skips any pre-v2 plain-text lines that may co-exist in the file.) Fields: `ts`, `file`, `signal` (always `S1` in v2), `bypass_type` (`l2_heading` or `sentinel`), `char_delta`, optional `reason`/`carved_delta`/`headings`, `session_id`, `tool`. ≥3 entries since last `/retro` is a signal to revisit calibration.
+**Inspect override log:** `jq -Rc 'try fromjson | select(.regression_test != true)' docs/analysis/bloat-overrides.log` — JSONL, one entry per bypass use. (`-R 'try fromjson'` skips header `#` comment lines and any pre-v2 plain-text lines.) Fields: `ts`, `file`, `signal` (always `S1` in v2), `bypass_type` (`l2_heading` or `sentinel`), `char_delta`, optional `reason`/`carved_delta`/`headings`, `session_id`, `tool`, `regression_test` (since 2026-05-08; entries from `_manual_test_stage2.sh` are stamped `true` via the `HOOK_REGRESSION_TEST` env var). ≥3 organic entries since last `/retro` is a signal to revisit calibration.
 
 **Sentinel counter file:** `~/.claude/state/docs-bloat-gate-sentinels-<session_id>.txt` (single integer). Session ID resolves from `CLAUDE_SESSION_ID` env → hash of `CLAUDE_TRANSCRIPT_PATH` → hourly-rolling token. Counter auto-resets when the session ID changes. Safe to delete to reset within a session for debugging.
 
@@ -82,7 +82,7 @@ echo '{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command
   | python3 .claude/hooks/docs-only-plan-gate.py
 ```
 
-**Inspect override log:** `cat docs/analysis/docs-only-plan-overrides.log`. ≥3 entries since last `/retro` is a signal to revisit gate calibration.
+**Inspect override log:** `jq -Rc 'try fromjson | select(.regression_test != true)' docs/analysis/docs-only-plan-overrides.log` — JSONL since 2026-05-08; legacy plain-text lines are skipped by `try fromjson`. The `regression_test` field flags entries from `_manual_test_stage2.sh` (stamped via the `HOOK_REGRESSION_TEST=1` env var); filter them out before counting. ≥3 organic entries since last `/retro` is a signal to revisit gate calibration.
 
 ## Regression-test scaffold
 

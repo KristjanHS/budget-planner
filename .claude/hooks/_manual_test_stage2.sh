@@ -7,6 +7,10 @@
 set -u
 cd "$(dirname "$0")/../.."
 PROJ="$(pwd)"
+# Mark all hook-log entries written by this regression scaffold so calibration
+# audits can filter them. Hooks check this env var and stamp regression_test=true
+# in the JSONL entry. Reason strings stay clean (no [regression-test] prefix).
+export HOOK_REGRESSION_TEST=1
 HOOK_PLAN=".claude/hooks/docs-only-plan-gate.py"
 HOOK_TEST="$HOME/.claude/hooks/external-process-test-gate.py"
 STAMP="$HOME/.claude/sessions/$(python3 -c "import hashlib; print(hashlib.md5(b'$PROJ').hexdigest()[:8])")/pytest-pass-stamp"

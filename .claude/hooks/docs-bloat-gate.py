@@ -283,10 +283,27 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _write_schema_header(log: Path, fields: str) -> None:
+    if log.exists() and log.stat().st_size > 0:
+        return
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(f"# JSONL fields: {fields} (since 2026-05-08)\n")
+    except OSError:
+        pass
+
+
 def append_log(entry: dict) -> None:
     log = project_dir() / LOG_REL
     try:
         log.parent.mkdir(parents=True, exist_ok=True)
+        _write_schema_header(
+            log,
+            "ts, file, signal, bypass_type, char_delta, [reason], [carved_delta], "
+            "[headings], session_id, tool, regression_test",
+        )
+        entry["regression_test"] = os.environ.get("HOOK_REGRESSION_TEST") == "1"
         with log.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry, separators=(",", ":")) + "\n")
     except OSError:

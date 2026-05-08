@@ -61,6 +61,10 @@ Public surface:
 def find_slop(text: str) -> list[str]:
     """Return slop terms present in `text`. Empty list = clean."""
 
+def slop_hit_counts(text: str) -> Counter[str]:
+    """Counter of slop occurrences. Hook needs counts (not just presence)
+    for net-added detection; find_slop is a thin wrapper over this."""
+
 def lexical_density(text: str) -> float:
     """Content-word ratio. Returns 0.0–1.0."""
 
@@ -68,7 +72,7 @@ def density_threshold() -> float:
     """The shared S3 cutoff (0.45 today)."""
 ```
 
-Constants `SLOP_WORDS`, `SLOP_PHRASES`, `STOP_WORDS`, `DENSITY_THRESHOLD` move from the hook into this module. Hook concerns that *do not* move: tier caps, sentinel parsing, override log writing, Bash write-pattern regex, L2-heading exemption, payload handling.
+Constants `SLOP_WORDS`, `SLOP_PHRASES`, `FUNCTION_WORDS`, `DENSITY_THRESHOLD` move from the hook into this module. Hook concerns that *do not* move: tier caps, sentinel parsing, override log writing, Bash write-pattern regex, L2-heading exemption, payload handling.
 
 ### Hook refactor (`.claude/hooks/docs-bloat-gate.py`)
 
@@ -130,7 +134,7 @@ These are reminders surfaced *to the user when they `/retro`* — the retro skil
 ## Decisions log
 
 1. Library lives at `<project>/.claude/lib/docs_quality.py` (project-local). Global lib deferred per YAGNI.
-2. Library exports rule definitions only (`find_slop`, `lexical_density`, `density_threshold`); enforcement stays in the hook.
+2. Library exports rule definitions only (`find_slop`, `slop_hit_counts`, `lexical_density`, `density_threshold`); enforcement stays in the hook. `slop_hit_counts` is added because the hook needs Counter-valued net-added detection, not just boolean presence; `find_slop` wraps it for the skill's "what hit?" use case.
 3. Glob extension covers `docs/spec.md`, `docs/human/*.md`, `docs/plans/*.md` (top level only).
 4. Four new analysis types added: intra/cross-file dup (extended corpus), trigger-table drift, plan supersession, section-size flagging.
 5. Phase 4 pre-check is advisory, not blocking. Hook is the unbypassable line.
@@ -150,5 +154,9 @@ No file is written-then-rewritten across commits. No phase ordering re-work.
 
 None remaining at design time. Implementation may surface:
 
-- Whether the `sys.path` import shape is robust across the hook's invocation contexts (CLI, regression-test harness, future automation). Resolved at first failure.
+- ~~Whether the `sys.path` import shape is robust across the hook's invocation contexts (CLI, regression-test harness, future automation).~~ **Resolved at implementation:** both invocation paths (settings.json `python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/docs-bloat-gate.py` and the test harness `subprocess.run([sys.executable, str(HOOK_PATH)])`) produce an absolute `__file__`, so `Path(__file__).parent.parent / "lib"` resolves to `<project>/.claude/lib` in both cases. 72/72 in-scope hook tests pass.
 - Whether trigger-table drift should *propose* replacement rows (best-fit existing § match) or only *flag* drift. Default: flag-only; promote to propose-and-apply if first-pass usage shows the user always picks the obvious fix.
+
+## Deferred follow-ups
+
+- `tests/lib/test_docs_quality.py` (~5 tests pinning slop list contents + density edge cases). Plan rated it "recommended for rule-change visibility, not strictly required." Skipped at implementation since the 72-test hook suite exercises the library indirectly. Worth adding when the slop list next changes — a slop-list edit can pass hook tests while silently shifting which terms are checked, because no test pins the list directly.

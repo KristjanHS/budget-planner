@@ -22,9 +22,15 @@ import json
 import os
 import re
 import sys
-from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+from docs_quality import (  # noqa: E402
+    DENSITY_THRESHOLD,
+    lexical_density,
+    slop_hit_counts,
+)
 
 # --- Gated paths ---------------------------------------------------------
 GATED_DOCS = {"docs/spec.md"}
@@ -56,71 +62,9 @@ TIER_CAPS = {"rule": 150, "doc": 800, "spec": 2000}
 NEW_SECTION_LINE_EXEMPT = 30
 NEW_SECTION_CHAR_EXEMPT = 1500
 
-# --- S3 thresholds -------------------------------------------------------
-DENSITY_THRESHOLD = 0.45
+# --- S3 char-delta gate (when density check applies) ---------------------
+# DENSITY_THRESHOLD + slop/function-word lists live in .claude/lib/docs_quality.py.
 DENSITY_DELTA_GUARD = 100
-
-# --- S2 stoplist (~30 patterns) ------------------------------------------
-SLOP_WORDS = {
-    # transition adverbs
-    "furthermore", "moreover", "additionally", "consequently",
-    "subsequently", "accordingly", "nevertheless", "notwithstanding",
-    # hedge adverbs
-    "fundamentally", "essentially", "ultimately",
-    # AI tells (single-word)
-    "comprehensive", "robust", "seamless", "leverage", "utilize",
-}
-SLOP_PHRASES = (
-    # hedges (multi-word)
-    "it's worth noting", "it should be noted", "it is important to",
-    "that said", "having said that", "in essence", "at its core",
-    "while this may vary", "in the context of",
-    # AI tells (multi-word)
-    "delve into", "navigate the", "landscape of", "realm of", "tapestry of",
-)
-
-# ~150 English function words for S3 lexical-density stoplist.
-FUNCTION_WORDS = {
-    # articles
-    "a", "an", "the",
-    # pronouns
-    "i", "me", "my", "mine", "we", "us", "our", "ours",
-    "you", "your", "yours", "he", "him", "his",
-    "she", "her", "hers", "it", "its",
-    "they", "them", "their", "theirs",
-    "this", "that", "these", "those",
-    "who", "whom", "whose", "which", "what",
-    # conjunctions / subordinators
-    "and", "or", "but", "nor", "so", "yet", "for",
-    "if", "then", "than", "while", "although", "though",
-    "because", "since", "unless", "until", "when",
-    "where", "whether", "how", "why", "as",
-    # prepositions
-    "in", "on", "at", "to", "of", "by", "with",
-    "from", "into", "onto", "upon", "about", "above",
-    "across", "after", "against", "along", "among",
-    "around", "before", "behind", "below", "beneath",
-    "beside", "between", "beyond", "during", "except",
-    "inside", "near", "outside", "over", "through",
-    "throughout", "toward", "towards", "under", "underneath",
-    "up", "down", "off", "out",
-    # auxiliaries / be / have / do / modals
-    "be", "am", "is", "are", "was", "were", "been", "being",
-    "have", "has", "had", "having",
-    "do", "does", "did", "doing",
-    "will", "would", "shall", "should", "can", "could",
-    "may", "might", "must", "ought",
-    # determiners / quantifiers
-    "no", "not", "all", "any", "some", "none", "both",
-    "each", "every", "much", "many", "more", "most",
-    "less", "least", "few", "several", "such", "same",
-    "other", "another", "own",
-    # discourse / fillers
-    "only", "just", "very", "too", "also", "even", "again",
-    "here", "there", "now", "well", "like", "yes", "ok",
-    # contraction stubs (after \w+ tokenization)
-    "s", "t", "re", "ve", "ll", "d", "m",
-}
 
 
 # --- Helpers -------------------------------------------------------------
@@ -238,46 +182,6 @@ def carved_char_delta(added: str, removed: str, current: str) -> int:
     return delta
 
 
-# --- S2: slop detection --------------------------------------------------
-_SLOP_WORD_RE = re.compile(
-    r"\b(" + "|".join(re.escape(w) for w in sorted(SLOP_WORDS)) + r")\b",
-    re.IGNORECASE,
-)
-
-
-def slop_hit_counts(text: str) -> Counter[str]:
-    """Return a Counter of slop-pattern occurrences in `text`.
-
-    Counts (not just presence) so that net-added detection in
-    `gate_text_edit` catches "added one more occurrence" cases — a
-    set-difference would miss the second instance when the first already
-    appears in `removed`.
-    """
-    counts: Counter[str] = Counter()
-    if not text:
-        return counts
-    for m in _SLOP_WORD_RE.finditer(text):
-        counts[m.group(1).lower()] += 1
-    lower = text.lower()
-    for ph in SLOP_PHRASES:
-        n, start = 0, 0
-        while (idx := lower.find(ph, start)) != -1:
-            n += 1
-            start = idx + len(ph)
-        if n:
-            counts[ph] += n
-    return counts
-
-
-# --- S3: lexical density -------------------------------------------------
-def lexical_density(added: str) -> tuple[float, int]:
-    tokens = re.findall(r"\w+", added.lower())
-    if not tokens:
-        return 1.0, 0
-    content = sum(1 for t in tokens if t not in FUNCTION_WORDS)
-    return content / len(tokens), len(tokens)
-
-
 # --- Override log --------------------------------------------------------
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -342,7 +246,7 @@ def gate_text_edit(rel: str, added: str, removed: str, current: str, tool: str) 
 
     # S3: lexical density (UNBYPASSABLE), gated on char_delta > 100.
     if char_delta > DENSITY_DELTA_GUARD:
-        density, _ = lexical_density(added)
+        density = lexical_density(added)
         if density < DENSITY_THRESHOLD:
             sys.stderr.write(
                 f"docs-bloat-gate: lexical density {density:.2f} below "

@@ -595,9 +595,10 @@ class TestOverrideLog:
         new1 = f"<!-- docs-bloat-gate-override: {VALID_REASON} -->\n" + "x" * 200
         run_hook(tmp_path, edit_payload(f, old="", new=new1), session_id="sid-log-A")
         run_hook(tmp_path, edit_payload(f, old="", new=new1), session_id="sid-log-B")
-        lines = (tmp_path / "docs/analysis/bloat-overrides.log").read_text().splitlines()
-        assert len(lines) == 2
-        for ln in lines:
+        raw = (tmp_path / "docs/analysis/bloat-overrides.log").read_text().splitlines()
+        entries = [ln for ln in raw if not ln.startswith("#")]
+        assert len(entries) == 2
+        for ln in entries:
             entry = json.loads(ln)
             assert entry["bypass_type"] == "sentinel"
 

@@ -35,8 +35,8 @@ formulas)::
                                ├──► Trends(stub = current_month named range)
                                │       │
                                │       └──► Timelog Plan
-                               └──► Actuals-Hours
-                                       └──► Actuals ──► Summary ──► Trends(full)
+                               ├──► Actuals-Hours ──► (back-patch Capacity to-date)
+                               └──► Actuals ──► Summary ──► Trends(full)
 
 Enforced by ``test_build_order_is_stable``. Build order differs from
 user-facing tab order — some builders are ordered by dependency, not

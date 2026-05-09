@@ -232,7 +232,7 @@ def _write_person_hours_grid(
                         "Leave blank until the month closes.")
                     comment_added = True
                 # Forecast-EUR leaf — derived from the sibling hour cell.
-                # ROUND to whole EUR at the leaf so Plan-Forecast SUMs match
+                # ROUND to whole EUR at the leaf so downstream SUMs match
                 # auditor-computed totals (hours/143 is fractional; without
                 # ROUND, sub-cent drift aggregates to several EUR over a
                 # full project).
@@ -746,9 +746,9 @@ def build_actuals_hours_sheet(
                font=HEADER_FONT, border=False)
     ws.cell(row=1, column=1).comment = sized_comment(
         "Trust boundary for hours-side cumulative figures. The effective "
-        "value in column D is what Capacity, Plan-Forecast, and Trends "
-        "consume via the named range `hours_actuals_through_month`. "
-        "Override (B) beats auto-derived (C) only when it holds a number."
+        "value in column D is what Capacity and Trends consume via the "
+        "named range `hours_actuals_through_month`. Override (B) beats "
+        "auto-derived (C) only when it holds a number."
     )
     style_cell(ws, 1, 2, value=hours_through_override, font=BLUE_INPUT,
                fmt="0", border=False)
@@ -771,10 +771,10 @@ def build_actuals_hours_sheet(
         "=IF(ISNUMBER(B1),B1,C1)"
     )
     ws.cell(row=1, column=4).comment = sized_comment(
-        "Effective hours trust cutoff consumed by Capacity, Plan-Forecast, "
-        "and Trends via the named range `hours_actuals_through_month`. "
-        "Override in B wins when numeric; otherwise falls through to the "
-        "auto scan in C. Do not edit."
+        "Effective hours trust cutoff consumed by Capacity and Trends via "
+        "the named range `hours_actuals_through_month`. Override in B wins "
+        "when numeric; otherwise falls through to the auto scan in C. Do "
+        "not edit."
     )
     wb.defined_names.add(DefinedName(
         "hours_actuals_through_month",

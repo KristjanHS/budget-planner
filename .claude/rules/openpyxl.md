@@ -6,7 +6,6 @@ paths:
   - "budget_planner/capacity.py"
   - "budget_planner/actuals.py"
   - "budget_planner/actuals_hours.py"
-  - "budget_planner/plan_forecast.py"
   - "budget_planner/trends.py"
   - "budget_planner/config_sheet.py"
   - "budget_planner/workbook.py"

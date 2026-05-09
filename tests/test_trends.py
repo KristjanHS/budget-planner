@@ -682,7 +682,7 @@ def test_cumulative_forecast_helper_row_formulas(trends_ws):
     assert "MAX(0," in first_cell, (
         f"Future-anchor sum must clamp at 0 via MAX(0, ...): {first_cell!r}"
     )
-    # No more Plan-Forecast refs after Phase 2.4.
+    # Defensive: forecast helper must not reference Plan-Forecast.
     assert "Plan-Forecast" not in first_cell, (
         f"Forecast helper must not reference Plan-Forecast: {first_cell!r}"
     )
@@ -721,8 +721,8 @@ def test_actual_helper_row_first_month_clipped(trends_ws):
     and NA() — the v2 T10 clipping wrapper.
     """
     # The Actual helper row is the hidden row whose first-month formula
-    # contains 'Actuals!' but not 'Plan-Forecast' (distinguishes from forecast
-    # row) and not 'partner_ceiling' (distinguishes from ceiling row).
+    # contains 'Actuals!' but does not match the forecast 2-anchor shape
+    # (no 'Plan-Forecast' ref — defensive) and is not the ceiling row.
     hidden_rows = sorted(
         r for r in range(1, trends_ws.max_row + 1)
         if trends_ws.row_dimensions[r].hidden
@@ -793,12 +793,11 @@ def test_actual_helper_row_mid_month_clipped(trends_ws):
 
 
 def test_forecast_helper_row_two_anchor_pattern(trends_ws):
-    """Forecast helper row no longer clips by hours_actuals_through_month
-    after Phase 2.4. The new 2-anchor pattern (design §9) anchors on
-    eur_actuals_through_month (now-anchor) and project_months
+    """Forecast helper row uses the 2-anchor pattern (design §9): anchors
+    on eur_actuals_through_month (now-anchor) and project_months
     (future-anchor); off-anchor cells emit NA(). The hours-side cadence
-    is no longer consulted because the forecast is sourced from Actuals
-    EUR posted-cumulative cells (not Plan-Forecast hours derivations).
+    is not consulted — the forecast is sourced from Actuals EUR
+    posted-cumulative cells via slope projection.
     """
     # Locate the forecast helper row by its 2-anchor shape (project_months
     # + eur_actuals_through_month + NA() + Actuals!).
@@ -817,11 +816,11 @@ def test_forecast_helper_row_two_anchor_pattern(trends_ws):
         f"(future-anchor branch), got {mid_cell!r}"
     )
     assert "NA()" in mid_cell
-    # hours_actuals_through_month is no longer the forecast trust boundary.
+    # hours_actuals_through_month is not the forecast trust boundary.
     assert "hours_actuals_through_month" not in mid_cell, (
         f"Forecast helper must not reference hours_actuals_through_month "
-        f"after Phase 2.4 (forecast sources from Actuals EUR slope, not "
-        f"hours-derived Plan-Forecast): {mid_cell!r}"
+        f"(forecast sources from Actuals EUR slope, not the hours-side "
+        f"cadence): {mid_cell!r}"
     )
 
 
@@ -833,7 +832,7 @@ def test_planned_and_ceiling_helper_rows_unchanged(trends_ws):
         r for r in range(1, trends_ws.max_row + 1)
         if trends_ws.row_dimensions[r].hidden
     )
-    # Planned: contains SUMPRODUCT (and not Plan-Forecast/Actuals/partner_ceiling alone)
+    # Planned: contains SUMPRODUCT (and not Actuals/partner_ceiling alone)
     planned_row = None
     ceiling_row = None
     for r in hidden_rows:

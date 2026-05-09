@@ -55,7 +55,7 @@ _RP_GROUP_START = 3
 
 def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
                         work_packages,
-                        reporting_periods, plan_forecast_layout=None):
+                        reporting_periods):
     """Create the Summary sheet with annual budget view and budget overview.
 
     Every data parameter is required — the orchestrator threads live data
@@ -79,19 +79,12 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
         List of WP dicts.
     reporting_periods : list[dict]
         Reporting period entries.
-    plan_forecast_layout : dict | None
-        Accepted for transitional compatibility while the orchestrator
-        still threads it through (Stage C drops Plan-Forecast wholesale).
-        Ignored here — the project-end Forecast EUR column reads from
-        Actuals' posted-cumulative cells directly.
 
     Returns
     -------
     dict
         Summary layout with keys ``first_wp_row``, ``last_wp_row``, ``total_row``.
     """
-    del plan_forecast_layout  # Phase 2.3: ignored; Stage C deletes the kwarg.
-
     num_wps = len(work_packages)
     val_col_sum = val_columns(project_params["months"])["sum"]
     config_first_wp_row = layout["config_first_wp_row"]

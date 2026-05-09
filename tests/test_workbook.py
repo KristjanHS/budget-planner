@@ -26,7 +26,7 @@ def layout(workbook):
 
 def test_sheets_exist(workbook):
     for name in ["Config", "Plan", "Capacity", "Actuals",
-                 "Actuals-Hours", "Plan-Forecast", "Summary"]:
+                 "Actuals-Hours", "Summary"]:
         assert name in workbook.sheetnames, f"Missing sheet: {name}"
 
 
@@ -280,7 +280,6 @@ def test_build_order_yields_resolved_cross_sheet_dependencies(assigned_wb_path):
     expected_upstream_refs = {
         "Plan": {"Config!", "Capacity!"},
         "Capacity": {"Config!"},
-        "Plan-Forecast": {"Config!"},
         "Summary": {"Config!", "Plan!", "Actuals!"},
         "Trends": {"Config!", "Plan!", "Actuals!", "Capacity!"},
     }

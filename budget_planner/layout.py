@@ -39,7 +39,6 @@ SHEET_PLAN = "Plan"
 SHEET_CAPACITY = "Capacity"
 SHEET_ACTUALS = "Actuals"
 SHEET_ACTUALS_HOURS = "Actuals-Hours"
-SHEET_PLAN_FORECAST = "Plan-Forecast"
 SHEET_SUMMARY = "Summary"
 SHEET_TRENDS = "Trends"
 SHEET_TIMELOG_PLAN = "Timelog Plan"
@@ -195,12 +194,11 @@ VAL_OFFSET_BREACH_PLUS_I = 12
 VAL_OFFSET_POSTED_IDX = 13
 VAL_OFFSET_POSTED_VALUE = 14
 
-# Backward-compat aliases (transitional; retire after Stages B/C/D).
+# Backward-compat aliases (transitional; retire after Stage D).
 # Plan / Capacity / Actuals-Hours / Summary use "sum" semantically (row-wide
-# SUM of monthly cells); Plan-Forecast uses "cum" semantically (running
-# cumulative EUR). These slots are physically the same columns that Actuals
-# now repurposes for Slope / Posted. Aliases let consumers stay on legacy
-# keys until their dedicated stages rewire them.
+# SUM of monthly cells). These slots are physically the same columns that
+# Actuals now repurposes for Slope / Posted. Aliases let consumers stay on
+# legacy keys until Stage D rewires them.
 VAL_OFFSET_SUM = VAL_OFFSET_SLOPE
 VAL_OFFSET_SUM_PLUS_I = VAL_OFFSET_SLOPE_PLUS_I
 VAL_OFFSET_CUM = VAL_OFFSET_POSTED
@@ -255,9 +253,8 @@ def val_columns(project_months: int) -> dict[str, int]:
 
     Legacy keys ``sum`` / ``cum`` / ``sum_plus_i`` / ``cum_plus_i`` are
     transitional aliases — consumers on Plan / Capacity / Actuals-Hours /
-    Plan-Forecast / Summary still use them. They resolve to the same
-    column slots as the new keys (offset 1 / 4 / 7 / 10) and will be
-    retired as those modules migrate in Stages B/C/D.
+    Summary still use them. They resolve to the same column slots as the
+    new keys (offset 1 / 4 / 7 / 10) and will be retired in Stage D.
     """
     end = month_col_end(project_months)
     return {
@@ -284,39 +281,6 @@ def val_columns(project_months: int) -> dict[str, int]:
     }
 
 
-# ── Forecast monitoring column offsets (Actuals sheet — DEAD CODE) ──
-# Phase 2.2 shipped — the Actuals forecast-monitoring block is gone and
-# no callers remain (grep confirms). These offsets + ``forecast_val_columns``
-# stay only because Stage C will delete them alongside ``plan_forecast.py``
-# wholesale; deleting earlier would cause a churny intermediate commit.
-FORECAST_GUTTER = 1
-FORECAST_OFFSET_CUM = FORECAST_GUTTER + 1
-FORECAST_OFFSET_VAR = FORECAST_GUTTER + 2
-FORECAST_OFFSET_PCT_CEIL = FORECAST_GUTTER + 3
-FORECAST_OFFSET_BREACH = FORECAST_GUTTER + 4
-FORECAST_OFFSET_CUM_PLUS_I = FORECAST_GUTTER + 5
-FORECAST_OFFSET_VAR_PLUS_I = FORECAST_GUTTER + 6
-FORECAST_OFFSET_PCT_CEIL_PLUS_I = FORECAST_GUTTER + 7
-FORECAST_OFFSET_BREACH_PLUS_I = FORECAST_GUTTER + 8
-
-
-def forecast_val_columns(project_months: int) -> dict[str, int]:
-    """Return forecast-monitoring column numbers (Actuals — transitional).
-
-    Retire after Phase 2.2 (actuals.py rewrite) lands and the forecast
-    monitoring block is removed from the Actuals builder.
-    """
-    breach_pi = val_columns(project_months)["breach_plus_i"]
-    return {
-        "cum_forecast": breach_pi + FORECAST_OFFSET_CUM,
-        "var_forecast": breach_pi + FORECAST_OFFSET_VAR,
-        "pct_ceil_forecast": breach_pi + FORECAST_OFFSET_PCT_CEIL,
-        "breach_forecast": breach_pi + FORECAST_OFFSET_BREACH,
-        "cum_forecast_plus_i": breach_pi + FORECAST_OFFSET_CUM_PLUS_I,
-        "var_forecast_plus_i": breach_pi + FORECAST_OFFSET_VAR_PLUS_I,
-        "pct_ceil_forecast_plus_i": breach_pi + FORECAST_OFFSET_PCT_CEIL_PLUS_I,
-        "breach_forecast_plus_i": breach_pi + FORECAST_OFFSET_BREACH_PLUS_I,
-    }
 
 
 def wp_active_months(wp_id: str, work_packages: list[dict]) -> frozenset[int]:

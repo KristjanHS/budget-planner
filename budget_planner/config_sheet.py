@@ -850,7 +850,8 @@ def build_config_sheet(ws, wb, project_params, work_packages,
             "Convention for how many hours equal 1 person-month of "
             "full-time effort. EU/programme defaults to 143 h/month. Used to "
             "convert hours logged on Actuals-Hours into person-months on "
-            "Capacity and into EUR on Plan-Forecast. Blue = user input."
+            "Capacity and into EUR forecasts on downstream sheets. "
+            "Blue = user input."
         ),
         param_rows["Vacation Month"]: (
             "Calendar month nobody logs to the project (vacation). "
@@ -961,8 +962,8 @@ def build_config_sheet(ws, wb, project_params, work_packages,
     # `months_elapsed_eur`, and `reconciled_through_month` were dropped; each
     # callsite now inlines `MAX(1, …)` / `MIN(…, …)` directly.
     # WP Budget +i column — authoritative with-indirect EUR per WP, consumed
-    # by every sheet that reports a with-indirect budget (Actuals, Plan-Forecast,
-    # Timelog Plan in later stages).
+    # by every sheet that reports a with-indirect budget (Actuals, Timelog
+    # Plan in later stages).
     wp_budget_plus_i_col_letter = get_column_letter(COL_WP_BUDGET_PLUS_I)
     wb.defined_names.add(DefinedName(
         "wp_budget_with_indirect",

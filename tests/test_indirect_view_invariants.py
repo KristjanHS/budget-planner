@@ -1,8 +1,8 @@
 """Indirect-view cross-sheet invariants (see
 ``docs/spec.md`` § Indirect-view EUR header suffix).
 
-Enforces the ``+i`` / ``-i`` convention across the 6 in-scope sheets
-(Config, Actuals, Plan-Forecast, Capacity, Actuals-Hours, Timelog Plan):
+Enforces the ``+i`` / ``-i`` convention across the in-scope sheets
+(Config, Actuals, Capacity, Actuals-Hours, Timelog Plan):
 
 * ``test_minus_i_fill_carries_minus_i_token`` — every cell with
   ``WITHOUT_INDIRECT_HEADER_FILL`` (#FBE5D6, unique to the indirect-view
@@ -34,7 +34,6 @@ from budget_planner.layout import (
     SHEET_ACTUALS_HOURS,
     SHEET_CAPACITY,
     SHEET_CONFIG,
-    SHEET_PLAN_FORECAST,
     SHEET_TIMELOG_PLAN,
 )
 from budget_planner.styles import (
@@ -48,7 +47,6 @@ IN_SCOPE_SHEETS = [
     SHEET_CONFIG,
     SHEET_ACTUALS,
     SHEET_ACTUALS_HOURS,
-    SHEET_PLAN_FORECAST,
     SHEET_CAPACITY,
     SHEET_TIMELOG_PLAN,
 ]
@@ -75,8 +73,8 @@ def _cell_rgb(cell):
     return _rgb6(fill.fgColor)
 
 
-# Calendar-year anchor: the year_row cells on Actuals / Plan-Forecast
-# carry a "<YYYY> -i" label that visually labels the monthly grid band.
+# Calendar-year anchor: the year_row cells on Actuals carry a
+# "<YYYY> -i" label that visually labels the monthly grid band.
 # The grid cells themselves and this label use LIGHT_BLUE_FILL (inherited
 # from ``build_year_month_headers``). Exempt per D8.
 _CALENDAR_ANCHOR_RE = re.compile(r"^\d{4}\s[+\-]i$")

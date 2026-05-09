@@ -35,7 +35,7 @@ formulas)::
                                ├──► Trends(stub = current_month named range)
                                │       │
                                │       └──► Timelog Plan
-                               └──► Actuals-Hours ──► Plan-Forecast
+                               └──► Actuals-Hours
                                        └──► Actuals ──► Summary ──► Trends(full)
 
 Enforced by ``test_build_order_is_stable``. Build order differs from
@@ -54,15 +54,6 @@ display position. Tab order (set after build via ``wb.move_sheet``) is in
 - Timelog Plan is independent of the forecast chain; it only needs the
   Config layout and the ``current_month`` stub, so it slots right after
   Trends-stub.
-- Actuals-Hours must precede Plan-Forecast (forecast-EUR leaves exist
-  before they are SUMmed). Stage C deletes Plan-Forecast wholesale; the
-  Plan-Forecast ordering constraints below are transitional pending that.
-- Plan-Forecast must precede Actuals (transitional only — Stage A Actuals
-  no longer reads Plan-Forecast; the kwarg is accept-and-ignore. Drops in
-  Phase 2.5 wiring cleanup, then Phase 4 deletes the tab).
-- Summary must follow Plan-Forecast (transitional only — Phase 2.3 rewired
-  Summary to consume Actuals!{posted_idx,posted_value,slope} directly via
-  slope projection to ``project_months``. Drops in Phase 2.5).
 - Trends is populated last so every upstream layout dict (including
   ``helper_row_forecast``) is known.
 
@@ -94,7 +85,6 @@ from budget_planner.capacity import (
 )
 from budget_planner.actuals import build_actuals_sheet
 from budget_planner.actuals_hours import build_actuals_hours_sheet
-from budget_planner.plan_forecast import build_plan_forecast_sheet
 from budget_planner.summary import build_summary_sheet
 from budget_planner.timelog_plan import build_timelog_plan_sheet
 from budget_planner.trends import build_trends_sheet
@@ -104,7 +94,6 @@ from budget_planner.layout import (
     SHEET_CAPACITY,
     SHEET_ACTUALS,
     SHEET_ACTUALS_HOURS,
-    SHEET_PLAN_FORECAST,
     SHEET_TIMELOG_PLAN,
     SHEET_TRENDS,
     SECTION_HEADER_LABELS,
@@ -385,8 +374,6 @@ def _build_all_sheets(
     )
 
     # Stage 6a — Actuals-Hours (hour timelog; depends only on config_layout).
-    # Built BEFORE Plan-Forecast so the latter can SUM the forecast-EUR
-    # leaves (transitional pending Stage C — Phase 4 deletes Plan-Forecast).
     # Tab order is fixed up at the end of this function.
     actuals_hours_ws = wb.create_sheet(SHEET_ACTUALS_HOURS)
     actuals_hours_layout = build_actuals_hours_sheet(
@@ -410,19 +397,7 @@ def _build_all_sheets(
         project_params=project_params,
     )
 
-    # Stage 6b — Plan-Forecast (aggregates forecast-EUR leaves from
-    # Actuals-Hours into a WP × month grid; mirrors Plan shape).
-    plan_forecast_ws = wb.create_sheet(SHEET_PLAN_FORECAST)
-    build_plan_forecast_sheet(
-        plan_forecast_ws,
-        project_params=project_params,
-        work_packages=work_packages,
-        assignments=assignments,
-        config_first_wp_row=ctx.config_layout["wp_first_row"],
-        actuals_hours_layout=actuals_hours_layout,
-    )
-
-    # Stage 6c — Actuals (depends on plan_layout + Trends stub for
+    # Stage 6b — Actuals (depends on plan_layout + Trends stub for
     # current_month).
     ctx.actuals_layout = build_actuals_sheet(
         wb,

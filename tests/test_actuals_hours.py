@@ -334,7 +334,8 @@ def test_forecast_eur_leaf_formula_structure(hrs):
         f"Formula should VLOOKUP col 4 (Rate): {leaf!r}"
     )
     # ROUND(..., 0) wrapper ensures each leaf is a whole EUR — avoids
-    # sub-cent drift when Plan-Forecast SUMs hundreds of these leaves.
+    # sub-cent drift when downstream sheets aggregate hundreds of these
+    # leaves.
     assert "ROUND(" in leaf, (
         f"Formula should wrap ROUND(...,0) for whole-EUR leaves: {leaf!r}"
     )

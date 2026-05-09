@@ -690,7 +690,6 @@ def _register_named_ranges(wb):
 
 def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
                         preserved=None,
-                        plan_forecast_layout=None,
                         eur_through_override: int | None = None):
     """Build the Actuals sheet for posted-cumulative EUR per WP per month.
 
@@ -702,14 +701,11 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     Args:
         wb: The parent Workbook.
         layout: Layout dict from build_plan_sheet(), needs config_first_wp_row.
-        plan_forecast_layout: Accepted for transitional compatibility;
-            Stage C drops Plan-Forecast wholesale. Ignored here.
 
     Returns:
         Layout dict with keys: asof_row, year_row, month_row,
         first_wp_row, last_wp_row, total_row + per-WP column refs.
     """
-    del plan_forecast_layout  # Phase 2.2: ignored; Stage C deletes the kwarg.
     if project_params is None or work_packages is None:
         if project_params is None:
             project_params = config.default_project_params()

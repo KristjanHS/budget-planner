@@ -484,9 +484,8 @@ def _write_reconciliation_section(ws, tlayout, layout, actuals_layout):
         )
 
         # Col B: Cumulative Forecast EUR through reconciled_through_month.
-        # Phase 2.4 rewire: replaces the SUM('Plan-Forecast'!...) window
-        # with the per-WP slope projection on Actuals. Linear extrapolation
-        # from the WP's posted-cumulative anchor out to reconciled_through.
+        # Per-WP slope projection on Actuals: linear extrapolation from the
+        # WP's posted-cumulative anchor out to reconciled_through.
         # MAX(0, ...) clamps a negative projection (correction postings).
         # Empty-string sentinel handled by posted_idx=0 -> 0 (no projection).
         posted_idx_ref = (
@@ -770,10 +769,12 @@ def _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params
                 f"{prev_cl}{helper_row_actual}+{SHEET_ACTUALS}!{cl}{act_total})"
             )
 
-        # Helper Row 3: Cumulative forecast EUR — sums Plan-Forecast monthly
-        # totals cumulatively. Sheet name MUST be single-quoted (hyphen).
-        # Clipped past `hours_actuals_through_month` (forecast tracks the
-        # hours-side through-month cadence, not the EUR one).
+        # Helper Row 3: Cumulative forecast EUR — 2-anchor pattern. The
+        # now-anchor (m=eur_actuals_through_month) emits the current
+        # posted-cumulative total; the project-end anchor
+        # (m=project_months) emits the slope-projected end total. All
+        # off-anchor cells emit NA() so the chart series draws a single
+        # straight segment between the two anchors.
         forecast_formula = (
             f"=IF({month_idx_literal}=eur_actuals_through_month,"
             f"{sum_posted_now_expr},"
@@ -1034,8 +1035,7 @@ def _apply_column_widths(ws):
 
 def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout, *,
                        project_params, work_packages,
-                       team, reporting_periods,
-                       plan_forecast_layout=None):
+                       team, reporting_periods):
     """Build the Trends sheet: WP burn rate, cumulative chart, person load.
 
     Args:
@@ -1049,15 +1049,7 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         work_packages: List of WP dicts with single-range 'start'/'end'/'type'.
         team: List of team member dicts.
         reporting_periods: Reporting period entries.
-        plan_forecast_layout: Transitional accept-and-ignore (Phase 2.4
-            rewired all consumers to read Actuals helpers directly; the
-            param stays until Phase 2.5 drops the kwarg from workbook.py).
     """
-    # Phase 2.4 transitional pattern (mirrors Stage A actuals.py + Phase 2.3
-    # summary.py): we no longer consume Plan-Forecast on Trends, but
-    # workbook.py still threads the kwarg until Phase 2.5 lands.
-    del plan_forecast_layout
-
     tlayout = _resolve_trends_layout(
         layout, actuals_layout, project_params, work_packages, team,
     )

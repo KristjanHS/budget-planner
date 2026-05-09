@@ -140,19 +140,19 @@ def test_recon_wp_row_count_plus_total(recon_ws):
 
 
 def test_recon_col_b_forecast_formula(recon_ws):
-    """Col B: per-WP slope projection on Actuals (Phase 2.4 rewire), guarded
-    by the local ``Reconciled through`` helper cell ($B$<recon_row+4>) and
-    by posted_idx=0 -> 0. Replaces the prior SUM('Plan-Forecast'!INDEX-window)
-    formula. Linear extrapolation from the WP's posted-cumulative anchor
-    out to reconciled_through; MAX(0, ...) clamps a negative projection.
+    """Col B: per-WP slope projection on Actuals, guarded by the local
+    ``Reconciled through`` helper cell ($B$<recon_row+4>) and by
+    posted_idx=0 -> 0. Linear extrapolation from the WP's posted-cumulative
+    anchor out to reconciled_through; MAX(0, ...) clamps a negative
+    projection.
     """
     recon_row = _recon_section_row(recon_ws)
     reconciled_ref = f"$B${recon_row + 4}"
     first_wp_row = recon_row + 7
     formula = str(recon_ws.cell(first_wp_row, 2).value)
-    # No more Plan-Forecast refs after Phase 2.4 rewire.
+    # Defensive: Col B must not reference Plan-Forecast.
     assert "Plan-Forecast" not in formula, (
-        f"Col B must not reference Plan-Forecast after Phase 2.4: {formula!r}"
+        f"Col B must not reference Plan-Forecast: {formula!r}"
     )
     assert "Actuals!" in formula, (
         f"Col B must reference Actuals! (per-WP posted/slope cells): {formula!r}"
@@ -371,10 +371,9 @@ def test_gap_helper_row_formula(recon_ws):
     """Gap helper row's first-month formula is =<cl><actual>-<cl><forecast>.
 
     Discovers the helper rows dynamically via openpyxl — matches the
-    pattern used elsewhere in the trends test suite. Phase 2.4 rewired
-    the forecast row from Plan-Forecast SUMs to a 2-anchor pattern, so
-    the forecast-row probe now looks for the (project_months,
-    eur_actuals_through_month, NA()) shape rather than 'Plan-Forecast'.
+    pattern used elsewhere in the trends test suite. The forecast-row
+    probe matches the 2-anchor (project_months, eur_actuals_through_month,
+    NA()) shape.
     """
     from budget_planner.layout import MONTH_COL_START
     from budget_planner.styles import col_letter

@@ -141,9 +141,9 @@ VAL_COL_DIFF = _vcols["diff"]
 VAL_COL_POSTED = _vcols["posted"]
 VAL_COL_PCT_CEIL = _vcols["pct_ceil"]
 VAL_COL_BREACH = _vcols["breach"]
-# Backward-compat aliases (transitional; retire as Stages B/C/D migrate the
-# remaining consumers — Plan / Capacity / Actuals-Hours / Plan-Forecast /
-# Summary). Point at the same column slots.
+# Backward-compat aliases (transitional; retire as Stage D migrates the
+# remaining consumers — Plan / Capacity / Actuals-Hours / Summary).
+# Point at the same column slots.
 VAL_COL_SUM = VAL_COL_SLOPE
 VAL_COL_CUM = VAL_COL_POSTED
 

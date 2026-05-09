@@ -1,11 +1,10 @@
 """Summary sheet — project-end Forecast EUR column tests.
 
-Phase 2.3 (2026-05-09) retired the per-year Forecast EUR column. The Summary
-sheet now has 4 columns per calendar-year group (Plan FTE, Plan EUR, Act EUR,
-Var EUR) PLUS a single project-end Forecast EUR column sitting between the
-year band and PROJECT TOTAL. The Forecast EUR cell projects from the Actuals
-posted-cumulative cells (posted_idx + posted_value + slope) out to
-project_months — no Plan-Forecast tab dependency anymore.
+The Summary sheet has 4 columns per calendar-year group (Plan FTE, Plan
+EUR, Act EUR, Var EUR) PLUS a single project-end Forecast EUR column
+sitting between the year band and PROJECT TOTAL. The Forecast EUR cell
+projects from the Actuals posted-cumulative cells (posted_idx +
+posted_value + slope) out to project_months.
 """
 
 import pytest

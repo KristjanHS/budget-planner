@@ -165,27 +165,46 @@ COL_EXT_EU = 6
 EXT_LAST_COL = 6
 
 # Validation column offsets (relative to month_col_end).
-# Offsets 1..6 carry the without-indirect (-i) rollups (historical keys
-# ``sum`` / ``budget`` / ``diff`` / ``cum`` / ``pct_ceil`` / ``breach`` —
-# retained to preserve deferred-consumer semantics on Summary / Trends /
-# Plan, which read -i numbers from these positions).
-VAL_OFFSET_SUM = 1
+# Offsets 1..6 carry the without-indirect (-i) rollups; 7..12 carry the
+# with-indirect (+i) mirrors. The +i block is outside the collapsible -i
+# band and forms the default-visible rollup surface for external-facing
+# use. See ``docs/spec.md`` § Indirect-view EUR header suffix.
+#
+# Actuals semantic: offset 1 = Slope (avg-burn = posted_value/posted_idx);
+# offset 4 = Posted (latest-filled cumulative through current_month).
+# Posted-cumulative redesign (2026-05-09) replaced Sum/Cum on the Actuals
+# sheet — see ``docs/plans/2026-05-09-actuals-posted-cumulative-design.md``.
+VAL_OFFSET_SLOPE = 1
 VAL_OFFSET_BUDGET = 2
 VAL_OFFSET_DIFF = 3
-# Actuals-only additional columns
-VAL_OFFSET_CUM = 4
+VAL_OFFSET_POSTED = 4
 VAL_OFFSET_PCT_CEIL = 5
 VAL_OFFSET_BREACH = 6
-# Offsets 7..12 carry the with-indirect (+i) mirrors on the Actuals sheet.
-# The +i block is outside the collapsible -i band and forms the
-# default-visible rollup surface for external-facing use. See
-# ``docs/spec.md`` § Indirect-view EUR header suffix.
-VAL_OFFSET_SUM_PLUS_I = 7
+VAL_OFFSET_SLOPE_PLUS_I = 7
 VAL_OFFSET_BUDGET_PLUS_I = 8
 VAL_OFFSET_DIFF_PLUS_I = 9
-VAL_OFFSET_CUM_PLUS_I = 10
+VAL_OFFSET_POSTED_PLUS_I = 10
 VAL_OFFSET_PCT_CEIL_PLUS_I = 11
 VAL_OFFSET_BREACH_PLUS_I = 12
+
+# Hidden helpers (Actuals-only; -i side; outline-grouped, black-formula).
+# `posted_idx` = banned-pattern-safe SUMPRODUCT-MAX scan returning the latest
+# 1-based month index with a numeric posting; `posted_value` = INDEX into
+# row at that index. Consumed by the visible Posted/Slope/Variance/%/Breach
+# formulas. +i side does NOT mirror — Posted +i = ROUND(-i × 1.25, 0).
+VAL_OFFSET_POSTED_IDX = 13
+VAL_OFFSET_POSTED_VALUE = 14
+
+# Backward-compat aliases (transitional; retire after Stages B/C/D).
+# Plan / Capacity / Actuals-Hours / Summary use "sum" semantically (row-wide
+# SUM of monthly cells); Plan-Forecast uses "cum" semantically (running
+# cumulative EUR). These slots are physically the same columns that Actuals
+# now repurposes for Slope / Posted. Aliases let consumers stay on legacy
+# keys until their dedicated stages rewire them.
+VAL_OFFSET_SUM = VAL_OFFSET_SLOPE
+VAL_OFFSET_SUM_PLUS_I = VAL_OFFSET_SLOPE_PLUS_I
+VAL_OFFSET_CUM = VAL_OFFSET_POSTED
+VAL_OFFSET_CUM_PLUS_I = VAL_OFFSET_POSTED_PLUS_I
 
 
 # Alert thresholds
@@ -229,39 +248,48 @@ def month_col_end(project_months: int) -> int:
 def val_columns(project_months: int) -> dict[str, int]:
     """Return dict of validation column numbers.
 
-    Keys without a suffix (``sum`` / ``budget`` / ``diff`` / ``cum`` /
-    ``pct_ceil`` / ``breach``) are the without-indirect (-i) rollups at
-    offsets 1..6 from ``month_col_end``. These keep their historical
-    positions so deferred consumers (Summary / Trends / Plan) that read
-    by position continue to resolve to a numerically identical -i cell.
-    Keys with ``_plus_i`` suffix are the with-indirect (+i) mirrors at
-    offsets 7..12, added in T3 of the indirect-view restructure.
+    Primary keys (-i side): ``slope`` / ``budget`` / ``diff`` / ``posted`` /
+    ``pct_ceil`` / ``breach`` at offsets 1..6 from ``month_col_end``.
+    +i mirrors at offsets 7..12 (``*_plus_i``). Hidden helpers
+    ``posted_idx`` / ``posted_value`` at offsets 13..14 (Actuals only).
+
+    Legacy keys ``sum`` / ``cum`` / ``sum_plus_i`` / ``cum_plus_i`` are
+    transitional aliases — consumers on Plan / Capacity / Actuals-Hours /
+    Plan-Forecast / Summary still use them. They resolve to the same
+    column slots as the new keys (offset 1 / 4 / 7 / 10) and will be
+    retired as those modules migrate in Stages B/C/D.
     """
     end = month_col_end(project_months)
     return {
-        "sum": end + VAL_OFFSET_SUM,
+        # Posted-cumulative redesign (current naming):
+        "slope": end + VAL_OFFSET_SLOPE,
         "budget": end + VAL_OFFSET_BUDGET,
         "diff": end + VAL_OFFSET_DIFF,
-        "cum": end + VAL_OFFSET_CUM,
+        "posted": end + VAL_OFFSET_POSTED,
         "pct_ceil": end + VAL_OFFSET_PCT_CEIL,
         "breach": end + VAL_OFFSET_BREACH,
-        "sum_plus_i": end + VAL_OFFSET_SUM_PLUS_I,
+        "slope_plus_i": end + VAL_OFFSET_SLOPE_PLUS_I,
         "budget_plus_i": end + VAL_OFFSET_BUDGET_PLUS_I,
         "diff_plus_i": end + VAL_OFFSET_DIFF_PLUS_I,
-        "cum_plus_i": end + VAL_OFFSET_CUM_PLUS_I,
+        "posted_plus_i": end + VAL_OFFSET_POSTED_PLUS_I,
         "pct_ceil_plus_i": end + VAL_OFFSET_PCT_CEIL_PLUS_I,
         "breach_plus_i": end + VAL_OFFSET_BREACH_PLUS_I,
+        "posted_idx": end + VAL_OFFSET_POSTED_IDX,
+        "posted_value": end + VAL_OFFSET_POSTED_VALUE,
+        # Backward-compat aliases (retire after Stages B/C/D):
+        "sum": end + VAL_OFFSET_SUM,
+        "sum_plus_i": end + VAL_OFFSET_SUM_PLUS_I,
+        "cum": end + VAL_OFFSET_CUM,
+        "cum_plus_i": end + VAL_OFFSET_CUM_PLUS_I,
     }
 
 
-# ── Forecast monitoring column offsets (Actuals sheet) ──
-# Placed after the Actual-EUR ``breach_plus_i`` column with a 1-column
-# gutter so the groupable forecast band is visually separable.
-# Offsets 1..4 carry the without-indirect (-i) siblings that live
-# **inside** the collapsible -i band; offsets 5..8 carry the with-indirect
-# (+i) mirrors that form the default-visible forecast rollup block. T3
-# of the indirect-view restructure (2026-04-22) added the +i mirrors and
-# re-based the forecast block on ``breach_plus_i`` (was ``breach``).
+# ── Forecast monitoring column offsets (Actuals sheet — TRANSITIONAL) ──
+# Posted-cumulative redesign (Phase 2.2) replaces the forecast monitoring
+# block on Actuals with per-WP slope/forecast cells inline. Until the
+# actuals.py rewrite ships, these offsets + ``forecast_val_columns`` stay
+# so the existing builder + tests keep working. After Phase 2.2 lands, all
+# callers vanish and these constants can be deleted in Stage C.
 FORECAST_GUTTER = 1
 FORECAST_OFFSET_CUM = FORECAST_GUTTER + 1
 FORECAST_OFFSET_VAR = FORECAST_GUTTER + 2
@@ -274,15 +302,10 @@ FORECAST_OFFSET_BREACH_PLUS_I = FORECAST_GUTTER + 8
 
 
 def forecast_val_columns(project_months: int) -> dict[str, int]:
-    """Return dict of forecast-monitoring column numbers on Actuals.
+    """Return forecast-monitoring column numbers (Actuals — transitional).
 
-    Positioned after the Actual-EUR ``breach_plus_i`` column, with a
-    1-column gutter. Legacy keys ``cum_forecast`` / ``var_forecast`` /
-    ``pct_ceil_forecast`` / ``breach_forecast`` resolve to the
-    without-indirect (-i) siblings that live inside the collapsible -i
-    band (adjacency ``var_forecast == cum_forecast + 1`` etc. still
-    holds within the -i sub-block). ``*_forecast_plus_i`` keys name the
-    +i mirrors placed outside the collapsible band.
+    Retire after Phase 2.2 (actuals.py rewrite) lands and the forecast
+    monitoring block is removed from the Actuals builder.
     """
     breach_pi = val_columns(project_months)["breach_plus_i"]
     return {

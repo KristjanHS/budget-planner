@@ -160,7 +160,7 @@ def test_through_month_strip_formulas_on_actuals_hours(actuals_hours_ws_demo):
     """Same strip contract as Actuals (label / override / auto / effective)
     registered against `hours_actuals_through_month`. The auto scan here
     is `=MAX(SUMPRODUCT(...), ...)` over per-person programme-WP row ranges —
-    externals and subtotal/TOTAL/EU TOTAL rows are excluded.
+    externals and per-person TOTAL rows are excluded.
 
     The demo fixture has multiple team members with programme-WP assignments,
     so the formula must contain ≥2 `SUMPRODUCT(` terms. A regression that

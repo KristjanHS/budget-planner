@@ -1,9 +1,7 @@
 """Shared per-person row geometry helpers.
 
 Used by the Capacity sheet and the Actuals-Hours sheet so both share the same
-per-person block layout (header → WP rows → external rows → TOTAL → optional
-EU TOTAL). Actuals-Hours opts into EU TOTAL (the EU-ceiling enforcement
-surface); Capacity passes both optional flags False.
+per-person block layout (header → WP rows → external rows → TOTAL).
 """
 
 from dataclasses import dataclass
@@ -35,11 +33,8 @@ class PersonLayout:
     header_row: int
     wp_rows: dict[str, int]
     external_rows: dict[str, int]
-    cum_hours_todate_row: int | None
-    actual_pm_todate_row: int | None
     total_row: int
     remaining_row: int | None
-    eu_total_row: int | None
     next_row: int
 
 
@@ -49,18 +44,11 @@ def plan_person_layout(
     wp_ids: list[str],
     external_names: list[str],
     include_remaining: bool,
-    include_eu_total: bool,
-    include_hours_todate_summary: bool = False,
 ) -> PersonLayout:
     """Compute sequential row positions for a single person's section.
 
     Layout order: header, one row per WP id, one row per external name,
-    optional ``Cumulative hours to date`` + ``Actual PM to date`` summary
-    rows (when ``include_hours_todate_summary`` is True), TOTAL, optional
-    REMAINING, optional EU TOTAL.
-
-    The hours-to-date summary rows are Actuals-Hours-only; Capacity
-    passes False (the default) and the layout is unchanged.
+    TOTAL, optional REMAINING.
     """
     r = start_row
     header_row = r
@@ -69,29 +57,17 @@ def plan_person_layout(
     r += len(wp_ids)
     external_rows = {name: r + i for i, name in enumerate(external_names)}
     r += len(external_names)
-    cum_hours_todate_row = r if include_hours_todate_summary else None
-    if include_hours_todate_summary:
-        r += 1
-    actual_pm_todate_row = r if include_hours_todate_summary else None
-    if include_hours_todate_summary:
-        r += 1
     total_row = r
     r += 1
     remaining_row = r if include_remaining else None
     if include_remaining:
         r += 1
-    eu_total_row = r if include_eu_total else None
-    if include_eu_total:
-        r += 1
     return PersonLayout(
         header_row=header_row,
         wp_rows=wp_rows,
         external_rows=external_rows,
-        cum_hours_todate_row=cum_hours_todate_row,
-        actual_pm_todate_row=actual_pm_todate_row,
         total_row=total_row,
         remaining_row=remaining_row,
-        eu_total_row=eu_total_row,
         next_row=r,
     )
 
@@ -117,10 +93,9 @@ def apply_person_row_outline(ws, layout: PersonLayout) -> None:
 
     Body rows = everything between the header row (exclusive) and
     ``next_row`` (exclusive) — i.e. WP rows, external rows, TOTAL,
-    optional REMAINING, optional EU TOTAL. Header row stays at the
-    default level 0 so the outline button (with ``summaryBelow=False``
-    on the sheet) sits next to the header and collapses the block
-    beneath it.
+    optional REMAINING. Header row stays at the default level 0
+    so the outline button (with ``summaryBelow=False`` on the sheet)
+    sits next to the header and collapses the block beneath it.
 
     Idempotent: calling twice leaves the final level at 1.
     """

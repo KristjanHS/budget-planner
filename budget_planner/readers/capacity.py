@@ -219,8 +219,8 @@ def _read_person_grids(
             col_a = ws.cell(dr, 1).value
             col_b = ws.cell(dr, 2).value
 
-            # Skip TOTAL, REMAINING, and EU TOTAL rows
-            if col_b and str(col_b).upper() in ("TOTAL", "REMAINING", "EU TOTAL"):
+            # Skip TOTAL and REMAINING rows
+            if col_b and str(col_b).upper() in ("TOTAL", "REMAINING"):
                 continue
 
             # Try to classify the row

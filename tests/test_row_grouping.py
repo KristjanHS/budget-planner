@@ -1,10 +1,10 @@
 """Row-grouping tests for Capacity + Actuals-Hours (W1 row grouping).
 
 Each person block collapses as a unit: header row stays at ``outline_level
-== 0``; every body row (WP rows, external rows, TOTAL, and on Actuals-Hours
-the optional EU TOTAL) has ``outline_level == 1``. The sheet's
-``outlinePr.summaryBelow`` is set to ``False`` so the collapse button sits
-next to the person header (above the block), not below it.
+== 0``; every body row (WP rows, external rows, TOTAL) has
+``outline_level == 1``. The sheet's ``outlinePr.summaryBelow`` is set to
+``False`` so the collapse button sits next to the person header (above
+the block), not below it.
 
 Round-trip test asserts ``rebuild_workbook`` preserves the outline levels
 — openpyxl stores row_dimensions natively, but the full init→edit→rebuild
@@ -51,7 +51,7 @@ def _assert_person_blocks_grouped(ws, sheet_name: str) -> None:
     assert headers, f"{sheet_name}: expected at least one merged A:B row"
 
     # Keep only the subset that looks like a person header: next-row col B
-    # is either blank/formula (WP row) or TOTAL/EU TOTAL label is within
+    # is either blank/formula (WP row) or TOTAL label is within
     # body before next header. Simplest filter: any header whose +1 row
     # carries data (non-empty col A) or is a TOTAL row within the span.
     # In practice the demo workbook has clear person headers; filter by
@@ -74,7 +74,7 @@ def _assert_person_blocks_grouped(ws, sheet_name: str) -> None:
             f"{ws.row_dimensions[hr].outline_level})"
         )
         # Every body row must be level 1 — including WP rows, externals,
-        # TOTAL, and EU TOTAL (Actuals-Hours only).
+        # and TOTAL.
         for br in body:
             level = ws.row_dimensions[br].outline_level or 0
             assert level == 1, (

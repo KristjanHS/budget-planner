@@ -51,7 +51,7 @@ def _find_wp_row_under_person(ws, header_row: int, wp_id: str) -> int:
         if val is None:
             continue
         b_val = ws.cell(r, 2).value
-        if b_val and str(b_val).upper() in ("TOTAL", "EU TOTAL"):
+        if b_val and str(b_val).upper() == "TOTAL":
             return -1
         if not isinstance(val, str):
             continue

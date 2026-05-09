@@ -1,10 +1,11 @@
 """Capacity sheet builder — per-person monthly FTE allocation.
 
 Per-person groups with WP rows (blue input, distribution-curve static
-values) and a TOTAL row (SUM across the WP rows for that person). REMAINING
-and EU TOTAL rows were dropped 2026-04-28 — REMAINING < 0 folded onto the
-TOTAL > Max FTE red CF, and the per-year EU ceiling now lives only on
-Actuals-Hours (the auditor enforcement surface — see ``actuals_hours.py``).
+values) and a TOTAL row (SUM across the WP rows for that person).
+REMAINING < 0 folds onto the TOTAL > Max FTE red CF (per-row REMAINING
+row dropped 2026-04-28). The per-year EU ceiling check was dropped in
+the 2026-05-09 posted-cumulative redesign; compliance is a manual check
+thereafter.
 
 Non-obvious conventions:
 
@@ -158,15 +159,12 @@ def _resolve_grid_state(
     layout_start = start_row
     if not ordered_wp_ids and not ordered_external_names:
         layout_start = start_row + 1
-    # Capacity drops REMAINING + EU TOTAL: REMAINING CF folded onto TOTAL,
-    # EU-ceiling enforcement lives on Actuals-Hours (the per-year CF on the
-    # EU TOTAL row over there is the auditor surface).
+    # Capacity drops REMAINING: REMAINING CF folded onto TOTAL.
     layout = plan_person_layout(
         start_row=layout_start,
         wp_ids=ordered_wp_ids,
         external_names=ordered_external_names,
         include_remaining=False,
-        include_eu_total=False,
     )
     return {
         "name": name,
@@ -353,9 +351,8 @@ def _write_total_row(
     style_cell(ws, r, 1, fill=LIGHT_GREEN_FILL)
     style_cell(ws, r, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
     ws.cell(row=r, column=2).comment = sized_comment("Per-month SUM of all programme WP rows above for this person. External "
-        "project rows are NOT included here — for the EU-ceiling view "
-        "that includes EU-flagged externals, see Actuals-Hours's "
-        "EU TOTAL row (the auditor enforcement surface).")
+        "project rows are NOT included here — externals don't consume "
+        "programme budget, so the planned-FTE TOTAL stays programme-only.")
     for mi in range(project_params["months"]):
         c = month_col_start + mi
         cl = col_letter(c)
@@ -548,11 +545,7 @@ def _apply_actual_band_cf(
     months: int,
     actual_col_start: int, variance_col_start: int,
 ) -> None:
-    """Apply CF for actual band: variance reds + Actual TOTAL utilisation.
-
-    EU per-year ceiling CF moved to Actuals-Hours (the enforcement surface);
-    Capacity no longer carries the EU TOTAL row.
-    """
+    """Apply CF for actual band: variance reds + Actual TOTAL utilisation."""
     # ── CF: Variance band — red if ABS(variance) > CAPACITY_VARIANCE_FTE_RED ──
     all_variance_rows = (list(wp_rows.values())
                          + list(external_rows.values()))
@@ -1017,9 +1010,9 @@ def apply_capacity_todate_formulas(
     def _windowed_plan_sum_expr(row: int) -> str:
         # Returns an *expression fragment* (no leading ``=``) so callers can
         # splice it into a compound formula. SUMs the planned monthly cells
-        # on this row (typically a TOTAL or EU TOTAL row, whose per-month
-        # cells already sum all WPs) across the first
-        # ``hours_actuals_through_month`` columns.
+        # on this row (typically a TOTAL row, whose per-month cells already
+        # sum all WPs) across the first ``hours_actuals_through_month``
+        # columns.
         rng = f"${month_col_start_l}${row}:${month_col_end_l}${row}"
         return (
             f"IF(hours_actuals_through_month<=0,0,"

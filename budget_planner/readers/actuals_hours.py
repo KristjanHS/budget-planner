@@ -27,7 +27,7 @@ def read_actuals_hours_sheet(
     literal person name (written as a literal, not a formula, so the
     forecast-EUR VLOOKUP works under ``data_only``). Under each person, WP
     rows carry ``=Config!A{n}`` in col A; external rows carry a literal
-    project name. TOTAL and EU TOTAL rows are skipped.
+    project name. TOTAL rows are skipped.
 
     Columns with ``outline_level >= 1`` belong to the collapsible Forecast
     EUR band — those are derived formulas, never user input, so they are
@@ -152,11 +152,8 @@ def read_actuals_hours_sheet(
 
         for dr in range(header_row + 1, group_end + 1):
             col_b = ws.cell(dr, 2).value
-            # Stop-or-skip on TOTAL / EU TOTAL rows.
-            if col_b is not None and str(col_b).strip().upper() in (
-                "TOTAL",
-                "EU TOTAL",
-            ):
+            # Skip TOTAL rows.
+            if col_b is not None and str(col_b).strip().upper() == "TOTAL":
                 continue
 
             col_a = ws.cell(dr, 1).value

@@ -142,6 +142,20 @@ def test_project_end_forecast_red_cf_present(summary_wb):
         f"{len(matches)}. Rules: {rules}"
     )
 
+    # Bystander: the adjacent last-year Var EUR column must NOT carry a
+    # 0.8* red rule. Catches a regression where the helper accidentally
+    # writes the rule to `forecast_col - 1` or duplicates onto the year band.
+    adjacent_var_l = col_letter(_FORECAST_COL - 1)
+    adjacent_hits = [
+        r for r in rules
+        if r[0].startswith(f"{adjacent_var_l}")
+        and any('0.8*' in f for f in r[1])
+    ]
+    assert len(adjacent_hits) == 0, (
+        f"0.8* red CF unexpectedly on adjacent col {adjacent_var_l}: "
+        f"{adjacent_hits}"
+    )
+
 
 # PROJECT TOTAL block has no grey CF
 

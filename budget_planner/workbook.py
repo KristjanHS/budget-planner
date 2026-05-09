@@ -55,10 +55,14 @@ display position. Tab order (set after build via ``wb.move_sheet``) is in
   Config layout and the ``current_month`` stub, so it slots right after
   Trends-stub.
 - Actuals-Hours must precede Plan-Forecast (forecast-EUR leaves exist
-  before they are SUMmed).
-- Plan-Forecast must precede Actuals (forecast-monitoring block green-
-  cross-refs Plan-Forecast).
-- Summary must follow Plan-Forecast (pulls Forecast EUR/year).
+  before they are SUMmed). Stage C deletes Plan-Forecast wholesale; the
+  Plan-Forecast ordering constraints below are transitional pending that.
+- Plan-Forecast must precede Actuals (transitional only — Stage A Actuals
+  no longer reads Plan-Forecast; the kwarg is accept-and-ignore. Drops in
+  Phase 2.5 wiring cleanup, then Phase 4 deletes the tab).
+- Summary must follow Plan-Forecast (transitional only — Phase 2.3 rewired
+  Summary to consume Actuals!{posted_idx,posted_value,slope} directly via
+  slope projection to ``project_months``. Drops in Phase 2.5).
 - Trends is populated last so every upstream layout dict (including
   ``helper_row_forecast``) is known.
 
@@ -430,8 +434,10 @@ def _build_all_sheets(
         eur_through_override=preserved_eur_through_override,
     )
 
-    # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout,
-    # plan_forecast_layout for the Forecast EUR column per year)
+    # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout;
+    # consumes Actuals!{posted_idx,posted_value,slope} for the project-end
+    # Forecast EUR column. plan_forecast_layout is accept-and-ignore until
+    # Phase 2.5 drops the wiring.)
     ctx.summary_layout = build_summary_sheet(
         wb,
         ctx.plan_layout,

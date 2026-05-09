@@ -34,6 +34,10 @@ Docs-only plans still require a pytest gate. `tests/test_config_sheet.py::test_c
 
 Any design doc that lands a long ordered step list (≥10 steps, even a single-PR rollout) has the same cross-step re-write risk as a multi-phase plan. Walk each step's concrete edits and tag which file/function each touches. If the same file appears in two sequential steps where the first's change depends on state the second removes, merge them into one per-file pass. **Trigger is "same target, two steps," not "≥3 phases."** The mybrain skill's Step 7 item 5 phase-gate is a floor, not a ceiling.
 
+Test deletes go where the prod-code removal lands, not where the topic finishes — late-stage test deletes leave earlier stages pytest-broken.
+
+Grep changed layout constants across `tests/` before splitting — siblings hardcoding old values fail the suite even when named test files pass.
+
 ## Feature-removal grep
 
 Before finalizing a removal design, sweep `raise.*Error.*"`, `"""` docstrings, and `\.value\s*=\s*"` literals — see `~/.claude/references/pre-ship-sweeps.md` § "Grep user-facing prose when designing a feature removal".

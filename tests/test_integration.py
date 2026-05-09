@@ -14,12 +14,15 @@ from budget_planner.config import (
 # ── Helpers for Summary sheet layout discovery ──
 
 # Summary layout constants (must match summary.py)
-# Plan FTE, Plan EUR, Act EUR, Fcst EUR, Var EUR (Fcst added in Task 10)
-_COLS_PER_YEAR = 5
+# Plan FTE, Plan EUR, Act EUR, Var EUR — per-year Forecast EUR retired in
+# the posted-cumulative redesign; a single project-end Forecast EUR column
+# sits between the year band and PROJECT TOTAL.
+_COLS_PER_YEAR = 4
 _YEAR_GROUP_START = 3
 _CAL_GROUPS = list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS))
 _NUM_YEARS = len(_CAL_GROUPS)
-_TOTAL_GROUP_START = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
+_FORECAST_COL = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
+_TOTAL_GROUP_START = _FORECAST_COL + 1
 
 
 def _find_summary_first_wp_row(summary_ws):
@@ -142,8 +145,8 @@ def test_summary_variance_eur_equals_plan_minus_actual(fresh_wb_path):
             sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
             plan_eur_col_l = get_column_letter(sc + 1)
             act_eur_col_l = get_column_letter(sc + 2)
-            # Variance EUR is at sc + 4 (sc + 3 is Forecast EUR, added in Task 10)
-            cell_val = summary.cell(row, sc + 4).value
+            # Variance EUR is at sc + 3 (per-year Forecast EUR retired)
+            cell_val = summary.cell(row, sc + 3).value
             expected = f"={plan_eur_col_l}{row}-{act_eur_col_l}{row}"
             assert cell_val == expected, (
                 f"WP row {row} Y{y+1}: expected {expected}, got {cell_val}"
@@ -194,14 +197,15 @@ def test_summary_project_totals_sum_across_years(fresh_wb_path):
             f"got {summary.cell(row, _TOTAL_GROUP_START + 2).value}"
         )
 
-        # Variance total (tc+4): Plan EUR total - Actual EUR total
-        # (tc+3 is Forecast EUR total, added in Task 10)
+        # Variance total (tc+3): Plan EUR total - Actual EUR total
+        # (per-year Forecast EUR retired; project-end Forecast lives in
+        # its own column outside the PROJECT TOTAL band)
         tc_plan_eur_l = get_column_letter(_TOTAL_GROUP_START + 1)
         tc_act_eur_l = get_column_letter(_TOTAL_GROUP_START + 2)
         expected_var = f"={tc_plan_eur_l}{row}-{tc_act_eur_l}{row}"
-        assert summary.cell(row, _TOTAL_GROUP_START + 4).value == expected_var, (
+        assert summary.cell(row, _TOTAL_GROUP_START + 3).value == expected_var, (
             f"Row {row} total Variance: expected {expected_var}, "
-            f"got {summary.cell(row, _TOTAL_GROUP_START + 4).value}"
+            f"got {summary.cell(row, _TOTAL_GROUP_START + 3).value}"
         )
 
     wb.close()

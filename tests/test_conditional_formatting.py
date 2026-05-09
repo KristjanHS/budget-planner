@@ -172,13 +172,13 @@ class TestSummaryConditionalFormatting:
         )
 
     def test_summary_forecast_eur_red(self, workbook):
-        """Task 10: Forecast EUR (per year + project total) has red CF when
-        Forecast EUR < 0.8 * Plan EUR. One rule per calendar year + 1 project
-        total = num_years + 1 rules.
+        """Project-end Forecast EUR column has a single red CF when
+        Forecast < 0.8 × project total Plan EUR. The posted-cumulative
+        rewrite collapsed per-year Forecast columns into one project-end
+        column, so only ONE red rule remains (not num_years + 1).
         """
         ws = workbook["Summary"]
         rules = _collect_cf_rules(ws)
-        num_years = len(list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS)))
         # Match by: RED_FILL + "0.8*" + range sqref (contains ':')
         fcst_red_rules = [
             r for r in rules
@@ -186,10 +186,16 @@ class TestSummaryConditionalFormatting:
             and any("0.8*" in f for f in r[1])
             and ":" in r[0]
         ]
-        expected = num_years + 1
-        assert len(fcst_red_rules) == expected, (
-            f"Expected {expected} red Forecast EUR CF rules "
-            f"(one per year + project total), got {len(fcst_red_rules)}"
+        assert len(fcst_red_rules) == 1, (
+            f"Expected exactly 1 red Forecast EUR CF rule on the project-end "
+            f"column, got {len(fcst_red_rules)}"
+        )
+        # Empty-sentinel guard required: posted_idx=0 returns "" from the
+        # forecast formula, and `"" < 0.8*X` would fire spuriously without
+        # the `<>""` clause.
+        assert any('<>""' in f for f in fcst_red_rules[0][1]), (
+            f"Project-end Forecast red CF must guard against empty-sentinel "
+            f'with `<>""`, got: {fcst_red_rules[0][1]}'
         )
 
     def test_summary_remaining_amber(self, workbook):

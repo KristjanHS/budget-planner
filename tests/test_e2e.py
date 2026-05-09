@@ -27,11 +27,14 @@ def test_demo_mode_recalc_zero_errors(demo_recalc):
 
 # Layout constants matching summary.py
 _YEAR_GROUP_START = 3
-# Plan FTE, Plan EUR, Act EUR, Fcst EUR, Var EUR (Fcst added in Task 10)
-_COLS_PER_YEAR = 5
+# Plan FTE, Plan EUR, Act EUR, Var EUR — per-year Forecast EUR retired in
+# the posted-cumulative redesign; project-end Forecast EUR sits in its own
+# column between the year band and PROJECT TOTAL.
+_COLS_PER_YEAR = 4
 _CAL_GROUPS = list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS))
 _NUM_YEARS = len(_CAL_GROUPS)
-_TOTAL_GROUP_START = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
+_FORECAST_COL = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
+_TOTAL_GROUP_START = _FORECAST_COL + 1
 
 
 def _find_summary_first_wp_row(ws):

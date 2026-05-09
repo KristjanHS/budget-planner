@@ -1,16 +1,19 @@
-"""Summary calendar-year WP block — per-column partial-year shading (Task 8).
+"""Summary calendar-year WP block — per-column partial-year shading.
 
-The five per-year columns (Plan FTE, Plan €, Act €, Fcst €, Var €) shade grey
-when the year is not fully covered by actuals:
+Phase 2.3 (2026-05-09) retired the per-year Forecast EUR slot. The four
+per-year columns (Plan FTE, Plan €, Act €, Var €) shade grey when the
+year is not fully covered by actuals:
 
 - Act €  shades by ``eur_actuals_through_month``
-- Fcst € shades by ``hours_actuals_through_month``
-- Var €  shades by the stricter MIN of the two
+- Var €  shades by the stricter MIN of EUR/hours coverage
 
-``year_coverage_pct = months_of_year_covered / 12`` is the design metric; the
-grey CF fires when the year-end project-month exceeds the through-month value.
-The partial-year gate also tightens the existing Fcst < 0.8 * Plan red CF so
-it only fires on fully-covered years.
+``year_coverage_pct = months_of_year_covered / 12`` is the design metric;
+the grey CF fires when the year-end project-month exceeds the through-month
+value.
+
+The previous "Fcst < 0.8 * Plan red CF, gated on full coverage" rule retired
+along with the per-year Fcst slot — replaced by a single project-end
+Forecast EUR column with its own (un-gated) red CF guarded by ``<>""``.
 """
 
 import pytest
@@ -24,10 +27,12 @@ from budget_planner.styles import col_letter
 
 
 _YEAR_GROUP_START = 3
-_COLS_PER_YEAR = 5  # Plan FTE, Plan €, Act €, Fcst €, Var €
+_COLS_PER_YEAR = 4  # Plan FTE, Plan €, Act €, Var €
 _CAL_GROUPS = list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS))
 _NUM_YEARS = len(_CAL_GROUPS)
-_TOTAL_GROUP_START = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
+# Project-end Forecast EUR column sits between year band and PROJECT TOTAL.
+_FORECAST_COL = _YEAR_GROUP_START + _NUM_YEARS * _COLS_PER_YEAR
+_TOTAL_GROUP_START = _FORECAST_COL + 1
 _GREY_HEX = "FFD9D9D9"
 _RED_HEX = "FFFFC7CE"
 
@@ -55,7 +60,7 @@ def _collect_cf_rules(ws):
     return results
 
 
-# ── Helpers ──
+# Helpers
 
 def _grey_rules(rules):
     return [r for r in rules if r[2] is not None and r[2].endswith(_GREY_HEX)]
@@ -65,7 +70,7 @@ def _red_rules(rules):
     return [r for r in rules if r[2] is not None and r[2].endswith(_RED_HEX)]
 
 
-# ── Grey partial-year rules present per year ──
+# Grey partial-year rules present per year
 
 @pytest.mark.parametrize("y", range(_NUM_YEARS))
 def test_act_eur_has_grey_cf_per_year(summary_wb, y):
@@ -89,35 +94,18 @@ def test_act_eur_has_grey_cf_per_year(summary_wb, y):
 
 
 @pytest.mark.parametrize("y", range(_NUM_YEARS))
-def test_fcst_eur_has_grey_cf_per_year(summary_wb, y):
-    """Fcst € column has a grey CF gated on hours_actuals_through_month."""
-    ws = summary_wb["Summary"]
-    rules = _grey_rules(_collect_cf_rules(ws))
-    group_start, span = _CAL_GROUPS[y]
-    year_end_pm = group_start + span
-    sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
-    fcst_col_l = col_letter(sc + 3)
-    expected_formula = f"hours_actuals_through_month<{year_end_pm}"
-    matches = [
-        r for r in rules
-        if r[0].startswith(f"{fcst_col_l}")
-        and any(expected_formula == f for f in r[1])
-    ]
-    assert len(matches) == 1, (
-        f"Year {y} Fcst € grey CF: expected 1 rule with formula "
-        f"{expected_formula!r}, got {len(matches)}"
-    )
-
-
-@pytest.mark.parametrize("y", range(_NUM_YEARS))
 def test_var_eur_has_grey_cf_per_year_with_min(summary_wb, y):
-    """Var € column has a grey CF using the stricter MIN of both through-months."""
+    """Var € column has a grey CF using the stricter MIN of both through-months.
+
+    Phase 2.3: Var is at offset +3 (was +4 before the per-year Forecast slot
+    retired).
+    """
     ws = summary_wb["Summary"]
     rules = _grey_rules(_collect_cf_rules(ws))
     group_start, span = _CAL_GROUPS[y]
     year_end_pm = group_start + span
     sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
-    var_col_l = col_letter(sc + 4)
+    var_col_l = col_letter(sc + 3)
     matches = [
         r for r in rules
         if r[0].startswith(f"{var_col_l}")
@@ -132,49 +120,30 @@ def test_var_eur_has_grey_cf_per_year_with_min(summary_wb, y):
     )
 
 
-# ── Existing Fcst<0.8*Plan CF is now gated ──
+# Project-end Forecast EUR red CF (replacement for the retired per-year rule)
 
-def test_fcst_red_cf_gated_on_fully_covered_year(summary_wb):
-    """Red Fcst < 0.8*Plan CF formula now wraps AND(hours_actuals_through_month>=N,...)."""
+def test_project_end_forecast_red_cf_present(summary_wb):
+    """A single red CF on the project-end Forecast EUR column compares
+    Forecast < 0.8 * Plan EUR project total, with an `<>""` empty-sentinel
+    guard."""
     ws = summary_wb["Summary"]
     rules = _red_rules(_collect_cf_rules(ws))
-    # Per-year red Fcst rules (range sqref, "0.8*" in formula).
-    per_year_fcst_red = [
+    fc_l = col_letter(_FORECAST_COL)
+    plan_total_l = col_letter(_TOTAL_GROUP_START + 1)
+    matches = [
         r for r in rules
-        if ":" in r[0]
-        and any("0.8*" in f for f in r[1])
+        if r[0].startswith(f"{fc_l}")
+        and any('0.8*' in f and '<>""' in f and plan_total_l in f
+                for f in r[1])
     ]
-    # num_years per-year rules + 1 project-total rule
-    assert len(per_year_fcst_red) == _NUM_YEARS + 1, (
-        f"Expected {_NUM_YEARS + 1} red Fcst CFs, got {len(per_year_fcst_red)}"
+    assert len(matches) == 1, (
+        f"Project-end Forecast red CF: expected 1 rule on col {fc_l} with "
+        f"'0.8*', '<>\"\"', and Plan total ref {plan_total_l}, got "
+        f"{len(matches)}. Rules: {rules}"
     )
 
-    # Walk each per-year rule's formula and confirm it's gated.
-    gated = [
-        r for r in per_year_fcst_red
-        if any(
-            f.startswith("AND(hours_actuals_through_month>=")
-            for f in r[1]
-        )
-    ]
-    # The project-total Fcst red CF is intentionally NOT gated (spans all years),
-    # so we expect exactly num_years gated rules.
-    assert len(gated) == _NUM_YEARS, (
-        f"Expected {_NUM_YEARS} gated per-year Fcst red CFs, got {len(gated)}"
-    )
 
-    # Confirm each year's threshold N matches group_start + span.
-    for y, (group_start, span) in enumerate(_CAL_GROUPS):
-        year_end_pm = group_start + span
-        token = f"AND(hours_actuals_through_month>={year_end_pm},"
-        hits = [r for r in gated if any(token in f for f in r[1])]
-        assert len(hits) == 1, (
-            f"Year {y}: expected gated Fcst red CF with threshold "
-            f"{year_end_pm}, got {len(hits)}"
-        )
-
-
-# ── PROJECT TOTAL block has no grey CF ──
+# PROJECT TOTAL block has no grey CF
 
 def test_project_total_block_has_no_grey_cf(summary_wb):
     """PROJECT TOTAL columns (across-years) must have no grey partial-year CF."""
@@ -192,13 +161,14 @@ def test_project_total_block_has_no_grey_cf(summary_wb):
         )
 
 
-# ── Negative-variance CFs unchanged ──
+# Negative-variance CFs unchanged
 
 def test_negative_variance_red_cfs_unchanged(summary_wb):
-    """Negative-Variance red CFs remain simple `<colLetter><row><0` formulas.
+    """Negative-Variance red CFs remain simple ``<colLetter><row><0`` formulas.
 
-    Task 8 must not have touched these — they still fire on partial years
-    because a genuine overspend against plan matters even with partial data.
+    Phase 2.3 shifted Var from offset +4 to +3 but the formula shape is
+    unchanged — they still fire on partial years because a genuine overspend
+    against plan matters even with partial data.
     """
     ws = summary_wb["Summary"]
     rules = _red_rules(_collect_cf_rules(ws))
@@ -212,21 +182,33 @@ def test_negative_variance_red_cfs_unchanged(summary_wb):
     ]
     # Expect: num_years per-year Var € + 1 project-total Var €
     # plus the RP-summary block (num_rps + 1). Here we only assert the
-    # calendar-year block count as a lower bound — that's what Task 8 scope
+    # calendar-year block count as a lower bound — that's what this scope
     # covers.
     assert len(var_red) >= _NUM_YEARS + 1, (
         f"Expected >= {_NUM_YEARS + 1} simple <0 red variance CFs, "
         f"got {len(var_red)}"
     )
 
+    # Locate the calendar-year first WP row dynamically — sqrefs from the RP
+    # block share col-letters with the year-band block at offset +3 (e.g. col
+    # F for year 0 also hosts the first RP's Var €), so we filter by row range
+    # to disambiguate.
+    first_wp_row = None
+    for r in range(1, ws.max_row + 1):
+        v = ws.cell(r, 1).value
+        if isinstance(v, str) and v.startswith("=Config!A"):
+            first_wp_row = r
+            break
+    assert first_wp_row is not None
+
     # For each per-year Var € column, confirm the formula is still the bare
-    # single-cell "<0" comparison.
+    # single-cell "<0" comparison at the calendar-year block's first WP row.
     for y in range(_NUM_YEARS):
-        var_col = _YEAR_GROUP_START + y * _COLS_PER_YEAR + 4
+        var_col = _YEAR_GROUP_START + y * _COLS_PER_YEAR + 3
         var_col_l = col_letter(var_col)
         matches = [
             r for r in var_red
-            if r[0].startswith(f"{var_col_l}")
+            if r[0].startswith(f"{var_col_l}{first_wp_row}")
             and any(
                 f.startswith(var_col_l) and f.endswith("<0")
                 for f in r[1]
@@ -234,5 +216,5 @@ def test_negative_variance_red_cfs_unchanged(summary_wb):
         ]
         assert len(matches) == 1, (
             f"Year {y} Var € red <0 CF: expected 1 unchanged rule on col "
-            f"{var_col_l}, got {len(matches)}"
+            f"{var_col_l} starting row {first_wp_row}, got {len(matches)}"
         )

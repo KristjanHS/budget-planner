@@ -117,8 +117,10 @@ class TestCapacityYearHeaders:
 
 
 class TestSummaryYearHeaders:
-    """Summary year headers merge across 5 columns per year group
-    (Task 10 added a Forecast EUR column between Actual EUR and Variance EUR).
+    """Summary year headers merge across 4 columns per year group
+    (Plan FTE, Plan EUR, Actual EUR, Variance EUR). Project-end Forecast
+    EUR sits in a single non-merged column between the year band and
+    PROJECT TOTAL — not a merged group.
     """
 
     def test_summary_year_header_merges(self, workbook):
@@ -126,7 +128,7 @@ class TestSummaryYearHeaders:
         cal_groups = list(_calendar_year_groups(PROJECT_START, PROJECT_MONTHS))
         num_years = len(cal_groups)
         YEAR_GROUP_START = 3
-        COLS_PER_YEAR = 5
+        COLS_PER_YEAR = 4
 
         # Build expected year group merges
         expected_year = []
@@ -135,8 +137,10 @@ class TestSummaryYearHeaders:
             end_col = start_col + COLS_PER_YEAR - 1
             expected_year.append((start_col, end_col))
 
-        # PROJECT TOTAL merge
-        total_start = YEAR_GROUP_START + num_years * COLS_PER_YEAR
+        # PROJECT TOTAL merge — project-end Forecast EUR column sits between
+        # the year band and PROJECT TOTAL, hence the +1 offset.
+        forecast_col = YEAR_GROUP_START + num_years * COLS_PER_YEAR
+        total_start = forecast_col + 1
         total_end = total_start + COLS_PER_YEAR - 1  # same width as year groups
         expected_total = (total_start, total_end)
 

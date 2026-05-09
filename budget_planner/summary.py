@@ -1,8 +1,11 @@
 """Summary sheet builder — annual budget overview with per-year and project-total columns.
 
-Calendar-year column groups (5 sub-columns/year: Plan FTE, Plan EUR,
-Actual EUR, Forecast EUR, Variance EUR) + PROJECT TOTAL. Budget Overview
-applies the **25% indirect uplift** to Total Claimable. Reporting Period
+Calendar-year column groups (4 sub-columns/year: Plan FTE, Plan EUR,
+Actual EUR, Variance EUR) + PROJECT TOTAL. A single project-end
+**Forecast EUR** column sits between the year band and PROJECT TOTAL,
+projecting from the Actuals posted-cumulative cells (posted_idx +
+posted_value + slope) out to project_months. Budget Overview applies
+the **25% indirect uplift** to Total Claimable. Reporting Period
 Summary emits **Form C preparation rows** grouped by Config reporting
 periods — compliance-load-bearing, not free to restructure.
 
@@ -12,14 +15,14 @@ Role: read-only.
 
 - Remaining EUR column: **red** when ``value < 0``.
 - Variance EUR (per year + project total): **red** when negative.
-- Forecast EUR: **red** when ``Forecast < 0.8 * Plan EUR`` AND year is
-  fully covered (``hours_actuals_through_month >= year_end_pm``) — gated
-  so partial-coverage years don't trigger false-alarm underspend alerts;
-  those are instead shaded grey (see next point).
+- Forecast EUR (single project-end column): **red** when
+  ``Forecast < 0.8 * Plan EUR`` (project-total Plan EUR), with an
+  ``<>""`` guard so the empty-sentinel ("" when no postings yet)
+  doesn't compare-fire the rule.
 - Per-year partial-coverage grey: Act € shaded by
-  ``eur_actuals_through_month < year_end_pm``; Fcst € by
-  ``hours_actuals_through_month < year_end_pm``; Var € by the stricter
-  MIN. PROJECT TOTAL columns have no grey CF (span all years).
+  ``eur_actuals_through_month < year_end_pm``; Var € by the stricter
+  MIN of EUR/hours coverage. PROJECT TOTAL columns have no grey CF
+  (span all years).
 - Budget Overview Remaining: **amber** when < 10% of ceiling, **red**
   when negative.
 """
@@ -30,7 +33,6 @@ from dateutil.relativedelta import relativedelta
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_SUMMARY, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS,
-    SHEET_PLAN_FORECAST,
     val_columns, _calendar_year_groups,
 )
 from budget_planner.styles import (
@@ -41,9 +43,11 @@ from budget_planner.styles import (
 )
 
 
-# Plan FTE, Plan EUR, Actual EUR, Forecast EUR, Variance EUR — same 5-column
-# shape for each calendar-year group AND for the PROJECT TOTAL group.
-_COLS_PER_YEAR = 5
+# Plan FTE, Plan EUR, Actual EUR, Variance EUR — same 4-column shape for each
+# calendar-year group AND for the PROJECT TOTAL group. The project-end
+# Forecast EUR sits in its own single column between the year band and
+# PROJECT TOTAL.
+_COLS_PER_YEAR = 4
 _YEAR_GROUP_START = 3
 _COLS_PER_RP = 4  # Plan FTE, Plan EUR, Act EUR, Var EUR
 _RP_GROUP_START = 3
@@ -51,7 +55,7 @@ _RP_GROUP_START = 3
 
 def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
                         work_packages,
-                        reporting_periods, plan_forecast_layout):
+                        reporting_periods, plan_forecast_layout=None):
     """Create the Summary sheet with annual budget view and budget overview.
 
     Every data parameter is required — the orchestrator threads live data
@@ -65,19 +69,28 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
     layout : dict
         From build_plan_sheet(): config_first_wp_row, planned_first_wp_row.
     actuals_layout : dict
-        From build_actuals_sheet(): first_wp_row, total_row.
+        From build_actuals_sheet(): first_wp_row, total_row, plus the
+        posted-cumulative redesign keys ``posted_idx_col`` /
+        ``posted_value_col`` / ``slope_col`` consumed by the project-end
+        Forecast EUR column.
     project_params : dict
         Keys: title, start, months, rate.
     work_packages : list[dict]
         List of WP dicts.
     reporting_periods : list[dict]
         Reporting period entries.
+    plan_forecast_layout : dict | None
+        Accepted for transitional compatibility while the orchestrator
+        still threads it through (Stage C drops Plan-Forecast wholesale).
+        Ignored here — the project-end Forecast EUR column reads from
+        Actuals' posted-cumulative cells directly.
 
     Returns
     -------
     dict
         Summary layout with keys ``first_wp_row``, ``last_wp_row``, ``total_row``.
     """
+    del plan_forecast_layout  # Phase 2.3: ignored; Stage C deletes the kwarg.
 
     num_wps = len(work_packages)
     val_col_sum = val_columns(project_params["months"])["sum"]
@@ -85,7 +98,6 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
     planned_first_wp_row = layout["planned_first_wp_row"]
     actuals_first_wp_row = actuals_layout["first_wp_row"]
     actuals_total_row = actuals_layout["total_row"]
-    pf_first_wp_row = plan_forecast_layout["forecast_first_wp_row"]
 
     summary = wb.create_sheet(SHEET_SUMMARY)
     summary.sheet_properties.tabColor = "008000"
@@ -93,31 +105,32 @@ def build_summary_sheet(wb, layout, actuals_layout, *, project_params,
     cal_groups = list(_calendar_year_groups(
         project_params["start"], project_params["months"]))
     num_years = len(cal_groups)
-    total_group_start = _YEAR_GROUP_START + num_years * _COLS_PER_YEAR
+    forecast_col = _YEAR_GROUP_START + num_years * _COLS_PER_YEAR
+    total_group_start = forecast_col + 1
 
     r = _write_title(summary)
     r = _write_year_headers(summary, r, cal_groups, project_params["start"],
-                            num_years, total_group_start)
-    r = _write_year_subheaders(summary, r, num_years, total_group_start)
+                            num_years, forecast_col, total_group_start)
+    r = _write_year_subheaders(summary, r, num_years, forecast_col,
+                               total_group_start)
     summary_first_wp_row = r
     _write_wp_data_rows(summary, r, work_packages, cal_groups, num_years,
-                        total_group_start, config_first_wp_row,
+                        forecast_col, total_group_start, config_first_wp_row,
                         planned_first_wp_row, actuals_first_wp_row,
-                        pf_first_wp_row)
+                        actuals_layout)
     summary_last_wp_row = summary_first_wp_row + num_wps - 1
     totals_row = summary_last_wp_row + 1
-    _write_totals_row(summary, totals_row, num_years, total_group_start,
-                      summary_first_wp_row, summary_last_wp_row)
+    _write_totals_row(summary, totals_row, num_years, forecast_col,
+                      total_group_start, summary_first_wp_row,
+                      summary_last_wp_row)
     _apply_year_variance_cf(summary, num_years, summary_first_wp_row,
                             summary_last_wp_row)
     _apply_total_variance_cf(summary, total_group_start, summary_first_wp_row,
                              summary_last_wp_row)
-    _apply_year_forecast_cf(summary, cal_groups, summary_first_wp_row,
-                            summary_last_wp_row)
     _apply_partial_coverage_cf(summary, cal_groups, summary_first_wp_row,
                                summary_last_wp_row)
-    _apply_total_forecast_cf(summary, total_group_start, summary_first_wp_row,
-                             summary_last_wp_row)
+    _apply_total_forecast_cf(summary, forecast_col, total_group_start,
+                             summary_first_wp_row, summary_last_wp_row)
 
     r = _write_budget_overview(summary, totals_row, val_col_sum,
                                actuals_total_row)
@@ -164,8 +177,8 @@ def _write_title(ws) -> int:
 
 
 def _write_year_headers(ws, r: int, cal_groups, project_start, num_years: int,
-                        total_group_start: int) -> int:
-    """Write the calendar-year banner row + PROJECT TOTAL banner."""
+                        forecast_col: int, total_group_start: int) -> int:
+    """Write the calendar-year banner row + Forecast EUR banner + PROJECT TOTAL banner."""
     style_cell(ws, r, 1, "", fill=LIGHT_BLUE_FILL)
     style_cell(ws, r, 2, "", fill=LIGHT_BLUE_FILL)
     for y, (group_start, _span) in enumerate(cal_groups):
@@ -177,6 +190,12 @@ def _write_year_headers(ws, r: int, cal_groups, project_start, num_years: int,
         for c2 in range(start_col + 1, end_col + 1):
             style_cell(ws, r, c2, fill=LIGHT_BLUE_FILL)
 
+    # Single project-end Forecast EUR column banner — uses LIGHT_GREEN_FILL
+    # to flag it as a project-wide rollup (not a per-year metric like the
+    # blue year band).
+    style_cell(ws, r, forecast_col, "FORECAST", font=HEADER_FONT,
+               fill=LIGHT_GREEN_FILL, alignment=CENTER)
+
     ws.merge_cells(start_row=r, start_column=total_group_start, end_row=r, end_column=total_group_start + _COLS_PER_YEAR - 1)
     style_cell(ws, r, total_group_start, font=Font(name="Arial", bold=True, size=10, color="FFFFFF"), fill=SECTION_FILL, alignment=CENTER).value = "PROJECT TOTAL"
     for c2 in range(total_group_start + 1, total_group_start + _COLS_PER_YEAR):
@@ -184,18 +203,23 @@ def _write_year_headers(ws, r: int, cal_groups, project_start, num_years: int,
     return r + 1
 
 
-def _write_year_subheaders(ws, r: int, num_years: int,
+def _write_year_subheaders(ws, r: int, num_years: int, forecast_col: int,
                            total_group_start: int) -> int:
-    """Write the per-year sub-headers (Plan FTE / Plan € / Act € / Fcst € / Var €)."""
+    """Write the per-year sub-headers (Plan FTE / Plan € / Act € / Var €) +
+    project-end Forecast €."""
     style_cell(ws, r, 1, "WP ID", font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
     style_cell(ws, r, 2, "WP Name", font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
-    year_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Fcst \u20ac", "Var \u20ac"]
+    year_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Var \u20ac"]
     for y in range(num_years):
         for si, sh in enumerate(year_sub):
             c = _YEAR_GROUP_START + y * _COLS_PER_YEAR + si
             style_cell(ws, r, c, sh, font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
-    total_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Fcst \u20ac", "Var \u20ac"]
+    # Project-end Forecast EUR sub-header (single column).
+    style_cell(ws, r, forecast_col, "Forecast \u20ac", font=HEADER_FONT,
+               fill=LIGHT_GREEN_FILL, alignment=CENTER)
+
+    total_sub = ["Plan FTE", "Plan \u20ac", "Act \u20ac", "Var \u20ac"]
     for si, sh in enumerate(total_sub):
         c = total_group_start + si
         style_cell(ws, r, c, sh, font=HEADER_FONT, fill=LIGHT_GREEN_FILL, alignment=CENTER)
@@ -203,12 +227,17 @@ def _write_year_subheaders(ws, r: int, num_years: int,
 
 
 def _write_wp_data_rows(ws, first_row: int, work_packages, cal_groups,
-                        num_years: int, total_group_start: int,
+                        num_years: int, forecast_col: int,
+                        total_group_start: int,
                         config_first_wp_row: int, planned_first_wp_row: int,
                         actuals_first_wp_row: int,
-                        pf_first_wp_row: int) -> None:
-    """Write per-WP rows: cross-sheet refs + per-year columns + project totals."""
+                        actuals_layout: dict) -> None:
+    """Write per-WP rows: cross-sheet refs + per-year columns + project-end
+    Forecast EUR + project totals."""
     month_col_start = MONTH_COL_START
+    posted_idx_l = col_letter(actuals_layout["posted_idx_col"])
+    posted_value_l = col_letter(actuals_layout["posted_value_col"])
+    slope_l = col_letter(actuals_layout["slope_col"])
     for i, _wp in enumerate(work_packages):
         row = first_row + i
         config_row = config_first_wp_row + i
@@ -235,17 +264,27 @@ def _write_wp_data_rows(ws, first_row: int, work_packages, cal_groups,
             style_cell(ws, row, sc + 2, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
                 f"=SUM({SHEET_ACTUALS}!{first_col_l}{actuals_wp_row}:{last_col_l}{actuals_wp_row})"
             )
-            # Forecast EUR (cross-sheet ref to Plan-Forecast sheet).
-            # Sheet name contains a hyphen → Excel requires single-quotes.
-            # No current_month gate: forecast spans the full calendar year.
-            pf_wp_row = pf_first_wp_row + i
-            style_cell(ws, row, sc + 3, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
-                f"=SUM('{SHEET_PLAN_FORECAST}'!{first_col_l}{pf_wp_row}:{last_col_l}{pf_wp_row})"
-            )
-            # Variance EUR = Plan EUR - Actual EUR
-            style_cell(ws, row, sc + 4, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+            # Variance EUR = Plan EUR - Actual EUR (offset +3, was +4 before
+            # the per-year Forecast EUR slot retired in Phase 2.3).
+            style_cell(ws, row, sc + 3, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
                 f"={col_letter(sc + 1)}{row}-{col_letter(sc + 2)}{row}"
             )
+
+        # Project-end Forecast EUR \u2014 cross-sheet projection from Actuals
+        # posted-cumulative cells. When posted_idx is 0 (no posting yet) the
+        # formula returns the empty-string sentinel; otherwise it
+        # extrapolates posted_value out to project_months at the per-WP
+        # slope. MAX(0, ...) clamps a negative slope projection.
+        # No ROUND() \u2014 leaf forecast doesn't compound through SUMPRODUCT.
+        act_row = actuals_first_wp_row + i
+        forecast_formula = (
+            f'=IF({SHEET_ACTUALS}!{posted_idx_l}{act_row}=0,"",'
+            f'MAX(0,{SHEET_ACTUALS}!{posted_value_l}{act_row}'
+            f'+{SHEET_ACTUALS}!{slope_l}{act_row}'
+            f'*(project_months-{SHEET_ACTUALS}!{posted_idx_l}{act_row})))'
+        )
+        style_cell(ws, row, forecast_col, font=GREEN_XREF,
+                   fmt="\u20ac#,##0").value = forecast_formula
 
         # Project totals — sum each year-group column across years.
         # `year_sum` closes over `row`; redefined per WP iteration by design.
@@ -258,17 +297,18 @@ def _write_wp_data_rows(ws, first_row: int, work_packages, cal_groups,
         style_cell(ws, row, tc, font=BLACK_FORMULA, fmt="0.00").value = f"={year_sum(0)}"
         style_cell(ws, row, tc + 1, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={year_sum(1)}"
         style_cell(ws, row, tc + 2, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={year_sum(2)}"
-        style_cell(ws, row, tc + 3, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"={year_sum(3)}"
-        # Total variance EUR = Plan EUR total - Actual EUR total
-        style_cell(ws, row, tc + 4, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+        # Total variance EUR = Plan EUR total - Actual EUR total (offset +3,
+        # mirrors the year band after Phase 2.3's Forecast slot retirement).
+        style_cell(ws, row, tc + 3, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
             f"={col_letter(tc + 1)}{row}-{col_letter(tc + 2)}{row}"
         )
 
 
-def _write_totals_row(ws, totals_row: int, num_years: int,
+def _write_totals_row(ws, totals_row: int, num_years: int, forecast_col: int,
                       total_group_start: int, first_wp_row: int,
                       last_wp_row: int) -> None:
-    """Write the per-column SUM totals row across all year-groups + PROJECT TOTAL."""
+    """Write the per-column SUM totals row across all year-groups + project-end
+    Forecast EUR + PROJECT TOTAL."""
     style_cell(ws, totals_row, 1, "", fill=LIGHT_GREEN_FILL)
     style_cell(ws, totals_row, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
     for y in range(num_years):
@@ -277,6 +317,11 @@ def _write_totals_row(ws, totals_row: int, num_years: int,
             fmt = "0.00" if si == 0 else "\u20ac#,##0"
             col_range = f"{col_letter(c)}{first_wp_row}:{col_letter(c)}{last_wp_row}"
             style_cell(ws, totals_row, c, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt=fmt).value = f"=SUM({col_range})"
+
+    # Project-end Forecast EUR TOTAL (single column, separate from PROJECT TOTAL).
+    fc_range = f"{col_letter(forecast_col)}{first_wp_row}:{col_letter(forecast_col)}{last_wp_row}"
+    style_cell(ws, totals_row, forecast_col, font=BLACK_FORMULA,
+               fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0").value = f"=SUM({fc_range})"
 
     for si in range(_COLS_PER_YEAR):
         c = total_group_start + si
@@ -287,9 +332,13 @@ def _write_totals_row(ws, totals_row: int, num_years: int,
 
 def _apply_year_variance_cf(ws, num_years: int, first_wp_row: int,
                             last_wp_row: int) -> None:
-    """CF: red on negative Variance EUR (per-year columns)."""
+    """CF: red on negative Variance EUR (per-year columns).
+
+    Variance is now at offset +3 (was +4 before Phase 2.3 retired the
+    per-year Forecast EUR slot).
+    """
     for y in range(num_years):
-        var_col = _YEAR_GROUP_START + y * _COLS_PER_YEAR + 4
+        var_col = _YEAR_GROUP_START + y * _COLS_PER_YEAR + 3
         var_col_l = col_letter(var_col)
         var_range = f"{var_col_l}{first_wp_row}:{var_col_l}{last_wp_row}"
         ws.conditional_formatting.add(var_range, FormulaRule(
@@ -299,8 +348,11 @@ def _apply_year_variance_cf(ws, num_years: int, first_wp_row: int,
 
 def _apply_total_variance_cf(ws, total_group_start: int, first_wp_row: int,
                              last_wp_row: int) -> None:
-    """CF: red on negative Variance EUR (PROJECT TOTAL column)."""
-    total_var_col = total_group_start + 4
+    """CF: red on negative Variance EUR (PROJECT TOTAL column).
+
+    Variance is now at offset +3 (was +4 before Phase 2.3).
+    """
+    total_var_col = total_group_start + 3
     total_var_col_l = col_letter(total_var_col)
     total_var_range = f"{total_var_col_l}{first_wp_row}:{total_var_col_l}{last_wp_row}"
     ws.conditional_formatting.add(total_var_range, FormulaRule(
@@ -308,56 +360,28 @@ def _apply_total_variance_cf(ws, total_group_start: int, first_wp_row: int,
     ))
 
 
-def _apply_year_forecast_cf(ws, cal_groups, first_wp_row: int,
-                            last_wp_row: int) -> None:
-    """CF: red on Forecast EUR < 0.8 * Plan EUR (per-year), gated by full coverage.
-
-    Mirrors the variance-style "material underspend" alert.
-    Gated on hours_actuals_through_month >= end-of-year so partial-coverage
-    years don't spuriously flag underspend; the grey partial-year rule
-    takes care of those.
-    """
-    for y, (group_start, span) in enumerate(cal_groups):
-        plan_eur_col = _YEAR_GROUP_START + y * _COLS_PER_YEAR + 1
-        fcst_col = _YEAR_GROUP_START + y * _COLS_PER_YEAR + 3
-        plan_eur_col_l = col_letter(plan_eur_col)
-        fcst_col_l = col_letter(fcst_col)
-        fcst_range = f"{fcst_col_l}{first_wp_row}:{fcst_col_l}{last_wp_row}"
-        year_end_pm = group_start + span
-        ws.conditional_formatting.add(fcst_range, FormulaRule(
-            formula=[
-                f"AND(hours_actuals_through_month>={year_end_pm},"
-                f"{fcst_col_l}{first_wp_row}<0.8*{plan_eur_col_l}{first_wp_row})"
-            ],
-            fill=CF_RED_FILL,
-        ))
-
-
 def _apply_partial_coverage_cf(ws, cal_groups, first_wp_row: int,
                                last_wp_row: int) -> None:
-    """CF: grey on per-year partial-coverage Act/Fcst/Var € columns.
+    """CF: grey on per-year partial-coverage Act/Var € columns.
 
     Act €: year not fully covered by eur_actuals_through_month.
-    Fcst €: year not fully covered by hours_actuals_through_month.
-    Var €: stricter — either coverage short of the year end.
+    Var €: stricter — either EUR or hours coverage short of the year end.
     Skips PROJECT TOTAL (summarises across years; no single coverage gate).
+    Phase 2.3 retired the per-year Fcst € grey rule (no per-year Forecast
+    column anymore — replaced by a single project-end Forecast EUR column).
     """
     for y, (group_start, span) in enumerate(cal_groups):
         year_end_pm = group_start + span
         sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
         act_col_l = col_letter(sc + 2)
-        fcst_col_l = col_letter(sc + 3)
-        var_col_l = col_letter(sc + 4)
+        # Variance is at offset +3 (was +4 before Phase 2.3 retired the
+        # per-year Forecast slot). The per-year Fcst € grey rule retired
+        # along with the column.
+        var_col_l = col_letter(sc + 3)
 
         act_range = f"{act_col_l}{first_wp_row}:{act_col_l}{last_wp_row}"
         ws.conditional_formatting.add(act_range, FormulaRule(
             formula=[f"eur_actuals_through_month<{year_end_pm}"],
-            fill=CF_GREY_FILL,
-        ))
-
-        fcst_range_grey = f"{fcst_col_l}{first_wp_row}:{fcst_col_l}{last_wp_row}"
-        ws.conditional_formatting.add(fcst_range_grey, FormulaRule(
-            formula=[f"hours_actuals_through_month<{year_end_pm}"],
             fill=CF_GREY_FILL,
         ))
 
@@ -371,21 +395,23 @@ def _apply_partial_coverage_cf(ws, cal_groups, first_wp_row: int,
         ))
 
 
-def _apply_total_forecast_cf(ws, total_group_start: int, first_wp_row: int,
-                             last_wp_row: int) -> None:
-    """CF: red on Forecast EUR < 0.8 * Plan EUR (PROJECT TOTAL column)."""
-    total_plan_eur_col = total_group_start + 1
-    total_fcst_col = total_group_start + 3
-    total_plan_eur_col_l = col_letter(total_plan_eur_col)
-    total_fcst_col_l = col_letter(total_fcst_col)
-    total_fcst_range = (
-        f"{total_fcst_col_l}{first_wp_row}:"
-        f"{total_fcst_col_l}{last_wp_row}"
-    )
-    ws.conditional_formatting.add(total_fcst_range, FormulaRule(
+def _apply_total_forecast_cf(ws, forecast_col: int, total_group_start: int,
+                             first_wp_row: int, last_wp_row: int) -> None:
+    """CF: red on project-end Forecast EUR < 0.8 * Plan EUR (project total).
+
+    Compares per-row forecast (single column at ``forecast_col``) to
+    per-row Plan EUR project total at ``total_group_start + 1``. The
+    ``<>""`` guard skips the empty-string sentinel emitted by the
+    forecast formula when posted_idx is 0 (no postings yet) -- without
+    it, the comparison ``""<0.8*X`` fires the red rule for every WP.
+    """
+    fc = col_letter(forecast_col)
+    plan_total_l = col_letter(total_group_start + 1)
+    fc_range = f"{fc}{first_wp_row}:{fc}{last_wp_row}"
+    ws.conditional_formatting.add(fc_range, FormulaRule(
         formula=[
-            f"{total_fcst_col_l}{first_wp_row}"
-            f"<0.8*{total_plan_eur_col_l}{first_wp_row}"
+            f'AND({fc}{first_wp_row}<>"",'
+            f"{fc}{first_wp_row}<0.8*{plan_total_l}{first_wp_row})"
         ],
         fill=CF_RED_FILL,
     ))

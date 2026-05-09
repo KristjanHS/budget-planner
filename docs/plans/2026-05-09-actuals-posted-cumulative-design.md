@@ -1,13 +1,17 @@
-# Actuals "as-of" cumulative semantics — design
+# Actuals posted-cumulative semantics — design
 
 **Date:** 2026-05-09
 **Status:** Design approved, awaiting implementation plan
 **Scope:** Actuals + Actuals-Hours input convention shift; deletes Plan-Forecast tab, Actuals-Hours forecast-EUR band, EU TOTAL row, "Cumulative hours to date" row, "Actual PM to date" row.
 
+**Amendment 2026-05-09 (post brutal-honesty simplification pass):** dropped automatic migration warning + schema stamp (migration is now a manual one-time clear); replaced last-pair slope + manual override with avg-burn slope (§3); collapsed Trends per-month forecast helper grid into 2 anchor cells per WP (§9); collapsed Summary per-year `Forecast EUR` block into single per-WP column (§9); kept named ranges `eur_actuals_through_month` / `hours_actuals_through_month` unchanged (no semantic gain in renaming). Phasing + test inventory split out — to be written when impl starts.
+
+**Amendment 2026-05-09 (vocabulary cleanup, Approach C):** "Posted" lifecycle vocabulary used end-to-end on the per-WP surface — internal helpers `posted_idx` / `posted_value`, column headers `Posted -i` / `Posted +i`, sheet header `Posted through:`. Sheet-wide named ranges keep `..._through_month` because they describe a different semantic axis (sheet-wide reconciliation cutoff = `MIN` across WPs, distinct from per-WP latest posting). Three temporal concepts now have three distinct words: `current_month` (project clock) / `..._through_month` (sheet reconciliation) / `posted_*` (per-WP latest posting).
+
 ## Goals
 
-1. Make accountant-driven cumulative-to-date EUR snapshots the native input convention. Allow gaps in monthly data (snapshots arrive irregularly).
-2. Derive the per-WP forecast automatically from the cumulative-input slope, removing the need for a separate hours-derived forecast pipeline.
+1. Make accountant-driven posted-cumulative EUR snapshots the native input convention. Allow gaps in monthly data (snapshots arrive irregularly).
+2. Derive the per-WP forecast automatically from the posted-cumulative slope, removing the need for a separate hours-derived forecast pipeline.
 3. Cut the derived/redundant surface area: one source of truth per WP × month for actuals, one slope cell per WP for forecast, one tab fewer.
 4. Preserve `±i` indirect-mirror convention and the inactive-month greying rule unchanged.
 
@@ -22,18 +26,18 @@ Rejected alternatives:
 
 ### 1. Input convention
 
-Both actuals tabs hold **as-of values per cell**.
+Both actuals tabs hold **posted-cumulative values per cell**.
 
 | Tab | Cell convention |
 |---|---|
-| `Actuals` | `M[wp, m]` = WP total EUR as of month `m` (`-i` source; `+i` derived) |
-| `Actuals-Hours` | `H[person, wp, m]` = person-on-WP total hours as of month `m` |
+| `Actuals` | `M[wp, m]` = WP total EUR posted through month `m` (`-i` source; `+i` derived) |
+| `Actuals-Hours` | `H[person, wp, m]` = person-on-WP total hours posted through month `m` |
 
 Rules:
-- Blank cell = "no data point at this month." Not zero.
-- A filled cell is the running total as of that month, regardless of neighbors.
+- Blank cell = "no posting recorded at this month." Not zero.
+- A filled cell is the running total posted through that month, regardless of neighbors.
 - Monotonic-non-decreasing within a row's active window is expected but **not enforced** (correction postings can go backward).
-- The latest filled cell at-or-before `current_month` IS the as-of total.
+- The latest filled cell at-or-before `current_month` IS the WP's currently-posted total.
 - Inactive-month greying unchanged. Filled cells inside the active window can have gaps.
 - ±i mirrors unchanged: `+i = ROUND(-i × 1.25, 0)` per cell.
 
@@ -43,8 +47,8 @@ Rules:
        Jan | Feb | Mar | Apr | May | Jun ... Dec
 WP1          200   380         500
               ↑     ↑           ↑
-              as-of as-of       as-of (latest)
-              Feb   Mar         May = €500
+              posted posted    posted (latest)
+              Feb    Mar       May = €500
 ```
 
 Per-month spend (derived, never stored): Mar = 380 − 200 = 180. May = 500 − 380 = 120. Gap-spreading: between two filled points, the slope `(cum_n − cum_prev) / (m_n − m_prev)` spreads the delta evenly across the gap months.
@@ -53,113 +57,97 @@ Per-month spend (derived, never stored): Mar = 380 − 200 = 180. May = 500 − 
 
 | Column | Formula |
 |---|---|
-| ~~`Sum -i`~~ | **dropped** — collapses into As-of-at-project-end |
-| `As-of -i` (through `current_month`) | latest filled cell at-or-before `current_month` |
+| ~~`Sum -i`~~ | **dropped** — collapses into Posted-at-project-end |
+| `Posted -i` (through `current_month`) | latest filled cell at-or-before `current_month` |
 | `Budget -i` | `=Config!F<r>` (unchanged) |
-| `Variance -i` | `Budget − As-of` |
-| `% Budget -i` | `As-of / Budget` |
-| `Breach-In -i` | `IF(As-of=0,"—",(Budget−As-of)/(As-of/MAX(1,eur_as_of_month)))` |
+| `Variance -i` | `Budget − Posted` |
+| `% Budget -i` | `Posted / Budget` |
+| `Breach-In -i` | `IF(Posted=0,"—",(Budget−Posted)/(Posted/MAX(1,eur_actuals_through_month)))` |
 
-Banned-pattern-safe formula for "latest filled month index" (per spec §"`MATCH`/`LOOKUP` banned"):
+Banned-pattern-safe formula for "latest posted month index" (per spec §"`MATCH`/`LOOKUP` banned"):
 
 ```
-as_of_idx = SUMPRODUCT(MAX(
+posted_idx = SUMPRODUCT(MAX(
   (COLUMN(Jan:M_curr) - COLUMN($Jan$1) + 1)
   * ISNUMBER(Jan:M_curr)
 ))
-as_of_value = INDEX(row, as_of_idx)   ' wrapped in IFERROR(..., "")
+posted_value = INDEX(row, posted_idx)   ' wrapped in IFERROR(..., "")
 ```
 
 ### 3. Forecast slope (Actuals)
 
-Per-WP slope cell on Actuals (-i side; +i derives via ROUND(×1.25,0)):
+Per-WP slope cell on Actuals (-i side; +i derives via ROUND(×1.25, 0)).
 
-| Filled cumulative points | Slope source | Forecast at project end |
-|---|---|---|
-| 0 points | blank — no forecast | forecast cells display "—" |
-| 1 point | origin-anchored: `as_of_value / as_of_idx` | `as_of_value × proj_end / as_of_idx` |
-| 2+ points | last-pair: `(as_of_value − prev_value) / (as_of_idx − prev_idx)` | `as_of_value + slope × (proj_end − as_of_idx)` |
-
-**Per-WP manual override cell** (blue-input, optional). When filled, dominates the auto-slope. Catches one-off Q4 catch-up postings that would otherwise produce a runaway forecast.
-
-`prev_idx` formula (banned-pattern-safe):
+**Single avg-burn formula:**
 
 ```
-prev_idx = SUMPRODUCT(MAX(
-  (COLUMN(Jan:Dec) - COLUMN($Jan$1) + 1)
-  * ISNUMBER(Jan:Dec)
-  * ((COLUMN(Jan:Dec) - COLUMN($Jan$1) + 1) < as_of_idx)
-))
+slope    = IF(posted_idx=0, "", posted_value / posted_idx)
+forecast = IF(posted_idx=0, "", posted_value + slope * (project_end - posted_idx))
 ```
+
+**Why avg-burn, not last-pair:** accountant cumulative-input cadence has 2–3 month lag and quarterly catch-up postings. Last-pair slope amplifies catch-up months into runaway forecasts; avg-burn smooths. Acknowledged trade-off: less responsive to a genuine cadence shift mid-project — but smoothing is the correct behavior for this input pattern. One formula across all filled-point counts (0/1/2+); no `prev_*` helpers, no override cell.
 
 ### 4. Tab + feature deletions
 
 **A. Plan-Forecast tab deleted entirely.**
 - `budget_planner/plan_forecast.py` (462 lines) removed.
 - Workbook stage removed from `workbook.py`.
-- Three downstream consumers rewired (all pulling from Actuals):
+- Three downstream consumers rewired (all sourced from same-row Actuals posted/slope cells, no cross-sheet helper grids):
   - **Actuals forecast monitoring block** — sources from same-row slope, no cross-sheet ref.
-  - **Summary `Forecast EUR` per-year column** — reads from a new per-year forecast helper column on Actuals (one cell per WP × year).
-  - **Trends `Cumulative Forecast` chart line** — reads from a new per-month forecast helper block on Actuals (one row per WP, per-month projected values clamped at `[as_of_idx+1, project_end]`).
+  - **Summary `Forecast EUR`** — single per-WP column (not per-year). Inline formula: `posted_value + slope * (project_end - posted_idx)`, clamped at `MAX(0, ...)`. Cross-sheet refs to two Actuals cells per WP. No helper column on Actuals. (See §9.)
+  - **Trends `Cumulative Forecast` chart line** — fed by 2 anchor cells per WP: `(posted_idx, posted_value)` now-anchor and `(project_end, forecast_at_project_end)` future-anchor. Chart series interpolates the linear segment between them. No per-month helper grid. (See §9.)
 
 **B. Actuals-Hours forecast-EUR band deleted.** No replacement (WP-level forecast on Actuals is enough). Side benefit: removes the calendar-year-boundary EU-ceiling-CF mis-fire (spec.md §EUR cadence line 49).
 
 **C. EU TOTAL row + EU per-year ceiling CF deleted.** `include_eu_total` opt-in on `person_section.plan_person_layout` becomes dead code; remove the parameter. **Compliance side effect**: live EU per-year ceiling check goes away. User checks compliance manually (or adds a Summary-level check later — out of scope).
 
-**D. Actuals-Hours derived rows deleted.** "Cumulative hours to date" and "Actual PM to date" rows removed (cells themselves now hold cum-to-date — derived rows duplicate).
+**D. Actuals-Hours derived rows deleted.** "Cumulative hours to date" and "Actual PM to date" rows removed (cells themselves now hold posted-cumulative — derived rows duplicate).
 
 **E. Actuals `Sum -i` and `Sum +i` columns dropped** (already covered §2).
 
 ### 5. Preserved invariants (no behavior change)
 
-- **Trust boundaries**: `eur_as_of_month` / `hours_as_of_month` named ranges still live at `Actuals!$D$1` and `'Actuals-Hours'!$D$1`. C1 auto-derivation = "largest month-index where ANY WP has a numeric value" (TOTAL + external rows excluded). Same scan as today; renamed.
+- **Trust boundaries**: `eur_actuals_through_month` / `hours_actuals_through_month` named ranges unchanged at `Actuals!$D$1` and `'Actuals-Hours'!$D$1`. C1 auto-derivation = "largest month-index where ANY WP has a numeric value" (TOTAL + external rows excluded). Same scan as today, no rename. **Semantic axis**: sheet-wide reconciliation cutoff (max across WPs); distinct from per-WP `posted_idx` (this WP's latest filled cell).
 - **Inactive-month rule** unchanged.
-- **±i mirror convention** unchanged. New As-of -i is accountant-native source; As-of +i = ROUND(-i × 1.25, 0) per cell.
-- **Font color convention (Rule 3)** unchanged: blue = blue input (as-of cells), black = formula (as_of_idx, as_of_value, slope, forecast columns), green = cross-sheet ref (Budget pulls from Config).
+- **±i mirror convention** unchanged. New Posted -i is accountant-native source; Posted +i = ROUND(-i × 1.25, 0) per cell.
+- **Font color convention (Rule 3)** unchanged: blue = blue input (posted-cumulative cells), black = formula (posted_idx, posted_value, slope, forecast columns), green = cross-sheet ref (Budget pulls from Config).
 
-### 6. Reader and rebuild contract — migration
+### 6. Migration (manual, one-time)
 
-**Migration trap:** existing workbooks have monthly-delta values in cells that will be reinterpreted as cumulative. Rebuild MUST NOT silently reinterpret.
+User clears all Actuals / Actuals-Hours data cells, re-enters as posted-cumulative totals, runs rebuild. No automated migration warning, no schema version stamp, no reader-side branch. Sole-user workbook; the one-time mental shift is documented in the spec.md prose update + this doc.
 
-Plan:
-1. **No automatic migration.** Rebuild treats existing cells as opaque — preserved verbatim.
-2. **Schema version stamp** bumped to `actuals-as-of-v1` (extends the existing version stamp on Config).
-3. **One-time warning on rebuild** when loading a pre-stamp workbook: "Existing Actuals/Actuals-Hours cells used monthly-delta convention. New convention is as-of cumulative. Clear cells and re-enter as as-of totals. Rebuild has preserved your numbers but they no longer have a valid interpretation." Stamp written on first rebuild.
-4. **Preserved-data table** (spec.md §Reader and Rebuild contract → "What rebuild preserves") updated:
-   - Removed: "EU TOTAL row" entry (cells deleted).
-   - Removed: "Forecast-EUR band cells" entry (deleted).
-   - Removed: "Plan-Forecast cells" entry (tab deleted).
-   - Renamed: "Monthly EUR values per WP" → "As-of EUR values per WP". "Hour timelog per person × WP × month" → "As-of hours per person × WP × month".
-5. **Reader extraction functions:** unchanged. The current "largest 1-based month-index with any numeric value" scan happens to correctly return the as-of-month under both old and new conventions.
+The reader's existing "largest 1-based month-index with any numeric value" trust-boundary scan returns the correct posted-through-month under both old and new conventions, so the reader is untouched.
 
-### 7. Renames everywhere
+### 7. Renames
 
 | Current | New |
 |---|---|
-| Column header `Cum -i` / `Cum +i` | `As-of -i` / `As-of +i` |
+| Column header `Cum -i` / `Cum +i` | `Posted -i` / `Posted +i` |
 | Forecast column `Cum forecast at project end -i` | `Forecast -i` |
-| Helper cells `latest_idx`, `latest_value` | `as_of_idx`, `as_of_value` |
-| Named range `eur_actuals_through_month` | `eur_as_of_month` |
-| Named range `hours_actuals_through_month` | `hours_as_of_month` |
-| Spec.md prose "cumulative-to-date" / "running cumulative" | "as-of total" / "as-of-month value" |
+| Helper cells `latest_idx`, `latest_value` | `posted_idx`, `posted_value` |
+| Sheet header `As of:` (Actuals + Actuals-Hours) | `Posted through:` |
+| Spec.md prose "cumulative-to-date" / "running cumulative" | "posted-cumulative" / "posted through month" |
+
+Named ranges `eur_actuals_through_month` / `hours_actuals_through_month` kept unchanged — accurate (sheet-wide reconciliation cutoff), stable, no semantic gain in renaming, and a different concept from per-WP `posted_*`.
 
 ## Key decisions log
 
-1. **Cumulative-to-date semantics on per-WP/per-person cells** (not new dedicated rows). One source of truth, no schema duplication.
-2. **Last-pair slope** for forecast (recent-burn, two filled points). Origin-anchored fallback for 1 point. Blank for 0 points.
-3. **Per-WP manual override cell** for slope. Pre-mortem mitigation against Q4 catch-up posting volatility.
-4. **WP-level forecast only.** Drop person-level EUR forecast surface.
-5. **±i mirror complexity preserved** as-is.
-6. **EU TOTAL + EU per-year ceiling CF deleted.** User accepts manual compliance check.
-7. **No automatic migration** — warn-don't-migrate. User clears cells and re-enters once.
-8. **Renames consolidated to "As-of"** vocabulary (matches existing "As of:" header label on Actuals; accountant-native; time-anchored).
+1. **Posted-cumulative semantics on per-WP/per-person cells** (not new dedicated rows). One source of truth, no schema duplication.
+2. **Avg-burn slope** for forecast: `posted_value / posted_idx`. Single formula across all filled-point counts. Smooths quarterly catch-up postings instead of amplifying them. No override cell (revisit only if a real anomaly fires).
+3. **WP-level forecast only.** Drop person-level EUR forecast surface.
+4. **±i mirror complexity preserved** as-is.
+5. **EU TOTAL + EU per-year ceiling CF deleted.** User accepts manual compliance check.
+6. **Manual one-time migration** — no schema stamp, no reader warning, no version branch.
+7. **"Posted" lifecycle vocabulary end-to-end on per-WP surface** — column headers, internal helpers, and sheet header all use `Posted` / `Posted through`. Accountant-native action verb (you "post" entries to the books). Sheet-wide named ranges keep `..._through_month` (different semantic axis: sheet-wide reconciliation). Three temporal concepts → three distinct words: `current_month` / `..._through_month` / `posted_*`.
+8. **Trends forecast line** fed by 2 anchor cells per WP; no per-month helper grid.
+9. **Summary `Forecast EUR`** is a single per-WP column; no per-year breakout (the previous per-year formula would have flat-lined the posted value into closed past years — semantically wrong).
 
 ## Out of scope
 
 - ±i mirror consolidation / removal.
 - Per-person EUR forecast surface (intentionally dropped).
 - Replacement EU-compliance check on Summary.
-- Reader "hard-fail until cells cleared" mode (warning is sufficient).
+- Reader "hard-fail until cells cleared" mode (manual migration is sufficient).
 - Inactive-month greying rule changes.
 - Trends chart restyling beyond rewiring data sources.
 
@@ -167,107 +155,59 @@ Plan:
 
 | Risk | Likelihood | Impact | Mitigation in design |
 |---|:-:|:-:|---|
-| User retains monthly-delta mental model after migration | Med | High | Stamp + console warning on first rebuild (§6); spec.md prose rewrite. |
-| Last-pair slope volatile on anomalous month | Med | Med | Per-WP manual override cell (§3). |
-| Trends/Summary lose intra-year forecast granularity | Low | Med | Per-month forecast helper block on Actuals feeds Trends; per-year helper column feeds Summary (§4.A). |
+| User retains monthly-delta mental model after migration | Med | High | spec.md prose rewrite; explicit one-step manual migration in §6. |
+| Avg-burn slope under-responds to genuine cadence shift | Low | Med | Acceptable for accountant cumulative-input cadence with quarterly catch-ups; revisit only if real-world data shows the failure mode. |
 | EU compliance check loss goes unnoticed | Med | High | Documented in §4.C as accepted side effect; user explicitly opted in. |
-| Variance/breach formulas regress when As-of source changes | Low | Med | Snapshot tests on demo workbook before/after (Phase 6). |
-| ±i mirrors fed by stale -i source after rewire | Low | Med | Audit every ROUND(×1.25) callsite during Phase 2/3 (Phase B in plan). |
+| Variance/breach formulas regress when Posted source changes | Low | Med | Snapshot tests on demo workbook before/after (impl-time). |
+| ±i mirrors fed by stale -i source after rewire | Low | Med | Audit every ROUND(×1.25) callsite during the builder rewrite. |
 | Reader's "through-month" scan needs different formula | Low | High | Verified: same scan works under both old and new conventions. |
-
-## Phasing (re-work-audited per skill step 7.5)
-
-| Phase | Scope | Modules touched |
-|---|---|---|
-| 1 | Spec.md + named-range rename + schema version bump | `docs/spec.md`, `budget_planner/workbook.py` (named-range registration), `config_sheet.py` (version stamp), `layout.py` if column constants shift |
-| 2 | Actuals + Summary + Trends — full rewrite | `actuals.py`, `summary.py`, `trends.py` |
-| 3 | Actuals-Hours — full rewrite | `actuals_hours.py`, `person_section.py` (drop `include_eu_total` param) |
-| 4 | Delete Plan-Forecast tab | rm `plan_forecast.py`; `workbook.py` (remove stage) |
-| 5 | Reader migration warning | reader/extractor module, `__main__.py` (rebuild entry) |
-| 6 | Tests + manual demo verification | `tests/**`, demo workbook |
-
-**Re-work audit:** no module is rewritten in two phases.
-- `actuals.py`: Phase 2 only.
-- `actuals_hours.py`: Phase 3 only.
-- `workbook.py`: Phase 1 (named-range registration) + Phase 4 (Plan-Forecast stage removal) — distinct concerns, not re-write.
-- `summary.py`, `trends.py`, `person_section.py`: each touched once.
-- `spec.md`: Phase 1 only (terminology + named-range + preserved-table updates land together).
-
-## Migration UX (user-facing)
-
-1. Pull this branch.
-2. Run rebuild on existing workbook → console warning fires.
-3. Open workbook, clear Actuals data cells, clear Actuals-Hours data cells.
-4. Re-enter latest accountant snapshot as as-of totals (one cell per WP × month for accountant data; gaps where no snapshot exists).
-5. Re-enter Actuals-Hours as cumulative hours per person × WP × month (gaps OK).
-6. Run rebuild again → schema stamp written; warning suppressed on subsequent rebuilds.
+| Reader confuses sheet-wide `..._through_month` with per-WP `posted_*` | Low | Med | Distinct vocabulary (Decision 7); §5 explicitly notes the semantic-axis difference. |
 
 ## Resolved layout decisions
 
-### 8. Slope + override column placement (Actuals)
+### 8. Slope column placement (Actuals)
 
-`Sum -i` and `Sum +i` columns are dropped. Replaced 1-for-1 with the new helpers; net column delta is +1.
+`Sum -i` and `Sum +i` columns are dropped. Replaced 1-for-1 with the new helpers; net column delta is 0.
 
 Per-WP row, -i side, in display order:
 
 ```
-Budget -i | As-of -i | Override -i | Slope -i | Variance -i | % Budget -i | Breach-In -i
-                           ↑           ↑
-                       blue input    black-formula (hidden via outline group)
-                       (optional)    = IF(Override<>"", Override,
-                                          IF(as_of_idx=0, "",
-                                          IF(prev_idx=0, as_of_value/as_of_idx,
-                                             (as_of_value-prev_value)/(as_of_idx-prev_idx))))
+Budget -i | Posted -i | Slope -i | Variance -i | % Budget -i | Breach-In -i
+                          ↑
+                    black-formula (hidden via outline group)
+                    = IF(posted_idx=0, "", posted_value / posted_idx)
 ```
 
-+i mirror block: same shape, with `Slope +i = ROUND(Slope -i × 1.25, 0)`. **No `Override +i` cell** — `+i` is a pure derivation. If the user wants to override, they do it on -i; +i follows.
++i mirror block: same shape, with `Slope +i = ROUND(Slope -i × 1.25, 0)`.
 
-`as_of_idx`, `as_of_value`, `prev_idx`, `prev_value` live as four hidden helper cells per WP-row (outline-grouped, black-formula). Per the spec preference for outline groups over `hidden=True` (`openpyxl.md` §Core patterns).
+`posted_idx` and `posted_value` live as two hidden helper cells per WP-row (outline-grouped, black-formula). Per the spec preference for outline groups over `hidden=True` (`openpyxl.md` §Core patterns).
 
-### 9. Per-month forecast block — lives on Trends, not Actuals
+### 9. Forecast feeding Trends + Summary
 
-Trends chart owns its own per-WP × per-month forecast helper rows. Each cell:
+**Trends chart — 2 anchor cells per WP, no helper grid.**
+
+Trends owns two black-formula cells per WP that the chart series consumes:
 
 ```
-=IF(m <= as_of_idx, "", as_of_value + slope * (m - as_of_idx))
+anchor_now    : (posted_idx,   posted_value)                                          ' cross-sheet refs to Actuals
+anchor_future : (project_end,  posted_value + slope * (project_end - posted_idx))     ' cross-sheet refs to Actuals
 ```
 
-References cross-sheet to `Actuals!<as_of_value>` and `Actuals!<slope>` (green-xref font). Clamped at project end by the column range itself.
+Chart series has 2 data points per WP for the forecast line. Excel/LO interpolates the linear segment between them. No per-WP × per-month helper grid.
 
-**Why on Trends and not Actuals:** Actuals stays focused on actuals + single-cell slope. The chart-feeding grid is a Trends concern; placing it on Actuals would interleave forecast values with the input grid and re-introduce the "two surfaces" problem the simplification is meant to remove.
+**Why anchors not a per-month grid:** the forecast is a linear function of `m`; a line plotted from N evenly-spaced points equals the line plotted from its 2 endpoints. The grid was solving a non-problem.
 
-Summary's per-year `Forecast EUR` column reads inline (no helper column on Actuals): `=as_of_value + slope * (year_end_month - as_of_idx)`, clamped at `MAX(0, ...)` so a 0-point WP shows blank, not negative. One formula per WP × year cell, sourced directly from the two Actuals helper cells.
+**Summary — single `Forecast EUR` column per WP.**
 
-### 10. Schema version stamp — new named range on Config
+One inline formula per WP row (no helper column on Actuals):
 
-Single new named range `actuals_schema` pointing to a fresh Config cell (sibling of the existing `version_stamp`, black-formula effective cell with literal value `"as-of-v1"`). Reader checks existence at rebuild start:
+```
+=IF(Actuals!<posted_idx>=0, "",
+    MAX(0, Actuals!<posted_value> + Actuals!<slope> * (project_end - Actuals!<posted_idx>)))
+```
 
-- Named range absent OR value ≠ `"as-of-v1"` → emit one-time console warning, then write the stamp at end of rebuild.
-- Named range present with `"as-of-v1"` → silent rebuild as today.
+Per-year breakout dropped: the previous per-year formula would have flat-lined the posted value into closed past years (semantically wrong — closed years should reflect actual EOY closed values, not a current-as-of projection). Single end-of-project projection per WP is the honest signal.
 
-**Why a new range, not extending `version_stamp`:** keeping `version_stamp` as a free-form human-readable string means parser logic touches a string-format. A dedicated boolean-ish named range is one `wb.defined_names` lookup. Lower-effort, lower-risk.
+## Implementation plan
 
-### 11. Test inventory
-
-**Delete** (~7 files / ~2k LOC removed):
-- `tests/test_plan_forecast*.py` — entire tab gone.
-- `tests/test_actuals_hours_forecast_eur*.py` — band gone.
-- `tests/test_actuals_hours_eu_total*.py` — row + CF gone.
-- `tests/test_actuals_hours_cumulative_to_date*.py` — derived row gone.
-- `tests/test_actuals_hours_actual_pm*.py` — derived row gone.
-- `tests/test_actuals_sum_column*.py` (or whichever file targets `val_col_sum`) — column gone.
-
-**Update** (existing tests, semantic + rename adjustments):
-- `tests/test_actuals*.py` — change expected values to cumulative semantics; rename `Cum` → `As-of`, named-range references; update breach/variance/forecast-block source assertions to point at same-row slope instead of Plan-Forecast.
-- `tests/test_actuals_hours*.py` (surviving files) — rename + cumulative semantics.
-- `tests/test_summary*.py` — `Forecast EUR` source switch from Plan-Forecast to inline-from-Actuals.
-- `tests/test_trends*.py` — chart series source switches to Trends-local helper rows referencing Actuals slope.
-- `tests/test_reader*.py` — `eur_as_of_month` / `hours_as_of_month` named-range names; preserved-data assertions.
-- Test fixtures in `tests/fixtures/` (or sample workbooks): regenerate with cumulative-to-date sample data.
-
-**Add** (new files):
-- `tests/test_actuals_as_of.py` — covers: latest-filled-month formula (banned-pattern-safe form), 0/1/2+ point slope branches, override cell dominance, +i mirror = ROUND(-i × 1.25, 0).
-- `tests/test_actuals_forecast_block.py` — forecast columns (Forecast, Variance forecast, % Budget forecast, Breach-In forecast) sourced from same-row slope; correct values for the worked example in §1.
-- `tests/test_reader_schema_stamp.py` — warning fires once on pre-stamp workbook; stamp written; subsequent rebuild silent.
-
-Specific filename choices and dropped-test list confirmed via `grep -rn "Plan-Forecast\|val_col_sum\|EU TOTAL\|forecast_val_columns" tests/` during Phase 6.
+Phasing, module-by-module re-work audit, and test inventory: separate doc when impl starts. Standard project gating applies (plan-hygiene + pytest gate per `.claude/rules/plan-hygiene.md`).

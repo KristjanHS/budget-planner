@@ -284,12 +284,11 @@ def val_columns(project_months: int) -> dict[str, int]:
     }
 
 
-# ── Forecast monitoring column offsets (Actuals sheet — TRANSITIONAL) ──
-# Posted-cumulative redesign (Phase 2.2) replaces the forecast monitoring
-# block on Actuals with per-WP slope/forecast cells inline. Until the
-# actuals.py rewrite ships, these offsets + ``forecast_val_columns`` stay
-# so the existing builder + tests keep working. After Phase 2.2 lands, all
-# callers vanish and these constants can be deleted in Stage C.
+# ── Forecast monitoring column offsets (Actuals sheet — DEAD CODE) ──
+# Phase 2.2 shipped — the Actuals forecast-monitoring block is gone and
+# no callers remain (grep confirms). These offsets + ``forecast_val_columns``
+# stay only because Stage C will delete them alongside ``plan_forecast.py``
+# wholesale; deleting earlier would cause a churny intermediate commit.
 FORECAST_GUTTER = 1
 FORECAST_OFFSET_CUM = FORECAST_GUTTER + 1
 FORECAST_OFFSET_VAR = FORECAST_GUTTER + 2

@@ -706,7 +706,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
             Stage C drops Plan-Forecast wholesale. Ignored here.
 
     Returns:
-        Layout dict with keys: header_row, year_row, month_row,
+        Layout dict with keys: asof_row, year_row, month_row,
         first_wp_row, last_wp_row, total_row + per-WP column refs.
     """
     del plan_forecast_layout  # Phase 2.2: ignored; Stage C deletes the kwarg.

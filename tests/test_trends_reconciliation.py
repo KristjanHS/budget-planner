@@ -140,20 +140,35 @@ def test_recon_wp_row_count_plus_total(recon_ws):
 
 
 def test_recon_col_b_forecast_formula(recon_ws):
-    """Col B: INDEX-window SUM on 'Plan-Forecast' sheet, guarded by the
-    local ``Reconciled through`` helper cell ($B$<recon_row+4>)."""
+    """Col B: per-WP slope projection on Actuals (Phase 2.4 rewire), guarded
+    by the local ``Reconciled through`` helper cell ($B$<recon_row+4>) and
+    by posted_idx=0 -> 0. Replaces the prior SUM('Plan-Forecast'!INDEX-window)
+    formula. Linear extrapolation from the WP's posted-cumulative anchor
+    out to reconciled_through; MAX(0, ...) clamps a negative projection.
+    """
     recon_row = _recon_section_row(recon_ws)
     reconciled_ref = f"$B${recon_row + 4}"
     first_wp_row = recon_row + 7
     formula = str(recon_ws.cell(first_wp_row, 2).value)
-    assert "'Plan-Forecast'!" in formula, (
-        f"Col B must reference 'Plan-Forecast'! (single-quoted): {formula!r}"
+    # No more Plan-Forecast refs after Phase 2.4 rewire.
+    assert "Plan-Forecast" not in formula, (
+        f"Col B must not reference Plan-Forecast after Phase 2.4: {formula!r}"
+    )
+    assert "Actuals!" in formula, (
+        f"Col B must reference Actuals! (per-WP posted/slope cells): {formula!r}"
     )
     assert reconciled_ref in formula, (
-        f"Col B must guard on {reconciled_ref} (local Reconciled helper): {formula!r}"
+        f"Col B must use {reconciled_ref} (local Reconciled helper) in the "
+        f"slope projection: {formula!r}"
     )
-    assert "INDEX" in formula, f"Col B must use INDEX window: {formula!r}"
-    assert "SUM" in formula, f"Col B must use SUM: {formula!r}"
+    # Slope-projection shape: posted_idx=0 sentinel + MAX(0, ...) clamp.
+    assert "=0" in formula, (
+        f"Col B must guard posted_idx=0 with the empty-projection branch: "
+        f"{formula!r}"
+    )
+    assert "MAX(0," in formula, (
+        f"Col B must clamp projection at 0 via MAX(0, ...): {formula!r}"
+    )
 
 
 def test_recon_col_c_actual_formula(recon_ws):
@@ -356,21 +371,41 @@ def test_gap_helper_row_formula(recon_ws):
     """Gap helper row's first-month formula is =<cl><actual>-<cl><forecast>.
 
     Discovers the helper rows dynamically via openpyxl — matches the
-    pattern used elsewhere in the trends test suite.
+    pattern used elsewhere in the trends test suite. Phase 2.4 rewired
+    the forecast row from Plan-Forecast SUMs to a 2-anchor pattern, so
+    the forecast-row probe now looks for the (project_months,
+    eur_actuals_through_month, NA()) shape rather than 'Plan-Forecast'.
     """
     from budget_planner.layout import MONTH_COL_START
     from budget_planner.styles import col_letter
 
     # Find the actual helper row (the hidden row with an Actuals! ref in
-    # its first-month cell).
+    # its first-month cell). Disambiguate from the new 2-anchor forecast
+    # row, which ALSO references Actuals + eur_actuals_through_month, by
+    # requiring the cumulative shape (no NA() / project_months on the
+    # actual row).
     actual_row = _find_hidden_row_with_first_month_formula(
-        recon_ws, lambda f: "Actuals!" in f and "eur_actuals_through_month" in f
+        recon_ws,
+        lambda f: (
+            "Actuals!" in f
+            and "eur_actuals_through_month" in f
+            and "project_months" not in f
+            and "NA()" in f  # actual row clips with NA(); kept post Phase 2.4
+        ),
     )
     forecast_row = _find_hidden_row_with_first_month_formula(
-        recon_ws, lambda f: "'Plan-Forecast'!" in f
+        recon_ws,
+        lambda f: (
+            "project_months" in f
+            and "eur_actuals_through_month" in f
+            and "NA()" in f
+            and "Actuals!" in f
+        ),
     )
     assert actual_row is not None, "Could not locate actual helper row"
-    assert forecast_row is not None, "Could not locate forecast helper row"
+    assert forecast_row is not None, (
+        "Could not locate forecast helper row (2-anchor pattern)"
+    )
 
     cl = col_letter(MONTH_COL_START)
     expected = f"={cl}{actual_row}-{cl}{forecast_row}"

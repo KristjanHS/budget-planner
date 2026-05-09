@@ -157,14 +157,22 @@ def test_burn_rate_status_formula(trends_ws):
 
 
 def test_burn_rate_exhaustion_formula(trends_ws):
-    """Col G has COUNTIF + ROUND formula for Exhaustion Month."""
+    """Col G uses Actuals slope (per design §3) wrapped in ROUND, guarded by
+    posted_idx=0 -> "No data". Phase 2.4 replaced the COUNTIF/cum heuristic
+    with the actuals-tab `slope` column (avg-burn = posted_value / posted_idx).
+    """
     header_row = _find_row_containing(trends_ws, 1, "WP ID")
     assert header_row is not None
     first_wp_row = header_row + 1
     cell = trends_ws.cell(first_wp_row, 7)
     formula = str(cell.value)
-    assert "COUNTIF" in formula
     assert "ROUND" in formula
+    assert "Actuals!" in formula
+    assert '"No data"' in formula
+    # COUNTIF heuristic is gone after Phase 2.4 (slope is now the source).
+    assert "COUNTIF" not in formula, (
+        f"Col G must not consult COUNTIF after Phase 2.4 rewire: {formula!r}"
+    )
 
 
 def test_burn_rate_total_row(trends_ws):
@@ -605,14 +613,20 @@ def test_cumulative_forecast_series_styling():
 
 
 def test_cumulative_forecast_helper_row_formulas(trends_ws):
-    """Forecast helper row contains cumulative SUM formulas referencing
-    'Plan-Forecast' MONTHLY TOTAL row, single-quoted (hyphenated sheet name).
+    """Forecast helper row uses the project-aggregated 2-anchor pattern
+    (Phase 2.4 / design §9): every cell tests two month-index anchors and
+    emits NA() everywhere else, so LineChart draws a single straight
+    segment between (eur_actuals_through_month, sum_posted_now) and
+    (project_months, sum_forecast_end).
 
-    First month: =SUM('Plan-Forecast'!<col><total_row>)
-    Subsequent: =<prev_col><helper_row>+SUM('Plan-Forecast'!<col><total_row>)
+    Each cell shape:
+        =IF(<m>=eur_actuals_through_month,<sum_posted_now>,
+            IF(<m>=project_months,<sum_forecast_end>,
+               NA()))
     """
-    # Discover the forecast helper row dynamically: it's a hidden row whose
-    # cells contain references to 'Plan-Forecast'.
+    # Discover the forecast helper row dynamically: it's the hidden row
+    # whose cells reference project_months and Actuals posted_idx/value/
+    # slope cells (the 2-anchor formula pattern).
     hidden_rows = sorted(
         r for r in range(1, trends_ws.max_row + 1)
         if trends_ws.row_dimensions[r].hidden
@@ -620,41 +634,60 @@ def test_cumulative_forecast_helper_row_formulas(trends_ws):
 
     forecast_row = None
     for r in hidden_rows:
-        # Probe the first month column to find the forecast helper row.
         cell_val = trends_ws.cell(r, MONTH_COL_START).value
-        if cell_val is not None and "'Plan-Forecast'" in str(cell_val):
+        if cell_val is None:
+            continue
+        s = str(cell_val)
+        # Forecast row: anchors on eur_actuals_through_month + project_months,
+        # references Actuals (slope-projection sum), and emits NA() on the
+        # off-anchor branch.
+        if (
+            "eur_actuals_through_month" in s
+            and "project_months" in s
+            and "NA()" in s
+            and "Actuals!" in s
+        ):
             forecast_row = r
             break
     assert forecast_row is not None, (
-        f"No hidden helper row references 'Plan-Forecast' "
+        f"No hidden helper row matches the 2-anchor forecast pattern "
         f"(hidden_rows={hidden_rows})"
     )
 
-    # First-month formula: wrapped in IF(...>hours_actuals_through_month,NA(),
-    # SUM('Plan-Forecast'!<col><total_row>)) for v2 T10 clipping.
+    # First-month cell: full 2-anchor IF shape with NA() fallthrough.
     first_cell = trends_ws.cell(forecast_row, MONTH_COL_START).value
     assert isinstance(first_cell, str)
-    assert "SUM('Plan-Forecast'!" in first_cell, (
-        f"First-month forecast helper formula should reference "
-        f"SUM('Plan-Forecast'!..., got {first_cell!r}"
+    assert "1=eur_actuals_through_month" in first_cell, (
+        f"First-month forecast helper should test '1=eur_actuals_through_month', "
+        f"got {first_cell!r}"
+    )
+    assert "1=project_months" in first_cell, (
+        f"First-month forecast helper should test '1=project_months' "
+        f"(future-anchor branch), got {first_cell!r}"
+    )
+    assert "NA()" in first_cell, (
+        f"First-month forecast helper should emit NA() on off-anchor cells, "
+        f"got {first_cell!r}"
+    )
+    # Future anchor must reference the slope projection.
+    assert "MAX(0," in first_cell, (
+        f"Future-anchor sum must clamp at 0 via MAX(0, ...): {first_cell!r}"
+    )
+    # No more Plan-Forecast refs after Phase 2.4.
+    assert "Plan-Forecast" not in first_cell, (
+        f"Forecast helper must not reference Plan-Forecast: {first_cell!r}"
     )
 
-    # Second-month formula: cumulative — prev cell + SUM('Plan-Forecast'!...)
-    second_cell = trends_ws.cell(forecast_row, MONTH_COL_START + 1).value
-    assert isinstance(second_cell, str)
-    assert "'Plan-Forecast'" in second_cell, (
-        f"Second-month forecast helper should reference Plan-Forecast, "
-        f"got {second_cell!r}"
+    # Mid-month cell at m_idx=4 (literal m=5): same 2-anchor shape with
+    # the literal updated.
+    mid_cell = trends_ws.cell(forecast_row, MONTH_COL_START + 4).value
+    assert isinstance(mid_cell, str)
+    assert "5=eur_actuals_through_month" in mid_cell, (
+        f"Mid-month (m=5) forecast helper should test "
+        f"'5=eur_actuals_through_month', got {mid_cell!r}"
     )
-    # Cumulative shape: previous-column ref to forecast helper row + SUM(...)
-    prev_col_letter = col_letter(MONTH_COL_START)
-    assert f"{prev_col_letter}{forecast_row}" in second_cell, (
-        f"Expected previous-column self-ref ({prev_col_letter}{forecast_row}) "
-        f"in cumulative formula, got {second_cell!r}"
-    )
-    assert "+SUM" in second_cell, (
-        f"Expected cumulative shape (prev col + SUM), got {second_cell!r}"
-    )
+    assert "5=project_months" in mid_cell
+    assert "NA()" in mid_cell
 
 
 # ================================================================
@@ -750,29 +783,37 @@ def test_actual_helper_row_mid_month_clipped(trends_ws):
     )
 
 
-def test_forecast_helper_row_clipped_by_hours_through_month(trends_ws):
-    """Forecast helper-row formulas reference hours_actuals_through_month and NA()."""
-    forecast_row = _find_helper_row_by_probe(trends_ws, "'Plan-Forecast'")
+def test_forecast_helper_row_two_anchor_pattern(trends_ws):
+    """Forecast helper row no longer clips by hours_actuals_through_month
+    after Phase 2.4. The new 2-anchor pattern (design §9) anchors on
+    eur_actuals_through_month (now-anchor) and project_months
+    (future-anchor); off-anchor cells emit NA(). The hours-side cadence
+    is no longer consulted because the forecast is sourced from Actuals
+    EUR posted-cumulative cells (not Plan-Forecast hours derivations).
+    """
+    # Locate the forecast helper row by its 2-anchor shape (project_months
+    # + eur_actuals_through_month + NA() + Actuals!).
+    forecast_row = _find_helper_row_by_probe(trends_ws, "project_months")
     assert forecast_row is not None
 
-    first_cell = trends_ws.cell(forecast_row, MONTH_COL_START).value
-    assert isinstance(first_cell, str)
-    assert "hours_actuals_through_month" in first_cell, (
-        f"First-month forecast formula must reference "
-        f"hours_actuals_through_month, got {first_cell!r}"
-    )
-    assert "NA()" in first_cell, (
-        f"First-month forecast formula must clip with NA(), got {first_cell!r}"
-    )
-
-    # m_idx=5 → literal '6>hours_actuals_through_month'
+    # m_idx=5 -> literal m=6: both anchors must use the literal '6=...' form.
     mid_cell = trends_ws.cell(forecast_row, MONTH_COL_START + 5).value
     assert isinstance(mid_cell, str)
-    assert "6>hours_actuals_through_month" in mid_cell, (
+    assert "6=eur_actuals_through_month" in mid_cell, (
         f"Mid-month (m_idx=5) forecast formula should test "
-        f"'6>hours_actuals_through_month', got {mid_cell!r}"
+        f"'6=eur_actuals_through_month', got {mid_cell!r}"
+    )
+    assert "6=project_months" in mid_cell, (
+        f"Mid-month forecast formula should test '6=project_months' "
+        f"(future-anchor branch), got {mid_cell!r}"
     )
     assert "NA()" in mid_cell
+    # hours_actuals_through_month is no longer the forecast trust boundary.
+    assert "hours_actuals_through_month" not in mid_cell, (
+        f"Forecast helper must not reference hours_actuals_through_month "
+        f"after Phase 2.4 (forecast sources from Actuals EUR slope, not "
+        f"hours-derived Plan-Forecast): {mid_cell!r}"
+    )
 
 
 def test_planned_and_ceiling_helper_rows_unchanged(trends_ws):

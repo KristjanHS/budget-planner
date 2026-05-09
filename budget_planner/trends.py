@@ -29,7 +29,6 @@ from openpyxl.formatting.rule import FormulaRule
 
 from budget_planner.layout import (
     MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS, SHEET_CAPACITY,
-    SHEET_PLAN_FORECAST,
     TREND_OK_BAND, TREND_OVER_THRESHOLD, TREND_WATCH_THRESHOLD, TREND_SLOW_THRESHOLD,
     COL_WP_START, COL_WP_END,
     month_col_end as _month_col_end, val_columns,
@@ -51,7 +50,7 @@ from budget_planner.styles import CF_RED_FILL as _RED_CF_FILL
 
 
 def _resolve_trends_layout(layout, actuals_layout, project_params, work_packages,
-                           team, plan_forecast_layout):
+                           team):
     """Resolve every column letter and row anchor for the Trends sheet
     into a single dict consumed by the helpers below.
 
@@ -66,7 +65,14 @@ def _resolve_trends_layout(layout, actuals_layout, project_params, work_packages
     month_col_end = _month_col_end(project_params["months"])
     val_col_budget = val_columns(project_params["months"])["budget"]
 
-    cum_col_letter = col_letter(actuals_layout["cum_col"])
+    # Posted-cumulative helpers on Actuals (per Phase 2.4 rewire).
+    # `posted_idx`/`posted_value`/`slope` replace the Stage A `cum_col` bandage:
+    # Burn-rate Col D + Col G now read posted_value directly (guarded by
+    # posted_idx=0 → "—"/"No data"); reconciliation + 2-anchor forecast use
+    # the slope projection. See design §3 + §9.
+    posted_idx_col_letter = col_letter(actuals_layout["posted_idx_col"])
+    posted_value_col_letter = col_letter(actuals_layout["posted_value_col"])
+    slope_col_letter = col_letter(actuals_layout["slope_col"])
     ceiling_col_letter = col_letter(val_col_budget)
     ms = col_letter(month_col_start)
     me = col_letter(month_col_end)
@@ -111,17 +117,6 @@ def _resolve_trends_layout(layout, actuals_layout, project_params, work_packages
     helper_row_gap = helper_row_rp + 1
     helper_row_zero = helper_row_gap + 1
 
-    pf_first_wp_row = (
-        plan_forecast_layout["forecast_first_wp_row"]
-        if plan_forecast_layout is not None
-        else None
-    )
-    pf_total_row = (
-        plan_forecast_layout["forecast_total_row"]
-        if plan_forecast_layout is not None
-        else None
-    )
-
     return {
         "wp_start_col_letter": wp_start_col_letter,
         "wp_end_col_letter": wp_end_col_letter,
@@ -129,7 +124,9 @@ def _resolve_trends_layout(layout, actuals_layout, project_params, work_packages
         "num_wps": num_wps,
         "month_col_end": month_col_end,
         "val_col_budget": val_col_budget,
-        "cum_col_letter": cum_col_letter,
+        "posted_idx_col_letter": posted_idx_col_letter,
+        "posted_value_col_letter": posted_value_col_letter,
+        "slope_col_letter": slope_col_letter,
         "ceiling_col_letter": ceiling_col_letter,
         "ms": ms,
         "me": me,
@@ -160,8 +157,6 @@ def _resolve_trends_layout(layout, actuals_layout, project_params, work_packages
         "helper_row_rp": helper_row_rp,
         "helper_row_gap": helper_row_gap,
         "helper_row_zero": helper_row_zero,
-        "pf_first_wp_row": pf_first_wp_row,
-        "pf_total_row": pf_total_row,
     }
 
 
@@ -172,7 +167,9 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
     header_row = tlayout["header_row"]
     first_wp_data_row = tlayout["first_wp_data_row"]
     num_wps = tlayout["num_wps"]
-    cum_col_letter = tlayout["cum_col_letter"]
+    posted_idx_col_letter = tlayout["posted_idx_col_letter"]
+    posted_value_col_letter = tlayout["posted_value_col_letter"]
+    slope_col_letter = tlayout["slope_col_letter"]
     ceiling_col_letter = tlayout["ceiling_col_letter"]
     wp_start_col_letter = tlayout["wp_start_col_letter"]
     wp_end_col_letter = tlayout["wp_end_col_letter"]
@@ -228,12 +225,26 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
         # Stage A bandage: Posted -i now returns "" for "no postings yet" (design §2);
         # the +0/IFERROR wrapper coerces "" → 0 until Stage B rewires Trends to read
         # posted_value / posted_idx / slope cells directly.
+        # Cross-sheet refs to the per-WP posted-cumulative helpers on
+        # Actuals (Phase 2.4 rewire \u2014 replaces Stage A `cum_col` bandage).
+        posted_idx_ref = (
+            f"{SHEET_ACTUALS}!{posted_idx_col_letter}{actuals_row}"
+        )
+        posted_value_ref = (
+            f"{SHEET_ACTUALS}!{posted_value_col_letter}{actuals_row}"
+        )
+        slope_ref = f"{SHEET_ACTUALS}!{slope_col_letter}{actuals_row}"
+
+        # Col D: posted_value is "" when posted_idx=0 (design \u00a72
+        # sentinel) -- outer guard on posted_idx=0 -> "\u2014" so
+        # the division never sees the empty-string sentinel.
         budget_formula = (
-            f"IFERROR({SHEET_ACTUALS}!{cum_col_letter}{actuals_row}+0,0)"
+            f"{posted_value_ref}"
             f"/{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
         )
         style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<{wp_start},"\u2014",{budget_formula})'
+            f'=IF(current_month<{wp_start},"\u2014",'
+            f'IF({posted_idx_ref}=0,"\u2014",{budget_formula}))'
         )
 
         # Col E: Burn Delta
@@ -252,15 +263,21 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
             f'=IF(current_month<{wp_start},"\u2014",{status_formula})'
         )
 
-        # Col G: Exhaustion Mo.
-        # Stage A bandage: Posted -i empty-string sentinel coerced to 0 (see Col D note).
+        # Col G: Exhaustion Mo. \u2014 projection = wp_start + ROUND(budget/slope)-1.
+        # Per design \u00a73 the canonical burn rate is the per-project-month
+        # `slope` (avg-burn = posted_value / posted_idx) -- replaces the
+        # filled-cell-average heuristic (cum/COUNTIF) with the actuals-tab
+        # source of truth. Guarded twice: posted_idx=0 -> "No data";
+        # D=0 -> "\u2014". `actuals_month_range` is no longer consulted because
+        # posted_idx encodes "have we posted yet" without a separate
+        # COUNTIF count.
+        del actuals_month_range
         exhaustion_formula = (
-            f"IF(D{row}=0,\"\u2014\","
-            f"IF(COUNTIF({actuals_month_range},\">0\")=0,\"No data\","
+            f'IF({posted_idx_ref}=0,"No data",'
+            f'IF(D{row}=0,"\u2014",'
             f"{wp_start}+ROUND("
             f"{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
-            f"/(IFERROR({SHEET_ACTUALS}!{cum_col_letter}{actuals_row}+0,0)"
-            f"/COUNTIF({actuals_month_range},\">0\")),0)-1))"
+            f"/{slope_ref},0)-1))"
         )
         style_cell(ws, row, 7, font=BLACK_FORMULA, fmt="0").value = (
             f'=IF(current_month<{wp_start},"\u2014",{exhaustion_formula})'
@@ -406,7 +423,9 @@ def _write_reconciliation_section(ws, tlayout, layout, actuals_layout):
     recon_first_wp_row = tlayout["recon_first_wp_row"]
     recon_last_wp_row = tlayout["recon_last_wp_row"]
     recon_total_row = tlayout["recon_total_row"]
-    pf_first_wp_row = tlayout["pf_first_wp_row"]
+    posted_idx_col_letter = tlayout["posted_idx_col_letter"]
+    posted_value_col_letter = tlayout["posted_value_col_letter"]
+    slope_col_letter = tlayout["slope_col_letter"]
 
     # ================================================================
     # Section 2a: Reconciliation — Forecast vs Actual EUR
@@ -460,29 +479,46 @@ def _write_reconciliation_section(ws, tlayout, layout, actuals_layout):
         )
 
         # Col B: Cumulative Forecast EUR through reconciled_through_month.
-        # Uses INDEX window so the SUM range is bounded by the through-month
-        # cell count. Sheet name must be single-quoted (hyphen).
-        if pf_first_wp_row is not None:
-            pf_wp_row = pf_first_wp_row + i
-            pf_range_full = (
-                f"'{SHEET_PLAN_FORECAST}'!${ms}${pf_wp_row}:${me}${pf_wp_row}"
-            )
-            pf_start_ref = f"'{SHEET_PLAN_FORECAST}'!${ms}${pf_wp_row}"
-            style_cell(ws, row, 2, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
-                f"=IF($B${recon_health_reconciled_row}<=0,0,"
-                f"SUM({pf_start_ref}:INDEX({pf_range_full},1,"
-                f"$B${recon_health_reconciled_row})))"
-            )
+        # Phase 2.4 rewire: replaces the SUM('Plan-Forecast'!...) window
+        # with the per-WP slope projection on Actuals. Linear extrapolation
+        # from the WP's posted-cumulative anchor out to reconciled_through.
+        # MAX(0, ...) clamps a negative projection (correction postings).
+        # Empty-string sentinel handled by posted_idx=0 -> 0 (no projection).
+        posted_idx_ref = (
+            f"{SHEET_ACTUALS}!{posted_idx_col_letter}{actuals_wp_row}"
+        )
+        posted_value_ref = (
+            f"{SHEET_ACTUALS}!{posted_value_col_letter}{actuals_wp_row}"
+        )
+        slope_ref = f"{SHEET_ACTUALS}!{slope_col_letter}{actuals_wp_row}"
+        style_cell(ws, row, 2, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
+            f"=IF({posted_idx_ref}=0,0,"
+            f"MAX(0,{posted_value_ref}+{slope_ref}*"
+            f"($B${recon_health_reconciled_row}-{posted_idx_ref})))"
+        )
 
         # Col C: Cumulative Actual EUR through reconciled_through_month.
+        # Under posted-cumulative semantics the Actuals row holds running-
+        # total snapshots, not per-month deltas \u2014 SUMming them across the
+        # window double-counts. Instead, INDEX into the latest filled
+        # numeric cell at-or-before reconciled_through_month: the column
+        # offset is the max of (1-based position * ISNUMBER * within-window),
+        # which already IS the posted-cumulative-to-date by definition.
+        # IFERROR guards INDEX(..., 0) when no numeric cells fall inside
+        # the window.
         act_range_full = (
             f"{SHEET_ACTUALS}!${ms}${actuals_wp_row}:${me}${actuals_wp_row}"
         )
         act_start_ref = f"{SHEET_ACTUALS}!${ms}${actuals_wp_row}"
         style_cell(ws, row, 3, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
             f"=IF($B${recon_health_reconciled_row}<=0,0,"
-            f"SUM({act_start_ref}:INDEX({act_range_full},1,"
-            f"$B${recon_health_reconciled_row})))"
+            f"IFERROR(INDEX({act_range_full},1,"
+            f"SUMPRODUCT(MAX("
+            f"(COLUMN({act_range_full})-COLUMN({act_start_ref})+1)"
+            f"*ISNUMBER({act_range_full})"
+            f"*((COLUMN({act_range_full})-COLUMN({act_start_ref})+1)"
+            f"<=$B${recon_health_reconciled_row})"
+            f"))),0))"
         )
 
         # Col D: Gap EUR = Actual - Forecast (same-sheet derived → black)
@@ -642,14 +678,49 @@ def _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params
     helper_row_actual = tlayout["helper_row_actual"]
     helper_row_forecast = tlayout["helper_row_forecast"]
     helper_row_ceiling = tlayout["helper_row_ceiling"]
-    pf_total_row = tlayout["pf_total_row"]
+    posted_idx_col_letter = tlayout["posted_idx_col_letter"]
+    posted_value_col_letter = tlayout["posted_value_col_letter"]
+    slope_col_letter = tlayout["slope_col_letter"]
 
     plan_first_wp = layout["planned_first_wp_row"]
     plan_last_wp = layout["planned_last_wp_row"]
     act_total = actuals_layout["total_row"]
-    # Plan-Forecast MONTHLY TOTAL row (sums forecast EUR per month).
-    # plan_forecast_layout is wired through _build_all_sheets; falls back
-    # to None only when callers wire trends in isolation (tests would catch).
+    act_first_wp = actuals_layout["first_wp_row"]
+    act_last_wp = actuals_layout["last_wp_row"]
+
+    # Project-aggregated 2-anchor forecast (Phase 2.4 / design §9): two
+    # cells of the forecast helper row hold real values; everything else is
+    # NA() so LineChart draws a single straight segment between them.
+    #
+    #   now-anchor    @ eur_actuals_through_month  = SUM of WP posted_value
+    #   future-anchor @ project_months             = SUM of MAX(0, posted_value
+    #                                                  + slope * (project_months
+    #                                                  - posted_idx)) per WP
+    #
+    # Per-WP MAX-clamp wrapped in IFERROR(...,0) so the empty-string sentinel
+    # from posted_idx=0 (no postings yet) doesn't propagate #VALUE through
+    # the SUM. Individual `+` terms (rather than SUMPRODUCT array form) per
+    # the openpyxl rule on text*number propagation.
+    sum_posted_terms = []
+    sum_forecast_terms = []
+    for wp_off in range(num_wps):
+        ar = act_first_wp + wp_off
+        sum_posted_terms.append(
+            f"IFERROR({SHEET_ACTUALS}!{posted_value_col_letter}{ar}+0,0)"
+        )
+        sum_forecast_terms.append(
+            f"IFERROR(MAX(0,{SHEET_ACTUALS}!{posted_value_col_letter}{ar}"
+            f"+{SHEET_ACTUALS}!{slope_col_letter}{ar}"
+            f"*(project_months-{SHEET_ACTUALS}!{posted_idx_col_letter}{ar})),0)"
+        )
+    sum_posted_now_expr = "+".join(sum_posted_terms) if sum_posted_terms else "0"
+    sum_forecast_end_expr = (
+        "+".join(sum_forecast_terms) if sum_forecast_terms else "0"
+    )
+    # Silence "unused" hints — they're consumed inside the loop body via the
+    # per-WP terms above; act_last_wp kept for symmetry with summary.py
+    # debugging guards even though the per-WP loop bounds are sufficient.
+    _ = act_last_wp
 
     # Per-WP rate range from Config column D (for SUMPRODUCT)
     cfg_wp_first = layout["config_first_wp_row"]
@@ -698,21 +769,15 @@ def _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params
         # totals cumulatively. Sheet name MUST be single-quoted (hyphen).
         # Clipped past `hours_actuals_through_month` (forecast tracks the
         # hours-side through-month cadence, not the EUR one).
-        if pf_total_row is not None:
-            pf_ref = f"'{SHEET_PLAN_FORECAST}'!{cl}{pf_total_row}"
-            if m_idx == 0:
-                style_cell(ws, helper_row_forecast, c,
-                           font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                    f"=IF({month_idx_literal}>hours_actuals_through_month,NA(),"
-                    f"SUM({pf_ref}))"
-                )
-            else:
-                prev_cl = col_letter(c - 1)
-                style_cell(ws, helper_row_forecast, c,
-                           font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                    f"=IF({month_idx_literal}>hours_actuals_through_month,NA(),"
-                    f"{prev_cl}{helper_row_forecast}+SUM({pf_ref}))"
-                )
+        forecast_formula = (
+            f"=IF({month_idx_literal}=eur_actuals_through_month,"
+            f"{sum_posted_now_expr},"
+            f"IF({month_idx_literal}=project_months,"
+            f"{sum_forecast_end_expr},"
+            f"NA()))"
+        )
+        style_cell(ws, helper_row_forecast, c,
+                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = forecast_formula
 
         # Helper Row 4: Ceiling line (flat)
         style_cell(ws, helper_row_ceiling, c,
@@ -842,9 +907,12 @@ def _build_cumulative_chart(ws, tlayout):
     s_actual.graphicalProperties.line.solidFill = "FF0000"
     chart.series.append(s_actual)
 
-    # Series 3: Cumulative forecast (amber dashed) — sums Plan-Forecast
-    # monthly totals cumulatively. Inserted between Actual and Ceiling so
-    # that legend ordering matches semantic priority.
+    # Series 3: Cumulative forecast (amber dashed) — project-aggregated
+    # 2-anchor series fed by `helper_row_forecast` (post Phase 2.4: NA() in
+    # all months except eur_actuals_through_month and project_months, so
+    # LineChart draws a single straight segment between the two anchors).
+    # Inserted between Actual and Ceiling so legend ordering matches
+    # semantic priority.
     s_forecast = Series(idx=2, order=2)
     s_forecast.tx = SeriesLabel(v="Cumulative Forecast")
     s_forecast.val = NumDataSource(numRef=NumRef(
@@ -968,17 +1036,25 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
     Args:
         ws: The Trends worksheet (already has current_month in B1).
         layout: Plan layout dict (config_first_wp_row, etc).
-        actuals_layout: Actuals layout dict (first_wp_row, cum_col, etc).
+        actuals_layout: Actuals layout dict (first_wp_row, posted_idx_col,
+            posted_value_col, slope_col, etc).
         capacity_layout: Capacity layout dict (person_groups with total_row per person).
         team_layout: Team layout dict (person_rows mapping name->row).
         project_params: Dict with keys title, start, months, rate.
         work_packages: List of WP dicts with single-range 'start'/'end'/'type'.
         team: List of team member dicts.
         reporting_periods: Reporting period entries.
+        plan_forecast_layout: Transitional accept-and-ignore (Phase 2.4
+            rewired all consumers to read Actuals helpers directly; the
+            param stays until Phase 2.5 drops the kwarg from workbook.py).
     """
+    # Phase 2.4 transitional pattern (mirrors Stage A actuals.py + Phase 2.3
+    # summary.py): we no longer consume Plan-Forecast on Trends, but
+    # workbook.py still threads the kwarg until Phase 2.5 lands.
+    del plan_forecast_layout
+
     tlayout = _resolve_trends_layout(
         layout, actuals_layout, project_params, work_packages, team,
-        plan_forecast_layout,
     )
 
     # Section 1: WP Burn Rate & Exhaustion (table + CF + TOTAL row)

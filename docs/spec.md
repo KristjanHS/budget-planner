@@ -127,11 +127,11 @@ Blue = input, Black = formula, Green = cross-sheet ref. CLAUDE.md Critical Rule 
 | `eur_actuals_through_month` | `actuals.py` (`Actuals!$D$1`, black-formula effective `=IF(ISNUMBER(B1),B1,C1)`) | `actuals.py` (Breach-In rate-anchor, Posted through: header), `summary.py`, `trends.py`. Inlined as `MAX(1,eur_actuals_through_month)` at every prior `months_elapsed_eur` callsite. |
 | `roster_lookup` | `config_sheet.py` (Team Roster cols A-D: name, Max FTE, grade, rate EUR/PM; Priority col E intentionally excluded so existing VLOOKUP indices stay stable) | `config_sheet.py` (Assignments Balance VLOOKUP col 2), `timelog_plan.py` (per-person rate helper VLOOKUP col 4) |
 | `team_priorities` | `config_sheet.py` (Team Roster Priority col E, blue input, default 2) | `timelog_plan.py` solver fill order — priority flows in via `reader.read_team_from_config` (header scan, not name resolution). Named range reserved for future Excel-formula consumers. |
-| `current_month` | `workbook.py` Stage 5 Trends stub (Trends!$B$1, **black formula** — `=MAX(1,MIN(Config!B3, ...))`; user may overwrite with a static number). Stub written before Actuals builder runs. | `actuals.py` (Cum. EUR / Breach-In cutoff), `timelog_plan.py` (per-WP `Burn rate needed`) |
+| `current_month` | `workbook.py` Stage 5 Trends stub (Trends!$B$1, **black formula** — `=MAX(1,MIN(Config!B3, ...))`; user may overwrite with a static number). Stub written before Actuals builder runs. | `actuals.py` (Posted -i / Breach-In cutoff), `timelog_plan.py` (per-WP `Burn rate needed`) |
 | `timelog_rebuild_from_month` | `config_sheet.py` (Config!$B$9, blue-input integer, default `1`, `min=1 / max=999` data validation) | `reader.read_timelog_plan` returns it as `rebuild_from_month: int`; `timelog_plan.py` builder partitions `preserved_grid` and narrows solver-input |
 | `vacation_month` | `config_sheet.py` (Config!$B$7, blue input string, default `"Jul"`) | `reader.read_config_sheet` → orchestrator + `timelog_plan.py` solver. Fallback to `"Jul"` when missing. |
 | `num_vacation_months` | `config_sheet.py` (Config!$B$8, BLACK_FORMULA builder-written literal — Rule 3 carve-out) | `timelog_plan.py` PER-PERSON SUMMARY Pool formula: `=ROUND(max_fte × (project_months − num_vacation_months), 0)` |
-| `wp_budget_with_indirect` | `config_sheet.py` (`Config!$F${wp_first_row}:$F${wp_last_row}` — the `Budget +i` column) | `actuals.py`, `actuals_hours.py`, `timelog_plan.py` |
+| `wp_budget_with_indirect` | `config_sheet.py` (`Config!$F${wp_first_row}:$F${wp_last_row}` — the `Budget +i` column) | `actuals.py` (`=INDEX(wp_budget_with_indirect, i+1)` for per-WP `Budget +i` rollups) |
 | `version_stamp` | `config_sheet.py` (Config!$B$10) | (informational) |
 
 **Reader/builder round-trip rule**: readers use named ranges (not coordinates); tolerate internal blanks; rebuild must preserve user-authored values on blue input cells.
@@ -172,7 +172,7 @@ Cross-sheet formulas (Plan's `=SUM(Capacity!...)`, Trends person-load refs, Summ
 
 ### Per-person Capacity geometry
 
-Per-person sequence: header → WP rows (assigned only) → external rows → TOTAL. REMAINING < 0 folds onto TOTAL > Max FTE (same red). EU per-year ceiling enforcement was dropped 2026-05-09 along with Plan-Forecast deletion — manual compliance check now.
+Per-person sequence: header → WP rows (assigned only) → external rows → TOTAL. REMAINING < 0 folds onto TOTAL > Max FTE (same red). The Actuals-Hours EU TOTAL row + per-year EU ceiling CF + the `include_eu_total` opt-in on `person_section.plan_person_layout` are deleted in the posted-cumulative redesign (2026-05-09 design); compliance is a manual check thereafter.
 
 ---
 

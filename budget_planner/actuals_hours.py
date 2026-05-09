@@ -44,28 +44,32 @@ HOUR_FMT = "#,##0"
 
 
 def _cum_hours_formula(row: int, month_col_start: int, months: int) -> str:
-    """Windowed cumulative SUM of this row's hour cells up to
+    """Latest filled posted-cumulative-hours value on this row at-or-before
     ``hours_actuals_through_month`` (`'Actuals-Hours'!$D$1`).
 
     Written on the Capacity-consumed ``cum_hours_col`` as a single helper
     so Capacity can reference one cell per row instead of rebuilding a
-    cross-sheet SUM+INDEX.
+    cross-sheet INDEX scan.
 
-    FIXME(Stage E): under posted-cumulative semantics (per design 2026-05-09 §1)
-    each cell already holds the running total through its month, so SUMming
-    them across the window over-counts. Capacity's `_wp_actual_formula`
-    (capacity.py) divides this by hours_per_fte_month and surfaces an
-    over-counted Actual PM whenever ≥2 cells are filled in the window.
-    Stage E owns the formula rewrite (likely SUMPRODUCT-MAX latest-filled
-    scan to mirror EUR-side `posted_value`/`posted_idx`).
+    Under posted-cumulative cell semantics (design 2026-05-09 §1) each
+    cell already holds the running total through its month, so we need
+    the latest filled cell within the window — not a SUM, which would
+    over-count cumulative snapshots. SUMPRODUCT-MAX-INDEX latest-filled
+    scan mirrors the EUR-side ``posted_idx``/``posted_value`` pattern
+    in ``actuals.py``. ``IFERROR(...,0)`` catches ``INDEX(rng,1,0)``
+    when no postings fall within the window (yields the desired
+    "Actual PM = 0" pass-through in Capacity's ``_wp_actual_formula``).
     """
     start_cl = col_letter(month_col_start)
     end_cl = col_letter(month_col_start + months - 1)
     rng = f"${start_cl}${row}:${end_cl}${row}"
     return (
-        f"=IF(hours_actuals_through_month<=0,0,"
-        f"SUM(${start_cl}${row}:"
-        f"INDEX({rng},1,hours_actuals_through_month)))"
+        f"=IFERROR(INDEX({rng},1,"
+        f"SUMPRODUCT(MAX("
+        f"(COLUMN({rng})-COLUMN(${start_cl}$1)+1<=hours_actuals_through_month)"
+        f"*(COLUMN({rng})-COLUMN(${start_cl}$1)+1)"
+        f"*ISNUMBER({rng})"
+        f"))),0)"
     )
 
 

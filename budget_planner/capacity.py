@@ -1000,12 +1000,9 @@ def apply_capacity_todate_formulas(
 
     def _wp_actual_formula(ah_row: int) -> str:
         # Single cross-sheet ref to Actuals-Hours helper col, divided by
-        # hours_per_fte_month. The windowed SUM+INDEX lives on that helper
-        # col, not here — see design doc.
-        # FIXME(Stage E): the helper-col SUM over-counts under posted-
-        # cumulative semantics (see `actuals_hours._cum_hours_formula`);
-        # this formula inherits that over-count. Stage E rewrites the
-        # helper formula.
+        # hours_per_fte_month. The latest-filled scan lives on that
+        # helper col (posted-cumulative semantics — see
+        # `actuals_hours._cum_hours_formula`).
         return (
             f"='{SHEET_ACTUALS_HOURS}'!${cum_cl}${ah_row}"
             f"/hours_per_fte_month"

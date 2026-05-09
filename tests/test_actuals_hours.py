@@ -236,22 +236,27 @@ def test_cum_hours_header_present(hrs):
 
 
 def test_cum_hours_wp_row_formula_shape(hrs):
-    """WP rows carry a windowed SUM+INDEX formula keyed on
-    ``hours_actuals_through_month``."""
+    """WP rows carry a SUMPRODUCT-MAX-INDEX latest-filled scan keyed on
+    ``hours_actuals_through_month`` (posted-cumulative semantics — the
+    helper returns the latest filled cell, not a SUM that would
+    over-count cumulative snapshots)."""
     alice_row = _find_person_header_row(hrs, "Alice") + 1  # first WP row
     formula = hrs.cell(alice_row, CUM_HOURS_COL).value
     assert isinstance(formula, str)
-    assert formula.startswith("=IF(hours_actuals_through_month<=0,0,")
-    assert "INDEX" in formula
+    assert formula.startswith("=IFERROR(INDEX(")
+    assert "SUMPRODUCT(MAX(" in formula
+    assert "ISNUMBER(" in formula
+    assert "hours_actuals_through_month" in formula
+    assert "SUM(" not in formula  # the broken-shape regression guard
     start_cl = col_letter(MONTH_COL_START)
     end_cl = col_letter(MONTH_COL_START + PROJECT_MONTHS - 1)
     assert f"${start_cl}${alice_row}:${end_cl}${alice_row}" in formula
 
 
 def test_cum_hours_total_formula(hrs):
-    """TOTAL row also carries the windowed SUM — Capacity's aggregate path
-    doesn't need it today, but the helper col is uniform per row so
-    cross-section reads remain consistent."""
+    """TOTAL row also carries the latest-filled scan — Capacity's
+    aggregate path doesn't need it today, but the helper col is uniform
+    per row so cross-section reads remain consistent."""
     alice_header = _find_person_header_row(hrs, "Alice")
     total_row = None
     for r in range(alice_header + 1, alice_header + 30):
@@ -263,3 +268,4 @@ def test_cum_hours_total_formula(hrs):
     assert isinstance(formula, str)
     assert "hours_actuals_through_month" in formula
     assert "INDEX" in formula
+    assert "SUMPRODUCT(MAX(" in formula

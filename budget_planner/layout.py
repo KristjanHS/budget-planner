@@ -194,11 +194,12 @@ VAL_OFFSET_BREACH_PLUS_I = 12
 VAL_OFFSET_POSTED_IDX = 13
 VAL_OFFSET_POSTED_VALUE = 14
 
-# Backward-compat aliases (transitional; retire after Stage D).
-# Plan / Capacity / Actuals-Hours / Summary use "sum" semantically (row-wide
-# SUM of monthly cells). These slots are physically the same columns that
-# Actuals now repurposes for Slope / Posted. Aliases let consumers stay on
-# legacy keys until Stage D rewires them.
+# Cross-sheet column-position aliases. The same physical column slots host
+# different semantic content per sheet: Actuals uses Slope / Posted (per the
+# 2026-05-09 posted-cumulative redesign), while Plan / Capacity / Actuals-
+# Hours / Summary use the slot for row-wide monthly-SUM. Both names are
+# canonical in their own sheet's context — these aliases let each builder
+# read the slot under the name that matches its semantics.
 VAL_OFFSET_SUM = VAL_OFFSET_SLOPE
 VAL_OFFSET_SUM_PLUS_I = VAL_OFFSET_SLOPE_PLUS_I
 VAL_OFFSET_CUM = VAL_OFFSET_POSTED
@@ -251,10 +252,11 @@ def val_columns(project_months: int) -> dict[str, int]:
     +i mirrors at offsets 7..12 (``*_plus_i``). Hidden helpers
     ``posted_idx`` / ``posted_value`` at offsets 13..14 (Actuals only).
 
-    Legacy keys ``sum`` / ``cum`` / ``sum_plus_i`` / ``cum_plus_i`` are
-    transitional aliases — consumers on Plan / Capacity / Actuals-Hours /
-    Summary still use them. They resolve to the same column slots as the
-    new keys (offset 1 / 4 / 7 / 10) and will be retired in Stage D.
+    Cross-semantic keys ``sum`` / ``cum`` / ``sum_plus_i`` / ``cum_plus_i``
+    resolve to the same column slots as ``slope`` / ``posted`` (offsets
+    1 / 4 / 7 / 10). Each sheet uses the name that matches its semantic:
+    Actuals reads as ``slope`` / ``posted``, while Plan / Capacity /
+    Actuals-Hours / Summary read as ``sum`` (row-wide monthly-SUM).
     """
     end = month_col_end(project_months)
     return {
@@ -273,7 +275,8 @@ def val_columns(project_months: int) -> dict[str, int]:
         "breach_plus_i": end + VAL_OFFSET_BREACH_PLUS_I,
         "posted_idx": end + VAL_OFFSET_POSTED_IDX,
         "posted_value": end + VAL_OFFSET_POSTED_VALUE,
-        # Backward-compat aliases (retire after Stages B/C/D):
+        # Cross-semantic aliases — non-Actuals sheets use sum/cum names
+        # for the same physical column slots (see VAL_OFFSET_SUM/CUM).
         "sum": end + VAL_OFFSET_SUM,
         "sum_plus_i": end + VAL_OFFSET_SUM_PLUS_I,
         "cum": end + VAL_OFFSET_CUM,

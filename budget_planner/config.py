@@ -141,9 +141,10 @@ VAL_COL_DIFF = _vcols["diff"]
 VAL_COL_POSTED = _vcols["posted"]
 VAL_COL_PCT_CEIL = _vcols["pct_ceil"]
 VAL_COL_BREACH = _vcols["breach"]
-# Backward-compat aliases (transitional; retire as Stage D migrates the
-# remaining consumers — Plan / Capacity / Actuals-Hours / Summary).
-# Point at the same column slots.
+# Cross-semantic aliases — Plan / Capacity / Actuals-Hours / Summary read
+# this column slot as a row-wide monthly-SUM, while Actuals reads it as
+# Slope. Both names are canonical for their respective sheet contexts;
+# tests for non-Actuals sheets import the SUM/CUM forms.
 VAL_COL_SUM = VAL_COL_SLOPE
 VAL_COL_CUM = VAL_COL_POSTED
 

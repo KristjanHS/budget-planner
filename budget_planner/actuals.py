@@ -805,8 +805,4 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
         "posted_value_col": alayout["val_col_posted_value"],
         "pct_ceiling_col": alayout["val_col_pct_ceil"],
         "breach_col": alayout["val_col_breach"],
-        # Transitional alias (retire after Stage B Trends rewire):
-        # `trends.py:69` reads `actuals_layout["cum_col"]`. Same column
-        # slot as `posted_col`.
-        "cum_col": alayout["val_col_posted"],
     }

@@ -130,10 +130,17 @@ def test_slope_formula_divides_posted_value_by_posted_idx(actuals_ws, vcols):
 
 @pytest.fixture(scope="module")
 def gap_recalc_path(tmp_path_factory):
-    """Workbook seeded with an explicit ``[200, blank, 380, blank, 500]``
-    gap pattern on the first WP row, then recalc'd. Pins that the
-    SUMPRODUCT-MAX scan returns the LATEST filled month, not first-
-    filled, count-of-filled, or max-of-values.
+    """Workbook seeded with an explicit ``[fill, blank, fill, blank, fill]``
+    pattern at M1/M3/M5 on the first WP row, then recalc'd. Pins that
+    the SUMPRODUCT-MAX scan returns the LATEST filled month — not
+    first-filled, count-of-filled, or max-of-values.
+
+    The values 200/380/500 are arbitrary integers; only the *positions*
+    (M1, M3, M5) are load-bearing for the latest-scan test. The
+    ``slope=500/5=100`` assertion uses round numbers so a denominator
+    or operand-swap regression yields an obviously wrong answer (e.g.
+    swapped: 5/500=0.01), not to assert posted-cumulative value
+    semantics on the seeded numbers.
     """
     out = tmp_path_factory.mktemp("posted_gap_wb") / "gap.xlsx"
     init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
@@ -155,9 +162,16 @@ def gap_recalc_path(tmp_path_factory):
     ws.cell(row=first_wp_row, column=MONTH_COL_START + 2, value=380)    # M3
     ws.cell(row=first_wp_row, column=MONTH_COL_START + 4, value=500)    # M5
 
-    # Override the through-month strip so current_month >= 5 — the scan
-    # filter `<= current_month` only finds the M5 fill if through-month
-    # is at least 5. Ten leaves headroom over the three filled months.
+    # Override BOTH through-month controls so the SUMPRODUCT scan filter
+    # (`<= current_month`) is deterministic. The ``current_month`` named
+    # range resolves to ``Trends!$B$1`` (workbook.py Stage 5 — Trends
+    # stub). Without this, ``current_month`` is date-derived from
+    # ``project_start`` + today() and would shift over time, making the
+    # ``posted_idx=5`` assertion silently brittle. The Actuals!B1
+    # override drives ``eur_actuals_through_month`` for sibling EUR
+    # consumers; not strictly required here but kept for clarity since
+    # both control strips serve through-month overrides.
+    wb["Trends"].cell(row=1, column=2, value=10)
     ws.cell(row=1, column=2, value=10)
 
     wb.save(str(out))

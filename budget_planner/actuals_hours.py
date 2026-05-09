@@ -56,9 +56,15 @@ def _cum_hours_formula(row: int, month_col_start: int, months: int) -> str:
     the latest filled cell within the window — not a SUM, which would
     over-count cumulative snapshots. SUMPRODUCT-MAX-INDEX latest-filled
     scan mirrors the EUR-side ``posted_idx``/``posted_value`` pattern
-    in ``actuals.py``. ``IFERROR(...,0)`` catches ``INDEX(rng,1,0)``
-    when no postings fall within the window (yields the desired
-    "Actual PM = 0" pass-through in Capacity's ``_wp_actual_formula``).
+    in ``actuals.py``.
+
+    When no postings fall within the window the inner SUMPRODUCT yields
+    0; ``INDEX(rng, 1, 0)`` then returns the entire row as an array
+    (Excel) or 0 (LibreOffice). In Excel, scalar-context coercion of
+    the array reference fires ``#VALUE!``, which ``IFERROR`` catches →
+    returns 0. LibreOffice already returns 0, so IFERROR is harmless.
+    Capacity's ``_wp_actual_formula`` divides by ``hours_per_fte_month``
+    and surfaces "Actual PM = 0" cleanly under both engines.
     """
     start_cl = col_letter(month_col_start)
     end_cl = col_letter(month_col_start + months - 1)

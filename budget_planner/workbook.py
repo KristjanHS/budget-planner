@@ -385,9 +385,9 @@ def _build_all_sheets(
     )
 
     # Stage 6a — Actuals-Hours (hour timelog; depends only on config_layout).
-    # Built BEFORE Actuals so Plan-Forecast can consume its layout, and
-    # Actuals can then consume Plan-Forecast's layout for the forecast
-    # monitoring columns. Tab order is fixed up at the end of this function.
+    # Built BEFORE Plan-Forecast so the latter can SUM the forecast-EUR
+    # leaves (transitional pending Stage C — Phase 4 deletes Plan-Forecast).
+    # Tab order is fixed up at the end of this function.
     actuals_hours_ws = wb.create_sheet(SHEET_ACTUALS_HOURS)
     actuals_hours_layout = build_actuals_hours_sheet(
         actuals_hours_ws,
@@ -413,7 +413,7 @@ def _build_all_sheets(
     # Stage 6b — Plan-Forecast (aggregates forecast-EUR leaves from
     # Actuals-Hours into a WP × month grid; mirrors Plan shape).
     plan_forecast_ws = wb.create_sheet(SHEET_PLAN_FORECAST)
-    plan_forecast_layout = build_plan_forecast_sheet(
+    build_plan_forecast_sheet(
         plan_forecast_ws,
         project_params=project_params,
         work_packages=work_packages,
@@ -423,21 +423,19 @@ def _build_all_sheets(
     )
 
     # Stage 6c — Actuals (depends on plan_layout + Trends stub for
-    # current_month + plan_forecast_layout for the forecast block).
+    # current_month).
     ctx.actuals_layout = build_actuals_sheet(
         wb,
         ctx.plan_layout,
         project_params=project_params,
         work_packages=work_packages,
         preserved=preserved_actuals,
-        plan_forecast_layout=plan_forecast_layout,
         eur_through_override=preserved_eur_through_override,
     )
 
     # Stage 7 — Summary (needs plan_layout, actuals_layout, config_layout;
     # consumes Actuals!{posted_idx,posted_value,slope} for the project-end
-    # Forecast EUR column. plan_forecast_layout is accept-and-ignore until
-    # Phase 2.5 drops the wiring.)
+    # Forecast EUR column).
     ctx.summary_layout = build_summary_sheet(
         wb,
         ctx.plan_layout,
@@ -445,7 +443,6 @@ def _build_all_sheets(
         project_params=project_params,
         work_packages=work_packages,
         reporting_periods=reporting_periods,
-        plan_forecast_layout=plan_forecast_layout,
     )
 
     # Stage 8 — Trends full (needs every prior layout)
@@ -459,7 +456,6 @@ def _build_all_sheets(
         work_packages=work_packages,
         team=team,
         reporting_periods=reporting_periods,
-        plan_forecast_layout=plan_forecast_layout,
     )
 
     # Drop the scaffolding sheet(s) the caller handed us — the real sheets

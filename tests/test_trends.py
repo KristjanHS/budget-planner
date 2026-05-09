@@ -135,7 +135,9 @@ def test_burn_rate_budget_eur_formula(trends_ws):
 
 
 def test_burn_rate_delta_formula(trends_ws):
-    """Col E = D - C (Burn Delta)."""
+    """Col E = D - C (Burn Delta), short-circuited on posted_idx=0 like Col D
+    (otherwise '—' - C propagates as #VALUE! once a WP starts but has no
+    postings yet)."""
     header_row = _find_row_containing(trends_ws, 1, "WP ID")
     assert header_row is not None
     first_wp_row = header_row + 1
@@ -143,10 +145,14 @@ def test_burn_rate_delta_formula(trends_ws):
     formula = str(cell.value)
     row = first_wp_row
     assert f"D{row}-C{row}" in formula or f"D{row} - C{row}" in formula
+    assert "Actuals!" in formula and "=0" in formula, (
+        f"Col E must guard on posted_idx=0 to avoid #VALUE! propagation: {formula!r}"
+    )
 
 
 def test_burn_rate_status_formula(trends_ws):
-    """Col F has IF/ABS formula for Status."""
+    """Col F has IF/ABS formula for Status; mirrors Col D's posted_idx=0
+    short-circuit because ABS(E) propagates the upstream #VALUE! otherwise."""
     header_row = _find_row_containing(trends_ws, 1, "WP ID")
     assert header_row is not None
     first_wp_row = header_row + 1
@@ -154,6 +160,9 @@ def test_burn_rate_status_formula(trends_ws):
     formula = str(cell.value)
     assert "IF" in formula
     assert "ABS" in formula
+    assert "Actuals!" in formula and "=0" in formula, (
+        f"Col F must guard on posted_idx=0 to avoid #VALUE! propagation: {formula!r}"
+    )
 
 
 def test_burn_rate_exhaustion_formula(trends_ws):

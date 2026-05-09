@@ -247,12 +247,16 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
             f'IF({posted_idx_ref}=0,"\u2014",{budget_formula}))'
         )
 
-        # Col E: Burn Delta
+        # Col E: Burn Delta -- mirrors Col D's posted_idx=0 short-circuit
+        # because the arithmetic D-C otherwise propagates "\u2014" - C as
+        # #VALUE! once a WP starts but has no postings yet.
         style_cell(ws, row, 5, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<{wp_start},"\u2014",D{row}-C{row})'
+            f'=IF(current_month<{wp_start},"\u2014",'
+            f'IF({posted_idx_ref}=0,"\u2014",D{row}-C{row}))'
         )
 
-        # Col F: Status
+        # Col F: Status -- same posted_idx=0 short-circuit (ABS(E)
+        # propagates the upstream #VALUE! otherwise).
         status_formula = (
             f'IF(ABS(E{row})<={TREND_OK_BAND},"OK",'
             f'IF(E{row}>{TREND_OVER_THRESHOLD},"OVER",'
@@ -260,7 +264,8 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
             f'IF(E{row}<{TREND_SLOW_THRESHOLD},"SLOW","OK"))))'
         )
         style_cell(ws, row, 6, font=BLACK_FORMULA).value = (
-            f'=IF(current_month<{wp_start},"\u2014",{status_formula})'
+            f'=IF(current_month<{wp_start},"\u2014",'
+            f'IF({posted_idx_ref}=0,"\u2014",{status_formula}))'
         )
 
         # Col G: Exhaustion Mo. \u2014 projection = wp_start + ROUND(budget/slope)-1.

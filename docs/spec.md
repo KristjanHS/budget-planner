@@ -29,9 +29,9 @@ flowchart TD
   CAP --> TRENDS
 ```
 
-The diagram omits `Actuals-Hours`, `Plan-Forecast`, and `Timelog Plan`. The first two form the secondary forecast chain: Actuals-Hours forecast-EUR leaves → Plan-Forecast SUMs → Actuals forecast monitoring block / Summary Forecast EUR / Trends Cumulative Forecast. Timelog Plan is a terminal surface (Config refs in; nothing out).
+The diagram omits `Actuals-Hours` (per-person hour entry; forecast EUR derives per-WP on Actuals from posted-cumulative slope) and `Timelog Plan` (terminal — Config refs in, nothing out).
 
-User-facing tab order: **Config → Timelog Plan → Actuals-Hours → Capacity → Plan → Actuals → Plan-Forecast → Trends → Summary**. Positions 1-3 hold frequently-edited tabs.
+User-facing tab order: **Config → Timelog Plan → Actuals-Hours → Capacity → Plan → Actuals → Trends → Summary**. Positions 1-3 hold frequently-edited tabs.
 
 ---
 
@@ -44,31 +44,24 @@ The workbook records actuals on two separate cadences. Any derived view that rea
 Per-person × per-WP × per-month cells on `Actuals-Hours`.
 
 - **Granularity:** monthly, per person per WP.
-- **Entry convention:** skip-and-cumulate is valid. A user may leave intermediate months blank and enter the cumulative hours-to-date in a later month. A single-month cell is **NOT** authoritative for that month — only the running cumulative total is.
-- **Calendar-year-boundary caveat (skip-and-cumulate × EU ceiling CF):** if a skip crosses a calendar-year boundary, the cumulative dump lands in the *later* year's annual SUM, so the per-calendar-year EU ceiling CF on Actuals-Hours mis-fires on **both** years (early year underreports, late year overshoots). The cumulative figure remains correct — only the per-year colorization is misleading. Reviewers consulting the EU ceiling CF on Actuals-Hours must spot-check around year boundaries when skip-and-cumulate is in use.
-- **Trust boundary:** `hours_actuals_through_month` — named range at `'Actuals-Hours'!$D$1` (black-formula effective cell; sheet name single-quoted because of the hyphen). D1 is `=IF(ISNUMBER(B1),B1,C1)` where B1 is an optional blue-input user override and C1 is an auto-derived scan of the programme-WP hour data (largest 1-based month-index with any numeric value, external/subtotal rows excluded). Months `1..hours_actuals_through_month` are closed for hours; later months are forecast-only territory.
+- **Entry convention:** **posted-cumulative.** Each filled cell is the running total posted through that month. Blanks are allowed inside the active window (postings arrive irregularly); a single-month cell is NOT the per-month delta. The latest filled cell at-or-before `current_month` IS the currently-posted total; per-month spend is `cum_n − cum_prev` (never stored). Monotonic-non-decreasing within a row is expected but not enforced (correction postings can go backward).
+- **Trust boundary:** `hours_actuals_through_month` — named range at `'Actuals-Hours'!$D$1` (black-formula effective cell; sheet name single-quoted because of the hyphen). D1 is `=IF(ISNUMBER(B1),B1,C1)` where B1 is an optional blue-input user override and C1 is an auto-derived scan of the programme-WP hour data (largest 1-based month-index with any numeric value, external/subtotal rows excluded). **Semantic axis: sheet-wide reconciliation cutoff** (max month-index where ANY WP has a value); distinct from per-WP latest posting. Months `1..hours_actuals_through_month` are closed for hours.
 
 ### EUR cadence
 
 WP-level totals on the `Actuals` sheet.
 
 - **Granularity:** monthly, per WP (no per-person EUR on `Actuals`).
-- **Entry convention:** driven by accountant/finance close, which runs with a 2–3 month lag behind the hours timelog. Skip-and-cumulate mirrors the Hours cadence: a user may leave intermediate months blank and enter the cumulative EUR-to-date in a later month. A single-month cell is **NOT** authoritative for that month — only the running cumulative total is. The trust-boundary scan (largest month-index with any numeric value) absorbs blanks correctly; downstream rate-derivations divide by `MAX(1, eur_actuals_through_month)`, not by a populated-cell count.
-- **Trust boundary:** `eur_actuals_through_month` — named range at `Actuals!$D$1` (black-formula effective cell). D1 is `=IF(ISNUMBER(B1),B1,C1)` where B1 is an optional blue-input user override and C1 is an auto-derived scan of the WP EUR data (largest 1-based month-index with any numeric value, TOTAL row excluded). Months past this index are not yet reconciled.
+- **Entry convention:** **posted-cumulative.** Driven by accountant/finance close (2–3 month lag behind hours timelog, often quarterly catch-up postings). Each filled cell is the running EUR posted through that month. Blanks allowed inside the active window. Per-WP `Posted -i` column = latest filled cell at-or-before `current_month`; per-WP slope cell = `posted_value / posted_idx` (avg-burn) drives the per-WP forecast `posted_value + slope × (project_end − posted_idx)`.
+- **Trust boundary:** `eur_actuals_through_month` — named range at `Actuals!$D$1` (black-formula effective cell). D1 is `=IF(ISNUMBER(B1),B1,C1)` where B1 is an optional blue-input user override and C1 is an auto-derived scan of the WP EUR data (largest 1-based month-index with any numeric value, TOTAL row excluded). **Semantic axis: sheet-wide reconciliation cutoff** (max across WPs); distinct from per-WP `posted_idx` (this WP's latest filled cell).
 
 ### Derived boundary
 
 - "Reconciled through month" = `MIN(eur_actuals_through_month, hours_actuals_through_month)`. Not a named range — Trends holds the single live helper cell (`$B$<recon_section_row+4>`, black formula) and consumers on the same sheet read it via absolute ref; cross-sheet consumers inline the `MIN(...)` expression.
-- This is the authoritative boundary for any **head-to-head comparison** between Actual EUR and Forecast EUR (hours-derived). Past this month at least one side is stale or missing.
 
 ### Design principle (enforce on every new actual-side readout)
 
-No derived view reads a single-month cell as authoritative for that month. Every actual-side readout is **either**:
-
-- **(a)** a cumulative-through-a-through-month total, or
-- **(b)** a to-date **rate** (cumulative / `MAX(1, <through_month>)`, inlined).
-
-Raw monthly actual cells surface only in collapsed / clearly-labelled bands ("reliable only when hours were entered per-month"), never as the input to a derived metric.
+Cells hold posted-cumulative totals; per-month deltas are never stored. Every actual-side readout is either (a) a cumulative-through-a-through-month total or (b) a to-date rate (`cumulative / MAX(1, <through_month>)`, inlined). Raw monthly cells never feed a derived metric directly.
 
 ---
 
@@ -106,9 +99,9 @@ Programme EUR numbers come in two forms: **without-indirect** (`-i`, direct cost
 
 - **`Budget +i`** (Config `WP BUDGET` col F, green fill): the grant-agreement partner envelope with indirect folded in. The cell is a structured-reference formula `FTE Budget × Rate × 1.25` (BLACK_FORMULA — Rule 3 carve-out; hand edits reset on rebuild, edit FTE Budget or Rate instead). Authoritative blue-input fields for a WP budget are `FTE Budget` (col C) and `Rate` (col D).
 - **`Budget -i`** (Config `WP BUDGET` col E, orange fill): derived `= Budget +i / 1.25`. Preserves the numeric semantic of the retired `Ceiling` column position so deferred consumers reading Config col E keep resolving to a without-indirect number.
-- **Forecast-EUR and Actual-EUR rollups** (Actuals, Plan-Forecast, Actuals-Hours) store the accountant-native without-indirect figure as the source; `+i` mirrors wrap each `-i` source in `ROUND(x × 1.25, 0)`.
+- **Forecast-EUR and Actual-EUR rollups** (Actuals) store the accountant-native without-indirect figure as the source; `+i` mirrors wrap each `-i` source in `ROUND(x × 1.25, 0)`.
 
-**In scope:** Config `WP BUDGET`, Actuals, Plan-Forecast, Capacity (EUR cells only — Capacity is FTE-dominant, most headers keep `LIGHT_BLUE_FILL`), Actuals-Hours (Forecast-EUR band), Timelog Plan. **Deferred:** Trends, Summary, Plan keep legacy "Ceiling" wording until the follow-on overhaul; do not rewrite their EUR terminology drive-by.
+**In scope:** Config `WP BUDGET`, Actuals, Capacity (EUR cells only — Capacity is FTE-dominant, most headers keep `LIGHT_BLUE_FILL`), Timelog Plan. **Deferred:** Trends, Summary, Plan keep legacy "Ceiling" wording until the follow-on overhaul; do not rewrite their EUR terminology drive-by.
 
 **Terminology.** Use "Budget" everywhere, not "Ceiling". When quoting the grant agreement itself ("EUR ceiling per partner"), preserve the source wording as a quotation — do not rewrite regulatory text.
 
@@ -130,15 +123,15 @@ Blue = input, Black = formula, Green = cross-sheet ref. CLAUDE.md Critical Rule 
 |---|---|---|
 | `project_start` | `config_sheet.py` (Config!$B$2) | nearly every builder (date math, headers) |
 | `fte_rate` | `config_sheet.py` (Config!$B$4) | `plan.py` leaves (currently via direct Config ref; pending consolidation) |
-| `hours_actuals_through_month` | `actuals_hours.py` (`'Actuals-Hours'!$D$1`, black-formula effective `=IF(ISNUMBER(B1),B1,C1)`) | `capacity.py`, `actuals_hours.py` (greying), `plan_forecast.py` (greying), `summary.py` (partial-year shading), `trends.py` (reconciliation, NA-clipping). Inlined as `MAX(1,hours_actuals_through_month)` at every prior `months_elapsed_hours` callsite. |
-| `eur_actuals_through_month` | `actuals.py` (`Actuals!$D$1`, black-formula effective `=IF(ISNUMBER(B1),B1,C1)`) | `actuals.py` (Breach-In cumulative-slope, As-of), `summary.py`, `trends.py`. Inlined as `MAX(1,eur_actuals_through_month)` at every prior `months_elapsed_eur` callsite. |
-| `roster_lookup` | `config_sheet.py` (Team Roster cols A-D: name, Max FTE, grade, rate EUR/PM; Priority col E intentionally excluded so existing VLOOKUP indices stay stable) | `actuals_hours.py` (forecast-EUR leaves VLOOKUP col 4), `config_sheet.py` (Assignments Balance VLOOKUP col 2), `timelog_plan.py` (per-person rate helper VLOOKUP col 4) |
+| `hours_actuals_through_month` | `actuals_hours.py` (`'Actuals-Hours'!$D$1`, black-formula effective `=IF(ISNUMBER(B1),B1,C1)`) | `capacity.py`, `actuals_hours.py` (greying), `summary.py` (partial-year shading), `trends.py` (reconciliation, NA-clipping). Inlined as `MAX(1,hours_actuals_through_month)` at every prior `months_elapsed_hours` callsite. |
+| `eur_actuals_through_month` | `actuals.py` (`Actuals!$D$1`, black-formula effective `=IF(ISNUMBER(B1),B1,C1)`) | `actuals.py` (Breach-In rate-anchor, Posted through: header), `summary.py`, `trends.py`. Inlined as `MAX(1,eur_actuals_through_month)` at every prior `months_elapsed_eur` callsite. |
+| `roster_lookup` | `config_sheet.py` (Team Roster cols A-D: name, Max FTE, grade, rate EUR/PM; Priority col E intentionally excluded so existing VLOOKUP indices stay stable) | `config_sheet.py` (Assignments Balance VLOOKUP col 2), `timelog_plan.py` (per-person rate helper VLOOKUP col 4) |
 | `team_priorities` | `config_sheet.py` (Team Roster Priority col E, blue input, default 2) | `timelog_plan.py` solver fill order — priority flows in via `reader.read_team_from_config` (header scan, not name resolution). Named range reserved for future Excel-formula consumers. |
 | `current_month` | `workbook.py` Stage 5 Trends stub (Trends!$B$1, **black formula** — `=MAX(1,MIN(Config!B3, ...))`; user may overwrite with a static number). Stub written before Actuals builder runs. | `actuals.py` (Cum. EUR / Breach-In cutoff), `timelog_plan.py` (per-WP `Burn rate needed`) |
 | `timelog_rebuild_from_month` | `config_sheet.py` (Config!$B$9, blue-input integer, default `1`, `min=1 / max=999` data validation) | `reader.read_timelog_plan` returns it as `rebuild_from_month: int`; `timelog_plan.py` builder partitions `preserved_grid` and narrows solver-input |
 | `vacation_month` | `config_sheet.py` (Config!$B$7, blue input string, default `"Jul"`) | `reader.read_config_sheet` → orchestrator + `timelog_plan.py` solver. Fallback to `"Jul"` when missing. |
 | `num_vacation_months` | `config_sheet.py` (Config!$B$8, BLACK_FORMULA builder-written literal — Rule 3 carve-out) | `timelog_plan.py` PER-PERSON SUMMARY Pool formula: `=ROUND(max_fte × (project_months − num_vacation_months), 0)` |
-| `wp_budget_with_indirect` | `config_sheet.py` (`Config!$F${wp_first_row}:$F${wp_last_row}` — the `Budget +i` column) | `actuals.py`, `plan_forecast.py` (`=INDEX(wp_budget_with_indirect, i+1)` for per-WP `Budget +i` rollups), `actuals_hours.py`, `timelog_plan.py` |
+| `wp_budget_with_indirect` | `config_sheet.py` (`Config!$F${wp_first_row}:$F${wp_last_row}` — the `Budget +i` column) | `actuals.py`, `actuals_hours.py`, `timelog_plan.py` |
 | `version_stamp` | `config_sheet.py` (Config!$B$10) | (informational) |
 
 **Reader/builder round-trip rule**: readers use named ranges (not coordinates); tolerate internal blanks; rebuild must preserve user-authored values on blue input cells.
@@ -173,19 +166,19 @@ Every WP has exactly one `(start, end)` pair (cols H/I of WP BUDGET). The reader
 Cross-sheet formulas (Plan's `=SUM(Capacity!...)`, Trends person-load refs, Summary aggregations) index by row position, so row order is a contract not an accident.
 
 - **Capacity person order matches Config TEAM ROSTER order.** Adding a roster row shifts every downstream Capacity person group.
-- **Plan WP row order matches Config WP BUDGET order.** Same for Actuals, Plan-Forecast, Summary.
+- **Plan WP row order matches Config WP BUDGET order.** Same for Actuals, Summary.
 - **Capacity per-person WP rows are ordered by Config PERSON-WP ASSIGNMENTS** for that person (intersection filter — not all WPs), further reduced to assignments with non-zero `total_fte`. Zero-FTE assignments stay in the Config auditor table but their per-person grid row is suppressed on Capacity AND Actuals-Hours so the row-order mirror invariant holds. Empty-window intersection rows (non-zero `total_fte` but the assignment window has no overlap with the WP active range) still render as all-grey rows — out of scope for the zero-FTE filter.
-- **Actuals-Hours person + WP row order mirrors Capacity at the WP rows.** Actuals-Hours carries an extra EU TOTAL row beneath each person's TOTAL (the EU-ceiling enforcement surface, dropped from Capacity 2026-04-28); cross-sheet refs from Capacity to Actuals-Hours target WP row positions, never EU TOTAL.
+- **Actuals-Hours person + WP row order mirrors Capacity at the WP rows.**
 
 ### Per-person Capacity geometry
 
-Per-person sequence: header → WP rows (assigned only) → external rows → TOTAL. REMAINING + EU TOTAL dropped 2026-04-28: REMAINING < 0 folded onto TOTAL > Max FTE (same red); per-year EU ceiling enforcement lives only on Actuals-Hours's EU TOTAL. The shared `person_section.plan_person_layout` helper still supports `include_eu_total=True` — Actuals-Hours opts in, Capacity passes False.
+Per-person sequence: header → WP rows (assigned only) → external rows → TOTAL. REMAINING < 0 folds onto TOTAL > Max FTE (same red). EU per-year ceiling enforcement was dropped 2026-05-09 along with Plan-Forecast deletion — manual compliance check now.
 
 ---
 
 ## Inactive-month rule
 
-On every sheet with monthly data (Capacity, Plan, Actuals, Actuals-Hours, Plan-Forecast), months outside the intersection of the assignment window `[Start, End]` and the WP's single-range active months are **greyed and empty**. Distribution curves must never leak FTE into out-of-range months. Auditors reject PM logged outside a WP's active range.
+On every sheet with monthly data (Capacity, Plan, Actuals, Actuals-Hours), months outside the intersection of the assignment window `[Start, End]` and the WP's single-range active months are **greyed and empty**. Distribution curves must never leak FTE into out-of-range months. Auditors reject PM logged outside a WP's active range.
 
 ---
 
@@ -343,7 +336,6 @@ Don't change without updating this mapping.
 | Timelog Plan | Orange (FF8C00) | Prescriptive 1.0-FTE WP allocation — distinct from Plan/Capacity |
 | Actuals | Blue (0000FF) | EUR input from accountant |
 | Actuals-Hours | Red (C00000) | Hours input — primary hours surface |
-| Plan-Forecast | Green (00B050) | Read-only aggregation (green = formula-derived) |
 | Summary | Green (008000) | Read-only aggregation |
 | Trends | Gold (FFD700) | PM dashboard |
 

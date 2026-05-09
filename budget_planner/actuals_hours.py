@@ -50,6 +50,14 @@ def _cum_hours_formula(row: int, month_col_start: int, months: int) -> str:
     Written on the Capacity-consumed ``cum_hours_col`` as a single helper
     so Capacity can reference one cell per row instead of rebuilding a
     cross-sheet SUM+INDEX.
+
+    FIXME(Stage E): under posted-cumulative semantics (per design 2026-05-09 §1)
+    each cell already holds the running total through its month, so SUMming
+    them across the window over-counts. Capacity's `_wp_actual_formula`
+    (capacity.py) divides this by hours_per_fte_month and surfaces an
+    over-counted Actual PM whenever ≥2 cells are filled in the window.
+    Stage E owns the formula rewrite (likely SUMPRODUCT-MAX latest-filled
+    scan to mirror EUR-side `posted_value`/`posted_idx`).
     """
     start_cl = col_letter(month_col_start)
     end_cl = col_letter(month_col_start + months - 1)
@@ -322,7 +330,7 @@ def build_actuals_hours_sheet(
     month_col_end = _month_col_end(months)
     _vcols = val_columns(months)
     val_col_sum = _vcols["sum"]
-    # Cum-hours helper column (one gutter after the Sum validation col).
+    # Cum-hours helper column: blank spacer at val_col_sum+1, helper at +2.
     # Capacity's to-date Actual PM references this cell divided by
     # hours_per_fte_month (see design doc 2026-04-14-t5).
     cum_hours_col = val_col_sum + 2

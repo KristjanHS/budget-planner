@@ -2,8 +2,6 @@
 
 import re
 
-from openpyxl.utils import get_column_letter
-
 from budget_planner.layout import (
     MONTH_COL_START,
     SECTION_HEADER_LABELS,
@@ -24,15 +22,13 @@ def read_actuals_hours_sheet(
 
     Anchors on the "WP ID" month-header row, then walks person groups. Each
     person section starts with a merged A:B header whose col A holds the
-    literal person name (written as a literal, not a formula, so the
-    forecast-EUR VLOOKUP works under ``data_only``). Under each person, WP
-    rows carry ``=Config!A{n}`` in col A; external rows carry a literal
-    project name. TOTAL rows are skipped.
+    literal person name (written as a literal, not a formula, for stable
+    behavior under ``data_only`` reads). Under each person, WP rows carry
+    ``=Config!A{n}`` in col A; external rows carry a literal project name.
+    TOTAL rows are skipped.
 
-    Columns with ``outline_level >= 1`` belong to the collapsible Forecast
-    EUR band — those are derived formulas, never user input, so they are
-    skipped when reading monthly values. Tolerates internal blank rows
-    inside a person section (per the rebuild shape-drift design).
+    Tolerates internal blank rows inside a person section (per the rebuild
+    shape-drift design).
 
     Args:
         ws: Actuals-Hours worksheet.
@@ -57,14 +53,11 @@ def read_actuals_hours_sheet(
     # begin strictly below it.
     month_header_row = _find_header_row(ws, SECTION_HEADER_LABELS["wp_id_column"])
 
-    # Pre-compute the set of hour columns (skip outline-level >= 1 columns
-    # — those are the forecast-EUR band mirror, recomputed on rebuild).
-    hour_cols: list[int] = []
-    for mi in range(project_months):
-        col = month_col_start + mi
-        if ws.column_dimensions[get_column_letter(col)].outline_level >= 1:
-            continue
-        hour_cols.append(col)
+    # Hour columns span the full month grid — no outline-grouped derived
+    # columns interleave the user-input cells on Actuals-Hours.
+    hour_cols: list[int] = [
+        month_col_start + mi for mi in range(project_months)
+    ]
 
     # ── Find person header rows ──
     # Convention (actuals_hours.py): person headers are A:B merged with a

@@ -44,8 +44,9 @@ class TestCapacityConditionalFormatting:
     """Capacity sheet CF: yellow per WP variance + 2 per person (amber/red TOTAL).
 
     REMAINING + EU TOTAL rows dropped from Capacity (2026-04-28); per-year EU
-    ceiling CF lives on Actuals-Hours only. REMAINING < 0 CF folded onto
-    TOTAL > Max FTE (still red, single rule per person)."""
+    ceiling CF on Actuals-Hours deleted in the posted-cumulative redesign
+    (2026-05-09); EU compliance is now a manual check. REMAINING < 0 CF
+    folded onto TOTAL > Max FTE (still red, single rule per person)."""
 
     def test_capacity_rule_count(self, workbook):
         """Planned-side CF + Actual-view band CF + simplified to-date CF.

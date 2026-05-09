@@ -843,8 +843,9 @@ def build_config_sheet(ws, wb, project_params, work_packages,
         param_rows["EU Annual Ceiling (PM/FTE/year)"]: (
             "Maximum person-months a team member may charge to EU-funded "
             "projects per calendar year — across ALL EU grants, not just "
-            "this one. Drives the Capacity EU TOTAL per-year conditional "
-            "formatting and the EU ceiling pro-rated check."
+            "this one. Used for the EU ceiling pro-rated check; per-year "
+            "conditional formatting was removed in the 2026-05-09 redesign, "
+            "so EU compliance is now a manual check."
         ),
         param_rows["Hours per FTE Month"]: (
             "Convention for how many hours equal 1 person-month of "

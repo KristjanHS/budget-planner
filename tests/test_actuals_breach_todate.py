@@ -11,8 +11,9 @@ Posted-cumulative redesign (2026-05-09):
 - Per-WP Breach -i = `(Budget - Posted) / (Posted / MAX(1, eur_actuals_through_month))`
   guarded by `IF(posted_idx=0, "", IF(Posted=0, "—", ...))`. The forecast
   monitoring block was deleted; hours-side breach lives on Actuals-Hours
-  now (Phase 3 — Stage D). The Actuals-Hours side header still reads
-  "As of:" until Stage D ships.
+  (Stage D shipped 2026-05-09 commit `db2ce14`). The Actuals-Hours header
+  reads "Hours Actuals Through Month:" — different label from the Actuals
+  EUR sheet's "Posted through:", retained as-is across Stage D.
 """
 import openpyxl
 import pytest

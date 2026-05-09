@@ -1,11 +1,18 @@
-"""Actuals Breach In cumulative-slope + As-of header tests.
+"""Actuals Breach In posted-cumulative-slope + Posted-through header tests.
 
 Post 2026-04-18 Config-through-month cleanup:
-- Actual + Forecast Breach In formulas inline ``MAX(1, eur_actuals_through_month)``
-  / ``MAX(1, hours_actuals_through_month)`` (derived ``months_elapsed_*``
-  named ranges were dropped).
+- Breach In formula inlines ``MAX(1, eur_actuals_through_month)``
+  (derived ``months_elapsed_*`` named ranges were dropped).
 - Row 1 holds the through-month override strip (label / override / auto /
-  effective). The "As of" header row shifted from row 1 to row 2.
+  effective). The "Posted through:" header row shifted from row 1 to
+  row 2.
+
+Posted-cumulative redesign (2026-05-09):
+- Per-WP Breach -i = `(Budget - Posted) / (Posted / MAX(1, eur_actuals_through_month))`
+  guarded by `IF(posted_idx=0, "", IF(Posted=0, "—", ...))`. The forecast
+  monitoring block was deleted; hours-side breach lives on Actuals-Hours
+  now (Phase 3 — Stage D). The Actuals-Hours side header still reads
+  "As of:" until Stage D ships.
 """
 import openpyxl
 import pytest
@@ -13,7 +20,6 @@ import pytest
 from budget_planner.config import (
     VAL_COL_BREACH,
 )
-from budget_planner.layout import forecast_val_columns
 
 
 @pytest.fixture(scope="module")
@@ -56,16 +62,6 @@ def test_actual_wp_breach_uses_eur_actuals_through_month(actuals_ws):
     assert "current_month" not in formula, formula
 
 
-def test_forecast_wp_breach_uses_hours_actuals_through_month(actuals_ws):
-    """Per-WP Forecast Breach In inlines MAX(1,hours_actuals_through_month)."""
-    from budget_planner.config import PROJECT_MONTHS
-    fcols = forecast_val_columns(PROJECT_MONTHS)
-    row = _find_first_wp_row(actuals_ws)
-    formula = str(actuals_ws.cell(row, fcols["breach_forecast"]).value)
-    assert "MAX(1,hours_actuals_through_month)" in formula, formula
-    assert "current_month" not in formula, formula
-
-
 def test_total_actual_breach_uses_eur_actuals_through_month(actuals_ws):
     """TOTAL row Actual Breach In inlines MAX(1,eur_actuals_through_month)."""
     row = _find_total_row(actuals_ws)
@@ -74,47 +70,27 @@ def test_total_actual_breach_uses_eur_actuals_through_month(actuals_ws):
     assert "current_month" not in formula, formula
 
 
-def test_total_forecast_breach_uses_hours_actuals_through_month(actuals_ws):
-    """TOTAL row Forecast Breach In inlines MAX(1,hours_actuals_through_month)."""
-    from budget_planner.config import PROJECT_MONTHS
-    fcols = forecast_val_columns(PROJECT_MONTHS)
-    row = _find_total_row(actuals_ws)
-    formula = str(actuals_ws.cell(row, fcols["breach_forecast"]).value)
-    assert "MAX(1,hours_actuals_through_month)" in formula, formula
-    assert "current_month" not in formula, formula
-
-
 # ── "As of" header row ──
 
 
-def test_asof_header_actual_block(actuals_ws):
-    """Row 2 col B = 'As of:', col C = green EDATE(project_start, eur_actuals_through_month - 1).
+def test_posted_through_header_actual_block(actuals_ws):
+    """Row 2 col B = 'Posted through:', col C = green
+    EDATE(project_start, eur_actuals_through_month - 1).
 
-    Row 1 now holds the through-month override strip; the "As of" header
-    shifted to row 2. Through-month cells are integer month indices; EDATE
-    turns them into a calendar date so the header reads "As of: Apr 2026"
-    rather than the Excel serial-date rendering of a small integer.
+    Row 1 holds the through-month override strip; the "Posted through:"
+    header sits on row 2. Posted-cumulative redesign (2026-05-09)
+    renamed the legacy "As of:" label to match the per-WP "Posted -i"
+    column convention. Through-month cells are integer month indices;
+    EDATE turns them into a calendar date so the header reads
+    "Posted through: Apr 2026" rather than the Excel serial-date
+    rendering of a small integer.
     """
-    assert actuals_ws.cell(2, 2).value == "As of:"
+    assert actuals_ws.cell(2, 2).value == "Posted through:"
     date_cell = actuals_ws.cell(2, 3)
     formula = str(date_cell.value)
     assert formula.startswith("=EDATE(project_start"), formula
     assert "eur_actuals_through_month" in formula, formula
     # Green cross-sheet-ref font (color 008000)
-    rgb = getattr(getattr(date_cell.font, "color", None), "rgb", None)
-    assert rgb is not None and str(rgb).upper().endswith("008000"), rgb
-
-
-def test_asof_header_forecast_block(actuals_ws):
-    """Row 2 at col_cum_forecast = 'As of:', next col = green EDATE hours formula."""
-    from budget_planner.config import PROJECT_MONTHS
-    fcols = forecast_val_columns(PROJECT_MONTHS)
-    col_cum_forecast = fcols["cum_forecast"]
-    assert actuals_ws.cell(2, col_cum_forecast).value == "As of:"
-    date_cell = actuals_ws.cell(2, col_cum_forecast + 1)
-    formula = str(date_cell.value)
-    assert formula.startswith("=EDATE(project_start"), formula
-    assert "hours_actuals_through_month" in formula, formula
     rgb = getattr(getattr(date_cell.font, "color", None), "rgb", None)
     assert rgb is not None and str(rgb).upper().endswith("008000"), rgb
 
@@ -141,8 +117,9 @@ def test_row_ordering_is_consistent(actuals_ws):
     total = _find_total_row(actuals_ws)
     # Row 1 is the through-month override strip (A1 label).
     assert actuals_ws.cell(1, 1).value == "EUR Actuals Through Month:"
-    # As-of row shifted to row 2.
-    assert actuals_ws.cell(2, 2).value == "As of:"
+    # "Posted through:" header row (renamed from "As of:" in the
+    # posted-cumulative redesign 2026-05-09).
+    assert actuals_ws.cell(2, 2).value == "Posted through:"
     # Section header split by T3 (indirect-view restructure 2026-04-22)
     # into "ACTUAL EUR -i" (cols 1..breach) + "ACTUAL EUR +i" (cols
     # sum_pi..breach_pi) merged regions on row 3; col 1 anchors the -i

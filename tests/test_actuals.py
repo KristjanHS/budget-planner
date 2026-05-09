@@ -4,8 +4,8 @@ import openpyxl
 
 from budget_planner.config import (
     WORK_PACKAGES, NUM_WPS, MONTH_COL_START,
-    VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
-    VAL_COL_CUM, VAL_COL_PCT_CEIL, VAL_COL_BREACH,
+    VAL_COL_SLOPE, VAL_COL_BUDGET, VAL_COL_DIFF,
+    VAL_COL_POSTED, VAL_COL_PCT_CEIL, VAL_COL_BREACH,
 )
 from budget_planner.layout import wp_month_bounds
 from budget_planner.styles import col_letter
@@ -85,8 +85,9 @@ def test_actuals_inactive_months_empty(actuals_workbook):
             f"M{m+1} should have grey fill"
 
 
-def test_actuals_sum_formula(actuals_workbook):
-    """Sum validation column has SUM formula."""
+def test_actuals_slope_formula(actuals_workbook):
+    """Slope -i is the avg-burn formula posted_value/posted_idx, guarded
+    by IF(posted_idx=0, "", ...) per posted-cumulative design §3."""
     ws = actuals_workbook["Actuals"]
     first_wp_row = None
     for r in range(1, ws.max_row + 1):
@@ -94,8 +95,11 @@ def test_actuals_sum_formula(actuals_workbook):
             first_wp_row = r + 1
             break
     assert first_wp_row is not None
-    cell = ws.cell(first_wp_row, VAL_COL_SUM)
-    assert cell.value and str(cell.value).startswith("=SUM(")
+    cell = ws.cell(first_wp_row, VAL_COL_SLOPE)
+    formula = str(cell.value)
+    assert formula.startswith("=IF("), formula
+    # /0 guard: posted_idx=0 → ""
+    assert '=0,""' in formula, formula
 
 
 def test_actuals_ceiling_refs_plan(actuals_workbook):
@@ -112,7 +116,8 @@ def test_actuals_ceiling_refs_plan(actuals_workbook):
 
 
 def test_actuals_variance_formula(actuals_workbook):
-    """Variance = Ceiling - Sum."""
+    """Variance -i = Budget -i - Posted -i (guarded by IF(posted_idx=0,
+    \"\", ...))."""
     ws = actuals_workbook["Actuals"]
     first_wp_row = None
     for r in range(1, ws.max_row + 1):
@@ -123,8 +128,8 @@ def test_actuals_variance_formula(actuals_workbook):
     cell = ws.cell(first_wp_row, VAL_COL_DIFF)
     formula = str(cell.value)
     budget_col = col_letter(VAL_COL_BUDGET)
-    sum_col = col_letter(VAL_COL_SUM)
-    assert budget_col in formula and sum_col in formula
+    posted_col = col_letter(VAL_COL_POSTED)
+    assert budget_col in formula and posted_col in formula
 
 
 def test_actuals_total_ceiling_uses_named_range(actuals_workbook):
@@ -167,27 +172,30 @@ def _find_year_row(ws):
     return None
 
 
-def test_actuals_cum_eur_formula(actuals_workbook):
-    """First WP row at VAL_COL_CUM has SUMPRODUCT formula with current_month."""
+def test_actuals_posted_eur_formula(actuals_workbook):
+    """First WP row at VAL_COL_POSTED is IFERROR(INDEX(grid, posted_idx),
+    \"\") — the latest filled cumulative through current_month per
+    posted-cumulative design §2."""
     ws = actuals_workbook["Actuals"]
     first_wp_row = _find_first_wp_row(ws)
     assert first_wp_row is not None
-    cell = ws.cell(first_wp_row, VAL_COL_CUM)
+    cell = ws.cell(first_wp_row, VAL_COL_POSTED)
     formula = str(cell.value)
-    assert "SUMPRODUCT" in formula
-    assert "current_month" in formula
+    assert formula.startswith("=IFERROR(INDEX("), formula
+    assert ',"")' in formula, formula
 
 
 def test_actuals_pct_ceiling_formula(actuals_workbook):
-    """First WP row at VAL_COL_PCT_CEIL divides cum by ceiling."""
+    """First WP row at VAL_COL_PCT_CEIL divides Posted by Budget (guarded
+    by IF(posted_idx=0, \"\", ...))."""
     ws = actuals_workbook["Actuals"]
     first_wp_row = _find_first_wp_row(ws)
     assert first_wp_row is not None
     cell = ws.cell(first_wp_row, VAL_COL_PCT_CEIL)
     formula = str(cell.value)
-    cum_l = col_letter(VAL_COL_CUM)
+    posted_l = col_letter(VAL_COL_POSTED)
     ceil_l = col_letter(VAL_COL_BUDGET)
-    assert cum_l in formula and ceil_l in formula
+    assert posted_l in formula and ceil_l in formula
 
 
 def test_actuals_breach_formula(actuals_workbook):
@@ -206,16 +214,18 @@ def test_actuals_breach_formula(actuals_workbook):
     assert "MAX(1,eur_actuals_through_month)" in formula
 
 
-def test_actuals_cum_headers(actuals_workbook):
-    """Year row has -i Cum EUR / % of Budget / Breach-In headers at the
-    legacy -i positions. T3 renamed ``Cum. EUR``/``% Ceiling``/``Breach
-    In`` to ``Cum EUR -i``/``% of Budget -i``/``Breach-In -i`` and added
-    +i mirrors at offsets 10/11/12 (covered by separate asserts below).
+def test_actuals_posted_headers(actuals_workbook):
+    """Year row has -i Posted / % of Budget / Breach-In headers at the
+    -i positions. Posted-cumulative redesign (2026-05-09) renamed
+    ``Cum EUR -i`` → ``Posted -i`` (matching cell convention shift to
+    posted-cumulative); ``% of Budget -i`` / ``Breach-In -i`` headers
+    are unchanged. +i mirrors at offsets 10/11/12 covered by a sibling
+    assert below.
     """
     ws = actuals_workbook["Actuals"]
     year_row = _find_year_row(ws)
     assert year_row is not None
-    assert ws.cell(year_row, VAL_COL_CUM).value == "Cum EUR -i"
+    assert ws.cell(year_row, VAL_COL_POSTED).value == "Posted -i"
     assert ws.cell(year_row, VAL_COL_PCT_CEIL).value == "% of Budget -i"
     assert ws.cell(year_row, VAL_COL_BREACH).value == "Breach-In -i"
 
@@ -224,17 +234,22 @@ def test_actuals_cum_headers(actuals_workbook):
 
 
 def test_actuals_plus_i_headers(actuals_workbook):
-    """+i mirror block headers carry the '+i' suffix in the year row."""
+    """+i mirror block headers carry the '+i' suffix in the year row.
+
+    Posted-cumulative redesign renamed Sum/Cum → Slope/Posted on both
+    -i and +i sides; the four other +i headers (Budget / Variance /
+    % of Budget / Breach-In) are unchanged.
+    """
     from budget_planner.layout import val_columns
     from budget_planner.config import PROJECT_MONTHS
     ws = actuals_workbook["Actuals"]
     year_row = _find_year_row(ws)
     assert year_row is not None
     vcols = val_columns(PROJECT_MONTHS)
-    assert ws.cell(year_row, vcols["sum_plus_i"]).value == "Sum +i"
+    assert ws.cell(year_row, vcols["slope_plus_i"]).value == "Slope +i"
     assert ws.cell(year_row, vcols["budget_plus_i"]).value == "Budget +i"
     assert ws.cell(year_row, vcols["diff_plus_i"]).value == "Variance +i"
-    assert ws.cell(year_row, vcols["cum_plus_i"]).value == "Cum EUR +i"
+    assert ws.cell(year_row, vcols["posted_plus_i"]).value == "Posted +i"
     assert ws.cell(year_row, vcols["pct_ceil_plus_i"]).value == "% of Budget +i"
     assert ws.cell(year_row, vcols["breach_plus_i"]).value == "Breach-In +i"
 
@@ -254,31 +269,35 @@ def test_actuals_plus_i_header_fills(actuals_workbook):
         return str(cell.fill.fgColor.rgb).upper() if cell.fill.fgColor else ""
 
     # +i mirror cols use light-green fill
-    for key in ("sum_plus_i", "budget_plus_i", "diff_plus_i",
-                "cum_plus_i", "pct_ceil_plus_i", "breach_plus_i"):
+    for key in ("slope_plus_i", "budget_plus_i", "diff_plus_i",
+                "posted_plus_i", "pct_ceil_plus_i", "breach_plus_i"):
         assert _fg(ws.cell(year_row, vcols[key])).endswith("E2EFDA"), (
             f"col {key} expected WITH_INDIRECT_HEADER_FILL (E2EFDA), "
             f"got {_fg(ws.cell(year_row, vcols[key]))}"
         )
     # -i rollup cols use pale-orange fill
-    for key in ("sum", "budget", "diff", "cum", "pct_ceil", "breach"):
+    for key in ("slope", "budget", "diff", "posted", "pct_ceil", "breach"):
         assert _fg(ws.cell(year_row, vcols[key])).endswith("FBE5D6"), (
             f"col {key} expected WITHOUT_INDIRECT_HEADER_FILL (FBE5D6), "
             f"got {_fg(ws.cell(year_row, vcols[key]))}"
         )
 
 
-def test_actuals_sum_plus_i_formula_multiplies_by_1_25(actuals_workbook):
-    """Sum +i = ROUND(Sum -i * 1.25, 0) per D3 + openpyxl.md EUR rule."""
+def test_actuals_slope_plus_i_formula_multiplies_by_1_25(actuals_workbook):
+    """Slope +i = ROUND(Slope -i * 1.25, 0) per D3 + openpyxl.md EUR
+    rule, guarded by IF(posted_idx=0, \"\", ...) so empty (no postings)
+    surfaces as blank in the +i mirror."""
     from budget_planner.layout import val_columns
     from budget_planner.config import PROJECT_MONTHS
     ws = actuals_workbook["Actuals"]
     first_wp_row = _find_first_wp_row(ws)
     assert first_wp_row is not None
     vcols = val_columns(PROJECT_MONTHS)
-    formula = str(ws.cell(first_wp_row, vcols["sum_plus_i"]).value)
-    sum_minus_l = col_letter(vcols["sum"])
-    assert formula == f"=ROUND({sum_minus_l}{first_wp_row}*1.25,0)", formula
+    formula = str(ws.cell(first_wp_row, vcols["slope_plus_i"]).value)
+    slope_minus_l = col_letter(vcols["slope"])
+    # Format: =IF(<idx_l>{r}=0,"",ROUND(<slope_l>{r}*1.25,0))
+    assert f"ROUND({slope_minus_l}{first_wp_row}*1.25,0)" in formula, formula
+    assert formula.startswith("=IF("), formula
 
 
 def test_actuals_budget_plus_i_uses_named_range(actuals_workbook):
@@ -310,24 +329,27 @@ def _col_outline_level(ws, col_idx):
 
 
 def test_actuals_minus_i_band_outline_level(actuals_workbook):
-    """Monthly -i grid + -i rollups + forecast -i siblings sit in
-    outline band at level 1 (collapsed by default via hidden=True)."""
+    """Monthly -i grid + -i visible rollups + hidden helpers sit in the
+    outline band at level 1 (collapsed by default via hidden=True).
+
+    Posted-cumulative redesign (2026-05-09) replaced the forecast
+    monitoring block with two hidden helpers (posted_idx,
+    posted_value) that join the band; +i mirrors stay outside.
+    """
     from budget_planner.layout import (
-        MONTH_COL_START, val_columns, forecast_val_columns,
+        MONTH_COL_START, val_columns,
         month_col_end as _mce,
     )
     from budget_planner.config import PROJECT_MONTHS
     ws = actuals_workbook["Actuals"]
     vcols = val_columns(PROJECT_MONTHS)
-    fcols = forecast_val_columns(PROJECT_MONTHS)
     mce = _mce(PROJECT_MONTHS)
 
     inside = (
         *range(MONTH_COL_START, mce + 1),
-        vcols["sum"], vcols["budget"], vcols["diff"],
-        vcols["cum"], vcols["pct_ceil"], vcols["breach"],
-        fcols["cum_forecast"], fcols["var_forecast"],
-        fcols["pct_ceil_forecast"], fcols["breach_forecast"],
+        vcols["slope"], vcols["budget"], vcols["diff"],
+        vcols["posted"], vcols["pct_ceil"], vcols["breach"],
+        vcols["posted_idx"], vcols["posted_value"],
     )
     for col in inside:
         lvl = _col_outline_level(ws, col)
@@ -338,10 +360,8 @@ def test_actuals_minus_i_band_outline_level(actuals_workbook):
 
     # +i mirrors stay outside the outline band
     outside = (
-        vcols["sum_plus_i"], vcols["budget_plus_i"], vcols["diff_plus_i"],
-        vcols["cum_plus_i"], vcols["pct_ceil_plus_i"], vcols["breach_plus_i"],
-        fcols["cum_forecast_plus_i"], fcols["var_forecast_plus_i"],
-        fcols["pct_ceil_forecast_plus_i"], fcols["breach_forecast_plus_i"],
+        vcols["slope_plus_i"], vcols["budget_plus_i"], vcols["diff_plus_i"],
+        vcols["posted_plus_i"], vcols["pct_ceil_plus_i"], vcols["breach_plus_i"],
     )
     for col in outside:
         lvl = _col_outline_level(ws, col)
@@ -351,15 +371,21 @@ def test_actuals_minus_i_band_outline_level(actuals_workbook):
         )
 
 
-def test_actuals_total_cum_formula(actuals_workbook):
-    """TOTAL row at VAL_COL_CUM has SUMPRODUCT formula."""
+def test_actuals_total_posted_formula(actuals_workbook):
+    """TOTAL row at VAL_COL_POSTED is =SUM over the per-WP Posted column.
+
+    Posted-cumulative redesign (2026-05-09) replaced the per-WP
+    SUMPRODUCT-current_month-mask with the visible Posted -i column
+    (latest filled cumulative through current_month). At the TOTAL
+    level, aggregation is a simple SUM; the IFERROR-empty-string
+    sentinel from per-WP cells coerces to 0 inside SUM.
+    """
     ws = actuals_workbook["Actuals"]
     total_row = _find_total_row(ws)
     assert total_row is not None
-    cell = ws.cell(total_row, VAL_COL_CUM)
+    cell = ws.cell(total_row, VAL_COL_POSTED)
     formula = str(cell.value)
-    assert "SUMPRODUCT" in formula
-    assert "current_month" in formula
+    assert formula.startswith("=SUM("), formula
 
 
 def test_actuals_total_pct_ceiling_uses_partner_ceiling(actuals_workbook):

@@ -225,8 +225,11 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
         )
 
         # Col D: % Budget EUR
+        # Stage A bandage: Posted -i now returns "" for "no postings yet" (design §2);
+        # the +0/IFERROR wrapper coerces "" → 0 until Stage B rewires Trends to read
+        # posted_value / posted_idx / slope cells directly.
         budget_formula = (
-            f"{SHEET_ACTUALS}!{cum_col_letter}{actuals_row}"
+            f"IFERROR({SHEET_ACTUALS}!{cum_col_letter}{actuals_row}+0,0)"
             f"/{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
         )
         style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="0.0%").value = (
@@ -250,12 +253,13 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
         )
 
         # Col G: Exhaustion Mo.
+        # Stage A bandage: Posted -i empty-string sentinel coerced to 0 (see Col D note).
         exhaustion_formula = (
             f"IF(D{row}=0,\"\u2014\","
             f"IF(COUNTIF({actuals_month_range},\">0\")=0,\"No data\","
             f"{wp_start}+ROUND("
             f"{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
-            f"/({SHEET_ACTUALS}!{cum_col_letter}{actuals_row}"
+            f"/(IFERROR({SHEET_ACTUALS}!{cum_col_letter}{actuals_row}+0,0)"
             f"/COUNTIF({actuals_month_range},\">0\")),0)-1))"
         )
         style_cell(ws, row, 7, font=BLACK_FORMULA, fmt="0").value = (

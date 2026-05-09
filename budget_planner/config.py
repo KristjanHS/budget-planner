@@ -134,12 +134,18 @@ from budget_planner.layout import MONTH_COL_START, val_columns as _val_columns  
 NUM_WPS = len(WORK_PACKAGES)
 MONTH_COL_END = MONTH_COL_START + PROJECT_MONTHS - 1
 _vcols = _val_columns(PROJECT_MONTHS)
-VAL_COL_SUM = _vcols["sum"]
+# Posted-cumulative redesign (current naming):
+VAL_COL_SLOPE = _vcols["slope"]
 VAL_COL_BUDGET = _vcols["budget"]
 VAL_COL_DIFF = _vcols["diff"]
-VAL_COL_CUM = _vcols["cum"]
+VAL_COL_POSTED = _vcols["posted"]
 VAL_COL_PCT_CEIL = _vcols["pct_ceil"]
 VAL_COL_BREACH = _vcols["breach"]
+# Backward-compat aliases (transitional; retire as Stages B/C/D migrate the
+# remaining consumers — Plan / Capacity / Actuals-Hours / Plan-Forecast /
+# Summary). Point at the same column slots.
+VAL_COL_SUM = VAL_COL_SLOPE
+VAL_COL_CUM = VAL_COL_POSTED
 
 
 def default_project_params():

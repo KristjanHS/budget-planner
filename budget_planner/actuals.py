@@ -6,7 +6,7 @@ sheet trust boundary (``eur_actuals_through_month`` named range at
 ``Actuals!$D$1``) and the through-month / two-cadence rules are
 canonical in ``docs/spec.md`` § Two-cadence actuals. Posted-cumulative
 redesign rationale:
-``docs/plans/2026-05-09-actuals-posted-cumulative-design.md``.
+``docs/plans/archived/2026-05-09-actuals-posted-cumulative-design.md``.
 
 ## Per-WP columns (in display order)
 
@@ -229,7 +229,7 @@ def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved,
     posted through that month (blank = no posting recorded). Visible
     Posted -i / Slope -i / Variance / % / Breach -i columns are derived
     from the two hidden helper cells (posted_idx, posted_value); see
-    ``docs/plans/2026-05-09-actuals-posted-cumulative-design.md`` § 2.
+    ``docs/plans/archived/2026-05-09-actuals-posted-cumulative-design.md`` § 2.
     """
     month_col_start = alayout["month_col_start"]
     month_col_end = alayout["month_col_end"]

@@ -1,8 +1,8 @@
 # Actuals posted-cumulative — implementation plan
 
 **Date:** 2026-05-09
-**Status:** Draft (Phase 1 spec rewrite already shipped — commit `06f122e`)
-**Design ref:** `docs/plans/2026-05-09-actuals-posted-cumulative-design.md`
+**Status:** SHIPPED 2026-05-09 (Stages A-E all closed; archived 2026-05-10)
+**Design ref:** `docs/plans/archived/2026-05-09-actuals-posted-cumulative-design.md`
 
 Implements the design's §"Implementation plan" deferred work: phasing, module-by-module re-work audit, test disposition. Spec is already ahead of code (§"Phase 1 SHIPPED" in the design doc) — phases below bring code to match.
 

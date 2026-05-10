@@ -172,7 +172,7 @@ EXT_LAST_COL = 6
 # Actuals semantic: offset 1 = Slope (avg-burn = posted_value/posted_idx);
 # offset 4 = Posted (latest-filled cumulative through current_month).
 # Posted-cumulative redesign (2026-05-09) replaced Sum/Cum on the Actuals
-# sheet — see ``docs/plans/2026-05-09-actuals-posted-cumulative-design.md``.
+# sheet — see ``docs/plans/archived/2026-05-09-actuals-posted-cumulative-design.md``.
 VAL_OFFSET_SLOPE = 1
 VAL_OFFSET_BUDGET = 2
 VAL_OFFSET_DIFF = 3

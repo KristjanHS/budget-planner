@@ -63,6 +63,10 @@ WP-level totals on the `Actuals` sheet.
 
 Cells hold posted-cumulative totals; per-month deltas are never stored. Every actual-side readout is either (a) a cumulative-through-a-through-month total or (b) a to-date rate (`cumulative / MAX(1, <through_month>)`, inlined). Raw monthly cells never feed a derived metric directly.
 
+### Trends `Cumulative Forecast` line — 2 anchor cells per WP
+
+The Trends chart's per-WP forecast line is driven by exactly two black-formula anchor cells: `(posted_idx, posted_value)` and `(project_end, MAX(0, posted_value + slope × (project_end − posted_idx)))`. Excel/LO interpolates the linear segment. **No per-month helper grid** — a line plotted from N evenly-spaced points equals the line plotted from its 2 endpoints; the grid was solving a non-problem. When `posted_idx = 0` (no postings yet) the cells emit `NA()` so the chart skips the WP entirely.
+
 ---
 
 ## Plan vs Timelog Plan — two allocation surfaces

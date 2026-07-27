@@ -1,5 +1,14 @@
 # Actuals `+i` columns render blank — diagnosis + fix design
 
+> **SUPERSEDED (mechanism only) — see `2026-07-27-isnumber-array-context-excel-fix.md` (docs/plans/).**
+> This doc's causal claim that **`COLUMN(range)` needs CSE array entry is DISPROVEN**: under a
+> `SUMPRODUCT` wrapper `COLUMN(range)` array-evaluates fine in Excel. The actual culprit in the same
+> formulas is **`ISNUMBER(range)`**, which gets no array context outside CSE and is not rescued by the
+> `SUMPRODUCT` wrapper. The shipped work described below (the CSE-free rewrite of `posted_idx` and the
+> `Actuals!C1` scan, and the recalc gate) STANDS and is still correct — only the stated mechanism, and
+> anything reasoned from it, is wrong. Wherever this doc says "`COLUMN(range)` needs CSE", read
+> "`ISNUMBER(range)` needs CSE".
+
 **Date:** 2026-07-27
 **Status:** diagnosis confirmed; recalc-gate fix shipped; formula fix has an OPEN decision (needs Excel verification)
 **Evidence file:** `tmp/budget_plan.xlsx` (user's Excel-saved workbook; gitignored)
@@ -28,7 +37,9 @@ Excel's own cached values in the user's file:
 Data present: WP1 `G6` = €4 884 (M5), `K6` = €7 500 (M9); WP2–WP4 likewise.
 `current_month` (`Trends!B1`) = 9, so both postings are inside the window.
 
-**Mechanism.** `COLUMN(range)` only returns the full N-element array under CSE array entry
+**Mechanism.** *(DISPROVEN — see the SUPERSEDED banner: it is `ISNUMBER(range)`, not `COLUMN(range)`,
+that loses array context here; `COLUMN(range)` under `SUMPRODUCT` is fine.)*
+`COLUMN(range)` only returns the full N-element array under CSE array entry
 (Ctrl+Shift+Enter). openpyxl cannot emit the `t="array"` flag — and Excel confirms it treated
 these as ordinary formulas by rewriting them as *shared* formulas (`t="shared"`, no array
 marker). Under plain entry, legacy `COLUMN(range)` degenerates to its first column, so the
@@ -42,7 +53,8 @@ no array expression — which is why it alone survives. Exactly the reported pic
 **This is the trap already documented in `.claude/rules/openpyxl.md`** ("LibreOffice handles all
 approaches; always verify in Excel"). LibreOffice array-evaluates everything, so the idiom
 looked correct in every LO-recalced test. `COLUMN(range)` is the one piece of the
-`SUMPRODUCT(MAX(…))` idiom that still needs CSE.
+`SUMPRODUCT(MAX(…))` idiom that still needs CSE. *(DISPROVEN — the CSE-needing piece is
+`ISNUMBER(range)`; see the SUPERSEDED banner.)*
 
 ### Confirmation test (30 s, in Excel)
 
@@ -209,8 +221,11 @@ module hardcodes an `Actuals!<row>` reference (`grep` for cross-sheet Actuals ro
 
 ### Explicitly OUT of scope this session
 
-`actuals_hours.py:86`, `actuals_hours.py:455`, `trends.py:538` keep the CSE-dependent `COLUMN()` idiom
-and **remain broken in Excel**. Also deferred: the `D1`→`B1` literal move, the static `COLUMN(`-in-
+`actuals_hours.py:86`, `actuals_hours.py:455`, `trends.py:538` keep the CSE-dependent idiom
+and **remain broken in Excel**. *(Stale as of f47297d: `trends.py:538` was FIXED there — it now uses
+`(range<>"")`. The two `actuals_hours.py` sites are still broken and are allowlisted as Stage B in
+`tests/test_formula_array_context_guard.py`. The CSE-dependent piece is `ISNUMBER(range)`, not
+`COLUMN()`.)* Also deferred: the `D1`→`B1` literal move, the static `COLUMN(`-in-
 `SUMPRODUCT` guard (Next-action 4a — the sparse-postings *behavioural* test already exists and cannot
 catch this class), and the LibreOffice no-op investigation.
 

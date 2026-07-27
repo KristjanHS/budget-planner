@@ -174,6 +174,13 @@ def test_through_month_strip_formulas_on_actuals_hours(actuals_hours_ws_demo):
     subtotal + TOTAL rows) would leave exactly one term and fail this
     check. Covers IF-precedence inversion too (D1 formula asserted
     verbatim).
+
+    Stage B / ``KNOWN_CSE_GAPS``: this shape is BROKEN in Excel — the
+    ``ISNUMBER(range)`` term gets no array context outside CSE, so the
+    auto scan evaluates to 0. The assertions below pin the shape as
+    currently emitted, not as a working contract. See
+    ``2026-07-27-isnumber-array-context-excel-fix.md`` (docs/plans/)
+    § Stage B.
     """
     assert actuals_hours_ws_demo.cell(1, 1).value == "Hours Actuals Through Month:"
     auto = str(actuals_hours_ws_demo.cell(1, 3).value)

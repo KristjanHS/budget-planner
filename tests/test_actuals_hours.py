@@ -214,7 +214,15 @@ def test_cum_hours_wp_row_formula_shape(hrs):
     """WP rows carry a SUMPRODUCT-MAX-INDEX latest-filled scan keyed on
     ``hours_actuals_through_month`` (posted-cumulative semantics — the
     helper returns the latest filled cell, not a SUM that would
-    over-count cumulative snapshots)."""
+    over-count cumulative snapshots).
+
+    Stage B / ``KNOWN_CSE_GAPS``: this shape is BROKEN in Excel — the
+    ``ISNUMBER(range)`` term gets no array context outside CSE, so the
+    scan evaluates to 0. The assertions below pin the shape as currently
+    emitted, not as a working contract. See
+    ``2026-07-27-isnumber-array-context-excel-fix.md`` (docs/plans/)
+    § Stage B.
+    """
     alice_row = _find_person_header_row(hrs, "Alice") + 1  # first WP row
     formula = hrs.cell(alice_row, CUM_HOURS_COL).value
     assert isinstance(formula, str)

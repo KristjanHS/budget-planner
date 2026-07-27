@@ -18,6 +18,7 @@ class PersonGridContext:
     orchestrator's pre-loop computations; bundling them avoids threading
     8 kwargs through every person-loop call site.
     """
+
     work_packages: list[dict]
     external_commitments: list[dict]
     wp_active_map: dict[str, frozenset[int]]
@@ -72,8 +73,7 @@ def plan_person_layout(
     )
 
 
-def filter_zero_fte_wps(person_assignments: list[dict],
-                         ordered_wp_ids: list[str]) -> list[str]:
+def filter_zero_fte_wps(person_assignments: list[dict], ordered_wp_ids: list[str]) -> list[str]:
     """Drop WP IDs whose Config PERSON-WP ASSIGNMENT row has total_fte == 0.
 
     Q2.1 = (a)-only suppression: zero-FTE assignments stay in the Config
@@ -83,8 +83,7 @@ def filter_zero_fte_wps(person_assignments: list[dict],
     overlap with the WP active range) is NOT addressed here — those rows
     still render as all-grey. See plan 2026-04-28 § Risks.
     """
-    zero_fte = {asgn["wp"] for asgn in person_assignments
-                if asgn.get("total_fte", 0) == 0}
+    zero_fte = {asgn["wp"] for asgn in person_assignments if asgn.get("total_fte", 0) == 0}
     return [wp for wp in ordered_wp_ids if wp not in zero_fte]
 
 

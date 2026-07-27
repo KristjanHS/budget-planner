@@ -11,10 +11,13 @@ import pytest
 import openpyxl
 
 from budget_planner.layout import (
-    _calendar_year_groups, val_columns,
+    _calendar_year_groups,
+    val_columns,
 )
 from budget_planner.config import (
-    NUM_WPS, PROJECT_MONTHS, PROJECT_START,
+    NUM_WPS,
+    PROJECT_MONTHS,
+    PROJECT_START,
 )
 from budget_planner.styles import col_letter
 
@@ -51,6 +54,7 @@ def _find_actuals_first_wp_row(ws):
 
 # Structure
 
+
 def test_summary_has_four_cols_per_year(summary_wb):
     """Sub-headers row: each year group has 4 cols ending in 'Var €'."""
     ws = summary_wb["Summary"]
@@ -66,10 +70,7 @@ def test_summary_has_four_cols_per_year(summary_wb):
         base = _YEAR_GROUP_START + y * _COLS_PER_YEAR
         labels = [ws.cell(sub_row, base + i).value for i in range(4)]
         # Phase 2.3: per-year Fcst € slot retired.
-        assert labels == ["Plan FTE", "Plan €", "Act €",
-                          "Var €"], (
-            f"Year {y}: unexpected sub-header labels {labels}"
-        )
+        assert labels == ["Plan FTE", "Plan €", "Act €", "Var €"], f"Year {y}: unexpected sub-header labels {labels}"
 
 
 def test_summary_forecast_eur_references_actuals_posted_cells(summary_wb):
@@ -93,8 +94,7 @@ def test_summary_forecast_eur_references_actuals_posted_cells(summary_wb):
             break
     assert sub_row is not None
     assert ws.cell(sub_row, _FORECAST_COL).value == "Forecast €", (
-        f"Expected 'Forecast €' header at col {_FORECAST_COL}, got "
-        f"{ws.cell(sub_row, _FORECAST_COL).value!r}"
+        f"Expected 'Forecast €' header at col {_FORECAST_COL}, got {ws.cell(sub_row, _FORECAST_COL).value!r}"
     )
 
     for i in range(NUM_WPS):
@@ -102,28 +102,19 @@ def test_summary_forecast_eur_references_actuals_posted_cells(summary_wb):
         actuals_row = actuals_first_wp + i
         cell = ws.cell(row, _FORECAST_COL)
         formula = cell.value
-        assert isinstance(formula, str), (
-            f"WP{i}: Forecast EUR cell is not a formula: {formula!r}"
-        )
+        assert isinstance(formula, str), f"WP{i}: Forecast EUR cell is not a formula: {formula!r}"
         # Must reference all three Actuals cells for this WP.
         assert f"Actuals!{posted_idx_l}{actuals_row}" in formula, (
-            f"WP{i} forecast formula missing posted_idx ref "
-            f"Actuals!{posted_idx_l}{actuals_row}: {formula}"
+            f"WP{i} forecast formula missing posted_idx ref Actuals!{posted_idx_l}{actuals_row}: {formula}"
         )
         assert f"Actuals!{posted_value_l}{actuals_row}" in formula, (
             f"WP{i} forecast formula missing posted_value ref: {formula}"
         )
-        assert f"Actuals!{slope_l}{actuals_row}" in formula, (
-            f"WP{i} forecast formula missing slope ref: {formula}"
-        )
-        assert "project_months" in formula, (
-            f"WP{i} forecast formula missing project_months named range: "
-            f"{formula}"
-        )
+        assert f"Actuals!{slope_l}{actuals_row}" in formula, f"WP{i} forecast formula missing slope ref: {formula}"
+        assert "project_months" in formula, f"WP{i} forecast formula missing project_months named range: {formula}"
         # Empty-sentinel guard: =0 then "" branch.
         assert "=0," in formula and '""' in formula, (
-            f"WP{i} forecast formula missing IF posted_idx=0 empty sentinel: "
-            f"{formula}"
+            f"WP{i} forecast formula missing IF posted_idx=0 empty sentinel: {formula}"
         )
 
 
@@ -136,6 +127,5 @@ def test_summary_forecast_eur_is_green_cross_sheet(summary_wb):
     assert color is not None
     rgb = color.rgb
     assert rgb is not None and str(rgb).endswith("008000"), (
-        f"Expected green font (008000) on project-end Forecast EUR, "
-        f"got {rgb!r}"
+        f"Expected green font (008000) on project-end Forecast EUR, got {rgb!r}"
     )

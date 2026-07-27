@@ -16,11 +16,33 @@ last_verified: 2026-04-24
 ## Plan archival
 - Plans representing a single shipped session (≤ 1 day end-to-end, all commits reference the plan path or feature name): `git rm`, don't `git mv`. Git log is the audit trail; the archived md is a second copy. Archive only plans whose design rationale isn't fully captured in commit messages or in `docs/spec.md`.
 
-Shipped plans left in `docs/plans/` root auto-load into future sessions and masquerade as active work. When `/impag` (or any plan-survey step) finds a plan fully shipped, `git mv` it into `docs/plans/archived/` the same session — don't just note shipped status and move on.
-Before `git mv`: grep the plan path across `budget_planner/**`, `tests/**`, `docs/**`, `CLAUDE.md` and update references to `docs/plans/archived/<filename>.md`. Verify `.claudeignore` names `archived/` (this project's convention, not `archive/`). If a sibling plan references the archived one with conditional/status language (`"Doc A pending"`, `"if X ships first"`, `"either can ship first"`), the condition has resolved — resolve sibling status notes and post-archive diff-list section headers to state the realized order concretely, not as a hypothetical.
-Before `git mv`ing a design doc to `archived/`, grep §Design content against `docs/spec.md`. Any load-bearing fact not present is merge-debt — migrate first. Walk each §section — vocabulary grep hits upstream §s but misses downstream rendering rationale. Do NOT archive plans marked "approved but not implemented" — those are still active even if dormant. (Non-duplication / `→ see X §Y` pointer hygiene is enforced at write-time by `.claude/hooks/docs-bloat-gate.py` — see CLAUDE.md Critical Rule 7.)
+Shipped plans left in `docs/plans/` root auto-load into future sessions and masquerade as active work. When `/impag` (or any plan-survey step) finds a plan fully shipped, `git mv` it into `docs/plans/archive/` the same session — don't just note shipped status and move on.
+Before `git mv`: grep the plan path across `budget_planner/**`, `tests/**`, `docs/**`, `CLAUDE.md` and update references to `docs/plans/archive/<filename>.md`. Verify `.claudeignore` names `archive/` — the global convention, adopted here 2026-07-27 (was `archived/`; old refs may survive in `docs/analysis/`). If a sibling plan references the archived one with conditional/status language (`"Doc A pending"`, `"if X ships first"`, `"either can ship first"`), the condition has resolved — resolve sibling status notes and post-archive diff-list section headers to state the realized order concretely, not as a hypothetical.
+Before `git mv`ing a design doc to `archive/`, grep §Design content against `docs/spec.md`. Any load-bearing fact not present is merge-debt — migrate first. Walk each §section — vocabulary grep hits upstream §s but misses downstream rendering rationale. Do NOT archive plans marked "approved but not implemented" — those are still active even if dormant. Non-duplication / `→ see X §Y` pointer hygiene is unenforced — no hook checks it; `docs-bloat-gate.py` only emits advisory slop/density nudges and never inspected pointers.
 If the plan has working-tree amendments (e.g. a §0 resolution note added in the archiving session), `git add <plan>` the amendment BEFORE `git mv` — `git mv` stages the rename against HEAD content, silently dropping uncommitted working-tree edits. The archive commit then ships without the amendment and the audit-trail content is lost.
-When a multi-stage split IS warranted (gate in `## When to write a plan doc`): one file per stage under `docs/plans/`, each sized to fit a 200k-token session context. Write `<date>-<feature>-stage-A.md`, `-stage-B.md`, … plus a short `<date>-<feature>-overview.md` index if useful; cross-reference between files. Single-stage plans stay in one file (Design + Plan + Corrections sections in place, as before). Archive rule (`git mv` to `archived/` after ship) applies per-stage file. No `-v2-` / `-enhancements-` version siblings — amend in place with a changelog entry inside the same stage file.
+
+**Pathspec BOTH halves of the rename.** `git mv` stages a delete plus an add; a commit pathspec naming only `docs/plans/archive/<stem>.md` commits the add and leaves the delete staged — the doc then exists at both paths and still auto-loads. List the old path too.
+
+**Gate the `git mv` on `git merge-base --is-ancestor <sha> main`.** Archived ≠ landed: a worktree can archive commits that never reached `main`.
+
+**Worktree ships, sync archives.** When the last stage ships from a linked worktree, "same session" is impossible — the commits reach `main` only at `make syncwt`. The shipping session records the plan as archive-pending in `project_state`; the landing session re-checks each landed stem (`git log --grep <stem>` all on `main`, only a USER-owed confirm left) and does the `git mv` there.
+
+## Cite plan docs by stem, not path
+
+Cite by filename stem — `2026-04-25-prose-rules-to-hooks-audit.md`, never the `docs/plans/`-prefixed path. Archiving then changes the path without dangling any ref. If a directory hint helps, point at the directory, and always at `docs/plans/`, never `docs/plans/archive/` — a repoint into the archive re-breaks on the next move. Canonical form: `<stem>.md (docs/plans/)`. Binds prose and code docstrings alike; a script that *reads* a plan file globs the basename across both `docs/plans/` and `docs/plans/archive/` and hardcodes neither.
+
+## Deleting a SECTION HEADING dangles refs exactly like deleting a file
+
+Nothing warns — the file still resolves. When a restructure merges or renames `##` headings, grep inbound section cites and repoint them **in the same commit**; run it repo-wide, `docs/plans/` included (active AND archived).
+
+**Use this form verbatim — the wildcard is load-bearing:**
+
+```
+grep -rn "<file-stem>.\{0,3\}§" --include=*.md --include=*.py
+```
+
+`.\{0,3\}` must stay a **dot** (any char) and the stem must include `.md`. Real cites read `` `plan-hygiene.md` §Claims `` — a closing backtick sits between the stem and the `§`, so a "tightened" variant like `[^ ]\{0,3\}\s*§` matches nothing and reports a false all-clear.
+When a multi-stage split IS warranted (gate in `## When to write a plan doc`): one file per stage under `docs/plans/`, each sized to fit a 200k-token session context. Write `<date>-<feature>-stage-A.md`, `-stage-B.md`, … plus a short `<date>-<feature>-overview.md` index if useful; cross-reference between files. Single-stage plans stay in one file (Design + Plan + Corrections sections in place, as before). Archive rule (`git mv` to `archive/` after ship) applies per-stage file. No `-v2-` / `-enhancements-` version siblings — amend in place with a changelog entry inside the same stage file.
 
 ## Doc hygiene
 Session-generated audits, analyses, and reports go in `docs/analysis/` (already in `.claudeignore` — keeps them out of auto-loaded context). The `docs/` root is for trigger-indexed reference docs listed in CLAUDE.md. Don't drop one-off session outputs into the reference tier.

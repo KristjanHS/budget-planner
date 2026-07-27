@@ -28,17 +28,32 @@ from openpyxl.chart.series import Series, SeriesLabel
 from openpyxl.formatting.rule import FormulaRule
 
 from budget_planner.layout import (
-    MONTH_COL_START, SHEET_PLAN, SHEET_CONFIG, SHEET_ACTUALS, SHEET_CAPACITY,
-    TREND_OK_BAND, TREND_OVER_THRESHOLD, TREND_WATCH_THRESHOLD, TREND_SLOW_THRESHOLD,
-    COL_WP_START, COL_WP_END,
-    month_col_end as _month_col_end, val_columns,
+    MONTH_COL_START,
+    SHEET_PLAN,
+    SHEET_CONFIG,
+    SHEET_ACTUALS,
+    SHEET_CAPACITY,
+    TREND_OK_BAND,
+    TREND_OVER_THRESHOLD,
+    TREND_WATCH_THRESHOLD,
+    TREND_SLOW_THRESHOLD,
+    COL_WP_START,
+    COL_WP_END,
+    month_col_end as _month_col_end,
+    val_columns,
     wp_month_bounds,
 )
 from openpyxl.utils import get_column_letter
 from budget_planner.styles import (
-    BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
-    LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
-    CENTER, style_cell, col_letter, write_section_header,
+    BLACK_FORMULA,
+    GREEN_XREF,
+    HEADER_FONT,
+    LIGHT_BLUE_FILL,
+    LIGHT_GREEN_FILL,
+    CENTER,
+    style_cell,
+    col_letter,
+    write_section_header,
     auto_fit_columns,
     sized_comment,
 )
@@ -49,8 +64,7 @@ from budget_planner.styles import CF_AMBER_FILL as _AMBER_CF_FILL
 from budget_planner.styles import CF_RED_FILL as _RED_CF_FILL
 
 
-def _resolve_trends_layout(layout, actuals_layout, project_params, work_packages,
-                           team):
+def _resolve_trends_layout(layout, actuals_layout, project_params, work_packages, team):
     """Resolve every column letter and row anchor for the Trends sheet
     into a single dict consumed by the helpers below.
 
@@ -183,16 +197,21 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
 
     # Column headers (row 4)
     headers = [
-        "WP ID", "WP Name", "% Time Elapsed", "% Budget EUR",
-        "Burn Delta", "Status", "Exhaustion Mo.",
+        "WP ID",
+        "WP Name",
+        "% Time Elapsed",
+        "% Budget EUR",
+        "Burn Delta",
+        "Status",
+        "Exhaustion Mo.",
     ]
     for ci, h in enumerate(headers, 1):
-        style_cell(ws, header_row, ci, h, font=HEADER_FONT,
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
+        style_cell(ws, header_row, ci, h, font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
     # Cell comment on Exhaustion Mo. header
-    ws.cell(row=header_row, column=7).comment = sized_comment("Projection is linear based on quarterly actuals. "
-        "Accuracy improves after Q2.")
+    ws.cell(row=header_row, column=7).comment = sized_comment(
+        "Projection is linear based on quarterly actuals. Accuracy improves after Q2."
+    )
 
     # WP data rows
     for i, wp in enumerate(work_packages):
@@ -213,13 +232,10 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
         wp_end = f"{SHEET_CONFIG}!{wp_end_col_letter}{config_row}"
 
         # Col C: % Time Elapsed
-        time_formula = (
-            f"MIN(1,(current_month-{wp_start}+1)"
-            f"/({wp_end}-{wp_start}+1))"
-        )
-        style_cell(ws, row, 3, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<{wp_start},"\u2014",{time_formula})'
-        )
+        time_formula = f"MIN(1,(current_month-{wp_start}+1)/({wp_end}-{wp_start}+1))"
+        style_cell(
+            ws, row, 3, font=BLACK_FORMULA, fmt="0.0%"
+        ).value = f'=IF(current_month<{wp_start},"\u2014",{time_formula})'
 
         # Col D: % Budget EUR
         # Stage A bandage: Posted -i now returns "" for "no postings yet" (design §2);
@@ -227,33 +243,24 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
         # posted_value / posted_idx / slope cells directly.
         # Cross-sheet refs to the per-WP posted-cumulative helpers on
         # Actuals (Phase 2.4 rewire \u2014 replaces Stage A `cum_col` bandage).
-        posted_idx_ref = (
-            f"{SHEET_ACTUALS}!{posted_idx_col_letter}{actuals_row}"
-        )
-        posted_value_ref = (
-            f"{SHEET_ACTUALS}!{posted_value_col_letter}{actuals_row}"
-        )
+        posted_idx_ref = f"{SHEET_ACTUALS}!{posted_idx_col_letter}{actuals_row}"
+        posted_value_ref = f"{SHEET_ACTUALS}!{posted_value_col_letter}{actuals_row}"
         slope_ref = f"{SHEET_ACTUALS}!{slope_col_letter}{actuals_row}"
 
         # Col D: posted_value is "" when posted_idx=0 (design \u00a72
         # sentinel) -- outer guard on posted_idx=0 -> "\u2014" so
         # the division never sees the empty-string sentinel.
-        budget_formula = (
-            f"{posted_value_ref}"
-            f"/{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
-        )
-        style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<{wp_start},"\u2014",'
-            f'IF({posted_idx_ref}=0,"\u2014",{budget_formula}))'
-        )
+        budget_formula = f"{posted_value_ref}/{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
+        style_cell(
+            ws, row, 4, font=BLACK_FORMULA, fmt="0.0%"
+        ).value = f'=IF(current_month<{wp_start},"\u2014",IF({posted_idx_ref}=0,"\u2014",{budget_formula}))'
 
         # Col E: Burn Delta -- mirrors Col D's posted_idx=0 short-circuit
         # because the arithmetic D-C otherwise propagates "\u2014" - C as
         # #VALUE! once a WP starts but has no postings yet.
-        style_cell(ws, row, 5, font=BLACK_FORMULA, fmt="0.0%").value = (
-            f'=IF(current_month<{wp_start},"\u2014",'
-            f'IF({posted_idx_ref}=0,"\u2014",D{row}-C{row}))'
-        )
+        style_cell(
+            ws, row, 5, font=BLACK_FORMULA, fmt="0.0%"
+        ).value = f'=IF(current_month<{wp_start},"\u2014",IF({posted_idx_ref}=0,"\u2014",D{row}-C{row}))'
 
         # Col F: Status -- same posted_idx=0 short-circuit (ABS(E)
         # propagates the upstream #VALUE! otherwise).
@@ -263,10 +270,9 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
             f'IF(E{row}>{TREND_WATCH_THRESHOLD},"WATCH",'
             f'IF(E{row}<{TREND_SLOW_THRESHOLD},"SLOW","OK"))))'
         )
-        style_cell(ws, row, 6, font=BLACK_FORMULA).value = (
-            f'=IF(current_month<{wp_start},"\u2014",'
-            f'IF({posted_idx_ref}=0,"\u2014",{status_formula}))'
-        )
+        style_cell(
+            ws, row, 6, font=BLACK_FORMULA
+        ).value = f'=IF(current_month<{wp_start},"\u2014",IF({posted_idx_ref}=0,"\u2014",{status_formula}))'
 
         # Col G: Exhaustion Mo. \u2014 projection = wp_start + ROUND(budget/slope)-1.
         # Per design \u00a73 the canonical burn rate is the per-project-month
@@ -284,9 +290,9 @@ def _write_burn_rate_table(ws, tlayout, layout, actuals_layout, work_packages):
             f"{SHEET_ACTUALS}!{ceiling_col_letter}{actuals_row}"
             f"/{slope_ref},0)-1))"
         )
-        style_cell(ws, row, 7, font=BLACK_FORMULA, fmt="0").value = (
-            f'=IF(current_month<{wp_start},"\u2014",{exhaustion_formula})'
-        )
+        style_cell(
+            ws, row, 7, font=BLACK_FORMULA, fmt="0"
+        ).value = f'=IF(current_month<{wp_start},"\u2014",{exhaustion_formula})'
 
     _ = num_wps  # parity hint: helper width drives WP loop count
 
@@ -304,38 +310,66 @@ def _apply_burn_rate_cf(ws, tlayout, work_packages):
     e_ref = f"E{first_wp_data_row}"
 
     # Green first (lowest priority) — ABS(delta) <= TREND_OK_BAND
-    ws.conditional_formatting.add(e_range, FormulaRule(
-        formula=[f'ABS({e_ref})<={TREND_OK_BAND}'], fill=_GREEN_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        e_range,
+        FormulaRule(
+            formula=[f"ABS({e_ref})<={TREND_OK_BAND}"],
+            fill=_GREEN_CF_FILL,
+        ),
+    )
     # Amber: overspend (delta > TREND_WATCH_THRESHOLD AND delta <= TREND_OVER_THRESHOLD)
-    ws.conditional_formatting.add(e_range, FormulaRule(
-        formula=[f'AND({e_ref}>{TREND_WATCH_THRESHOLD},{e_ref}<={TREND_OVER_THRESHOLD})'], fill=_AMBER_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        e_range,
+        FormulaRule(
+            formula=[f"AND({e_ref}>{TREND_WATCH_THRESHOLD},{e_ref}<={TREND_OVER_THRESHOLD})"],
+            fill=_AMBER_CF_FILL,
+        ),
+    )
     # Amber: underspend (delta < TREND_SLOW_THRESHOLD)
-    ws.conditional_formatting.add(e_range, FormulaRule(
-        formula=[f'{e_ref}<{TREND_SLOW_THRESHOLD}'], fill=_AMBER_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        e_range,
+        FormulaRule(
+            formula=[f"{e_ref}<{TREND_SLOW_THRESHOLD}"],
+            fill=_AMBER_CF_FILL,
+        ),
+    )
     # Red: delta > TREND_OVER_THRESHOLD
-    ws.conditional_formatting.add(e_range, FormulaRule(
-        formula=[f'{e_ref}>{TREND_OVER_THRESHOLD}'], fill=_RED_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        e_range,
+        FormulaRule(
+            formula=[f"{e_ref}>{TREND_OVER_THRESHOLD}"],
+            fill=_RED_CF_FILL,
+        ),
+    )
 
     # -- Conditional formatting: Status (col F, rows 5-12) --
     f_range = f"F{first_wp_data_row}:F{last_wp_data_row}"
     f_ref = f"F{first_wp_data_row}"
 
     # Green: "OK"
-    ws.conditional_formatting.add(f_range, FormulaRule(
-        formula=[f'{f_ref}="OK"'], fill=_GREEN_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        f_range,
+        FormulaRule(
+            formula=[f'{f_ref}="OK"'],
+            fill=_GREEN_CF_FILL,
+        ),
+    )
     # Amber: "WATCH" or "SLOW"
-    ws.conditional_formatting.add(f_range, FormulaRule(
-        formula=[f'OR({f_ref}="WATCH",{f_ref}="SLOW")'], fill=_AMBER_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        f_range,
+        FormulaRule(
+            formula=[f'OR({f_ref}="WATCH",{f_ref}="SLOW")'],
+            fill=_AMBER_CF_FILL,
+        ),
+    )
     # Red: "OVER"
-    ws.conditional_formatting.add(f_range, FormulaRule(
-        formula=[f'{f_ref}="OVER"'], fill=_RED_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        f_range,
+        FormulaRule(
+            formula=[f'{f_ref}="OVER"'],
+            fill=_RED_CF_FILL,
+        ),
+    )
 
     # -- Conditional formatting: Exhaustion Month (col G) — per WP row --
     # Each WP has a different end month; use literal value from wp_month_bounds()
@@ -347,27 +381,29 @@ def _apply_burn_rate_cf(ws, tlayout, work_packages):
         g_cell = f"G{row}:G{row}"
         g_ref = f"G{row}"
         # Green first: exhaustion >= wp_end
-        ws.conditional_formatting.add(g_cell, FormulaRule(
-            formula=[f'AND(ISNUMBER({g_ref}),{g_ref}>={wp_end_val})'],
-            fill=_GREEN_CF_FILL,
-        ))
+        ws.conditional_formatting.add(
+            g_cell,
+            FormulaRule(
+                formula=[f"AND(ISNUMBER({g_ref}),{g_ref}>={wp_end_val})"],
+                fill=_GREEN_CF_FILL,
+            ),
+        )
         # Amber: exhaustion within 3 months of wp_end
-        ws.conditional_formatting.add(g_cell, FormulaRule(
-            formula=[
-                f'AND(ISNUMBER({g_ref}),'
-                f'{g_ref}<{wp_end_val},'
-                f'{g_ref}>={wp_end_val}-3)'
-            ],
-            fill=_AMBER_CF_FILL,
-        ))
+        ws.conditional_formatting.add(
+            g_cell,
+            FormulaRule(
+                formula=[f"AND(ISNUMBER({g_ref}),{g_ref}<{wp_end_val},{g_ref}>={wp_end_val}-3)"],
+                fill=_AMBER_CF_FILL,
+            ),
+        )
         # Red: exhaustion < wp_end - 3
-        ws.conditional_formatting.add(g_cell, FormulaRule(
-            formula=[
-                f'AND(ISNUMBER({g_ref}),'
-                f'{g_ref}<{wp_end_val}-3)'
-            ],
-            fill=_RED_CF_FILL,
-        ))
+        ws.conditional_formatting.add(
+            g_cell,
+            FormulaRule(
+                formula=[f"AND(ISNUMBER({g_ref}),{g_ref}<{wp_end_val}-3)"],
+                fill=_RED_CF_FILL,
+            ),
+        )
 
 
 def _write_burn_rate_total(ws, tlayout, actuals_layout):
@@ -380,8 +416,7 @@ def _write_burn_rate_total(ws, tlayout, actuals_layout):
 
     # -- TOTAL row --
     style_cell(ws, total_row, 1, "", fill=LIGHT_GREEN_FILL)
-    style_cell(ws, total_row, 2, "TOTAL", font=HEADER_FONT,
-               fill=LIGHT_GREEN_FILL)
+    style_cell(ws, total_row, 2, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 3, "", fill=LIGHT_GREEN_FILL)
     style_cell(ws, total_row, 4, "", fill=LIGHT_GREEN_FILL)
     # Weighted average burn delta — individual IF() terms avoid text*number #VALUE!
@@ -389,12 +424,8 @@ def _write_burn_rate_total(ws, tlayout, actuals_layout):
     for i in range(num_wps):
         wr = first_wp_data_row + i
         ar = act_first + i
-        terms.append(
-            f"IF(ISNUMBER(E{wr}),E{wr}*{SHEET_ACTUALS}!"
-            f"{ceiling_col_letter}{ar},0)"
-        )
-    style_cell(ws, total_row, 5, font=BLACK_FORMULA,
-               fill=LIGHT_GREEN_FILL, fmt="0.0%").value = (
+        terms.append(f"IF(ISNUMBER(E{wr}),E{wr}*{SHEET_ACTUALS}!{ceiling_col_letter}{ar},0)")
+    style_cell(ws, total_row, 5, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="0.0%").value = (
         "=(" + "+".join(terms) + ")/partner_ceiling"
     )
     style_cell(ws, total_row, 6, "", fill=LIGHT_GREEN_FILL)
@@ -439,35 +470,30 @@ def _write_reconciliation_section(ws, tlayout, layout, actuals_layout):
     # rows at default row height), so the Reconciliation block starts at
     # chart_anchor_row + 14 (immediately after the chart).
     write_section_header(
-        ws, recon_section_row,
-        "RECONCILIATION: FORECAST vs ACTUAL EUR", merge_end=5,
+        ws,
+        recon_section_row,
+        "RECONCILIATION: FORECAST vs ACTUAL EUR",
+        merge_end=5,
     )
 
     # Health row 1: Actuals EUR through — green cross-sheet (named range → Config)
-    style_cell(ws, recon_health_eur_through_row, 1,
-               value="Actuals EUR through", font=HEADER_FONT)
-    style_cell(ws, recon_health_eur_through_row, 2,
-               font=GREEN_XREF, fmt="0").value = "=eur_actuals_through_month"
+    style_cell(ws, recon_health_eur_through_row, 1, value="Actuals EUR through", font=HEADER_FONT)
+    style_cell(ws, recon_health_eur_through_row, 2, font=GREEN_XREF, fmt="0").value = "=eur_actuals_through_month"
 
     # Health row 2: Hours through — green cross-sheet (named range → Config)
-    style_cell(ws, recon_health_hours_through_row, 1,
-               value="Hours through", font=HEADER_FONT)
-    style_cell(ws, recon_health_hours_through_row, 2,
-               font=GREEN_XREF, fmt="0").value = "=hours_actuals_through_month"
+    style_cell(ws, recon_health_hours_through_row, 1, value="Hours through", font=HEADER_FONT)
+    style_cell(ws, recon_health_hours_through_row, 2, font=GREEN_XREF, fmt="0").value = "=hours_actuals_through_month"
 
     # Health row 3: Reconciled through — same-sheet derived name (black)
-    style_cell(ws, recon_health_reconciled_row, 1,
-               value="Reconciled through", font=HEADER_FONT)
-    style_cell(ws, recon_health_reconciled_row, 2,
-               font=BLACK_FORMULA, fmt="0").value = (
-        "=MIN(eur_actuals_through_month,hours_actuals_through_month)"
-    )
+    style_cell(ws, recon_health_reconciled_row, 1, value="Reconciled through", font=HEADER_FONT)
+    style_cell(
+        ws, recon_health_reconciled_row, 2, font=BLACK_FORMULA, fmt="0"
+    ).value = "=MIN(eur_actuals_through_month,hours_actuals_through_month)"
 
     # Per-WP reconciliation table header
     recon_headers = ["WP", "Cum Forecast EUR", "Cum Actual EUR", "Gap EUR", "Gap %"]
     for ci, h in enumerate(recon_headers, 1):
-        style_cell(ws, recon_table_header_row, ci, h, font=HEADER_FONT,
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
+        style_cell(ws, recon_table_header_row, ci, h, font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
     # Data refs
     act_first_wp_row = actuals_layout["first_wp_row"]
@@ -479,21 +505,15 @@ def _write_reconciliation_section(ws, tlayout, layout, actuals_layout):
         actuals_wp_row = act_first_wp_row + i
 
         # Col A: WP ID (green cross-sheet ref to Config)
-        style_cell(ws, row, 1, font=GREEN_XREF).value = (
-            f"={SHEET_CONFIG}!A{config_row}"
-        )
+        style_cell(ws, row, 1, font=GREEN_XREF).value = f"={SHEET_CONFIG}!A{config_row}"
 
         # Col B: Cumulative Forecast EUR through reconciled_through_month.
         # Per-WP slope projection on Actuals: linear extrapolation from the
         # WP's posted-cumulative anchor out to reconciled_through.
         # MAX(0, ...) clamps a negative projection (correction postings).
         # Empty-string sentinel handled by posted_idx=0 -> 0 (no projection).
-        posted_idx_ref = (
-            f"{SHEET_ACTUALS}!{posted_idx_col_letter}{actuals_wp_row}"
-        )
-        posted_value_ref = (
-            f"{SHEET_ACTUALS}!{posted_value_col_letter}{actuals_wp_row}"
-        )
+        posted_idx_ref = f"{SHEET_ACTUALS}!{posted_idx_col_letter}{actuals_wp_row}"
+        posted_value_ref = f"{SHEET_ACTUALS}!{posted_value_col_letter}{actuals_wp_row}"
         slope_ref = f"{SHEET_ACTUALS}!{slope_col_letter}{actuals_wp_row}"
         style_cell(ws, row, 2, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
             f"=IF({posted_idx_ref}=0,0,"
@@ -506,52 +526,46 @@ def _write_reconciliation_section(ws, tlayout, layout, actuals_layout):
         # total snapshots, not per-month deltas \u2014 SUMming them across the
         # window double-counts. Instead, INDEX into the latest filled
         # numeric cell at-or-before reconciled_through_month: the column
-        # offset is the max of (1-based position * ISNUMBER * within-window),
+        # offset is the max of (1-based position * filled * within-window),
         # which already IS the posted-cumulative-to-date by definition.
+        # "filled" is ({range}<>""), not ISNUMBER({range}): Excel gives
+        # ISNUMBER(range) no array context outside CSE, collapsing the scan
+        # to 0 (LibreOffice masks this). COLUMN(range) is unaffected and stays.
         # IFERROR guards INDEX(..., 0) when no numeric cells fall inside
         # the window.
-        act_range_full = (
-            f"{SHEET_ACTUALS}!${ms}${actuals_wp_row}:${me}${actuals_wp_row}"
-        )
+        act_range_full = f"{SHEET_ACTUALS}!${ms}${actuals_wp_row}:${me}${actuals_wp_row}"
         act_start_ref = f"{SHEET_ACTUALS}!${ms}${actuals_wp_row}"
         style_cell(ws, row, 3, font=GREEN_XREF, fmt="\u20ac#,##0").value = (
             f"=IF($B${recon_health_reconciled_row}<=0,0,"
             f"IFERROR(INDEX({act_range_full},1,"
             f"SUMPRODUCT(MAX("
             f"(COLUMN({act_range_full})-COLUMN({act_start_ref})+1)"
-            f"*ISNUMBER({act_range_full})"
+            f'*({act_range_full}<>"")'
             f"*((COLUMN({act_range_full})-COLUMN({act_start_ref})+1)"
             f"<=$B${recon_health_reconciled_row})"
             f"))),0))"
         )
 
         # Col D: Gap EUR = Actual - Forecast (same-sheet derived → black)
-        style_cell(ws, row, 4, font=BLACK_FORMULA,
-                   fmt="\u20ac#,##0").value = f"=C{row}-B{row}"
+        style_cell(ws, row, 4, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = f"=C{row}-B{row}"
 
         # Col E: Gap % = D / B, guarded against zero forecast.
-        style_cell(ws, row, 5, font=BLACK_FORMULA,
-                   fmt="0.0%").value = f"=IFERROR(D{row}/B{row},0)"
+        style_cell(ws, row, 5, font=BLACK_FORMULA, fmt="0.0%").value = f"=IFERROR(D{row}/B{row},0)"
 
     # TOTAL row immediately after last WP row
-    style_cell(ws, recon_total_row, 1, "TOTAL", font=HEADER_FONT,
-               fill=LIGHT_GREEN_FILL)
-    style_cell(ws, recon_total_row, 2, font=BLACK_FORMULA,
-               fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0").value = (
-        f"=SUM(B${recon_first_wp_row}:B${recon_last_wp_row})"
-    )
-    style_cell(ws, recon_total_row, 3, font=BLACK_FORMULA,
-               fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0").value = (
-        f"=SUM(C${recon_first_wp_row}:C${recon_last_wp_row})"
-    )
-    style_cell(ws, recon_total_row, 4, font=BLACK_FORMULA,
-               fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0").value = (
-        f"=C{recon_total_row}-B{recon_total_row}"
-    )
-    style_cell(ws, recon_total_row, 5, font=BLACK_FORMULA,
-               fill=LIGHT_GREEN_FILL, fmt="0.0%").value = (
-        f"=IFERROR(D{recon_total_row}/B{recon_total_row},0)"
-    )
+    style_cell(ws, recon_total_row, 1, "TOTAL", font=HEADER_FONT, fill=LIGHT_GREEN_FILL)
+    style_cell(
+        ws, recon_total_row, 2, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0"
+    ).value = f"=SUM(B${recon_first_wp_row}:B${recon_last_wp_row})"
+    style_cell(
+        ws, recon_total_row, 3, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0"
+    ).value = f"=SUM(C${recon_first_wp_row}:C${recon_last_wp_row})"
+    style_cell(
+        ws, recon_total_row, 4, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="\u20ac#,##0"
+    ).value = f"=C{recon_total_row}-B{recon_total_row}"
+    style_cell(
+        ws, recon_total_row, 5, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="0.0%"
+    ).value = f"=IFERROR(D{recon_total_row}/B{recon_total_row},0)"
 
 
 def _apply_reconciliation_cf(ws, tlayout):
@@ -566,13 +580,21 @@ def _apply_reconciliation_cf(ws, tlayout):
     recon_e_range = f"E{recon_first_wp_row}:E{recon_total_row}"
     recon_e_ref = f"E{recon_first_wp_row}"
     # Red: |gap %| > 10%
-    ws.conditional_formatting.add(recon_e_range, FormulaRule(
-        formula=[f"ABS({recon_e_ref})>0.10"], fill=_RED_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        recon_e_range,
+        FormulaRule(
+            formula=[f"ABS({recon_e_ref})>0.10"],
+            fill=_RED_CF_FILL,
+        ),
+    )
     # Amber: |gap %| > 5%
-    ws.conditional_formatting.add(recon_e_range, FormulaRule(
-        formula=[f"ABS({recon_e_ref})>0.05"], fill=_AMBER_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        recon_e_range,
+        FormulaRule(
+            formula=[f"ABS({recon_e_ref})>0.05"],
+            fill=_AMBER_CF_FILL,
+        ),
+    )
 
 
 def _write_person_load_table(ws, tlayout, capacity_layout, team_layout, team):
@@ -597,8 +619,7 @@ def _write_person_load_table(ws, tlayout, capacity_layout, team_layout, team):
         "Variance to-date %",
     ]
     for ci, h in enumerate(person_headers, 1):
-        style_cell(ws, person_header_row, ci, h, font=HEADER_FONT,
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
+        style_cell(ws, person_header_row, ci, h, font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
 
     # Person data rows
     person_groups = capacity_layout["person_groups"]
@@ -621,26 +642,22 @@ def _write_person_load_table(ws, tlayout, capacity_layout, team_layout, team):
         cap_var = f"{SHEET_CAPACITY}!{todate_var_cl}{tr}"
 
         # Col A: Person name (green cross-sheet ref)
-        style_cell(ws, row, 1, font=GREEN_XREF).value = (
-            f"={SHEET_CONFIG}!A{roster_row}"
-        )
+        style_cell(ws, row, 1, font=GREEN_XREF).value = f"={SHEET_CONFIG}!A{roster_row}"
 
         # Col B: Avg FTE to date — Actual PM / MAX(1, hours_actuals_through_month).
         # IFERROR guards DIV/0 when hours_actuals_through_month <= 0.
-        style_cell(ws, row, 2, font=GREEN_XREF, fmt="0.00").value = (
-            f"=IFERROR({cap_actual}/MAX(1,hours_actuals_through_month),0)"
-        )
+        style_cell(
+            ws, row, 2, font=GREEN_XREF, fmt="0.00"
+        ).value = f"=IFERROR({cap_actual}/MAX(1,hours_actuals_through_month),0)"
 
         # Col C: Plan Avg FTE to date — (Actual + Variance) / MAX(1, hours_actuals_through_month).
         # Plan = Actual + Variance identity lives on Capacity; reuse here.
-        style_cell(ws, row, 3, font=GREEN_XREF, fmt="0.00").value = (
-            f"=IFERROR(({cap_actual}+{cap_var})/MAX(1,hours_actuals_through_month),0)"
-        )
+        style_cell(
+            ws, row, 3, font=GREEN_XREF, fmt="0.00"
+        ).value = f"=IFERROR(({cap_actual}+{cap_var})/MAX(1,hours_actuals_through_month),0)"
 
         # Col D: Variance to-date % — Variance / Plan. Guard against zero plan.
-        style_cell(ws, row, 4, font=GREEN_XREF, fmt="0.0%").value = (
-            f"=IFERROR({cap_var}/({cap_actual}+{cap_var}),0)"
-        )
+        style_cell(ws, row, 4, font=GREEN_XREF, fmt="0.0%").value = f"=IFERROR({cap_var}/({cap_actual}+{cap_var}),0)"
 
 
 def _apply_person_load_cf(ws, tlayout):
@@ -657,13 +674,21 @@ def _apply_person_load_cf(ws, tlayout):
     d_ref = f"D{person_first_row}"
 
     # Red: |variance| > 20%
-    ws.conditional_formatting.add(d_range, FormulaRule(
-        formula=[f'ABS({d_ref})>0.20'], fill=_RED_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        d_range,
+        FormulaRule(
+            formula=[f"ABS({d_ref})>0.20"],
+            fill=_RED_CF_FILL,
+        ),
+    )
     # Amber: |variance| > 10% (red wins the >=20% band via priority order)
-    ws.conditional_formatting.add(d_range, FormulaRule(
-        formula=[f'ABS({d_ref})>0.10'], fill=_AMBER_CF_FILL,
-    ))
+    ws.conditional_formatting.add(
+        d_range,
+        FormulaRule(
+            formula=[f"ABS({d_ref})>0.10"],
+            fill=_AMBER_CF_FILL,
+        ),
+    )
 
 
 def _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params):
@@ -709,18 +734,14 @@ def _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params
     sum_forecast_terms = []
     for wp_off in range(num_wps):
         ar = act_first_wp + wp_off
-        sum_posted_terms.append(
-            f"IFERROR({SHEET_ACTUALS}!{posted_value_col_letter}{ar}+0,0)"
-        )
+        sum_posted_terms.append(f"IFERROR({SHEET_ACTUALS}!{posted_value_col_letter}{ar}+0,0)")
         sum_forecast_terms.append(
             f"IFERROR(MAX(0,{SHEET_ACTUALS}!{posted_value_col_letter}{ar}"
             f"+{SHEET_ACTUALS}!{slope_col_letter}{ar}"
             f"*(project_months-{SHEET_ACTUALS}!{posted_idx_col_letter}{ar})),0)"
         )
     sum_posted_now_expr = "+".join(sum_posted_terms) if sum_posted_terms else "0"
-    sum_forecast_end_expr = (
-        "+".join(sum_forecast_terms) if sum_forecast_terms else "0"
-    )
+    sum_forecast_end_expr = "+".join(sum_forecast_terms) if sum_forecast_terms else "0"
     # Silence "unused" hints — they're consumed inside the loop body via the
     # per-WP terms above; act_last_wp kept for symmetry with summary.py
     # debugging guards even though the per-WP loop bounds are sufficient.
@@ -737,17 +758,14 @@ def _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params
         # Helper Row 1: Cumulative planned EUR (SUMPRODUCT with per-WP rates)
         plan_range = f"{SHEET_PLAN}!{cl}{plan_first_wp}:{cl}{plan_last_wp}"
         if m_idx == 0:
-            style_cell(ws, helper_row_planned, c,
-                       font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"=SUMPRODUCT({plan_range},{rate_range})"
-            )
+            style_cell(
+                ws, helper_row_planned, c, font=BLACK_FORMULA, fmt="\u20ac#,##0"
+            ).value = f"=SUMPRODUCT({plan_range},{rate_range})"
         else:
             prev_cl = col_letter(c - 1)
-            style_cell(ws, helper_row_planned, c,
-                       font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"={prev_cl}{helper_row_planned}"
-                f"+SUMPRODUCT({plan_range},{rate_range})"
-            )
+            style_cell(
+                ws, helper_row_planned, c, font=BLACK_FORMULA, fmt="\u20ac#,##0"
+            ).value = f"={prev_cl}{helper_row_planned}+SUMPRODUCT({plan_range},{rate_range})"
 
         # Helper Row 2: Cumulative actual EUR — clipped past
         # `eur_actuals_through_month` so the chart line ends cleanly at the
@@ -756,15 +774,12 @@ def _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params
         # (compile-time constant).
         month_idx_literal = m_idx + 1
         if m_idx == 0:
-            style_cell(ws, helper_row_actual, c,
-                       font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                f"=IF({month_idx_literal}>eur_actuals_through_month,NA(),"
-                f"{SHEET_ACTUALS}!{cl}{act_total})"
-            )
+            style_cell(
+                ws, helper_row_actual, c, font=BLACK_FORMULA, fmt="\u20ac#,##0"
+            ).value = f"=IF({month_idx_literal}>eur_actuals_through_month,NA(),{SHEET_ACTUALS}!{cl}{act_total})"
         else:
             prev_cl = col_letter(c - 1)
-            style_cell(ws, helper_row_actual, c,
-                       font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
+            style_cell(ws, helper_row_actual, c, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
                 f"=IF({month_idx_literal}>eur_actuals_through_month,NA(),"
                 f"{prev_cl}{helper_row_actual}+{SHEET_ACTUALS}!{cl}{act_total})"
             )
@@ -782,14 +797,10 @@ def _write_chart_helper_rows(ws, tlayout, layout, actuals_layout, project_params
             f"{sum_forecast_end_expr},"
             f"NA()))"
         )
-        style_cell(ws, helper_row_forecast, c,
-                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = forecast_formula
+        style_cell(ws, helper_row_forecast, c, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = forecast_formula
 
         # Helper Row 4: Ceiling line (flat)
-        style_cell(ws, helper_row_ceiling, c,
-                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-            "=partner_ceiling"
-        )
+        style_cell(ws, helper_row_ceiling, c, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = "=partner_ceiling"
 
     # Hide helper rows
     ws.row_dimensions[helper_row_planned].hidden = True
@@ -812,18 +823,16 @@ def _write_chart_label_and_rp_rows(ws, tlayout, project_params, reporting_period
     for m_idx in range(project_params["months"]):
         c = month_col_start + m_idx
         cal_date = project_start + relativedelta(months=m_idx)
-        ws.cell(row=helper_row_labels, column=c,
-                value=f"M{m_idx + 1}-{cal_date.strftime('%b%y')}")
+        ws.cell(row=helper_row_labels, column=c, value=f"M{m_idx + 1}-{cal_date.strftime('%b%y')}")
     ws.row_dimensions[helper_row_labels].hidden = True
 
     # Helper Row 5: RP boundary markers (ceiling value at each RP end month)
     for rp in reporting_periods:
         boundary_col = month_col_start + rp["end"] - 1
         if boundary_col <= month_col_end:
-            style_cell(ws, helper_row_rp, boundary_col,
-                       font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-                "=partner_ceiling"
-            )
+            style_cell(
+                ws, helper_row_rp, boundary_col, font=BLACK_FORMULA, fmt="\u20ac#,##0"
+            ).value = "=partner_ceiling"
     ws.row_dimensions[helper_row_rp].hidden = True
 
 
@@ -846,13 +855,11 @@ def _write_gap_helper_rows(ws, tlayout, project_params):
         c = month_col_start + m_idx
         cl = col_letter(c)
         # Gap helper: actual - forecast. Black same-sheet derived.
-        style_cell(ws, helper_row_gap, c,
-                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = (
-            f"={cl}{helper_row_actual}-{cl}{helper_row_forecast}"
-        )
+        style_cell(
+            ws, helper_row_gap, c, font=BLACK_FORMULA, fmt="\u20ac#,##0"
+        ).value = f"={cl}{helper_row_actual}-{cl}{helper_row_forecast}"
         # Zero reference: formula =0 (Rule 1: formulas only).
-        style_cell(ws, helper_row_zero, c,
-                   font=BLACK_FORMULA, fmt="\u20ac#,##0").value = "=0"
+        style_cell(ws, helper_row_zero, c, font=BLACK_FORMULA, fmt="\u20ac#,##0").value = "=0"
     ws.row_dimensions[helper_row_gap].hidden = True
     ws.row_dimensions[helper_row_zero].hidden = True
 
@@ -892,14 +899,12 @@ def _build_cumulative_chart(ws, tlayout):
     sheet_name = "Trends"
     range_str = f"'{sheet_name}'!${ms}${{}}:${me}${{}}"
 
-    cat_ref = AxDataSource(strRef=StrRef(
-        f=range_str.format(helper_row_labels, helper_row_labels)))
+    cat_ref = AxDataSource(strRef=StrRef(f=range_str.format(helper_row_labels, helper_row_labels)))
 
     # Series 1: Cumulative planned (blue solid)
     s_planned = Series(idx=0, order=0)
     s_planned.tx = SeriesLabel(v="Planned")
-    s_planned.val = NumDataSource(numRef=NumRef(
-        f=range_str.format(helper_row_planned, helper_row_planned)))
+    s_planned.val = NumDataSource(numRef=NumRef(f=range_str.format(helper_row_planned, helper_row_planned)))
     s_planned.cat = cat_ref
     s_planned.graphicalProperties.line.solidFill = "4472C4"
     chart.series.append(s_planned)
@@ -907,8 +912,7 @@ def _build_cumulative_chart(ws, tlayout):
     # Series 2: Cumulative actual (red solid)
     s_actual = Series(idx=1, order=1)
     s_actual.tx = SeriesLabel(v="Actual")
-    s_actual.val = NumDataSource(numRef=NumRef(
-        f=range_str.format(helper_row_actual, helper_row_actual)))
+    s_actual.val = NumDataSource(numRef=NumRef(f=range_str.format(helper_row_actual, helper_row_actual)))
     s_actual.cat = cat_ref
     s_actual.graphicalProperties.line.solidFill = "FF0000"
     chart.series.append(s_actual)
@@ -921,8 +925,7 @@ def _build_cumulative_chart(ws, tlayout):
     # semantic priority.
     s_forecast = Series(idx=2, order=2)
     s_forecast.tx = SeriesLabel(v="Cumulative Forecast")
-    s_forecast.val = NumDataSource(numRef=NumRef(
-        f=range_str.format(helper_row_forecast, helper_row_forecast)))
+    s_forecast.val = NumDataSource(numRef=NumRef(f=range_str.format(helper_row_forecast, helper_row_forecast)))
     s_forecast.cat = cat_ref
     s_forecast.graphicalProperties.line.solidFill = "FFB300"
     s_forecast.graphicalProperties.line.dashStyle = "dash"
@@ -931,8 +934,7 @@ def _build_cumulative_chart(ws, tlayout):
     # Series 4: Ceiling (grey dashed)
     s_ceiling = Series(idx=3, order=3)
     s_ceiling.tx = SeriesLabel(v="Ceiling")
-    s_ceiling.val = NumDataSource(numRef=NumRef(
-        f=range_str.format(helper_row_ceiling, helper_row_ceiling)))
+    s_ceiling.val = NumDataSource(numRef=NumRef(f=range_str.format(helper_row_ceiling, helper_row_ceiling)))
     s_ceiling.cat = cat_ref
     s_ceiling.graphicalProperties.line.solidFill = "808080"
     s_ceiling.graphicalProperties.line.dashStyle = "dash"
@@ -941,8 +943,7 @@ def _build_cumulative_chart(ws, tlayout):
     # Series 5: RP boundaries (green diamond markers at ceiling level)
     s_rp = Series(idx=4, order=4)
     s_rp.tx = SeriesLabel(v="RP End")
-    s_rp.val = NumDataSource(numRef=NumRef(
-        f=range_str.format(helper_row_rp, helper_row_rp)))
+    s_rp.val = NumDataSource(numRef=NumRef(f=range_str.format(helper_row_rp, helper_row_rp)))
     s_rp.cat = cat_ref
     s_rp.graphicalProperties.line.solidFill = "00B050"
     s_rp.graphicalProperties.line.dashStyle = "dot"
@@ -996,14 +997,12 @@ def _build_gap_chart(ws, tlayout):
     range_str = f"'{sheet_name}'!${ms}${{}}:${me}${{}}"
 
     # Reuse the month-label helper row from the cumulative chart.
-    gap_cat_ref = AxDataSource(strRef=StrRef(
-        f=range_str.format(helper_row_labels, helper_row_labels)))
+    gap_cat_ref = AxDataSource(strRef=StrRef(f=range_str.format(helper_row_labels, helper_row_labels)))
 
     # Series 1: Gap (solid purple)
     s_gap = Series(idx=0, order=0)
     s_gap.tx = SeriesLabel(v="Gap (Actual \u2212 Forecast)")
-    s_gap.val = NumDataSource(numRef=NumRef(
-        f=range_str.format(helper_row_gap, helper_row_gap)))
+    s_gap.val = NumDataSource(numRef=NumRef(f=range_str.format(helper_row_gap, helper_row_gap)))
     s_gap.cat = gap_cat_ref
     s_gap.graphicalProperties.line.solidFill = "7030A0"
     gap_chart.series.append(s_gap)
@@ -1011,8 +1010,7 @@ def _build_gap_chart(ws, tlayout):
     # Series 2: Zero reference (grey dashed)
     s_zero = Series(idx=1, order=1)
     s_zero.tx = SeriesLabel(v="Zero")
-    s_zero.val = NumDataSource(numRef=NumRef(
-        f=range_str.format(helper_row_zero, helper_row_zero)))
+    s_zero.val = NumDataSource(numRef=NumRef(f=range_str.format(helper_row_zero, helper_row_zero)))
     s_zero.cat = gap_cat_ref
     s_zero.graphicalProperties.line.solidFill = "808080"
     s_zero.graphicalProperties.line.dashStyle = "dash"
@@ -1033,9 +1031,9 @@ def _apply_column_widths(ws):
     ws.column_dimensions["B"].width = 25
 
 
-def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout, *,
-                       project_params, work_packages,
-                       team, reporting_periods):
+def build_trends_sheet(
+    ws, layout, actuals_layout, capacity_layout, team_layout, *, project_params, work_packages, team, reporting_periods
+):
     """Build the Trends sheet: WP burn rate, cumulative chart, person load.
 
     Args:
@@ -1051,7 +1049,11 @@ def build_trends_sheet(ws, layout, actuals_layout, capacity_layout, team_layout,
         reporting_periods: Reporting period entries.
     """
     tlayout = _resolve_trends_layout(
-        layout, actuals_layout, project_params, work_packages, team,
+        layout,
+        actuals_layout,
+        project_params,
+        work_packages,
+        team,
     )
 
     # Section 1: WP Burn Rate & Exhaustion (table + CF + TOTAL row)

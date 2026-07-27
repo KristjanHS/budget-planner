@@ -15,6 +15,7 @@ Endpoints:
 Covers cases 1-6 from the design doc §8 (drift-guard + docs-only gate live
 in ``test_config_sheet.py``).
 """
+
 from __future__ import annotations
 
 import re
@@ -127,17 +128,9 @@ def test_rebuild_from_month_1_wipes_edits(tmp_path: Path):
     ws3 = wb3[SHEET_TIMELOG_PLAN]
     assert ws3.cell(row, col).value != "WP0_EDIT"
     # Bystander: solver actually populated the row.
-    row_cells = [
-        ws3.cell(row, TIMELOG_MONTH_COL_START + mi).value
-        for mi in range(months)
-    ]
-    solver_placed = [
-        v for v in row_cells
-        if isinstance(v, str) and v.strip() and v != "WP0_EDIT"
-    ]
-    assert len(solver_placed) >= 1, (
-        f"N=1 must re-run solver; row {row} empty: {row_cells!r}"
-    )
+    row_cells = [ws3.cell(row, TIMELOG_MONTH_COL_START + mi).value for mi in range(months)]
+    solver_placed = [v for v in row_cells if isinstance(v, str) and v.strip() and v != "WP0_EDIT"]
+    assert len(solver_placed) >= 1, f"N=1 must re-run solver; row {row} empty: {row_cells!r}"
     wb3.close()
 
 
@@ -167,18 +160,12 @@ def test_rebuild_from_month_past_end_preserves_all(tmp_path: Path):
     wb2 = openpyxl.load_workbook(path)
     ws2 = wb2[SHEET_TIMELOG_PLAN]
     assert ws2.cell(row, col).value == edit_value, (
-        f"expected preserved edit {edit_value!r}, "
-        f"got {ws2.cell(row, col).value!r}"
+        f"expected preserved edit {edit_value!r}, got {ws2.cell(row, col).value!r}"
     )
     # Bystander: the rest of the row's pre-edit cells also survived (not wiped).
-    preserved = [
-        ws2.cell(row, TIMELOG_MONTH_COL_START + mi).value
-        for mi in range(months)
-    ]
+    preserved = [ws2.cell(row, TIMELOG_MONTH_COL_START + mi).value for mi in range(months)]
     non_empty = [v for v in preserved if isinstance(v, str) and v.strip()]
-    assert len(non_empty) >= 2, (
-        f"preserve-all must keep whole row, got only {non_empty!r}"
-    )
+    assert len(non_empty) >= 2, f"preserve-all must keep whole row, got only {non_empty!r}"
     wb2.close()
 
 
@@ -221,7 +208,8 @@ def test_mixed_mode_freezes_before_overwrites_after(tmp_path: Path):
         col_a = ws.cell(r, 1).value
         col_a_str = str(col_a or "").strip()
         if (
-            col_a is None or not col_a_str
+            col_a is None
+            or not col_a_str
             or col_a_str.upper().startswith("PER-")
             or col_a_str.lower().startswith("monthly total")
         ):
@@ -230,13 +218,15 @@ def test_mixed_mode_freezes_before_overwrites_after(tmp_path: Path):
         if hit is not None:
             found = (r, *hit)
             break
-    assert found is not None, (
-        f"no person row spans boundary N={n} with solver-placed cells"
-    )
+    assert found is not None, f"no person row spans boundary N={n} with solver-placed cells"
     (
         first,
-        frozen_month, frozen_col, frozen_pre,
-        solved_month, solved_col, solved_pre,
+        frozen_month,
+        frozen_col,
+        frozen_pre,
+        solved_month,
+        solved_col,
+        solved_pre,
     ) = found
 
     # Use REAL WP codes (orphan pruning would strip a "WP0_EDIT" sentinel).
@@ -255,8 +245,7 @@ def test_mixed_mode_freezes_before_overwrites_after(tmp_path: Path):
     wb2 = openpyxl.load_workbook(path)
     ws2 = wb2[SHEET_TIMELOG_PLAN]
     assert ws2.cell(first, frozen_col).value == frozen_swap, (
-        f"frozen cell (month {frozen_month} < N={n}) must survive rebuild, "
-        f"got {ws2.cell(first, frozen_col).value!r}"
+        f"frozen cell (month {frozen_month} < N={n}) must survive rebuild, got {ws2.cell(first, frozen_col).value!r}"
     )
     # Solver re-derives the post-boundary cell: it must land on something
     # non-empty, and it must NOT equal the discarded swap value UNLESS the
@@ -269,8 +258,7 @@ def test_mixed_mode_freezes_before_overwrites_after(tmp_path: Path):
     # grid; fall back to a weaker "is not empty" check otherwise.
     post_solved = ws2.cell(first, solved_col).value
     assert isinstance(post_solved, str) and post_solved.strip(), (
-        f"solved cell (month {solved_month} ≥ N={n}) must be filled, "
-        f"got {post_solved!r}"
+        f"solved cell (month {solved_month} ≥ N={n}) must be filled, got {post_solved!r}"
     )
     wb2.close()
 
@@ -297,7 +285,8 @@ def test_overshoot_under_freeze_completes_without_error(tmp_path: Path):
         col_a = ws.cell(r, 1).value
         col_a_str = str(col_a or "").strip()
         if (
-            col_a is None or not col_a_str
+            col_a is None
+            or not col_a_str
             or col_a_str.upper().startswith("PER-")
             or col_a_str.lower().startswith("monthly total")
         ):
@@ -317,14 +306,9 @@ def test_overshoot_under_freeze_completes_without_error(tmp_path: Path):
     ws2 = wb2[SHEET_TIMELOG_PLAN]
     # Confirm frozen cells survived (spot-check first person row).
     first2 = _grid_first_person_row(ws2)
-    kept = [
-        ws2.cell(first2, TIMELOG_MONTH_COL_START + mi).value
-        for mi in range(n - 1)
-    ]
+    kept = [ws2.cell(first2, TIMELOG_MONTH_COL_START + mi).value for mi in range(n - 1)]
     kept_wp1 = [v for v in kept if v == "WP1"]
-    assert len(kept_wp1) >= 1, (
-        f"overshoot test: expected ≥1 frozen WP1 cell, got {kept!r}"
-    )
+    assert len(kept_wp1) >= 1, f"overshoot test: expected ≥1 frozen WP1 cell, got {kept!r}"
     wb2.close()
 
 
@@ -355,20 +339,14 @@ def test_pre_freeze_point_workbook_upgrades_cleanly(tmp_path: Path):
     wb2 = openpyxl.load_workbook(path)
     months = _project_months(wb2)
     out = read_timelog_plan(wb2, months)
-    assert out["rebuild_from_month"] == 1, (
-        "missing new name must default to 1 (solve-all)"
-    )
+    assert out["rebuild_from_month"] == 1, "missing new name must default to 1 (solve-all)"
     wb2.close()
 
     rebuild_workbook(input_path=str(path))
 
     wb3 = openpyxl.load_workbook(path)
-    assert "timelog_rebuild_from_month" in wb3.defined_names, (
-        "rebuild must register the new name"
-    )
-    assert "timelog_resolve_flag" not in wb3.defined_names, (
-        "rebuild must unregister the stale legacy name"
-    )
+    assert "timelog_rebuild_from_month" in wb3.defined_names, "rebuild must register the new name"
+    assert "timelog_resolve_flag" not in wb3.defined_names, "rebuild must unregister the stale legacy name"
     wb3.close()
 
 

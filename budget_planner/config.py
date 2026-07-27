@@ -13,11 +13,11 @@ from datetime import datetime
 
 PROJECT_TITLE = "Programme Project Budget Plan"
 PROJECT_START = datetime(2026, 11, 1)  # First month of the project
-PROJECT_MONTHS = 14                    # Total project duration in months
-DEFAULT_RATE = 10000                    # EUR per person-month (per-WP default rate)
-EU_ANNUAL_CEILING_PM = 12.0              # Max PM per calendar year across all EU grants (≈215 days)
-CFS_THRESHOLD = 430_000                  # EUR — CFS audit certificate required above this
-DEFAULT_RP_LENGTH = 6                   # Months per reporting period (programme typical: 12-18)
+PROJECT_MONTHS = 14  # Total project duration in months
+DEFAULT_RATE = 10000  # EUR per person-month (per-WP default rate)
+EU_ANNUAL_CEILING_PM = 12.0  # Max PM per calendar year across all EU grants (≈215 days)
+CFS_THRESHOLD = 430_000  # EUR — CFS audit certificate required above this
+DEFAULT_RP_LENGTH = 6  # Months per reporting period (programme typical: 12-18)
 
 # ── GRADE RATES ──
 # EUR per person-month by job grade (bookkeeping-provided bands)
@@ -35,41 +35,39 @@ DEFAULT_GRADE = "Mid"
 # collapsed to M1-M7 for the single-range schema.
 
 WORK_PACKAGES = [
-    {"id": "WP1", "name": "Project Management",              "fte": 4.0,
-     "start":  1, "end": 14, "type": "flat"},
-    {"id": "WP2", "name": "Requirements and concept",     "fte":  6.0,
-     "start":  1, "end": 18, "type": "front-loaded"},
-    {"id": "WP3", "name": "Research and analysis", "fte": 6.0,
-     "start":  1, "end": 7, "type": "front-loaded"},
-    {"id": "WP4", "name": "Architecture design",             "fte": 12.0,
-     "start":  2, "end": 11, "type": "bell"},
-    {"id": "WP5", "name": "Component design",               "fte": 6.0,
-     "start": 4, "end": 13, "type": "bell"},
-    {"id": "WP6", "name": "Subsystem design",  "fte": 3.0,
-     "start": 4, "end": 13, "type": "bell"},
-    {"id": "WP7", "name": "Software development",         "fte": 3.0,
-     "start": 6, "end": 14, "type": "bell"},
-    {"id": "WP8", "name": "Prototyping",        "fte":  3.0,
-     "start": 10, "end": 14, "type": "back-loaded"},
-    {"id": "WP9", "name": "Validation and demo",       "fte":  3.0,
-     "start": 12, "end": 14, "type": "back-loaded"},
+    {"id": "WP1", "name": "Project Management", "fte": 4.0, "start": 1, "end": 14, "type": "flat"},
+    {"id": "WP2", "name": "Requirements and concept", "fte": 6.0, "start": 1, "end": 6, "type": "front-loaded"},
+    {
+        "id": "WP3",
+        "name": "Research and analysis",
+        "fte": 6.0,
+        "start": 1,
+        "end": 7,
+        "type": "front-loaded",
+    },
+    {"id": "WP4", "name": "Architecture design", "fte": 12.0, "start": 2, "end": 11, "type": "bell"},
+    {"id": "WP5", "name": "Component design", "fte": 6.0, "start": 4, "end": 13, "type": "bell"},
+    {"id": "WP6", "name": "Subsystem design", "fte": 3.0, "start": 4, "end": 13, "type": "bell"},
+    {"id": "WP7", "name": "Software development", "fte": 3.0, "start": 6, "end": 14, "type": "bell"},
+    {"id": "WP8", "name": "Prototyping", "fte": 3.0, "start": 10, "end": 14, "type": "back-loaded"},
+    {"id": "WP9", "name": "Validation and demo", "fte": 3.0, "start": 12, "end": 14, "type": "back-loaded"},
 ]
 
 # ── TEAM ──
 # Seed data only — Config sheet roster is primary after first generation
 TEAM = [
     {"name": "Alice", "max_fte": 1.0, "grade": "Senior"},
-    {"name": "Bob",   "max_fte": 1.0, "grade": "Mid"},
+    {"name": "Bob", "max_fte": 1.0, "grade": "Mid"},
     {"name": "Carol", "max_fte": 1.0, "grade": "Junior"},
-    {"name": "Dave",  "max_fte": 1.0, "grade": "Mid"},
+    {"name": "Dave", "max_fte": 1.0, "grade": "Mid"},
 ]
 
 # ── EXTERNAL COMMITMENTS ──
 # Seed data only — Excel Capacity sheet is primary after first generation
 EXTERNAL_COMMITMENTS = [
-    {"person": "Alice", "project": "ProjectX",        "fte": 2.0, "start": 1, "end": 11, "is_eu": False},
-    {"person": "Bob",   "project": "ProjectX",        "fte": 2.0, "start": 1, "end": 14, "is_eu": False},
-    {"person": "Bob",   "project": "HorizonEU-Alpha", "fte": 2.0, "start": 1, "end": 7, "is_eu": True},
+    {"person": "Alice", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 11, "is_eu": False},
+    {"person": "Bob", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 14, "is_eu": False},
+    {"person": "Bob", "project": "HorizonEU-Alpha", "fte": 2.0, "start": 1, "end": 7, "is_eu": True},
 ]
 
 # ── REPORTING PERIODS ──
@@ -97,18 +95,18 @@ DEMO_CURRENT_MONTH = 12
 #   WP9 → "-11% override" (Alice forced past +12% cap; skipping would breach -11%)
 #   WP3, WP5, WP6, WP7, WP8 → "Filled"
 DEMO_CAPACITY_ASSIGNMENTS = [
-    {"person": "Alice", "wp": "WP1", "start": 1,  "end": 14, "total_fte": 4.0},
-    {"person": "Alice", "wp": "WP3", "start": 1,  "end": 7, "total_fte": 3.0},
+    {"person": "Alice", "wp": "WP1", "start": 1, "end": 14, "total_fte": 4.0},
+    {"person": "Alice", "wp": "WP3", "start": 1, "end": 7, "total_fte": 3.0},
     {"person": "Alice", "wp": "WP9", "start": 12, "end": 14, "total_fte": 3.0},
-    {"person": "Bob",   "wp": "WP5", "start": 4, "end": 13, "total_fte": 5.0},
-    {"person": "Bob",   "wp": "WP6", "start": 4, "end": 13, "total_fte": 2.0},
+    {"person": "Bob", "wp": "WP5", "start": 4, "end": 13, "total_fte": 5.0},
+    {"person": "Bob", "wp": "WP6", "start": 4, "end": 13, "total_fte": 2.0},
     {"person": "Carol", "wp": "WP7", "start": 6, "end": 14, "total_fte": 3.0},
     {"person": "Carol", "wp": "WP8", "start": 10, "end": 14, "total_fte": 3.0},
-    {"person": "Dave",  "wp": "WP2", "start": 6, "end": 7, "total_fte": 1.00},
-    {"person": "Dave",  "wp": "WP3", "start": 1,  "end": 7, "total_fte": 6.0},
-    {"person": "Dave",  "wp": "WP5", "start": 4, "end": 13, "total_fte": 1.0},
-    {"person": "Dave",  "wp": "WP6", "start": 4, "end": 13, "total_fte": 1.0},
-    {"person": "Dave",  "wp": "WP8", "start": 10, "end": 14, "total_fte": 3.0},
+    {"person": "Dave", "wp": "WP2", "start": 6, "end": 7, "total_fte": 1.00},
+    {"person": "Dave", "wp": "WP3", "start": 1, "end": 7, "total_fte": 6.0},
+    {"person": "Dave", "wp": "WP5", "start": 4, "end": 13, "total_fte": 1.0},
+    {"person": "Dave", "wp": "WP6", "start": 4, "end": 13, "total_fte": 1.0},
+    {"person": "Dave", "wp": "WP8", "start": 10, "end": 14, "total_fte": 3.0},
 ]
 
 # Spending multipliers per WP index for demo actuals.

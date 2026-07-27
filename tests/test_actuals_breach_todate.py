@@ -15,6 +15,7 @@ Posted-cumulative redesign (2026-05-09):
   reads "Hours Actuals Through Month:" — different label from the Actuals
   EUR sheet's "Posted through:", retained as-is across Stage D.
 """
+
 import openpyxl
 import pytest
 
@@ -102,6 +103,7 @@ def test_posted_through_header_actual_block(actuals_ws):
 def test_freeze_panes_matches_first_wp_row(actuals_ws):
     """Freeze panes column C; row equals first WP row (shifted down by 1 from pre-T7)."""
     import re
+
     fp = actuals_ws.freeze_panes
     assert fp is not None
     m = re.match(r"([A-Z]+)(\d+)", fp)
@@ -145,15 +147,18 @@ def actuals_hours_ws_demo(demo_wb_path):
 
 
 def test_through_month_strip_formulas_on_actuals(actuals_ws):
-    """C1 auto-derive is a SUMPRODUCT(MAX(...ISNUMBER...)) scan over the WP
-    data block; D1 effective is IF(ISNUMBER(B1),B1,C1). Bug surface: a
-    refactor that narrows the scan range (e.g. includes the TOTAL row) or
-    inverts the IF precedence silently flips `eur_actuals_through_month`
-    to the wrong integer without breaking recalc.
+    """C1 auto-derive is a SUMPRODUCT(MAX(...(range<>"")...)) scan over the
+    WP data block; D1 effective is IF(ISNUMBER(B1),B1,C1) — that one is a
+    SCALAR ISNUMBER and stays. Bug surface: a refactor that narrows the scan
+    range (e.g. includes the TOTAL row), inverts the IF precedence, or
+    reverts the filled test to `ISNUMBER(range)` (no array context in Excel
+    outside CSE → scan collapses to 0) silently flips
+    `eur_actuals_through_month` to the wrong integer without breaking recalc.
     """
     auto = str(actuals_ws.cell(1, 3).value)
     assert auto.startswith("=SUMPRODUCT("), auto
-    assert "MAX(" in auto and "ISNUMBER(" in auto, auto
+    assert "MAX(" in auto and '<>""' in auto, auto
+    assert "ISNUMBER(" not in auto, auto
     assert actuals_ws.cell(1, 4).value == "=IF(ISNUMBER(B1),B1,C1)"
 
 
@@ -174,7 +179,5 @@ def test_through_month_strip_formulas_on_actuals_hours(actuals_hours_ws_demo):
     auto = str(actuals_hours_ws_demo.cell(1, 3).value)
     assert auto.startswith("=MAX(SUMPRODUCT("), auto
     assert "ISNUMBER(" in auto, auto
-    assert auto.count("SUMPRODUCT(") >= 2, (
-        f"expected per-person SUMPRODUCT terms, got: {auto}"
-    )
+    assert auto.count("SUMPRODUCT(") >= 2, f"expected per-person SUMPRODUCT terms, got: {auto}"
     assert actuals_hours_ws_demo.cell(1, 4).value == "=IF(ISNUMBER(B1),B1,C1)"

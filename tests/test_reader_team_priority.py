@@ -4,6 +4,7 @@ Priority is the solver tie-breaker (1 = highest, 3 = lowest); 0/4/7 etc. would
 silently exclude a person from every WP pass since the solver equality-matches
 prio ∈ (1, 2, 3). These tests guard the read+rebuild contract for Priority.
 """
+
 import openpyxl
 
 from budget_planner.layout import COL_ROSTER_PRIORITY, SECTION_HEADER_LABELS
@@ -13,9 +14,7 @@ from budget_planner.workbook import init_workbook, rebuild_workbook
 
 def _apply_priority_edits(cfg, roster_pre, edits):
     """Write Priority cells for named persons in the TEAM ROSTER section."""
-    roster_section = _find_header_row(
-        cfg, SECTION_HEADER_LABELS["team_roster"], required=True
-    )
+    roster_section = _find_header_row(cfg, SECTION_HEADER_LABELS["team_roster"], required=True)
     header_row = roster_section + 1
     for r in range(header_row + 1, header_row + 1 + len(roster_pre)):
         name = cfg.cell(r, 1).value
@@ -47,9 +46,7 @@ def test_read_team_priority_roundtrip(tmp_path):
 
     got = {m["name"]: m["priority"] for m in roster_post}
     for name, expected in edits.items():
-        assert got[name] == expected, (
-            f"{name}: expected priority {expected}, got {got[name]}"
-        )
+        assert got[name] == expected, f"{name}: expected priority {expected}, got {got[name]}"
 
 
 def test_read_team_priority_clamps_out_of_range(tmp_path):
@@ -79,6 +76,4 @@ def test_read_team_priority_clamps_out_of_range(tmp_path):
 
     got = {m["name"]: m["priority"] for m in roster_post}
     for name, expect in expected.items():
-        assert got[name] == expect, (
-            f"{name}: expected clamp to {expect}, got {got[name]}"
-        )
+        assert got[name] == expect, f"{name}: expected clamp to {expect}, got {got[name]}"

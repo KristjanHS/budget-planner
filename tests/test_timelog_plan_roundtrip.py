@@ -9,6 +9,7 @@ mechanism is gone. The tests here cover:
   surviving — the pruning loop lives in ``workbook.py`` around the
   ``read_timelog_plan`` call.
 """
+
 from __future__ import annotations
 
 import re
@@ -78,7 +79,8 @@ def recalced_timelog_wb_path(tmp_path_factory) -> str:
     init_workbook(str(out), assignments=DEMO_CAPACITY_ASSIGNMENTS)
     result = subprocess.run(
         ["python3", str(SCRIPTS_DIR / "recalc.py"), str(out)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         pytest.skip("LibreOffice not available")
@@ -104,19 +106,14 @@ def test_init_solver_output_preserved(recalced_timelog_wb_path: str):
     for r in range(first, ws.max_row + 1):
         a = ws.cell(r, 1).value
         a_str = str(a or "").strip()
-        if (
-            a is None or not a_str
-            or a_str.lower().startswith("monthly total")
-            or a_str.upper().startswith("PER-")
-        ):
+        if a is None or not a_str or a_str.lower().startswith("monthly total") or a_str.upper().startswith("PER-"):
             break  # end of grid block
         for mi in range(months):
             v = ws.cell(r, TIMELOG_MONTH_COL_START + mi).value
             if v is None or (isinstance(v, str) and v.strip() == ""):
                 continue
             assert isinstance(v, str) and not v.startswith("="), (
-                f"grid cell at ({r},{TIMELOG_MONTH_COL_START + mi}) "
-                f"should be a literal WP code, got {v!r}"
+                f"grid cell at ({r},{TIMELOG_MONTH_COL_START + mi}) should be a literal WP code, got {v!r}"
             )
             assert v.startswith("WP"), f"expected WP code, got {v!r}"
             placed += 1
@@ -127,9 +124,7 @@ def test_init_solver_output_preserved(recalced_timelog_wb_path: str):
 # ── Orphan pruning on rebuild ───────────────────────────────────────────────
 
 
-def test_orphan_wp_dropped_with_bystander(
-    tmp_path: Path, capsys, recalced_timelog_wb_path: str
-):
+def test_orphan_wp_dropped_with_bystander(tmp_path: Path, capsys, recalced_timelog_wb_path: str):
     """Rebuild drops a grid cell whose WP code no longer exists in the roster.
 
     Bystander: a valid WP-code cell on the same row must survive the rebuild.
@@ -150,10 +145,10 @@ def test_orphan_wp_dropped_with_bystander(
     # way. Deriving from solver output keeps the assertion stable across
     # demo-data changes.
     bystander_wp = ws.cell(first, m_start).value
-    assert (
-        isinstance(bystander_wp, str) and bystander_wp.startswith("WP")
-    ), f"expected solver-placed WP code at first cell, got {bystander_wp!r}"
-    _set(ws, first, m_start, bystander_wp)     # bystander (real WP)
+    assert isinstance(bystander_wp, str) and bystander_wp.startswith("WP"), (
+        f"expected solver-placed WP code at first cell, got {bystander_wp!r}"
+    )
+    _set(ws, first, m_start, bystander_wp)  # bystander (real WP)
     _set(ws, first, m_start + 1, "WP_ZOMBIE")  # orphan
     wb.save(path)
     wb.close()
@@ -171,9 +166,7 @@ def test_orphan_wp_dropped_with_bystander(
     assert ws2.cell(first2, m_start).value == bystander_wp
     # Orphan has been cleared / re-solved; must not carry the zombie value forward.
     orphan_val = ws2.cell(first2, m_start + 1).value
-    assert orphan_val != "WP_ZOMBIE", (
-        f"orphan cell still carries zombie code: {orphan_val!r}"
-    )
+    assert orphan_val != "WP_ZOMBIE", f"orphan cell still carries zombie code: {orphan_val!r}"
     wb2.close()
 
 

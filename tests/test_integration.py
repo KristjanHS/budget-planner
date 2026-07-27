@@ -6,8 +6,12 @@ from openpyxl.utils import get_column_letter
 from budget_planner.reader import discover_layout
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    WORK_PACKAGES, MONTH_COL_START, PROJECT_MONTHS, PROJECT_START,
-    NUM_WPS, VAL_COL_SUM,
+    WORK_PACKAGES,
+    MONTH_COL_START,
+    PROJECT_MONTHS,
+    PROJECT_START,
+    NUM_WPS,
+    VAL_COL_SUM,
 )
 
 
@@ -46,6 +50,7 @@ def _find_summary_budget_overview(summary_ws, after_row):
 
 # ── Summary ← Plan + Actuals cross-sheet formula tests ──
 
+
 def test_summary_plan_fte_formulas_reference_plan_planned_rows(fresh_wb_path):
     """Summary year Plan FTE formulas reference Plan planned block rows."""
     wb = openpyxl.load_workbook(fresh_wb_path)
@@ -66,9 +71,7 @@ def test_summary_plan_fte_formulas_reference_plan_planned_rows(fresh_wb_path):
             last_col_l = get_column_letter(MONTH_COL_START + group_start + span - 1)
 
             expected = f"=SUM(Plan!{first_col_l}{plan_wp_row}:{last_col_l}{plan_wp_row})"
-            assert cell_val == expected, (
-                f"{wp['id']} Y{y+1}: expected {expected}, got {cell_val}"
-            )
+            assert cell_val == expected, f"{wp['id']} Y{y + 1}: expected {expected}, got {cell_val}"
 
     wb.close()
 
@@ -102,9 +105,7 @@ def test_summary_actual_eur_formulas_reference_actuals_rows(fresh_wb_path):
             last_col_l = get_column_letter(MONTH_COL_START + group_start + span - 1)
 
             expected = f"=SUM(Actuals!{first_col_l}{actuals_wp_row}:{last_col_l}{actuals_wp_row})"
-            assert cell_val == expected, (
-                f"{wp['id']} Y{y+1}: expected {expected}, got {cell_val}"
-            )
+            assert cell_val == expected, f"{wp['id']} Y{y + 1}: expected {expected}, got {cell_val}"
 
     wb.close()
 
@@ -126,9 +127,7 @@ def test_summary_plan_eur_equals_fte_times_rate(fresh_wb_path):
             # Plan EUR is at sc + 1
             cell_val = summary.cell(row, sc + 1).value
             expected = f"={fte_col_l}{row}*Config!$D${config_row}"
-            assert cell_val == expected, (
-                f"WP row {row} Y{y+1}: expected {expected}, got {cell_val}"
-            )
+            assert cell_val == expected, f"WP row {row} Y{y + 1}: expected {expected}, got {cell_val}"
 
     wb.close()
 
@@ -148,9 +147,7 @@ def test_summary_variance_eur_equals_plan_minus_actual(fresh_wb_path):
             # Variance EUR is at sc + 3 (per-year Forecast EUR retired)
             cell_val = summary.cell(row, sc + 3).value
             expected = f"={plan_eur_col_l}{row}-{act_eur_col_l}{row}"
-            assert cell_val == expected, (
-                f"WP row {row} Y{y+1}: expected {expected}, got {cell_val}"
-            )
+            assert cell_val == expected, f"WP row {row} Y{y + 1}: expected {expected}, got {cell_val}"
 
     wb.close()
 
@@ -165,32 +162,21 @@ def test_summary_project_totals_sum_across_years(fresh_wb_path):
         row = first_wp + i
 
         # Plan FTE total (tc+0): sum of year Plan FTE cols
-        plan_fte_cols = [
-            get_column_letter(_YEAR_GROUP_START + y * _COLS_PER_YEAR)
-            for y in range(_NUM_YEARS)
-        ]
+        plan_fte_cols = [get_column_letter(_YEAR_GROUP_START + y * _COLS_PER_YEAR) for y in range(_NUM_YEARS)]
         expected_fte = "=" + "+".join(f"{cl}{row}" for cl in plan_fte_cols)
         assert summary.cell(row, _TOTAL_GROUP_START).value == expected_fte, (
-            f"Row {row} total Plan FTE: expected {expected_fte}, "
-            f"got {summary.cell(row, _TOTAL_GROUP_START).value}"
+            f"Row {row} total Plan FTE: expected {expected_fte}, got {summary.cell(row, _TOTAL_GROUP_START).value}"
         )
 
         # Plan EUR total (tc+1): sum of year Plan EUR cols
-        plan_eur_cols = [
-            get_column_letter(_YEAR_GROUP_START + y * _COLS_PER_YEAR + 1)
-            for y in range(_NUM_YEARS)
-        ]
+        plan_eur_cols = [get_column_letter(_YEAR_GROUP_START + y * _COLS_PER_YEAR + 1) for y in range(_NUM_YEARS)]
         expected_eur = "=" + "+".join(f"{cl}{row}" for cl in plan_eur_cols)
         assert summary.cell(row, _TOTAL_GROUP_START + 1).value == expected_eur, (
-            f"Row {row} total Plan EUR: expected {expected_eur}, "
-            f"got {summary.cell(row, _TOTAL_GROUP_START + 1).value}"
+            f"Row {row} total Plan EUR: expected {expected_eur}, got {summary.cell(row, _TOTAL_GROUP_START + 1).value}"
         )
 
         # Actual EUR total (tc+2): sum of year Actual EUR cols
-        act_eur_cols = [
-            get_column_letter(_YEAR_GROUP_START + y * _COLS_PER_YEAR + 2)
-            for y in range(_NUM_YEARS)
-        ]
+        act_eur_cols = [get_column_letter(_YEAR_GROUP_START + y * _COLS_PER_YEAR + 2) for y in range(_NUM_YEARS)]
         expected_act = "=" + "+".join(f"{cl}{row}" for cl in act_eur_cols)
         assert summary.cell(row, _TOTAL_GROUP_START + 2).value == expected_act, (
             f"Row {row} total Actual EUR: expected {expected_act}, "
@@ -204,8 +190,7 @@ def test_summary_project_totals_sum_across_years(fresh_wb_path):
         tc_act_eur_l = get_column_letter(_TOTAL_GROUP_START + 2)
         expected_var = f"={tc_plan_eur_l}{row}-{tc_act_eur_l}{row}"
         assert summary.cell(row, _TOTAL_GROUP_START + 3).value == expected_var, (
-            f"Row {row} total Variance: expected {expected_var}, "
-            f"got {summary.cell(row, _TOTAL_GROUP_START + 3).value}"
+            f"Row {row} total Variance: expected {expected_var}, got {summary.cell(row, _TOTAL_GROUP_START + 3).value}"
         )
 
     wb.close()
@@ -245,34 +230,27 @@ def test_summary_budget_overview_references(fresh_wb_path):
     # Personnel Actual = Actuals!{VAL_COL_SUM}{total_row}
     actual_formula = summary.cell(actual_row, 2).value
     expected_actual = f"=Actuals!{val_col_l}{actuals_total_row}"
-    assert actual_formula == expected_actual, (
-        f"Personnel Actual: expected {expected_actual}, got {actual_formula}"
-    )
+    assert actual_formula == expected_actual, f"Personnel Actual: expected {expected_actual}, got {actual_formula}"
 
     # Personnel Ceiling = partner_ceiling
     ceiling_formula = summary.cell(ceiling_row, 2).value
-    assert ceiling_formula == "=partner_ceiling", (
-        f"Personnel Ceiling: expected =partner_ceiling, got {ceiling_formula}"
-    )
+    assert ceiling_formula == "=partner_ceiling", f"Personnel Ceiling: expected =partner_ceiling, got {ceiling_formula}"
 
     # Remaining = Ceiling - Actual
     remaining_formula = summary.cell(remaining_row, 2).value
     expected_remaining = f"=B{ceiling_row}-B{actual_row}"
-    assert remaining_formula == expected_remaining, (
-        f"Remaining: expected {expected_remaining}, got {remaining_formula}"
-    )
+    assert remaining_formula == expected_remaining, f"Remaining: expected {expected_remaining}, got {remaining_formula}"
 
     # % Consumed = IF(ceiling=0,0,actual/ceiling)
     consumed_formula = summary.cell(consumed_row, 2).value
     expected_consumed = f"=IF(B{ceiling_row}=0,0,B{actual_row}/B{ceiling_row})"
-    assert consumed_formula == expected_consumed, (
-        f"% Consumed: expected {expected_consumed}, got {consumed_formula}"
-    )
+    assert consumed_formula == expected_consumed, f"% Consumed: expected {expected_consumed}, got {consumed_formula}"
 
     wb.close()
 
 
 # ── Reporting Period Summary section ─────────────────────────────────────
+
 
 def test_rp_summary_has_wp_rows(fresh_wb_path):
     """RP summary has one row per WP with cross-sheet formula refs."""
@@ -318,6 +296,7 @@ def test_rp_summary_has_wp_rows(fresh_wb_path):
 
 
 # ── Form C preparation rows ─────────────────────────────────────────────
+
 
 def test_form_c_rows_exist(fresh_wb_path):
     """Summary sheet has Form C prep rows with indirect costs and CFS flag."""

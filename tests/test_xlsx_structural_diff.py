@@ -102,6 +102,7 @@ def test_formula_removed(tmp_path: Path):
 def test_literal_type_flip_value_suppressed_for_numbers(tmp_path: Path):
     """E5 numeric → string. Even though it becomes a string, E5 is outside any label
     zone (col != A, row > 3) so the value field is not emitted."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "S"
@@ -123,6 +124,7 @@ def test_literal_type_flip_value_suppressed_for_numbers(tmp_path: Path):
 
 def test_label_zone_column_a_emits_string_value(tmp_path: Path):
     """A row label (column A, row 7) must be emitted in `value`."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "S"
@@ -152,6 +154,7 @@ def test_label_zone_column_a_emits_string_value(tmp_path: Path):
 
 def test_config_b_value_never_emitted(tmp_path: Path):
     """Config!B values must be suppressed even if they look like a benign label."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "Config"
@@ -169,6 +172,7 @@ def test_config_b_value_never_emitted(tmp_path: Path):
 
 def test_safe_literal_regex_suppresses_decimals(tmp_path: Path):
     """A1 (column-A label zone) string that matches the sensitive regex is suppressed."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "S"
@@ -309,6 +313,7 @@ def _populate_shift_grid(ws, row_offset: int = 0):
 def test_row_shift_hint_high_confidence(tmp_path: Path):
     """Rows 5-11 in A populated with formulas; B-side shifts everything down by 1
     and adds an extra terminal row so max_row goes up."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "Plan"
@@ -334,6 +339,7 @@ def test_row_shift_hint_high_confidence(tmp_path: Path):
 
 def test_row_shift_dimension_guard_blocks_hint(tmp_path: Path):
     """Same shifted formulas, but max_row unchanged → no hint."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "Plan"
@@ -355,6 +361,7 @@ def test_row_shift_dimension_guard_blocks_hint(tmp_path: Path):
 
 def test_column_shift_hint_high_confidence(tmp_path: Path):
     """Symmetric to row shift, shifting refs from column A to column B and growing max_col."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "Plan"
@@ -379,6 +386,7 @@ def test_column_shift_hint_high_confidence(tmp_path: Path):
 
 def test_mixed_shift_emits_both_with_medium_confidence(tmp_path: Path):
     """Half of changed formulas carry only-row delta, half carry only-col delta."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "Plan"
@@ -411,6 +419,7 @@ def test_mixed_shift_emits_both_with_medium_confidence(tmp_path: Path):
 
 def test_subthreshold_no_hint(tmp_path: Path):
     """Only 3 shifted formulas — below noise floor of 5."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "Plan"
@@ -469,6 +478,7 @@ def test_main_writes_diff_json(tmp_path: Path):
 def test_formula_and_style_changing_together_emits_both(tmp_path: Path):
     """A cell whose formula AND style both changed must surface BOTH facets —
     early-return ordering used to drop the style change silently."""
+
     def build_a(wb):
         ws = _active(wb)
         ws.title = "S"
@@ -573,6 +583,7 @@ def test_default_output_is_compact_single_line(tmp_path: Path):
 def test_no_decimal_value_leaks_when_only_data_changed(tmp_path: Path):
     """If the only change is a numeric literal value flip, the diff body must not
     contain the actual numbers."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "Money"
@@ -621,6 +632,7 @@ def test_canon_argb_alpha_opacity_and_non_alpha():
 def test_format_noise_suppressed_by_default(tmp_path: Path):
     """Workbooks differing only in number-format casing/escapes produce no cell
     records; `noise_filtered_summary.number_format_normalized` bumps."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "S"
@@ -662,6 +674,7 @@ def test_color_noise_suppressed_by_default(tmp_path: Path):
 
 def test_noise_filtered_summary_always_present(tmp_path: Path):
     """Zero-noise workbook pair still emits the summary with zero counts."""
+
     def build(wb):
         ws = wb.active
         ws.title = "S"
@@ -731,6 +744,7 @@ def test_color_noise_kept_with_flag(tmp_path: Path):
 def test_n4_removed_string_preserves_value(tmp_path: Path):
     """A→B: string-literal cell A1 removed. Record must carry `value: "Foo"`
     (label zone, benign content — same safety filter as the `added` branch)."""
+
     def build_a(wb):
         ws = wb.active
         ws.title = "S"
@@ -748,6 +762,7 @@ def test_n4_removed_string_preserves_value(tmp_path: Path):
 
 def test_schema_version_is_2(tmp_path: Path):
     """Stage 1 bump: schema_version advances from 1 → 2 (additive; see docstring)."""
+
     def build(wb):
         wb.active.title = "S"
 
@@ -757,6 +772,7 @@ def test_schema_version_is_2(tmp_path: Path):
 
 def test_n4_added_string_preserves_value(tmp_path: Path):
     """B→A direction: string-literal added on the B side carries `value`."""
+
     def build_a(wb):
         wb.active.title = "S"
 

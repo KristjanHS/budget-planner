@@ -55,9 +55,7 @@ def seed_demo_data(workbook_path: str) -> str:
     if first_wp_row is not None:
         # Read per-WP rates from Config col D
         config_ws = wb[SHEET_CONFIG]
-        wp_budget_row = _data_row_after(
-            _find_header_row(config_ws, SECTION_HEADER_LABELS["wp_budget"])
-        )
+        wp_budget_row = _data_row_after(_find_header_row(config_ws, SECTION_HEADER_LABELS["wp_budget"]))
         for i, wp in enumerate(WORK_PACKAGES):
             row = first_wp_row + i
             wp_rate = config_ws.cell(wp_budget_row + i, 4).value or 6500
@@ -93,10 +91,7 @@ def seed_demo_data(workbook_path: str) -> str:
 
     team_names = {m["name"] for m in TEAM}
     wp_index = {w["id"]: i for i, w in enumerate(WORK_PACKAGES)}
-    wp_active_set = {
-        w["id"]: wp_active_months(w["id"], WORK_PACKAGES)
-        for w in WORK_PACKAGES
-    }
+    wp_active_set = {w["id"]: wp_active_months(w["id"], WORK_PACKAGES) for w in WORK_PACKAGES}
 
     if SHEET_ACTUALS_HOURS in wb.sheetnames:
         hours_ws = wb[SHEET_ACTUALS_HOURS]
@@ -123,9 +118,7 @@ def seed_demo_data(workbook_path: str) -> str:
                 if active_months <= 0:
                     continue
                 monthly_fte = asgn["total_fte"] / active_months
-                multiplier = DEMO_ACTUALS_MULTIPLIERS[
-                    wp_index[wp_id] % len(DEMO_ACTUALS_MULTIPLIERS)
-                ]
+                multiplier = DEMO_ACTUALS_MULTIPLIERS[wp_index[wp_id] % len(DEMO_ACTUALS_MULTIPLIERS)]
                 active_set = wp_active_set[wp_id]
                 for m_idx in range(a_start - 1, min(a_end, hours_through)):
                     month_num = m_idx + 1

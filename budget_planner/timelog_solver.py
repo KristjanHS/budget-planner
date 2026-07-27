@@ -57,22 +57,30 @@ MIN_BUFFER_PCT = 0.11
 # branch added/renamed in the classifier should be mirrored here in the same
 # commit. Order matches classifier priority (first-match-wins).
 STOP_REASON_DEFINITIONS: list[tuple[str, str]] = [
-    ("No candidates",
-     "No PERSON-WP ASSIGNMENTS row references this WP — solver has nobody to place."),
-    ("No window",
-     "Assignment rows exist, but none of their [start, end] ranges overlap the WP's active window."),
-    ("-11% override",
-     "Placed € is past the +12% upper cap because skipping the last placement would have left the WP below the −11% lower cap. Lower-cap tie-break wins over upper-cap guard."),
-    ("Filled",
-     "Solver reached the WP budget (placed € ≥ ceiling €). Normal terminal state."),
-    ("+12% cap",
-     "Under budget, but next placement's rate would push placed € past the +12% upper buffer. Solver skips to avoid overshoot."),
-    ("Pool empty",
-     "Under budget; eligible candidates exist but all have exhausted their FTE pool on earlier WPs."),
-    ("Window full",
-     "Under budget; eligible candidates have remaining pool, but no legal unplaced months remain inside the WP's active range (months already filled by other WPs, vacations, or frozen)."),
-    ("Underfilled",
-     "Catch-all — should be unreachable given greedy correctness. If it appears, treat as a solver-policy-drift signal, not a config issue."),
+    ("No candidates", "No PERSON-WP ASSIGNMENTS row references this WP — solver has nobody to place."),
+    ("No window", "Assignment rows exist, but none of their [start, end] ranges overlap the WP's active window."),
+    (
+        "-11% override",
+        "Placed € is past the +12% upper cap because skipping the last placement would have left the WP "
+        "below the −11% lower cap. Lower-cap tie-break wins over upper-cap guard.",
+    ),
+    ("Filled", "Solver reached the WP budget (placed € ≥ ceiling €). Normal terminal state."),
+    (
+        "+12% cap",
+        "Under budget, but next placement's rate would push placed € past the +12% upper buffer. "
+        "Solver skips to avoid overshoot.",
+    ),
+    ("Pool empty", "Under budget; eligible candidates exist but all have exhausted their FTE pool on earlier WPs."),
+    (
+        "Window full",
+        "Under budget; eligible candidates have remaining pool, but no legal unplaced months remain inside "
+        "the WP's active range (months already filled by other WPs, vacations, or frozen).",
+    ),
+    (
+        "Underfilled",
+        "Catch-all — should be unreachable given greedy correctness. If it appears, treat as a "
+        "solver-policy-drift signal, not a config issue.",
+    ),
 ]
 
 
@@ -170,15 +178,10 @@ def _build_windows_index(
 
 
 def _empty_assignment(persons: list[Person], project_months: int) -> Assignment:
-    return {
-        p.name: {m: None for m in range(1, project_months + 1)}
-        for p in persons
-    }
+    return {p.name: {m: None for m in range(1, project_months + 1)} for p in persons}
 
 
-def _most_recent_wp_before(
-    assigned: Assignment, person_name: str, month: int
-) -> str | None:
+def _most_recent_wp_before(assigned: Assignment, person_name: str, month: int) -> str | None:
     """Return the WP code assigned to person at the largest month < `month`
     that has a non-None assignment, or None if no prior placement.
     """
@@ -256,11 +259,7 @@ def greedy_pass(
                 break
             # Eligible persons at this priority who have a row for this WP.
             candidates_raw = [
-                p
-                for p in persons
-                if p.priority == prio
-                and (p.name, wp.code) in windows_idx
-                and pool[p.name] > 0
+                p for p in persons if p.priority == prio and (p.name, wp.code) in windows_idx and pool[p.name] > 0
             ]
             if not candidates_raw:
                 continue
@@ -270,9 +269,7 @@ def greedy_pass(
             # stable enough for this to be a good first-order signal, and it
             # keeps iteration deterministic.
             def _run_key(p: Person, wp_code: str = wp.code) -> tuple[int, str]:
-                last = _most_recent_wp_before(
-                    assigned, p.name, project_months + 1
-                )
+                last = _most_recent_wp_before(assigned, p.name, project_months + 1)
                 running = 1 if last == wp_code else 0
                 # Python sorts ascending, and we want "running first", so
                 # invert with negation (equivalent to `not running`).
@@ -309,15 +306,9 @@ def greedy_pass(
                         # Tie-break: if skipping would leave the WP below the
                         # lower cap, place anyway. Overshoot beyond +12% is
                         # preferred over undershoot worse than -11%.
-                        upper_limit = (
-                            wp.ceiling_eur * (1 + MAX_BUFFER_PCT)
-                        )
-                        lower_limit = (
-                            wp.ceiling_eur * (1 - MIN_BUFFER_PCT)
-                        )
-                        would_overshoot = (
-                            placed_eur + p.rate_eur_per_pm > upper_limit
-                        )
+                        upper_limit = wp.ceiling_eur * (1 + MAX_BUFFER_PCT)
+                        lower_limit = wp.ceiling_eur * (1 - MIN_BUFFER_PCT)
+                        would_overshoot = placed_eur + p.rate_eur_per_pm > upper_limit
                         already_above_lower = placed_eur >= lower_limit
                         if would_overshoot and already_above_lower:
                             break
@@ -362,9 +353,7 @@ def switch_reduction_pass(
 
     # Work on a deep-ish copy. Inner dicts are month->str|None and need
     # their own copy; the outer dict is rebuilt by comprehension.
-    state: Assignment = {
-        name: dict(row) for name, row in assigned.items()
-    }
+    state: Assignment = {name: dict(row) for name, row in assigned.items()}
     person_names = sorted(state.keys())
 
     improved = True
@@ -398,10 +387,7 @@ def switch_reduction_pass(
                     # between persons at the same rate are €-neutral on
                     # each WP. Cross-tier swaps would shift per-WP € totals
                     # and break greedy's "placed_eur ≥ ceiling_eur" result.
-                    if (
-                        persons_by_name[p1_name].rate_eur_per_pm
-                        != persons_by_name[p2_name].rate_eur_per_pm
-                    ):
+                    if persons_by_name[p1_name].rate_eur_per_pm != persons_by_name[p2_name].rate_eur_per_pm:
                         continue
                     # Vacation guard: swap eligibility requires neither m nor
                     # m+1 to fall in either person's vacation set. For the
@@ -410,19 +396,13 @@ def switch_reduction_pass(
                     # design ships per-(person, year) overrides.
                     vac1 = persons_by_name[p1_name].vacation_months
                     vac2 = persons_by_name[p2_name].vacation_months
-                    if (
-                        m in vac1 or m + 1 in vac1
-                        or m in vac2 or m + 1 in vac2
-                    ):
+                    if m in vac1 or m + 1 in vac1 or m in vac2 or m + 1 in vac2:
                         continue
                     # Frozen guard: no swap may touch a frozen cell on
                     # either side. Mirrors the vacation guard shape.
                     fr1 = persons_by_name[p1_name].frozen_months
                     fr2 = persons_by_name[p2_name].frozen_months
-                    if (
-                        m in fr1 or m + 1 in fr1
-                        or m in fr2 or m + 1 in fr2
-                    ):
+                    if m in fr1 or m + 1 in fr1 or m in fr2 or m + 1 in fr2:
                         continue
                     b1 = state[p2_name][m]
                     b2 = state[p2_name][m + 1]
@@ -430,21 +410,13 @@ def switch_reduction_pass(
                     if (a1, a2) == (b1, b2):
                         continue
                     # Legality: each cell must fit its new owner's windows.
-                    if not _cell_legal_for_person(
-                        p1_name, b1, m, wps_by_code, windows_idx
-                    ):
+                    if not _cell_legal_for_person(p1_name, b1, m, wps_by_code, windows_idx):
                         continue
-                    if not _cell_legal_for_person(
-                        p1_name, b2, m + 1, wps_by_code, windows_idx
-                    ):
+                    if not _cell_legal_for_person(p1_name, b2, m + 1, wps_by_code, windows_idx):
                         continue
-                    if not _cell_legal_for_person(
-                        p2_name, a1, m, wps_by_code, windows_idx
-                    ):
+                    if not _cell_legal_for_person(p2_name, a1, m, wps_by_code, windows_idx):
                         continue
-                    if not _cell_legal_for_person(
-                        p2_name, a2, m + 1, wps_by_code, windows_idx
-                    ):
+                    if not _cell_legal_for_person(p2_name, a2, m + 1, wps_by_code, windows_idx):
                         continue
 
                     # Apply tentatively, measure switches, revert if not
@@ -479,9 +451,7 @@ def solve(
     Deterministic. Pure. See module docstring for the full contract.
     """
     assigned = greedy_pass(persons, wps, person_wp_windows, project_months)
-    assigned = switch_reduction_pass(
-        assigned, persons, wps, person_wp_windows, project_months
-    )
+    assigned = switch_reduction_pass(assigned, persons, wps, person_wp_windows, project_months)
     return assigned
 
 
@@ -505,9 +475,7 @@ def _placed_eur_for_wp(
     return total
 
 
-def _remaining_pool(
-    assigned: Assignment, person_name: str, person_pool: int
-) -> int:
+def _remaining_pool(assigned: Assignment, person_name: str, person_pool: int) -> int:
     row = assigned.get(person_name, {})
     used = sum(1 for v in row.values() if v is not None)
     return person_pool - used
@@ -525,9 +493,7 @@ def _legal_unplaced_months(
     return [
         m
         for m in range(lo, hi + 1)
-        if m not in person.vacation_months
-        and m not in person.frozen_months
-        and row.get(m) is None
+        if m not in person.vacation_months and m not in person.frozen_months and row.get(m) is None
     ]
 
 
@@ -579,11 +545,7 @@ def classify_wp_stop_reasons(
         if not rows_for_wp:
             reasons[wp.code] = "No candidates"
             continue
-        any_overlap = any(
-            max(w.start_month, wp.active_start)
-            <= min(w.end_month, wp.active_end)
-            for w in rows_for_wp
-        )
+        any_overlap = any(max(w.start_month, wp.active_start) <= min(w.end_month, wp.active_end) for w in rows_for_wp)
         if not any_overlap:
             reasons[wp.code] = "No window"
             continue
@@ -603,9 +565,7 @@ def classify_wp_stop_reasons(
             if _remaining_pool(assigned, p.name, p.pool) <= 0:
                 continue
             any_pool = True
-            legal = _legal_unplaced_months(
-                p, wp, windows_idx[(p.name, wp.code)], assigned
-            )
+            legal = _legal_unplaced_months(p, wp, windows_idx[(p.name, wp.code)], assigned)
             if legal:
                 any_pool_with_legal = True
                 if placed_eur + p.rate_eur_per_pm > upper_limit:

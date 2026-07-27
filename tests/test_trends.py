@@ -1,4 +1,5 @@
 """Tests for the Trends sheet builder."""
+
 from typing import TYPE_CHECKING
 
 import pytest
@@ -8,14 +9,17 @@ if TYPE_CHECKING:
     from openpyxl.worksheet.worksheet import Worksheet
 
 from budget_planner.config import (
-    NUM_WPS, TEAM,
-    VAL_COL_BUDGET, PROJECT_START,
+    NUM_WPS,
+    TEAM,
+    VAL_COL_BUDGET,
+    PROJECT_START,
 )
 from budget_planner.layout import MONTH_COL_START
 from budget_planner.styles import col_letter
 
 
 # ── Fixtures ──
+
 
 @pytest.fixture(scope="module")
 def trends_workbook(demo_wb_path):
@@ -49,6 +53,7 @@ def _find_row_containing(ws, col, substring):
 # Sheet basics
 # ================================================================
 
+
 def test_current_month_named_range(trends_workbook):
     defined = {}
     for name in trends_workbook.defined_names:
@@ -61,9 +66,7 @@ def test_current_month_named_range(trends_workbook):
 def test_current_month_default_value(trends_ws):
     """B1 has auto-calculating formula referencing project_start and TODAY()."""
     val = trends_ws["B1"].value
-    assert isinstance(val, str) and val.startswith("="), (
-        f"Expected formula in Trends!B1, got {val}"
-    )
+    assert isinstance(val, str) and val.startswith("="), f"Expected formula in Trends!B1, got {val}"
     assert "TODAY()" in val
     assert "project_start" in val
 
@@ -71,6 +74,7 @@ def test_current_month_default_value(trends_ws):
 # ================================================================
 # WP Burn Rate table
 # ================================================================
+
 
 def test_burn_rate_section_header(trends_ws):
     """Row 3 has the WP BURN RATE & EXHAUSTION section header."""
@@ -99,9 +103,7 @@ def test_burn_rate_wp_id_refs_plan(trends_ws):
     for i in range(NUM_WPS):
         cell = trends_ws.cell(first_wp_row + i, 1)
         formula = str(cell.value)
-        assert formula.startswith("=Config!A"), (
-            f"WP row {i}: expected Config!A ref, got {formula}"
-        )
+        assert formula.startswith("=Config!A"), f"WP row {i}: expected Config!A ref, got {formula}"
 
 
 def test_burn_rate_time_elapsed_formula(trends_ws):
@@ -179,9 +181,29 @@ def test_burn_rate_exhaustion_formula(trends_ws):
     assert "Actuals!" in formula
     assert '"No data"' in formula
     # COUNTIF heuristic is gone after Phase 2.4 (slope is now the source).
-    assert "COUNTIF" not in formula, (
-        f"Col G must not consult COUNTIF after Phase 2.4 rewire: {formula!r}"
-    )
+    assert "COUNTIF" not in formula, f"Col G must not consult COUNTIF after Phase 2.4 rewire: {formula!r}"
+
+
+def test_reconciliation_actual_scan_uses_nonblank_not_isnumber(trends_ws):
+    """The Reconciliation Actual-EUR column INDEXes into the Actuals WP row
+    at the latest filled column at-or-before `Reconciled through`. That scan
+    must test filled-ness with `(range<>"")`, never `ISNUMBER(range)`:
+    Excel gives `ISNUMBER(range)` no array context outside CSE, so the
+    SUMPRODUCT(MAX(...)) collapses to 0 and INDEX(...,0) → IFERROR → 0.
+    LibreOffice array-evaluates it correctly, so `make check` cannot see
+    this regression — hence the formula-shape pin.
+    See `2026-07-27-isnumber-array-context-excel-fix.md`.
+    """
+    scans = [
+        str(c.value)
+        for r in trends_ws.iter_rows()
+        for c in r
+        if isinstance(c.value, str) and c.value.startswith("=IF(") and "INDEX(Actuals!" in c.value
+    ]
+    assert scans, "No Reconciliation Actual-EUR INDEX scan found on Trends"
+    for f in scans:
+        assert '<>""' in f, f
+        assert "ISNUMBER(" not in f, f
 
 
 def test_burn_rate_total_row(trends_ws):
@@ -197,6 +219,7 @@ def test_burn_rate_total_row(trends_ws):
 # ================================================================
 # Person Load table
 # ================================================================
+
 
 def test_person_load_section_header(trends_ws):
     """Trends has a PERSON LOAD section header."""
@@ -251,9 +274,7 @@ def test_person_load_avg_to_date_formula(trends_ws):
     assert "MAX(1,hours_actuals_through_month)" in formula, (
         f"Col B must divide by MAX(1,hours_actuals_through_month): {formula!r}"
     )
-    assert "IFERROR" in formula, (
-        f"Col B must wrap division in IFERROR to guard DIV/0: {formula!r}"
-    )
+    assert "IFERROR" in formula, f"Col B must wrap division in IFERROR to guard DIV/0: {formula!r}"
 
 
 def test_person_load_plan_avg_to_date_formula(trends_ws):
@@ -268,9 +289,7 @@ def test_person_load_plan_avg_to_date_formula(trends_ws):
         f"Col C must divide by MAX(1,hours_actuals_through_month): {formula!r}"
     )
     # Plan = Actual + Variance — both Capacity refs must appear, and a '+' between
-    assert formula.count("Capacity!") >= 2, (
-        f"Col C must sum two Capacity refs (Actual + Variance): {formula!r}"
-    )
+    assert formula.count("Capacity!") >= 2, f"Col C must sum two Capacity refs (Actual + Variance): {formula!r}"
     assert "IFERROR" in formula
 
 
@@ -282,18 +301,13 @@ def test_person_load_variance_to_date_pct_formula(trends_ws):
     cell = trends_ws.cell(first_person_row, 4)
     formula = str(cell.value)
     assert "Capacity!" in formula
-    assert "IFERROR" in formula, (
-        f"Col D must wrap in IFERROR to guard zero plan: {formula!r}"
-    )
+    assert "IFERROR" in formula, f"Col D must wrap in IFERROR to guard zero plan: {formula!r}"
     # Denominator is a sum of two Capacity refs (Actual + Variance)
     assert formula.count("Capacity!") >= 3, (
-        f"Col D must reference Capacity thrice (1 numerator, 2 denominator): "
-        f"{formula!r}"
+        f"Col D must reference Capacity thrice (1 numerator, 2 denominator): {formula!r}"
     )
     # Percentage format
-    assert cell.number_format == "0.0%", (
-        f"Col D number_format must be '0.0%', got {cell.number_format!r}"
-    )
+    assert cell.number_format == "0.0%", f"Col D number_format must be '0.0%', got {cell.number_format!r}"
 
 
 def test_person_load_value_cols_are_green(trends_ws):
@@ -307,9 +321,7 @@ def test_person_load_value_cols_are_green(trends_ws):
 
     for col in (2, 3, 4):
         rgb = _font_rgb(trends_ws.cell(first_person_row, col))
-        assert rgb.endswith("008000"), (
-            f"Col {col} font should be GREEN_XREF (008000), got {rgb}"
-        )
+        assert rgb.endswith("008000"), f"Col {col} font should be GREEN_XREF (008000), got {rgb}"
 
 
 def test_person_load_variance_cf_rules(trends_ws):
@@ -334,23 +346,18 @@ def test_person_load_variance_cf_rules(trends_ws):
     # Match by formula content (CF fill color identity is DXF-context-dependent).
     # Red threshold = 0.2 (20%), amber threshold = 0.1 (10%) — match on the
     # exact ">N" suffix to avoid 0.1 substring-matching inside 0.10 etc.
-    red_rules = [
-        r for r in rules
-        if r.formula and "ABS" in r.formula[0] and ">0.2" in r.formula[0]
-    ]
+    red_rules = [r for r in rules if r.formula and "ABS" in r.formula[0] and ">0.2" in r.formula[0]]
     amber_rules = [
-        r for r in rules
-        if r.formula and "ABS" in r.formula[0] and ">0.1" in r.formula[0]
-        and ">0.2" not in r.formula[0]
+        r
+        for r in rules
+        if r.formula and "ABS" in r.formula[0] and ">0.1" in r.formula[0] and ">0.2" not in r.formula[0]
     ]
 
     assert len(red_rules) == 1, (
-        f"Expected one red (>0.20) CF rule on {target_range}, "
-        f"got rules={[r.formula for r in rules]}"
+        f"Expected one red (>0.20) CF rule on {target_range}, got rules={[r.formula for r in rules]}"
     )
     assert len(amber_rules) == 1, (
-        f"Expected one amber (>0.10) CF rule on {target_range}, "
-        f"got rules={[r.formula for r in rules]}"
+        f"Expected one amber (>0.10) CF rule on {target_range}, got rules={[r.formula for r in rules]}"
     )
 
     # Red must come first → lower priority number → higher priority
@@ -368,6 +375,7 @@ def test_person_load_variance_cf_rules(trends_ws):
 # Chart
 # ================================================================
 
+
 def test_cumulative_chart_exists(trends_ws):
     """Trends has at least one chart."""
     assert len(trends_ws._charts) >= 1
@@ -382,9 +390,7 @@ def test_chart_has_five_source_rows(trends_ws):
     """
     chart = trends_ws._charts[0]
     # After roundtrip the title is a rich Title object; extract text runs
-    title_text = "".join(
-        run.t for p in chart.title.tx.rich.paragraphs for run in p.r
-    )
+    title_text = "".join(run.t for p in chart.title.tx.rich.paragraphs for run in p.r)
     assert "Planned vs Actual" in title_text
     # 60 months * 5 rows = 300 series after roundtrip expansion
     assert len(chart.series) >= 5
@@ -394,10 +400,7 @@ def test_chart_has_five_source_rows(trends_ws):
 def test_helper_rows_hidden(trends_ws):
     """Chart helper rows (between person load section and chart) are hidden."""
     # Discover helper rows dynamically: they are the hidden rows in the sheet
-    hidden_rows = [
-        r for r in range(1, trends_ws.max_row + 1)
-        if trends_ws.row_dimensions[r].hidden
-    ]
+    hidden_rows = [r for r in range(1, trends_ws.max_row + 1) if trends_ws.row_dimensions[r].hidden]
     assert len(hidden_rows) == 8, (
         f"Expected 8 hidden helper rows "
         f"(planned, actual, forecast, ceiling, labels, rp, gap, zero), "
@@ -405,9 +408,7 @@ def test_helper_rows_hidden(trends_ws):
     )
     # Verify they are contiguous
     for i in range(1, len(hidden_rows)):
-        assert hidden_rows[i] == hidden_rows[i - 1] + 1, (
-            f"Hidden helper rows should be contiguous, got {hidden_rows}"
-        )
+        assert hidden_rows[i] == hidden_rows[i - 1] + 1, f"Hidden helper rows should be contiguous, got {hidden_rows}"
 
 
 # ================================================================
@@ -418,23 +419,16 @@ def test_helper_rows_hidden(trends_ws):
 # Dynamic row layout — parametric tests for row collision safety
 # ================================================================
 
+
 def _make_wps(n):
     """Generate n synthetic work packages."""
-    return [
-        {"id": f"WP{i+1}", "name": f"Work Package {i+1}",
-         "fte": 10.0, "start": 1, "end": 60}
-        for i in range(n)
-    ]
+    return [{"id": f"WP{i + 1}", "name": f"Work Package {i + 1}", "fte": 10.0, "start": 1, "end": 60} for i in range(n)]
 
 
 def _make_team(n, work_packages):
     """Generate n synthetic team members, each assigned to WP1."""
     wp_id = work_packages[0]["id"]
-    return [
-        {"name": f"Person{i+1}", "max_fte": 1.0, "grade": "Mid",
-         "wps": {wp_id: 1.0}}
-        for i in range(n)
-    ]
+    return [{"name": f"Person{i + 1}", "max_fte": 1.0, "grade": "Mid", "wps": {wp_id: 1.0}} for i in range(n)]
 
 
 def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
@@ -450,24 +444,28 @@ def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
     team = _make_team(num_team, work_packages)
     external_commitments: list[dict[str, object]] = []
     project_params = {
-        "title": "Test", "start": PROJECT_START,
-        "months": 24, "rate": 7500,
+        "title": "Test",
+        "start": PROJECT_START,
+        "months": 24,
+        "rate": 7500,
     }
 
     wb = WB()
-    _build_all_sheets(wb, project_params, work_packages, team,
-                      external_commitments, grade_rates=_cfg.GRADE_RATES)
+    _build_all_sheets(wb, project_params, work_packages, team, external_commitments, grade_rates=_cfg.GRADE_RATES)
 
     trends_ws = wb[SHEET_TRENDS]
     assert isinstance(trends_ws, Worksheet)
     return trends_ws
 
 
-@pytest.mark.parametrize("num_wps,num_team", [
-    (3, 2),    # small — fewer WPs than default
-    (9, 4),    # current default config size
-    (15, 8),   # large — more WPs and team members
-])
+@pytest.mark.parametrize(
+    "num_wps,num_team",
+    [
+        (3, 2),  # small — fewer WPs than default
+        (9, 4),  # current default config size
+        (15, 8),  # large — more WPs and team members
+    ],
+)
 def test_trends_no_row_collisions(num_wps, num_team):
     """Sections must not overlap regardless of WP / team count.
 
@@ -487,9 +485,7 @@ def test_trends_no_row_collisions(num_wps, num_team):
     assert wp_header is not None
     first_wp = wp_header + 1
     last_wp = total_row - 1
-    assert last_wp - first_wp + 1 == num_wps, (
-        f"Expected {num_wps} WP rows, got {last_wp - first_wp + 1}"
-    )
+    assert last_wp - first_wp + 1 == num_wps, f"Expected {num_wps} WP rows, got {last_wp - first_wp + 1}"
 
     person_section = _find_row_containing(ws, 1, "PERSON LOAD")
     assert person_section is not None, "PERSON LOAD section not found"
@@ -509,13 +505,8 @@ def test_trends_no_row_collisions(num_wps, num_team):
     last_person = first_person + person_count - 1
 
     # Find hidden (helper) rows
-    hidden_rows = sorted(
-        r for r in range(1, ws.max_row + 1)
-        if ws.row_dimensions[r].hidden
-    )
-    assert len(hidden_rows) == 8, (
-        f"Expected 8 hidden helper rows, found {len(hidden_rows)}: {hidden_rows}"
-    )
+    hidden_rows = sorted(r for r in range(1, ws.max_row + 1) if ws.row_dimensions[r].hidden)
+    assert len(hidden_rows) == 8, f"Expected 8 hidden helper rows, found {len(hidden_rows)}: {hidden_rows}"
 
     # Verify no overlaps
     # Chart anchor should be after total row
@@ -524,14 +515,14 @@ def test_trends_no_row_collisions(num_wps, num_team):
 
     # Person section must start after chart (chart height 7.5 cm ≈ 14 rows)
     assert person_section >= chart_anchor + 14, (
-        f"Person section row {person_section} too close to chart at {chart_anchor}. "
-        f"Chart needs ~14 rows of height."
+        f"Person section row {person_section} too close to chart at {chart_anchor}. Chart needs ~14 rows of height."
     )
 
     # Gap chart (T13) sits between the cumulative chart and the person
     # section. Pin the gap-chart → person-section margin directly so the
     # reconciliation block can't silently grow into Person Load.
     from openpyxl.utils.cell import coordinate_from_string
+
     assert len(ws._charts) == 2, (  # type: ignore[attr-defined]
         f"Expected 2 charts (cumulative + gap), got {len(ws._charts)}"  # type: ignore[attr-defined]
     )
@@ -553,9 +544,7 @@ def test_trends_no_row_collisions(num_wps, num_team):
 
     # Helper rows must be contiguous
     for i in range(1, len(hidden_rows)):
-        assert hidden_rows[i] == hidden_rows[i - 1] + 1, (
-            f"Hidden helper rows not contiguous: {hidden_rows}"
-        )
+        assert hidden_rows[i] == hidden_rows[i - 1] + 1, f"Hidden helper rows not contiguous: {hidden_rows}"
 
 
 def test_chart_has_rp_boundary_series():
@@ -567,21 +556,20 @@ def test_chart_has_rp_boundary_series():
     chart = ws._charts[0]  # type: ignore[attr-defined]
 
     # Should have 5 series: Planned, Actual, Forecast, Ceiling, RP End
-    assert len(chart.series) == 5, (
-        f"Expected 5 chart series, got {len(chart.series)}"
-    )
+    assert len(chart.series) == 5, f"Expected 5 chart series, got {len(chart.series)}"
 
     # Last series should be "RP End"
     rp_series = chart.series[4]
     assert rp_series.tx is not None
     # SeriesLabel value should contain "RP"
-    label_val = getattr(rp_series.tx, 'v', None)
+    label_val = getattr(rp_series.tx, "v", None)
     assert label_val is not None and "RP" in label_val
 
 
 # ================================================================
 # Cumulative Forecast series (Task 11)
 # ================================================================
+
 
 def test_chart_has_cumulative_forecast_series():
     """LineChart has a 'Cumulative Forecast' series between Actual and Ceiling.
@@ -596,10 +584,8 @@ def test_chart_has_cumulative_forecast_series():
     # Forecast is at index 2 (after Actual, before Ceiling)
     forecast = chart.series[2]
     assert forecast.tx is not None
-    label_val = getattr(forecast.tx, 'v', None)
-    assert label_val == "Cumulative Forecast", (
-        f"Expected 'Cumulative Forecast' at series idx 2, got {label_val!r}"
-    )
+    label_val = getattr(forecast.tx, "v", None)
+    assert label_val == "Cumulative Forecast", f"Expected 'Cumulative Forecast' at series idx 2, got {label_val!r}"
 
 
 def test_cumulative_forecast_series_styling():
@@ -611,14 +597,10 @@ def test_cumulative_forecast_series_styling():
     line = forecast.graphicalProperties.line
     # solidFill is a ColorChoice after openpyxl normalises the assignment
     color_str = getattr(line.solidFill, "srgbClr", line.solidFill)
-    assert color_str == "FFB300", (
-        f"Expected amber (FFB300) line color, got {color_str!r}"
-    )
+    assert color_str == "FFB300", f"Expected amber (FFB300) line color, got {color_str!r}"
     # dashStyle setter writes through to the underlying prstDash element
     dash = line.dashStyle or getattr(line, "prstDash", None)
-    assert dash == "dash", (
-        f"Expected dashed line, got dashStyle={dash!r}"
-    )
+    assert dash == "dash", f"Expected dashed line, got dashStyle={dash!r}"
 
 
 def test_cumulative_forecast_helper_row_formulas(trends_ws):
@@ -636,10 +618,7 @@ def test_cumulative_forecast_helper_row_formulas(trends_ws):
     # Discover the forecast helper row dynamically: it's the hidden row
     # whose cells reference project_months and Actuals posted_idx/value/
     # slope cells (the 2-anchor formula pattern).
-    hidden_rows = sorted(
-        r for r in range(1, trends_ws.max_row + 1)
-        if trends_ws.row_dimensions[r].hidden
-    )
+    hidden_rows = sorted(r for r in range(1, trends_ws.max_row + 1) if trends_ws.row_dimensions[r].hidden)
 
     forecast_row = None
     for r in hidden_rows:
@@ -650,50 +629,34 @@ def test_cumulative_forecast_helper_row_formulas(trends_ws):
         # Forecast row: anchors on eur_actuals_through_month + project_months,
         # references Actuals (slope-projection sum), and emits NA() on the
         # off-anchor branch.
-        if (
-            "eur_actuals_through_month" in s
-            and "project_months" in s
-            and "NA()" in s
-            and "Actuals!" in s
-        ):
+        if "eur_actuals_through_month" in s and "project_months" in s and "NA()" in s and "Actuals!" in s:
             forecast_row = r
             break
     assert forecast_row is not None, (
-        f"No hidden helper row matches the 2-anchor forecast pattern "
-        f"(hidden_rows={hidden_rows})"
+        f"No hidden helper row matches the 2-anchor forecast pattern (hidden_rows={hidden_rows})"
     )
 
     # First-month cell: full 2-anchor IF shape with NA() fallthrough.
     first_cell = trends_ws.cell(forecast_row, MONTH_COL_START).value
     assert isinstance(first_cell, str)
     assert "1=eur_actuals_through_month" in first_cell, (
-        f"First-month forecast helper should test '1=eur_actuals_through_month', "
-        f"got {first_cell!r}"
+        f"First-month forecast helper should test '1=eur_actuals_through_month', got {first_cell!r}"
     )
     assert "1=project_months" in first_cell, (
-        f"First-month forecast helper should test '1=project_months' "
-        f"(future-anchor branch), got {first_cell!r}"
+        f"First-month forecast helper should test '1=project_months' (future-anchor branch), got {first_cell!r}"
     )
-    assert "NA()" in first_cell, (
-        f"First-month forecast helper should emit NA() on off-anchor cells, "
-        f"got {first_cell!r}"
-    )
+    assert "NA()" in first_cell, f"First-month forecast helper should emit NA() on off-anchor cells, got {first_cell!r}"
     # Future anchor must reference the slope projection.
-    assert "MAX(0," in first_cell, (
-        f"Future-anchor sum must clamp at 0 via MAX(0, ...): {first_cell!r}"
-    )
+    assert "MAX(0," in first_cell, f"Future-anchor sum must clamp at 0 via MAX(0, ...): {first_cell!r}"
     # Defensive: forecast helper must not reference Plan-Forecast.
-    assert "Plan-Forecast" not in first_cell, (
-        f"Forecast helper must not reference Plan-Forecast: {first_cell!r}"
-    )
+    assert "Plan-Forecast" not in first_cell, f"Forecast helper must not reference Plan-Forecast: {first_cell!r}"
 
     # Mid-month cell at m_idx=4 (literal m=5): same 2-anchor shape with
     # the literal updated.
     mid_cell = trends_ws.cell(forecast_row, MONTH_COL_START + 4).value
     assert isinstance(mid_cell, str)
     assert "5=eur_actuals_through_month" in mid_cell, (
-        f"Mid-month (m=5) forecast helper should test "
-        f"'5=eur_actuals_through_month', got {mid_cell!r}"
+        f"Mid-month (m=5) forecast helper should test '5=eur_actuals_through_month', got {mid_cell!r}"
     )
     assert "5=project_months" in mid_cell
     assert "NA()" in mid_cell
@@ -703,12 +666,10 @@ def test_cumulative_forecast_helper_row_formulas(trends_ws):
 # v2 T10: Actual / Forecast helper-row clipping past through-month
 # ================================================================
 
+
 def _find_helper_row_by_probe(ws, substring):
     """Return first hidden row whose first-month cell contains `substring`."""
-    hidden_rows = sorted(
-        r for r in range(1, ws.max_row + 1)
-        if ws.row_dimensions[r].hidden
-    )
+    hidden_rows = sorted(r for r in range(1, ws.max_row + 1) if ws.row_dimensions[r].hidden)
     for r in hidden_rows:
         v = ws.cell(r, MONTH_COL_START).value
         if v is not None and substring in str(v):
@@ -723,56 +684,40 @@ def test_actual_helper_row_first_month_clipped(trends_ws):
     # The Actual helper row is the hidden row whose first-month formula
     # contains 'Actuals!' but does not match the forecast 2-anchor shape
     # (no 'Plan-Forecast' ref — defensive) and is not the ceiling row.
-    hidden_rows = sorted(
-        r for r in range(1, trends_ws.max_row + 1)
-        if trends_ws.row_dimensions[r].hidden
-    )
+    hidden_rows = sorted(r for r in range(1, trends_ws.max_row + 1) if trends_ws.row_dimensions[r].hidden)
     actual_row = None
     for r in hidden_rows:
         v = trends_ws.cell(r, MONTH_COL_START).value
         if v is None:
             continue
         s = str(v)
-        if ("Actuals!" in s and "'Plan-Forecast'" not in s
-                and "partner_ceiling" not in s
-                and "SUMPRODUCT" not in s):
+        if "Actuals!" in s and "'Plan-Forecast'" not in s and "partner_ceiling" not in s and "SUMPRODUCT" not in s:
             actual_row = r
             break
-    assert actual_row is not None, (
-        f"No hidden helper row with an Actuals! ref found (hidden={hidden_rows})"
-    )
+    assert actual_row is not None, f"No hidden helper row with an Actuals! ref found (hidden={hidden_rows})"
 
     first_cell = trends_ws.cell(actual_row, MONTH_COL_START).value
     assert isinstance(first_cell, str)
     assert "eur_actuals_through_month" in first_cell, (
-        f"First-month Actual formula must reference eur_actuals_through_month, "
-        f"got {first_cell!r}"
+        f"First-month Actual formula must reference eur_actuals_through_month, got {first_cell!r}"
     )
-    assert "NA()" in first_cell, (
-        f"First-month Actual formula must clip with NA(), got {first_cell!r}"
-    )
+    assert "NA()" in first_cell, f"First-month Actual formula must clip with NA(), got {first_cell!r}"
     # Literal month index 1 for m_idx=0
     assert "1>eur_actuals_through_month" in first_cell, (
-        f"First-month Actual formula should test '1>eur_actuals_through_month', "
-        f"got {first_cell!r}"
+        f"First-month Actual formula should test '1>eur_actuals_through_month', got {first_cell!r}"
     )
 
 
 def test_actual_helper_row_mid_month_clipped(trends_ws):
     """Actual helper-row formula at m_idx=5 uses literal '6>eur_actuals_through_month'."""
-    hidden_rows = sorted(
-        r for r in range(1, trends_ws.max_row + 1)
-        if trends_ws.row_dimensions[r].hidden
-    )
+    hidden_rows = sorted(r for r in range(1, trends_ws.max_row + 1) if trends_ws.row_dimensions[r].hidden)
     actual_row = None
     for r in hidden_rows:
         v = trends_ws.cell(r, MONTH_COL_START).value
         if v is None:
             continue
         s = str(v)
-        if ("Actuals!" in s and "'Plan-Forecast'" not in s
-                and "partner_ceiling" not in s
-                and "SUMPRODUCT" not in s):
+        if "Actuals!" in s and "'Plan-Forecast'" not in s and "partner_ceiling" not in s and "SUMPRODUCT" not in s:
             actual_row = r
             break
     assert actual_row is not None
@@ -781,14 +726,12 @@ def test_actual_helper_row_mid_month_clipped(trends_ws):
     mid_cell = trends_ws.cell(actual_row, MONTH_COL_START + 5).value
     assert isinstance(mid_cell, str)
     assert "6>eur_actuals_through_month" in mid_cell, (
-        f"Mid-month (m_idx=5) Actual formula should test "
-        f"'6>eur_actuals_through_month', got {mid_cell!r}"
+        f"Mid-month (m_idx=5) Actual formula should test '6>eur_actuals_through_month', got {mid_cell!r}"
     )
     assert "NA()" in mid_cell
     # Cumulative shape preserved inside the IF's false-branch.
     assert "+Actuals!" in mid_cell, (
-        f"Mid-month Actual formula should retain cumulative "
-        f"'<prev>+Actuals!...' shape, got {mid_cell!r}"
+        f"Mid-month Actual formula should retain cumulative '<prev>+Actuals!...' shape, got {mid_cell!r}"
     )
 
 
@@ -808,12 +751,10 @@ def test_forecast_helper_row_two_anchor_pattern(trends_ws):
     mid_cell = trends_ws.cell(forecast_row, MONTH_COL_START + 5).value
     assert isinstance(mid_cell, str)
     assert "6=eur_actuals_through_month" in mid_cell, (
-        f"Mid-month (m_idx=5) forecast formula should test "
-        f"'6=eur_actuals_through_month', got {mid_cell!r}"
+        f"Mid-month (m_idx=5) forecast formula should test '6=eur_actuals_through_month', got {mid_cell!r}"
     )
     assert "6=project_months" in mid_cell, (
-        f"Mid-month forecast formula should test '6=project_months' "
-        f"(future-anchor branch), got {mid_cell!r}"
+        f"Mid-month forecast formula should test '6=project_months' (future-anchor branch), got {mid_cell!r}"
     )
     assert "NA()" in mid_cell
     # hours_actuals_through_month is not the forecast trust boundary.
@@ -828,10 +769,7 @@ def test_planned_and_ceiling_helper_rows_unchanged(trends_ws):
     """Planned + Ceiling helper rows must NOT contain NA() — only Actual and
     Forecast are clipped by v2 T10.
     """
-    hidden_rows = sorted(
-        r for r in range(1, trends_ws.max_row + 1)
-        if trends_ws.row_dimensions[r].hidden
-    )
+    hidden_rows = sorted(r for r in range(1, trends_ws.max_row + 1) if trends_ws.row_dimensions[r].hidden)
     # Planned: contains SUMPRODUCT (and not Actuals/partner_ceiling alone)
     planned_row = None
     ceiling_row = None
@@ -844,12 +782,8 @@ def test_planned_and_ceiling_helper_rows_unchanged(trends_ws):
             planned_row = r
         elif s.strip() == "=partner_ceiling" and ceiling_row is None:
             ceiling_row = r
-    assert planned_row is not None, (
-        f"Could not find planned helper row (hidden={hidden_rows})"
-    )
-    assert ceiling_row is not None, (
-        f"Could not find ceiling helper row (hidden={hidden_rows})"
-    )
+    assert planned_row is not None, f"Could not find planned helper row (hidden={hidden_rows})"
+    assert ceiling_row is not None, f"Could not find ceiling helper row (hidden={hidden_rows})"
 
     # Probe a few month columns on each.
     for m_idx in (0, 3, 7):

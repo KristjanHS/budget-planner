@@ -17,6 +17,7 @@ Out-of-scope and lives in sibling files:
 * ``tests/test_reader_team_priority.py`` — TEAM ROSTER Priority field
   round-trip + clamping.
 """
+
 import pytest
 from openpyxl import Workbook
 
@@ -84,6 +85,7 @@ class TestDiscoverLayoutValidation:
     def test_discover_layout_finds_wp_formula_rows(self, fresh_wb_path):
         """discover_layout correctly finds WP data rows via formula scan."""
         import openpyxl
+
         wb = openpyxl.load_workbook(fresh_wb_path)
         layout = discover_layout(wb["Plan"])
         num_wps = len(WORK_PACKAGES)
@@ -92,9 +94,7 @@ class TestDiscoverLayoutValidation:
         assert layout["planned_total_row"] == layout["planned_last_wp_row"] + 1
         # Verify first WP row has a formula in col A
         first_val = wb["Plan"].cell(layout["planned_first_wp_row"], 1).value
-        assert str(first_val).startswith("="), (
-            f"Expected formula at planned first WP row, got {first_val!r}"
-        )
+        assert str(first_val).startswith("="), f"Expected formula at planned first WP row, got {first_val!r}"
         wb.close()
 
 
@@ -111,9 +111,7 @@ def test_iter_named_range_rows_returns_live_row_span_after_middle_insert():
     ws.title = "Config"
     for i, val in enumerate(["A", "B", "C"], start=5):
         ws.cell(i, 1, value=val)
-    wb.defined_names["roster_ftes"] = DefinedName(
-        name="roster_ftes", attr_text="Config!$B$5:$B$7"
-    )
+    wb.defined_names["roster_ftes"] = DefinedName(name="roster_ftes", attr_text="Config!$B$5:$B$7")
 
     # Excel-style middle insert: shift rows 6+ down by 1.
     ws.insert_rows(6, amount=1)
@@ -134,9 +132,7 @@ def test_iter_named_range_rows_handles_single_cell_ref():
     ws = wb.active
     assert ws is not None
     ws.title = "Config"
-    wb.defined_names["project_start"] = DefinedName(
-        name="project_start", attr_text="Config!$B$5"
-    )
+    wb.defined_names["project_start"] = DefinedName(name="project_start", attr_text="Config!$B$5")
     assert _iter_named_range_rows(wb, "project_start") == (5, 5)
 
 

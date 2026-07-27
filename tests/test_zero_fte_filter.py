@@ -8,7 +8,7 @@ mirror invariant holds across both sheets.
 Empty-window intersection (non-zero ``total_fte`` but the assignment window
 has no overlap with the WP active range) is **not** addressed by this
 filter — those rows still render as all-grey rows. See plan
-``docs/plans/archived/2026-04-28-capacity-row-cleanup-and-skip-cumulate-plan.md`` § Risks.
+``docs/plans/archive/2026-04-28-capacity-row-cleanup-and-skip-cumulate-plan.md`` § Risks.
 """
 
 import openpyxl
@@ -41,12 +41,9 @@ def test_filter_zero_fte_wps_drops_zero_keeps_nonzero():
     selective, not "remove everything".
     """
     person_assignments = [
-        {"person": "Alice", "wp": "WP1", "total_fte": 0.0,
-         "start": 1, "end": 12},
-        {"person": "Alice", "wp": "WP2", "total_fte": 3.0,
-         "start": 1, "end": 12},
-        {"person": "Alice", "wp": "WP3", "total_fte": 0,
-         "start": 1, "end": 12},
+        {"person": "Alice", "wp": "WP1", "total_fte": 0.0, "start": 1, "end": 12},
+        {"person": "Alice", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 12},
+        {"person": "Alice", "wp": "WP3", "total_fte": 0, "start": 1, "end": 12},
     ]
     ordered = ["WP1", "WP2", "WP3"]
     assert filter_zero_fte_wps(person_assignments, ordered) == ["WP2"]
@@ -65,12 +62,9 @@ def zero_fte_wb_path(tmp_path_factory):
     """
     out = tmp_path_factory.mktemp("zero_fte_wb") / "zero_fte.xlsx"
     assignments = [
-        {"person": "Alice", "wp": "WP1", "total_fte": 0.0,
-         "start": 1, "end": 12},
-        {"person": "Alice", "wp": "WP2", "total_fte": 3.0,
-         "start": 1, "end": 18},
-        {"person": "Bob", "wp": "WP5", "total_fte": 6.0,
-         "start": 4, "end": 13},
+        {"person": "Alice", "wp": "WP1", "total_fte": 0.0, "start": 1, "end": 12},
+        {"person": "Alice", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 18},
+        {"person": "Bob", "wp": "WP5", "total_fte": 6.0, "start": 4, "end": 13},
     ]
     init_workbook(str(out), assignments=assignments)
     return str(out)
@@ -82,12 +76,8 @@ def test_capacity_drops_zero_fte_wp_row(zero_fte_wb_path):
     _, wps = read_config_sheet(wb["Config"])
     cap = read_capacity_sheet(wb["Capacity"], wps)
     alice_wps = cap["person_groups"]["Alice"]["wp_values"]
-    assert "WP1" not in alice_wps, (
-        "Zero-FTE WP1 row should not appear on Capacity"
-    )
-    assert "WP2" in alice_wps, (
-        "Non-zero bystander WP2 must still be present"
-    )
+    assert "WP1" not in alice_wps, "Zero-FTE WP1 row should not appear on Capacity"
+    assert "WP2" in alice_wps, "Non-zero bystander WP2 must still be present"
     wb.close()
 
 
@@ -126,8 +116,7 @@ def test_capacity_and_actuals_hours_wp_row_order_mirror(zero_fte_wb_path):
         cap_wp_seq = [w for w in cap["person_groups"][name]["wp_values"]]
         hrs_wp_seq = [w for w in hrs.get(name, {}) if w in wp_ids]
         assert cap_wp_seq == hrs_wp_seq, (
-            f"WP-row order differs for {name}: "
-            f"Capacity={cap_wp_seq} vs Actuals-Hours={hrs_wp_seq}"
+            f"WP-row order differs for {name}: Capacity={cap_wp_seq} vs Actuals-Hours={hrs_wp_seq}"
         )
     wb.close()
 
@@ -139,7 +128,7 @@ def test_rebuild_drops_hours_when_assignment_total_fte_zeroed(tmp_path):
     """A1 (accepted): hours logged on a row whose Config assignment is later
     set to ``total_fte == 0`` are silently discarded on rebuild.
 
-    Per ``docs/plans/archived/2026-04-28-capacity-row-cleanup-and-skip-cumulate-plan.md`` Q2.2,
+    Per ``docs/plans/archive/2026-04-28-capacity-row-cleanup-and-skip-cumulate-plan.md`` Q2.2,
     there is no preserved-hours carve-out for the zero-FTE filter — the
     row drops everywhere on rebuild even if hours were previously entered.
     No telemetry, no warning. ``git log output/budget_plan*.xlsx`` is
@@ -154,8 +143,7 @@ def test_rebuild_drops_hours_when_assignment_total_fte_zeroed(tmp_path):
     init_workbook(
         output_path=path,
         assignments=[
-            {"person": "Alice", "wp": "WP2", "total_fte": 3.0,
-             "start": 1, "end": 12},
+            {"person": "Alice", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 12},
         ],
     )
 
@@ -188,8 +176,7 @@ def test_rebuild_drops_hours_when_assignment_total_fte_zeroed(tmp_path):
     # Now zero out the assignment via Config and rebuild.
     config_ws = wb["Config"]
     for r in range(1, config_ws.max_row + 1):
-        if (config_ws.cell(r, 1).value == "Alice"
-                and config_ws.cell(r, 2).value == "WP2"):
+        if config_ws.cell(r, 1).value == "Alice" and config_ws.cell(r, 2).value == "WP2":
             _set(config_ws, r, 3, 0.0)
             break
     wb.save(path)
@@ -199,9 +186,7 @@ def test_rebuild_drops_hours_when_assignment_total_fte_zeroed(tmp_path):
 
     wb = openpyxl.load_workbook(path)
     rebuilt = read_actuals_hours_sheet(wb["Actuals-Hours"])
-    assert "WP2" not in rebuilt.get("Alice", {}), (
-        "Zero-FTE row should be dropped from Actuals-Hours after rebuild"
-    )
+    assert "WP2" not in rebuilt.get("Alice", {}), "Zero-FTE row should be dropped from Actuals-Hours after rebuild"
 
     _, wps = read_config_sheet(wb["Config"])
     cap_after = read_capacity_sheet(wb["Capacity"], wps)

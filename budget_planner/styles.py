@@ -1,4 +1,5 @@
 """Spreadsheet styling constants and helpers."""
+
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, Protection
 from openpyxl.utils import get_column_letter
 
@@ -69,8 +70,7 @@ CF_PASTEL_FILLS = [
 ]
 
 THIN_BORDER = Border(
-    left=Side(style="thin"), right=Side(style="thin"),
-    top=Side(style="thin"), bottom=Side(style="thin")
+    left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin")
 )
 CENTER = Alignment(horizontal="center", vertical="center")
 CENTER_WRAP = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -101,13 +101,13 @@ def _is_blue_font(font):
     """Check if font color is blue (0000FF), indicating a user input cell."""
     if font is None:
         return False
-    color = getattr(font, 'color', None)
+    color = getattr(font, "color", None)
     if color is None:
         return False
-    rgb = getattr(color, 'rgb', None)
+    rgb = getattr(color, "rgb", None)
     if rgb is None:
         return False
-    return str(rgb).upper().endswith('0000FF')
+    return str(rgb).upper().endswith("0000FF")
 
 
 def col_letter(c):
@@ -137,10 +137,10 @@ def sized_comment(text: str, author: str = "Programme Budget Tool"):
     line; height from the resulting wrapped line count.
     """
     from openpyxl.comments import Comment as _Comment
+
     lines = text.splitlines() or [""]
     longest = max((len(line) for line in lines), default=0)
-    width = min(_COMMENT_MAX_WIDTH_PT,
-                max(_COMMENT_MIN_WIDTH_PT, longest * _COMMENT_CHAR_WIDTH_PT))
+    width = min(_COMMENT_MAX_WIDTH_PT, max(_COMMENT_MIN_WIDTH_PT, longest * _COMMENT_CHAR_WIDTH_PT))
     # Chars that fit on one visual line at the chosen width.
     chars_per_line = max(1, width // _COMMENT_CHAR_WIDTH_PT)
     wrapped_lines = 0
@@ -149,9 +149,7 @@ def sized_comment(text: str, author: str = "Programme Budget Tool"):
             wrapped_lines += 1
         else:
             wrapped_lines += -(-len(line) // chars_per_line)  # ceil div
-    height = min(_COMMENT_MAX_HEIGHT_PT,
-                 max(_COMMENT_MIN_HEIGHT_PT,
-                     wrapped_lines * _COMMENT_LINE_HEIGHT_PT))
+    height = min(_COMMENT_MAX_HEIGHT_PT, max(_COMMENT_MIN_HEIGHT_PT, wrapped_lines * _COMMENT_LINE_HEIGHT_PT))
     c = _Comment(text, author)
     c.width = width
     c.height = height
@@ -166,8 +164,7 @@ def write_section_header(ws, row, title, merge_end):
         style_cell(ws, row, c, fill=SECTION_FILL)
 
 
-def apply_year_groups(ws, month_col_start, project_months, current_month=None,
-                      *, project_start=None):
+def apply_year_groups(ws, month_col_start, project_months, current_month=None, *, project_start=None):
     """Apply column grouping by calendar year (outline level 1).
 
     Groups month columns by calendar-year boundaries. If current_month is
@@ -185,6 +182,7 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None,
     """
     if project_start is not None:
         from budget_planner.layout import _calendar_year_groups
+
         groups = list(_calendar_year_groups(project_start, project_months))
     else:
         # Backward compat: fixed 12-month spans
@@ -207,6 +205,7 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None,
         # Determine calendar year for this group
         if project_start is not None:
             from dateutil.relativedelta import relativedelta
+
             cal_year = (project_start + relativedelta(months=group_start)).year
         else:
             cal_year = None
@@ -215,9 +214,9 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None,
         if cal_year is not None:
             expand = cal_year in (2025, 2026)
         elif current_month is not None:
-            expand = (group_start < current_month <= group_start + span)
+            expand = group_start < current_month <= group_start + span
         else:
-            expand = (group_start == 0)
+            expand = group_start == 0
 
         if group_col_start <= year_end_col:
             ws.column_dimensions.group(
@@ -239,6 +238,4 @@ def auto_fit_columns(ws, *, min_width=8, max_width=40):
             max_len = max(max_len, len(str(val)))
         if max_len > 0:
             col_letter_str = col_cells[0].column_letter
-            ws.column_dimensions[col_letter_str].width = min(
-                max(max_len + 2, min_width), max_width
-            )
+            ws.column_dimensions[col_letter_str].width = min(max(max_len + 2, min_width), max_width)

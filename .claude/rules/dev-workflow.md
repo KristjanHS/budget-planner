@@ -18,7 +18,11 @@ Pytest runs mutate `output/*.xlsx` (openpyxl/LO zip metadata). Generated workboo
 Always include editor-config dirs (`.codex/`, `.cursor/`, `.vscode/`) in commits when present.
 
 ## Linting
-Run `pyright` (full project) before committing. Fix all errors.
+Run `make lint` (pyright + `ruff check` + `ruff format --check`, all full-project) before committing. Fix all errors.
+**Do NOT upgrade the host ruff past 0.12.9 without re-testing this.** ruff 0.16.0's formatter strips the parentheses from `except (A, B):` under this project's `line-length = 120`, emitting invalid Python — `make fmt` under it left 6 files unparseable while its own `--check` called them formatted. Reproduced on a clean HEAD file (`uvx ruff@0.16.0 format --diff budget_planner/readers/config.py`); `--isolated` (width 88) does not trigger it. 0.16 also formats Python inside Markdown code blocks, hence the `**/*.md` exclude.
+**`ruff format` needs two passes here.** One pass over the builder modules leaves 7 of them still needing a reformat (the `style_cell(...).value = (...)` long-assignment shape); reproduced on ruff 0.12.9 and 0.16.0, so it is not a stale-version bug. `make fmt` therefore formats twice and asserts convergence — never conclude "formatted" from a single pass.
+A write pass records its own output as formatted, so a cached `--check` straight after a cached `ruff format` reports clean while a cold check finds the residue. `make lint`/`make fmt` pass `--no-cache` (costs 0.02s); the global PostToolUse ruff hook does not, and stays honest only because the file it checks has just changed (cache miss) — it can go blind on files a cached `ruff format` wrote and nothing has touched since.
+Ruff config lives in `pyproject.toml` `[tool.ruff]` (line-length 120, `select = ["E","F","W"]`, `ignore = ["E501"]`, `scripts/office` excluded + `force-exclude = true` so the PostToolUse hook's single-file invocation honours the exclude). Line width is the formatter's job; keep our own modules under 120 by hand anyway — `make fmt` won't split long comments or string literals.
 Subagents create dead code — verify after each task.
 After adding any `# pyright: ignore[reportMissingImports]` suppressions, rerun `uv run pyright` before declaring clean — the next error tier is often hidden behind the import failure.
 

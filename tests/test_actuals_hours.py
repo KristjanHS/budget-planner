@@ -4,8 +4,11 @@ import pytest
 from openpyxl import load_workbook
 
 from budget_planner.config import (
-    DEMO_CAPACITY_ASSIGNMENTS, EXTERNAL_COMMITMENTS, TEAM,
-    PROJECT_MONTHS, WORK_PACKAGES,
+    DEMO_CAPACITY_ASSIGNMENTS,
+    EXTERNAL_COMMITMENTS,
+    TEAM,
+    PROJECT_MONTHS,
+    WORK_PACKAGES,
 )
 from budget_planner.layout import MONTH_COL_START, val_columns
 from budget_planner.styles import GREY_FILL, col_letter
@@ -28,8 +31,7 @@ def hrs(wb):
 
 
 def _person_assigned_wps(person_name):
-    return {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS
-            if a["person"] == person_name}
+    return {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == person_name}
 
 
 def _find_person_header_row(ws, person_name):
@@ -39,20 +41,16 @@ def _find_person_header_row(ws, person_name):
     data_only reads must be stable). We locate the row by matching col-A
     value == person_name AND verifying the A:B merge.
     """
-    merged_ranges = [(mr.min_row, mr.min_col, mr.max_col)
-                     for mr in ws.merged_cells.ranges]
+    merged_ranges = [(mr.min_row, mr.min_col, mr.max_col) for mr in ws.merged_cells.ranges]
     for r in range(1, ws.max_row + 1):
         if ws.cell(r, 1).value != person_name:
             continue
         is_person = any(
-            mr_min_r == r and mr_min_c == 1 and mr_max_c >= 2
-            for mr_min_r, mr_min_c, mr_max_c in merged_ranges
+            mr_min_r == r and mr_min_c == 1 and mr_max_c >= 2 for mr_min_r, mr_min_c, mr_max_c in merged_ranges
         )
         if is_person:
             return r
-    raise AssertionError(
-        f"Person header for {person_name!r} not found on {ws.title}"
-    )
+    raise AssertionError(f"Person header for {person_name!r} not found on {ws.title}")
 
 
 # ── Existence ──
@@ -64,6 +62,7 @@ def test_actuals_hours_sheet_exists(wb):
 
 
 # ── Structure: person groups match team size ──
+
 
 def test_actuals_hours_has_person_group_per_team_member(hrs):
     """One header row per team member."""
@@ -81,8 +80,7 @@ def test_actuals_hours_person_has_assigned_wp_rows(hrs):
         name = member["name"]
         header_row = _find_person_header_row(hrs, name)
         expected_wps = _person_assigned_wps(name)
-        expected_externals = [e for e in EXTERNAL_COMMITMENTS
-                              if e["person"] == name]
+        expected_externals = [e for e in EXTERNAL_COMMITMENTS if e["person"] == name]
 
         # WP rows immediately follow header
         wp_row_count = 0
@@ -94,23 +92,19 @@ def test_actuals_hours_person_has_assigned_wp_rows(hrs):
                 r += 1
                 continue
             # External project row: col A = literal project name (str)
-            if isinstance(v, str) and v in {e["project"]
-                                             for e in expected_externals}:
+            if isinstance(v, str) and v in {e["project"] for e in expected_externals}:
                 r += 1
                 continue
             break
-        assert wp_row_count == len(expected_wps), (
-            f"{name}: expected {len(expected_wps)} WP rows, got {wp_row_count}"
-        )
+        assert wp_row_count == len(expected_wps), f"{name}: expected {len(expected_wps)} WP rows, got {wp_row_count}"
 
         # Next row should be TOTAL label
         total_label = hrs.cell(r, 2).value
-        assert total_label == "TOTAL", (
-            f"{name}: expected TOTAL at row {r}, got {total_label!r}"
-        )
+        assert total_label == "TOTAL", f"{name}: expected TOTAL at row {r}, got {total_label!r}"
 
 
 # ── Inactive months: grey + empty ──
+
 
 def test_actuals_hours_inactive_month_is_empty_and_grey(hrs):
     """The first WP row for Bob, at any month before that WP's active start,
@@ -123,30 +117,22 @@ def test_actuals_hours_inactive_month_is_empty_and_grey(hrs):
     first_wp_code = bob_wps[0]["wp"]  # row order matches DEMO list order
     wp_def = next(w for w in WORK_PACKAGES if w["id"] == first_wp_code)
     if wp_def["start"] <= 1:
-        pytest.skip(
-            f"Bob's first WP {first_wp_code} is active at M1 — "
-            f"no inactive cell available for this assertion"
-        )
+        pytest.skip(f"Bob's first WP {first_wp_code} is active at M1 — no inactive cell available for this assertion")
     bob_header = _find_person_header_row(hrs, "Bob")
     first_wp_row = bob_header + 1
     m1_col = MONTH_COL_START  # M1
     cell = hrs.cell(first_wp_row, m1_col)
-    assert cell.value in (None, ""), (
-        f"Bob {first_wp_code} @ M1 should be empty (inactive); "
-        f"got {cell.value!r}"
-    )
+    assert cell.value in (None, ""), f"Bob {first_wp_code} @ M1 should be empty (inactive); got {cell.value!r}"
     fill = cell.fill
     assert fill is not None
     # PatternFill equality is stricter — compare by fgColor rgb
-    assert str(getattr(fill.fgColor, "rgb", "")).upper().endswith(
-        str(GREY_FILL.fgColor.rgb).upper()
-    ), (
-        f"Bob {first_wp_code} @ M1 fill should be GREY_FILL, "
-        f"got {fill.fgColor.rgb!r}"
+    assert str(getattr(fill.fgColor, "rgb", "")).upper().endswith(str(GREY_FILL.fgColor.rgb).upper()), (
+        f"Bob {first_wp_code} @ M1 fill should be GREY_FILL, got {fill.fgColor.rgb!r}"
     )
 
 
 # ── Active months: blue input + empty (no demo hours pre-filled) ──
+
 
 def test_actuals_hours_active_month_is_blue_and_empty(hrs):
     """Alice WP1 is active M1-M14. Her WP1 row at M1 must be blue + empty."""
@@ -155,21 +141,18 @@ def test_actuals_hours_active_month_is_blue_and_empty(hrs):
     m1_col = MONTH_COL_START
     cell = hrs.cell(wp1_row, m1_col)
     # Empty (no demo pre-fill on hours)
-    assert cell.value in (None, ""), (
-        f"Alice WP1 @ M1 should be empty; got {cell.value!r}"
-    )
+    assert cell.value in (None, ""), f"Alice WP1 @ M1 should be empty; got {cell.value!r}"
     # Blue font (0000FF)
     color = getattr(cell.font.color, "rgb", None)
     assert color is not None
-    assert str(color).upper().endswith("0000FF"), (
-        f"Alice WP1 @ M1 font should be blue, got {color!r}"
-    )
+    assert str(color).upper().endswith("0000FF"), f"Alice WP1 @ M1 font should be blue, got {color!r}"
     # Integer number format — no decimals
     assert "0" in cell.number_format
     assert "." not in cell.number_format
 
 
 # ── TOTAL row formula ──
+
 
 def test_actuals_hours_total_row_sums_data_rows(hrs):
     """TOTAL row M1 formula = SUM of the data rows above for that person."""
@@ -189,9 +172,7 @@ def test_actuals_hours_total_row_sums_data_rows(hrs):
     cl = col_letter(m1_col)
     formula = hrs.cell(total_row, m1_col).value
     expected = f"=SUM({cl}{data_row_start}:{cl}{data_row_end})"
-    assert formula == expected, (
-        f"TOTAL @ M1 expected {expected!r}, got {formula!r}"
-    )
+    assert formula == expected, f"TOTAL @ M1 expected {expected!r}, got {formula!r}"
 
 
 def test_person_header_is_literal_name(hrs):
@@ -201,16 +182,9 @@ def test_person_header_is_literal_name(hrs):
         name = member["name"]
         header_row = _find_person_header_row(hrs, name)
         value = hrs.cell(header_row, 1).value
-        assert isinstance(value, str), (
-            f"Person header for {name} must be a string, got {value!r}"
-        )
-        assert not value.startswith("="), (
-            f"Person header for {name} must be literal, got formula {value!r}"
-        )
-        assert value == name, (
-            f"Person header at row {header_row} expected {name!r}, "
-            f"got {value!r}"
-        )
+        assert isinstance(value, str), f"Person header for {name} must be a string, got {value!r}"
+        assert not value.startswith("="), f"Person header for {name} must be literal, got formula {value!r}"
+        assert value == name, f"Person header at row {header_row} expected {name!r}, got {value!r}"
 
 
 def test_actuals_hours_has_only_sum_validation_column(hrs):
@@ -228,6 +202,7 @@ def test_actuals_hours_has_only_sum_validation_column(hrs):
 
 
 # ── Cum-hours helper column (feeds Capacity to-date Actual PM) ──
+
 
 def test_cum_hours_header_present(hrs):
     """Header row carries the 'Cum hours (to date)' label."""

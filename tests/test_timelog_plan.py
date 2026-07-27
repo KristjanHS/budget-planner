@@ -8,6 +8,7 @@ openpyxl round-trip alone can't verify this).
 CF rules are matched by fill colour + formula pattern, not positional index,
 per ``.claude/rules/openpyxl-patterns.md``.
 """
+
 from __future__ import annotations
 
 import json
@@ -54,11 +55,13 @@ def recalced_assigned_path(assigned_wb_path, tmp_path_factory):
     mutate a shared artifact. Skips when LO is unavailable.
     """
     import shutil
+
     dst = tmp_path_factory.mktemp("tlp_recalc") / "assigned_recalced.xlsx"
     shutil.copyfile(assigned_wb_path, dst)
     result = subprocess.run(
         ["python3", str(SCRIPTS_DIR / "recalc.py"), str(dst)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         pytest.skip("LibreOffice not available")
@@ -79,11 +82,13 @@ def _project_months(wb) -> int:
 
 def _read_team(wb) -> list[dict]:
     from budget_planner.reader import read_team_from_config
+
     return read_team_from_config(wb["Config"])
 
 
 def _read_wps(wb) -> list[dict]:
     from budget_planner.reader import read_config_sheet
+
     _params, wps = read_config_sheet(wb["Config"])
     return wps
 
@@ -200,9 +205,7 @@ def test_grid_person_col_a_cross_refs_config(tlp):
     """Every person row's col A is a ``=Config!A<n>`` cross-reference."""
     for r in _iter_person_rows(tlp, _grid_person_first_row(tlp)):
         v = tlp.cell(r, 1).value
-        assert isinstance(v, str) and re.match(r"^=Config!A\d+$", v), (
-            f"row {r} col A should be =Config!A<n>, got {v!r}"
-        )
+        assert isinstance(v, str) and re.match(r"^=Config!A\d+$", v), f"row {r} col A should be =Config!A<n>, got {v!r}"
 
 
 def test_grid_person_row_count_matches_team(tlp, assigned_wb):
@@ -223,18 +226,14 @@ def test_underload_removed(tlp, assigned_wb):
     for r in _iter_person_rows(tlp, _grid_person_first_row(tlp)):
         v = tlp.cell(r, 2).value
         if isinstance(v, str) and v.startswith("="):
-            assert "COUNTIF" not in v, (
-                f"row {r} col B (M1) still carries Underload-like formula: {v!r}"
-            )
+            assert "COUNTIF" not in v, f"row {r} col B (M1) still carries Underload-like formula: {v!r}"
 
     # PER-PERSON SUMMARY: col B is Assigned (a COUNTIF), not Underload.
     # The distinguishing signature of v1 Underload was "=$D{r}-…COUNTIF".
     # v2 Assigned is "=COUNTIF(…,\"WP*\")".
     for r in _iter_person_rows(tlp, _summary_person_first_row(tlp)):
         v = str(tlp.cell(r, 2).value or "")
-        assert v.startswith("=COUNTIF("), (
-            f"PER-PERSON SUMMARY col B should be Assigned=COUNTIF, got {v!r}"
-        )
+        assert v.startswith("=COUNTIF("), f"PER-PERSON SUMMARY col B should be Assigned=COUNTIF, got {v!r}"
         assert "=$D" not in v, f"col B carries v1 Underload formula: {v!r}"
 
     # Header confirms semantic rename.
@@ -290,9 +289,7 @@ def test_no_toggle_row2_label_or_value(tlp):
     """
     for c in (9, 10):
         v = tlp.cell(2, c).value
-        assert v in (None, ""), (
-            f"row 2 col {c} expected empty after toggle removal, got {v!r}"
-        )
+        assert v in (None, ""), f"row 2 col {c} expected empty after toggle removal, got {v!r}"
 
 
 def test_legacy_resolve_flag_named_range_absent(assigned_wb):
@@ -332,8 +329,14 @@ def test_wp_summary_headers_v2(tlp):
     # (direct Config!F xref = +i). Buffer % inserted at col E; cols
     # Assigned months/WP sched months/Burn rate/OOW shifted one col right.
     expected = [
-        "WP code", "Budget +i", "Assigned €", "Buffer €", "Buffer %",
-        "Assigned months", "WP sched months", "Burn rate needed",
+        "WP code",
+        "Budget +i",
+        "Assigned €",
+        "Buffer €",
+        "Buffer %",
+        "Assigned months",
+        "WP sched months",
+        "Burn rate needed",
         "Any out-of-window?",
     ]
     got = [tlp.cell(hdr_row, 1 + i).value for i in range(len(expected))]
@@ -444,8 +447,14 @@ def test_person_summary_headers_v2(tlp):
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_PERSON_SUMMARY) + 1
     assert tlp.cell(hdr_row, 1).value == "Person"
     expected = [
-        "Assigned", "Pool", "Over-pool?", "Switches",
-        "First log", "Last log", "Rate (€/PM) -i", "Rate (€/PM) +i",
+        "Assigned",
+        "Pool",
+        "Over-pool?",
+        "Switches",
+        "First log",
+        "Last log",
+        "Rate (€/PM) -i",
+        "Rate (€/PM) +i",
     ]
     got = [tlp.cell(hdr_row, 2 + i).value for i in range(len(expected))]
     assert got == expected, got
@@ -457,9 +466,7 @@ def test_person_summary_shape(tlp):
     headers = [tlp.cell(hdr_row, c).value for c in range(1, 11)]
     assert headers[0] == "Person"
     assert all(headers[i] is not None and headers[i] != "" for i in range(9)), headers
-    assert headers[9] in (None, ""), (
-        f"PER-PERSON SUMMARY col 10 should be empty, got {headers[9]!r}"
-    )
+    assert headers[9] in (None, ""), f"PER-PERSON SUMMARY col 10 should be empty, got {headers[9]!r}"
     # "Largest gap" must not appear anywhere in the header row.
     assert "Largest gap" not in headers, headers
 
@@ -485,8 +492,7 @@ def test_rate_col_h(tlp, assigned_wb):
         summary_last_row = r
     expected_fragment = f"I{first_person}:I{summary_last_row}"
     assert expected_fragment in assigned_eur, (
-        f"expected rate-vector range {expected_fragment!r} in Assigned € formula, "
-        f"got {assigned_eur!r}"
+        f"expected rate-vector range {expected_fragment!r} in Assigned € formula, got {assigned_eur!r}"
     )
     # Anti-assertion: -i range must NOT be the rate vector for Assigned €.
     stale_fragment = f"H{first_person}:H{summary_last_row}"
@@ -515,19 +521,13 @@ def test_burn_rate_cf_uses_plus_i_max(tlp):
         if burn_addr not in str(cf_range.sqref):
             continue
         for rule in tlp.conditional_formatting[cf_range]:
-            for f in (rule.formula or []):
+            for f in rule.formula or []:
                 if "MAX(" in f and burn_addr in f:
                     found = True
                     expected_fragment = f"I{first_person}:I{summary_last_row}"
-                    assert expected_fragment in f, (
-                        f"burn-rate CF MAX must read col-I (+i) rate range, "
-                        f"got {f!r}"
-                    )
+                    assert expected_fragment in f, f"burn-rate CF MAX must read col-I (+i) rate range, got {f!r}"
                     stale = f"H{first_person}:H{summary_last_row}"
-                    assert stale not in f, (
-                        f"burn-rate CF still references stale col-H (-i) "
-                        f"rate range: {f!r}"
-                    )
+                    assert stale not in f, f"burn-rate CF still references stale col-H (-i) rate range: {f!r}"
     assert found, "no burn-rate CF rule found on PER-WP SUMMARY col H"
 
 
@@ -584,14 +584,10 @@ def test_first_log_first_non_empty_recalc(recalced_assigned_path):
                 break
         first_log = ws.cell(s_row, 6).value
         if first_non_empty_col is None:
-            assert first_log in (None, ""), (
-                f"summary row {s_row}: empty grid but First log = {first_log!r}"
-            )
+            assert first_log in (None, ""), f"summary row {s_row}: empty grid but First log = {first_log!r}"
             continue
         expected = ws.cell(month_header_row, first_non_empty_col).value
-        assert first_log == expected, (
-            f"summary row {s_row}: expected First log = {expected!r}, got {first_log!r}"
-        )
+        assert first_log == expected, f"summary row {s_row}: expected First log = {expected!r}, got {first_log!r}"
         checked += 1
     assert checked > 0, "no populated grid rows — fixture didn't exercise the formula"
     wb.close()
@@ -622,14 +618,10 @@ def test_last_log_last_non_empty_recalc(recalced_assigned_path):
                 break
         last_log = ws.cell(s_row, 7).value
         if last_non_empty_col is None:
-            assert last_log in (None, ""), (
-                f"summary row {s_row}: empty grid but Last log = {last_log!r}"
-            )
+            assert last_log in (None, ""), f"summary row {s_row}: empty grid but Last log = {last_log!r}"
             continue
         expected = ws.cell(month_header_row, last_non_empty_col).value
-        assert last_log == expected, (
-            f"summary row {s_row}: expected Last log = {expected!r}, got {last_log!r}"
-        )
+        assert last_log == expected, f"summary row {s_row}: expected Last log = {expected!r}, got {last_log!r}"
         if last_non_empty_col < m_end:
             any_partial_row_checked = True
         checked += 1
@@ -652,6 +644,7 @@ def test_last_log_last_non_empty_recalc(recalced_assigned_path):
 def _expected_year_groups(project_start, project_months: int) -> list[tuple[int, int, int]]:
     """Mirror of _calendar_year_groups: (year, first_month, last_month) 1-indexed."""
     from dateutil.relativedelta import relativedelta
+
     out: list[tuple[int, int, int]] = []
     m = 0
     while m < project_months:
@@ -667,6 +660,7 @@ def test_year_cols_count_and_headers(tlp, assigned_wb):
     """Year col count = distinct calendar years spanned; headers = Y{yyyy} +i
     with WITH_INDIRECT_HEADER_FILL (T7.3 display-layer +i flip)."""
     from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
+
     params, _wps = _read_config(assigned_wb)
     months = params["months"]
     groups = _expected_year_groups(params["start"], months)
@@ -676,9 +670,7 @@ def test_year_cols_count_and_headers(tlp, assigned_wb):
     expected_fill_rgb = WITH_INDIRECT_HEADER_FILL.fgColor.rgb
     for i, (year, _fm, _lm) in enumerate(groups):
         cell = tlp.cell(hdr_row, base_cols + 1 + i)
-        assert cell.value == f"Y{year} +i", (
-            f"col {base_cols + 1 + i}: {cell.value!r}"
-        )
+        assert cell.value == f"Y{year} +i", f"col {base_cols + 1 + i}: {cell.value!r}"
         assert cell.fill.fgColor.rgb == expected_fill_rgb, (
             f"col {base_cols + 1 + i}: expected WITH_INDIRECT_HEADER_FILL "
             f"{expected_fill_rgb}, got {cell.fill.fgColor.rgb!r}"
@@ -692,8 +684,14 @@ def test_stop_reason_col_present(tlp, assigned_wb):
     """Col J on PER-WP SUMMARY header row reads ``Stop reason``; each WP row
     carries a non-empty reason string from the closed enum."""
     valid = {
-        "No candidates", "No window", "-11% override", "Filled",
-        "+12% cap", "Pool empty", "Window full", "Underfilled",
+        "No candidates",
+        "No window",
+        "-11% override",
+        "Filled",
+        "+12% cap",
+        "Pool empty",
+        "Window full",
+        "Underfilled",
     }
     hdr_row = _find_section_title_row(tlp, SECTION_TITLE_WP_SUMMARY) + 1
     assert tlp.cell(hdr_row, 10).value == "Stop reason"
@@ -725,17 +723,13 @@ def test_year_cols_overlap_blanks(tlp, assigned_wb):
                 )
                 checked_overlap += 1
             else:
-                assert val in ("", None), (
-                    f"WP {wp['id']} year {groups[yi][0]}: expected blank, got {val!r}"
-                )
+                assert val in ("", None), f"WP {wp['id']} year {groups[yi][0]}: expected blank, got {val!r}"
                 checked_nonoverlap += 1
     # Bystander: ensure we actually exercised both branches.
     assert checked_overlap > 0
     # A non-overlap bystander is only possible if some WP doesn't span every
     # year. In the demo fixture WPs are staggered, so expect ≥1 non-overlap.
-    assert checked_nonoverlap > 0, (
-        "no non-overlap year cells in fixture — selectivity test is vacuous"
-    )
+    assert checked_nonoverlap > 0, "no non-overlap year cells in fixture — selectivity test is vacuous"
 
 
 def test_year_cols_sum_matches_assigned(recalced_assigned_path):
@@ -766,8 +760,7 @@ def test_year_cols_sum_matches_assigned(recalced_assigned_path):
                 year_sum += float(v)
         expected = float(assigned_eur)
         assert abs(year_sum - expected) <= tolerance, (
-            f"WP {wp['id']}: sum of year cols {year_sum} vs Assigned € "
-            f"{expected} (tolerance ±{tolerance})"
+            f"WP {wp['id']}: sum of year cols {year_sum} vs Assigned € {expected} (tolerance ±{tolerance})"
         )
         checked += 1
     assert checked > 0, "no numeric Assigned € values — recalc didn't populate"
@@ -776,6 +769,7 @@ def test_year_cols_sum_matches_assigned(recalced_assigned_path):
 
 def _read_config(wb):
     from budget_planner.reader import read_config_sheet
+
     return read_config_sheet(wb["Config"])
 
 
@@ -785,6 +779,7 @@ def _read_config(wb):
 def _vacation_project_months(project_start, project_months: int, vac_cal_month: int) -> set[int]:
     """Return 1-indexed project months whose calendar month == vac_cal_month."""
     from dateutil.relativedelta import relativedelta
+
     out: set[int] = set()
     for i in range(project_months):
         d = project_start + relativedelta(months=i)
@@ -818,14 +813,13 @@ def test_num_vacation_months_literal(assigned_wb):
     cfg = assigned_wb["Config"]
     val = cfg[ref.replace("$", "")].value
     expected = len(_vacation_project_months(params["start"], params["months"], 7))
-    assert val == expected, (
-        f"num_vacation_months: expected {expected}, got {val!r}"
-    )
+    assert val == expected, f"num_vacation_months: expected {expected}, got {val!r}"
 
 
 def test_vacation_cells_locked(assigned_wb, tlp):
     """Every July cell across person rows is '', has VACATION_FILL, locked=True."""
     from budget_planner.styles import VACATION_FILL
+
     params, _wps = _read_config(assigned_wb)
     m_start = TIMELOG_MONTH_COL_START
     vac_months = _vacation_project_months(params["start"], params["months"], 7)
@@ -842,16 +836,11 @@ def test_vacation_cells_locked(assigned_wb, tlp):
             col = m_start + month_num - 1
             cell = tlp.cell(r, col)
             assert cell.value in (None, ""), (
-                f"row {r} col {col} (month {month_num}): vacation cell "
-                f"must be empty, got {cell.value!r}"
+                f"row {r} col {col} (month {month_num}): vacation cell must be empty, got {cell.value!r}"
             )
             rgb = (cell.fill.fgColor.rgb or "").upper() if cell.fill and cell.fill.fgColor else ""
-            assert rgb == expected_fill_rgb, (
-                f"row {r} col {col}: expected VACATION_FILL {expected_fill_rgb}, got {rgb}"
-            )
-            assert cell.protection.locked is True, (
-                f"row {r} col {col}: vacation cell must be locked=True"
-            )
+            assert rgb == expected_fill_rgb, f"row {r} col {col}: expected VACATION_FILL {expected_fill_rgb}, got {rgb}"
+            assert cell.protection.locked is True, f"row {r} col {col}: vacation cell must be locked=True"
             checked_vac += 1
         # Bystander: at least one non-vacation in-window cell on the same row
         # must NOT have VACATION_FILL — proves the fill is vacation-specific.
@@ -876,9 +865,7 @@ def test_pool_formula_accounts_for_vacation(tlp):
     first = _summary_person_first_row(tlp)
     pool_val = str(tlp.cell(first, 3).value or "")
     assert pool_val.startswith("=ROUND("), pool_val
-    assert "num_vacation_months" in pool_val, (
-        f"Pool formula must subtract num_vacation_months, got {pool_val!r}"
-    )
+    assert "num_vacation_months" in pool_val, f"Pool formula must subtract num_vacation_months, got {pool_val!r}"
     # Anti-assertion: the pre-enhancement form (plain multiply) is gone.
     assert "project_months,0)" not in pool_val or "-num_vacation_months" in pool_val
 
@@ -907,6 +894,7 @@ def test_pool_value_after_recalc(recalced_assigned_path):
         name: str | None = None
         if isinstance(col_a, str) and col_a.startswith("="):
             import re as _re
+
             m = _re.match(r"=Config!A(\d+)", col_a)
             if m:
                 name = str(cfg_ws.cell(int(m.group(1)), 1).value or "")
@@ -957,6 +945,7 @@ def test_monthly_total_row_present(tlp, assigned_wb):
     are -i so the leaf is -i) and WITHOUT_INDIRECT_HEADER_FILL on the
     label cell."""
     from budget_planner.styles import WITHOUT_INDIRECT_HEADER_FILL
+
     months = _project_months(assigned_wb)
     m_start = TIMELOG_MONTH_COL_START
     m_end = m_start + months - 1
@@ -964,16 +953,14 @@ def test_monthly_total_row_present(tlp, assigned_wb):
     total_row = _monthly_total_row(tlp)
     label_cell = tlp.cell(total_row, 1)
     assert label_cell.value == "Monthly total -i"
-    assert (
-        label_cell.fill.fgColor.rgb == WITHOUT_INDIRECT_HEADER_FILL.fgColor.rgb
-    ), f"label fill {label_cell.fill.fgColor.rgb!r}"
+    assert label_cell.fill.fgColor.rgb == WITHOUT_INDIRECT_HEADER_FILL.fgColor.rgb, (
+        f"label fill {label_cell.fill.fgColor.rgb!r}"
+    )
 
     checked = 0
     for c in range(m_start, m_end + 1):
         v = str(tlp.cell(total_row, c).value or "")
-        assert v.startswith("=ROUND(SUMPRODUCT("), (
-            f"col {c}: expected ROUND(SUMPRODUCT(…), got {v!r}"
-        )
+        assert v.startswith("=ROUND(SUMPRODUCT("), f"col {c}: expected ROUND(SUMPRODUCT(…), got {v!r}"
         assert '<>""' in v, v
         assert "*1.25" not in v, f"col {c}: -i row must NOT wrap ×1.25, got {v!r}"
         checked += 1
@@ -984,6 +971,7 @@ def test_monthly_total_row_vacation_fill(tlp, assigned_wb):
     """July cells on the Monthly total -i row carry VACATION_FILL; non-vacation
     month cells on the same row do NOT (bystander for selectivity)."""
     from budget_planner.styles import VACATION_FILL
+
     params, _wps = _read_config(assigned_wb)
     vac_months = _vacation_project_months(params["start"], params["months"], 7)
     assert vac_months, "fixture has no July months — fill tier untestable"
@@ -997,10 +985,7 @@ def test_monthly_total_row_vacation_fill(tlp, assigned_wb):
     for mi in range(params["months"]):
         month_num = mi + 1
         cell = tlp.cell(total_row, m_start + mi)
-        rgb = (
-            (cell.fill.fgColor.rgb or "").upper()
-            if cell.fill and cell.fill.fgColor else ""
-        )
+        rgb = (cell.fill.fgColor.rgb or "").upper() if cell.fill and cell.fill.fgColor else ""
         if month_num in vac_months:
             assert rgb == expected_fill_rgb, (
                 f"total-row col {m_start + mi} (month {month_num}): "
@@ -1009,8 +994,7 @@ def test_monthly_total_row_vacation_fill(tlp, assigned_wb):
             checked_vac += 1
         else:
             assert rgb != expected_fill_rgb, (
-                f"total-row col {m_start + mi} (month {month_num}): "
-                "non-vacation cell incorrectly carries VACATION_FILL"
+                f"total-row col {m_start + mi} (month {month_num}): non-vacation cell incorrectly carries VACATION_FILL"
             )
             checked_nonvac += 1
     assert checked_vac > 0 and checked_nonvac > 0
@@ -1028,9 +1012,7 @@ def test_monthly_total_vacation_zero(recalced_assigned_path):
 
     for month_num in vac_months:
         v = ws.cell(total_row, m_start + month_num - 1).value
-        assert v in (0, 0.0), (
-            f"vacation month {month_num} total expected 0, got {v!r}"
-        )
+        assert v in (0, 0.0), f"vacation month {month_num} total expected 0, got {v!r}"
     wb.close()
 
 
@@ -1069,14 +1051,11 @@ def test_monthly_total_non_vacation_nonzero(recalced_assigned_path):
         got = ws.cell(total_row, c).value
         expected_minus_i = round(expected)
         assert got == expected_minus_i, (
-            f"month {month_num} (col {c}): expected {expected_minus_i} "
-            f"(= round({expected})), got {got!r}"
+            f"month {month_num} (col {c}): expected {expected_minus_i} (= round({expected})), got {got!r}"
         )
         if expected > 0:
             checked += 1
-    assert checked > 0, (
-        "no non-vacation month had any assigned persons — bystander gate vacuous"
-    )
+    assert checked > 0, "no non-vacation month had any assigned persons — bystander gate vacuous"
     wb.close()
 
 
@@ -1088,6 +1067,7 @@ def test_monthly_total_plus_i_row_present(tlp, assigned_wb):
     ROUND(SUMPRODUCT(...)*1.25,0) per month col and
     WITH_INDIRECT_HEADER_FILL on the label cell."""
     from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
+
     months = _project_months(assigned_wb)
     m_start = TIMELOG_MONTH_COL_START
     m_end = m_start + months - 1
@@ -1095,16 +1075,14 @@ def test_monthly_total_plus_i_row_present(tlp, assigned_wb):
     plus_i_row = _monthly_total_row(tlp) + 1
     label_cell = tlp.cell(plus_i_row, 1)
     assert label_cell.value == "Monthly total +i"
-    assert (
-        label_cell.fill.fgColor.rgb == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
-    ), f"label fill {label_cell.fill.fgColor.rgb!r}"
+    assert label_cell.fill.fgColor.rgb == WITH_INDIRECT_HEADER_FILL.fgColor.rgb, (
+        f"label fill {label_cell.fill.fgColor.rgb!r}"
+    )
 
     checked = 0
     for c in range(m_start, m_end + 1):
         v = str(tlp.cell(plus_i_row, c).value or "")
-        assert v.startswith("=ROUND(SUMPRODUCT("), (
-            f"col {c}: expected ROUND(SUMPRODUCT(…), got {v!r}"
-        )
+        assert v.startswith("=ROUND(SUMPRODUCT("), f"col {c}: expected ROUND(SUMPRODUCT(…), got {v!r}"
         assert '<>""' in v, v
         assert "*1.25" in v, f"col {c}: expected ×1.25 wrap, got {v!r}"
         checked += 1
@@ -1116,17 +1094,13 @@ def test_monthly_total_plus_i_followed_by_blank_then_summary(tlp):
     PER-PERSON SUMMARY title. Bystander: -i row is still at plus_i_row - 1."""
     plus_i_row = _monthly_total_row(tlp) + 1
     # -i row is the row above — confirms layout order.
-    assert (
-        str(tlp.cell(plus_i_row - 1, 1).value or "")
-        .lower().startswith("monthly total")
-    )
+    assert str(tlp.cell(plus_i_row - 1, 1).value or "").lower().startswith("monthly total")
     # Spacer row (blank col A) sits between +i and summary title.
     assert tlp.cell(plus_i_row + 1, 1).value in (None, "")
     # Section title sits two rows below +i.
     next_val = tlp.cell(plus_i_row + 2, 1).value
     assert next_val == SECTION_TITLE_PERSON_SUMMARY, (
-        f"expected PER-PERSON SUMMARY title at row "
-        f"{plus_i_row + 2}, got {next_val!r}"
+        f"expected PER-PERSON SUMMARY title at row {plus_i_row + 2}, got {next_val!r}"
     )
 
 
@@ -1140,6 +1114,7 @@ def _yearly_rows(tlp) -> tuple[int, int]:
     Post-D9 (2026-04-22): row labels live at col J (TIMELOG_YEARLY_LABEL_COL),
     not col A. 2026-04-28 shifted col I → J under "Stop reason"."""
     from budget_planner.layout import TIMELOG_YEARLY_LABEL_COL
+
     first = _wp_summary_first_row(tlp)
     # Walk down col J until we hit a cell whose text starts with "Yearly ".
     # Blank cells at WP rows are normal (col J at WP rows holds the
@@ -1161,6 +1136,7 @@ def test_yearly_rows_present(tlp):
     Stop reason)."""
     from budget_planner.layout import TIMELOG_YEARLY_LABEL_COL
     from budget_planner.styles import WITH_INDIRECT_HEADER_FILL
+
     y_total, y_budget = _yearly_rows(tlp)
     # Aiko-port T3 (2026-04-23) renamed "Yearly total +i" → "Yearly Assigned +i"
     # per brainstorm locked spec.
@@ -1172,14 +1148,8 @@ def test_yearly_rows_present(tlp):
     assert tlp.cell(y_budget, 1).value in (None, "")
 
     # With-indirect header fill on the label cell.
-    assert (
-        tlp.cell(y_total, TIMELOG_YEARLY_LABEL_COL).fill.fgColor.rgb
-        == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
-    )
-    assert (
-        tlp.cell(y_budget, TIMELOG_YEARLY_LABEL_COL).fill.fgColor.rgb
-        == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
-    )
+    assert tlp.cell(y_total, TIMELOG_YEARLY_LABEL_COL).fill.fgColor.rgb == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
+    assert tlp.cell(y_budget, TIMELOG_YEARLY_LABEL_COL).fill.fgColor.rgb == WITH_INDIRECT_HEADER_FILL.fgColor.rgb
 
     # Right-aligned: labels hug the first per-year cell at col K (2026-04-28
     # I→J shift). Guards against accidental revert to CENTER.
@@ -1241,8 +1211,7 @@ def test_yearly_total_col_c_crosscheck(recalced_assigned_path):
     assert isinstance(col_c, (int, float)), f"col C not numeric: {col_c!r}"
     tolerance = len(wps) * (len(groups) + 2)
     assert abs(year_sum - float(col_c)) <= tolerance, (
-        f"Yearly total: col C {col_c} vs year-sum {year_sum} "
-        f"(tolerance ±{tolerance})"
+        f"Yearly total: col C {col_c} vs year-sum {year_sum} (tolerance ±{tolerance})"
     )
     wb.close()
 
@@ -1273,9 +1242,7 @@ def test_yearly_budget_col_c_crosscheck(recalced_assigned_path):
     # If the per-year formula is later changed to wrap each cell in
     # `ROUND(..., 0)` (e.g. to align with the Yearly total +i convention),
     # bump this tolerance to `len(groups)` EUR to accommodate ±0.5 EUR per year.
-    assert abs(year_sum - float(col_c)) <= 1.0, (
-        f"Yearly budget: col C {col_c} vs year-sum {year_sum}"
-    )
+    assert abs(year_sum - float(col_c)) <= 1.0, f"Yearly budget: col C {col_c} vs year-sum {year_sum}"
     wb.close()
 
 
@@ -1306,13 +1273,13 @@ def test_yearly_budget_single_wp_single_year(tlp, assigned_wb):
     # coexist in the same year's formula.
     expected_term = f"1.0*Config!$F${cfg_row}"
     assert expected_term in formula, (
-        f"WP {wp['id']} fully in year idx {yi}: expected {expected_term!r} "
-        f"in yearly budget formula, got {formula!r}"
+        f"WP {wp['id']} fully in year idx {yi}: expected {expected_term!r} in yearly budget formula, got {formula!r}"
     )
 
 
 def _read_wps_and_schedule_and_params(wb):
     from budget_planner.reader import read_config_sheet
+
     params, wps = read_config_sheet(wb["Config"])
     return params, wps
 

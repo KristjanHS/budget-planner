@@ -4,15 +4,24 @@ import pytest
 import openpyxl
 
 from budget_planner.config import (
-    TEAM, WORK_PACKAGES, EXTERNAL_COMMITMENTS, DEMO_CAPACITY_ASSIGNMENTS,
-    MONTH_COL_START, MONTH_COL_END, PROJECT_MONTHS, PROJECT_START,
-    VAL_COL_SUM, VAL_COL_BUDGET, VAL_COL_DIFF,
+    TEAM,
+    WORK_PACKAGES,
+    EXTERNAL_COMMITMENTS,
+    DEMO_CAPACITY_ASSIGNMENTS,
+    MONTH_COL_START,
+    MONTH_COL_END,
+    PROJECT_MONTHS,
+    PROJECT_START,
+    VAL_COL_SUM,
+    VAL_COL_BUDGET,
+    VAL_COL_DIFF,
 )
 from budget_planner.styles import col_letter
 from budget_planner.capacity import build_capacity_sheet, distribute
 
 
 # ── Fixtures ──
+
 
 @pytest.fixture(scope="module")
 def full_wb(assigned_wb_path):
@@ -33,17 +42,20 @@ def capacity_layout(tmp_path_factory):
 
     wb = WB()
     config_ws = wb.create_sheet("Config")
-    config_layout = build_config_sheet(config_ws, wb,
-                                        {"title": "Test", "start": PROJECT_START,
-                                         "months": 14, "rate": 7500},
-                                        WORK_PACKAGES,
-                                        assignments=DEMO_CAPACITY_ASSIGNMENTS,
-                                        external_commitments=EXTERNAL_COMMITMENTS)
+    config_layout = build_config_sheet(
+        config_ws,
+        wb,
+        {"title": "Test", "start": PROJECT_START, "months": 14, "rate": 7500},
+        WORK_PACKAGES,
+        assignments=DEMO_CAPACITY_ASSIGNMENTS,
+        external_commitments=EXTERNAL_COMMITMENTS,
+    )
     plan_ws = wb.create_sheet("Plan")
     plan_layout = build_plan_sheet(plan_ws, wb, config_layout=config_layout)
     cap_ws = wb.create_sheet("Capacity")
     layout = build_capacity_sheet(
-        cap_ws, config_layout,
+        cap_ws,
+        config_layout,
         assignments=DEMO_CAPACITY_ASSIGNMENTS,
         config_first_wp_row=plan_layout["config_first_wp_row"],
     )
@@ -54,13 +66,14 @@ def capacity_layout(tmp_path_factory):
 
 # ── Build person-assignment lookup for assertions ──
 
+
 def _person_assigned_wps(person_name):
     """Return set of WP IDs assigned to a person in demo data."""
-    return {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS
-            if a["person"] == person_name}
+    return {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == person_name}
 
 
 # ── Person groups ──
+
 
 def test_capacity_has_person_group_per_team_member(capacity_layout):
     """One section per TEAM member."""
@@ -70,6 +83,7 @@ def test_capacity_has_person_group_per_team_member(capacity_layout):
 
 # ── Test: programme WP rows per person (only assigned WPs) ──
 
+
 def test_capacity_person_has_assigned_wp_rows(capacity_layout):
     """Each person has rows only for their assigned WPs."""
     for member in TEAM:
@@ -77,12 +91,12 @@ def test_capacity_person_has_assigned_wp_rows(capacity_layout):
         group = capacity_layout["person_groups"][name]
         expected_wps = _person_assigned_wps(name)
         assert set(group["wp_rows"].keys()) == expected_wps, (
-            f"{name}: expected WPs {expected_wps}, "
-            f"got {set(group['wp_rows'].keys())}"
+            f"{name}: expected WPs {expected_wps}, got {set(group['wp_rows'].keys())}"
         )
 
 
 # ── Test: External project rows ──
+
 
 def test_capacity_person_has_external_project_rows(capacity_layout):
     """External project rows present for persons with commitments."""
@@ -101,6 +115,7 @@ def test_capacity_person_has_external_project_rows(capacity_layout):
 
 # ─�� Test: TOTAL row ──
 
+
 def test_capacity_person_has_total_row(cap_ws, capacity_layout):
     """TOTAL row exists per person."""
     for member in TEAM:
@@ -111,6 +126,7 @@ def test_capacity_person_has_total_row(cap_ws, capacity_layout):
 
 # ── Test: WP rows are blue input ──
 
+
 def test_capacity_wp_rows_are_blue_input(cap_ws, capacity_layout):
     """Monthly cells in programme WP rows have blue font."""
     for member in TEAM:
@@ -118,8 +134,7 @@ def test_capacity_wp_rows_are_blue_input(cap_ws, capacity_layout):
         group = capacity_layout["person_groups"][name]
         for wp_id, row in group["wp_rows"].items():
             # Find the assignment to get the start month
-            asgn = next(a for a in DEMO_CAPACITY_ASSIGNMENTS
-                        if a["person"] == name and a["wp"] == wp_id)
+            asgn = next(a for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == name and a["wp"] == wp_id)
             c = MONTH_COL_START + asgn["start"] - 1  # first active month
             font = cap_ws.cell(row=row, column=c).font
             assert font.color and font.color.rgb in ("0000FF", "000000FF"), (
@@ -128,6 +143,7 @@ def test_capacity_wp_rows_are_blue_input(cap_ws, capacity_layout):
 
 
 # ── Test: TOTAL row SUM formula ──
+
 
 def test_capacity_total_row_is_sum_formula(cap_ws, capacity_layout):
     """TOTAL monthly cells have SUM formulas."""
@@ -143,6 +159,7 @@ def test_capacity_total_row_is_sum_formula(cap_ws, capacity_layout):
 
 # ── Test: Inactive months empty ──
 
+
 def _inactive_params():
     """Generate (person_name, wp_id) for assigned WPs with inactive months."""
     params = []
@@ -155,8 +172,7 @@ def _inactive_params():
 @pytest.mark.parametrize("person_name,wp_id", _inactive_params())
 def test_capacity_inactive_months_empty(cap_ws, capacity_layout, person_name, wp_id):
     """Inactive months have empty value and grey fill."""
-    asgn = next(a for a in DEMO_CAPACITY_ASSIGNMENTS
-                if a["person"] == person_name and a["wp"] == wp_id)
+    asgn = next(a for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == person_name and a["wp"] == wp_id)
     group = capacity_layout["person_groups"][person_name]
     row = group["wp_rows"][wp_id]
 
@@ -176,6 +192,7 @@ def test_capacity_inactive_months_empty(cap_ws, capacity_layout, person_name, wp
 
 # ── Test: WP row Sum formula ──
 
+
 def test_capacity_wp_row_sum_formula(cap_ws, capacity_layout):
     """programme WP rows have Sum = SUM(C{row}:..{row})."""
     start_cl = col_letter(MONTH_COL_START)
@@ -185,12 +202,11 @@ def test_capacity_wp_row_sum_formula(cap_ws, capacity_layout):
         for wp_id, row in group["wp_rows"].items():
             val = cap_ws.cell(row=row, column=VAL_COL_SUM).value
             expected = f"=SUM({start_cl}{row}:{end_cl}{row})"
-            assert val == expected, (
-                f"{member['name']}/{wp_id} Sum: expected {expected}, got {val}"
-            )
+            assert val == expected, f"{member['name']}/{wp_id} Sum: expected {expected}, got {val}"
 
 
 # ── Test: WP row Budget formula refs assignment config block ──
+
 
 def test_capacity_wp_row_budget_formula(cap_ws, capacity_layout):
     """programme WP rows have Budget = Config!C{assign_config_row} (assignment Total FTE)."""
@@ -204,12 +220,11 @@ def test_capacity_wp_row_budget_formula(cap_ws, capacity_layout):
             assert asgn_row is not None, f"{name}/{wp_id} not in assign_config_rows"
             val = cap_ws.cell(row=row, column=VAL_COL_BUDGET).value
             expected = f"=Config!C{asgn_row}"
-            assert val == expected, (
-                f"{name}/{wp_id} Budget: expected {expected}, got {val}"
-            )
+            assert val == expected, f"{name}/{wp_id} Budget: expected {expected}, got {val}"
 
 
 # ── Test: WP row Variance formula = Budget − Sum ──
+
 
 def test_capacity_wp_row_variance_formula(cap_ws, capacity_layout):
     """programme WP rows have Variance = {budget_col}{row} - {sum_col}{row}."""
@@ -220,12 +235,11 @@ def test_capacity_wp_row_variance_formula(cap_ws, capacity_layout):
         for wp_id, row in group["wp_rows"].items():
             val = cap_ws.cell(row=row, column=VAL_COL_DIFF).value
             expected = f"={budget_cl}{row}-{sum_cl}{row}"
-            assert val == expected, (
-                f"{member['name']}/{wp_id} Variance: expected {expected}, got {val}"
-            )
+            assert val == expected, f"{member['name']}/{wp_id} Variance: expected {expected}, got {val}"
 
 
 # ── Test: External row Sum/Budget/Variance formulas ──
+
 
 def test_capacity_external_row_validation_formulas(cap_ws, capacity_layout):
     """External rows: Sum, Budget refs config Total FTE, Variance."""
@@ -242,9 +256,7 @@ def test_capacity_external_row_validation_formulas(cap_ws, capacity_layout):
             # Sum
             sum_val = cap_ws.cell(row=row, column=VAL_COL_SUM).value
             expected_sum = f"=SUM({start_cl}{row}:{end_cl}{row})"
-            assert sum_val == expected_sum, (
-                f"{member['name']}/{project} Sum: expected {expected_sum}, got {sum_val}"
-            )
+            assert sum_val == expected_sum, f"{member['name']}/{project} Sum: expected {expected_sum}, got {sum_val}"
 
             # Budget: =Config!C{ext_config_row}
             ext_config_row = ext_config_rows[(member["name"], project)]
@@ -263,6 +275,7 @@ def test_capacity_external_row_validation_formulas(cap_ws, capacity_layout):
 
 
 # ── Distribution curve tests ──
+
 
 def test_distribute_flat():
     result = distribute(12.0, 6, "flat")
@@ -306,16 +319,14 @@ def test_distribute_zero_months():
 
 # ── Test: TOTAL-row over-allocation CF (folded REMAINING-row CF) ──
 
+
 def test_capacity_total_row_overalloc_red_cf(cap_ws, capacity_layout):
     """TOTAL row has a red CF rule per person whose formula compares the
     monthly TOTAL cell against Config Max FTE (folds the dropped REMAINING
     < 0 CF onto TOTAL > Max FTE)."""
     from openpyxl.styles import PatternFill
 
-    expected_total_rows = {
-        capacity_layout["person_groups"][m["name"]]["total_row"]
-        for m in TEAM
-    }
+    expected_total_rows = {capacity_layout["person_groups"][m["name"]]["total_row"] for m in TEAM}
     matched: set[int] = set()
     for cf_range in cap_ws.conditional_formatting:
         rules = cap_ws.conditional_formatting[cf_range]
@@ -333,12 +344,10 @@ def test_capacity_total_row_overalloc_red_cf(cap_ws, capacity_layout):
                 # Red TOTAL over-alloc CF: "<col><row>>Config!$B$<row>"
                 # (no 0.8 amber multiplier, no SUM, no <0 — distinguishes
                 # from amber TOTAL, EU CF, and variance reds.)
-                if (">Config!$B$" in f and "0.8" not in f
-                        and "SUM(" not in f):
+                if ">Config!$B$" in f and "0.8" not in f and "SUM(" not in f:
                     for total_row in expected_total_rows:
                         if f"{total_row}>Config!$B$" in f:
                             matched.add(total_row)
     assert matched == expected_total_rows, (
-        f"Expected red over-alloc CF on every TOTAL row {sorted(expected_total_rows)},"
-        f" matched {sorted(matched)}"
+        f"Expected red over-alloc CF on every TOTAL row {sorted(expected_total_rows)}, matched {sorted(matched)}"
     )

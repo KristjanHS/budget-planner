@@ -24,19 +24,31 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.properties import Outline
 
 from budget_planner.layout import (
-    MONTH_COL_START, SHEET_ACTUALS_HOURS, SHEET_CONFIG,
-    build_year_month_headers, month_range_ref,
-    month_col_end as _month_col_end, val_columns,
+    MONTH_COL_START,
+    SHEET_ACTUALS_HOURS,
+    SHEET_CONFIG,
+    build_year_month_headers,
+    month_range_ref,
+    month_col_end as _month_col_end,
+    val_columns,
     wp_active_months,
 )
 from budget_planner.person_section import (
-    plan_person_layout, PersonGridContext, apply_person_row_outline,
+    plan_person_layout,
+    PersonGridContext,
+    apply_person_row_outline,
     filter_zero_fte_wps,
 )
 from budget_planner.styles import (
-    BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT,
-    SECTION_FILL, GREY_FILL, LIGHT_GREEN_FILL,
-    style_cell, col_letter,
+    BLUE_INPUT,
+    BLACK_FORMULA,
+    GREEN_XREF,
+    HEADER_FONT,
+    SECTION_FILL,
+    GREY_FILL,
+    LIGHT_GREEN_FILL,
+    style_cell,
+    col_letter,
     sized_comment,
 )
 
@@ -80,7 +92,10 @@ def _cum_hours_formula(row: int, month_col_start: int, months: int) -> str:
 
 
 def _write_person_hours_grid(
-    ws, r: int, member: dict, *,
+    ws,
+    r: int,
+    member: dict,
+    *,
     ctx: PersonGridContext,
     person_assignments: list[dict],
     cum_hours_col: int,
@@ -139,8 +154,7 @@ def _write_person_hours_grid(
     # origin) but the header uses white-on-SECTION_FILL styling for the
     # person banner.
     ws.cell(row=r, column=1).value = name
-    ws.cell(row=r, column=1).font = Font(name="Arial", bold=True, size=10,
-                                          color="FFFFFF")
+    ws.cell(row=r, column=1).font = Font(name="Arial", bold=True, size=10, color="FFFFFF")
     style_cell(ws, r, 2, fill=SECTION_FILL)
     r += 1
 
@@ -154,17 +168,11 @@ def _write_person_hours_grid(
         config_row = config_first_wp_row + wp_idx[wp_id]
         assert r == layout.wp_rows[wp_id]
 
-        style_cell(ws, r, 1, font=GREEN_XREF).value = (
-            f"={SHEET_CONFIG}!A{config_row}"
-        )
-        style_cell(ws, r, 2, font=GREEN_XREF).value = (
-            f"={SHEET_CONFIG}!B{config_row}"
-        )
+        style_cell(ws, r, 1, font=GREEN_XREF).value = f"={SHEET_CONFIG}!A{config_row}"
+        style_cell(ws, r, 2, font=GREEN_XREF).value = f"={SHEET_CONFIG}!B{config_row}"
 
         wp_active = wp_active_map.get(wp_id, frozenset())
-        preserved_months = (
-            preserved_for_person.get(wp_id) if preserved_for_person else None
-        )
+        preserved_months = preserved_for_person.get(wp_id) if preserved_for_person else None
 
         comment_added = False
         for mi in range(project_params["months"]):
@@ -192,17 +200,16 @@ def _write_person_hours_grid(
                     )
                     comment_added = True
             else:
-                style_cell(ws, r, c, "", font=BLUE_INPUT, fill=GREY_FILL,
-                           fmt=HOUR_FMT)
+                style_cell(ws, r, c, "", font=BLUE_INPUT, fill=GREY_FILL, fmt=HOUR_FMT)
 
         # Validation: Sum column only (no Budget/Variance — hours log is a
         # record, not a budget-vs-actual view; design §1).
         sum_range = month_range_ref(r, month_col_start, month_col_end)
-        style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
-                   fmt=HOUR_FMT).value = f"=SUM({sum_range})"
-        style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA,
-                   fmt=HOUR_FMT).value = _cum_hours_formula(
-            r, month_col_start, project_params["months"],
+        style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fmt=HOUR_FMT).value = f"=SUM({sum_range})"
+        style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA, fmt=HOUR_FMT).value = _cum_hours_formula(
+            r,
+            month_col_start,
+            project_params["months"],
         )
 
         wp_rows[wp_id] = r
@@ -218,10 +225,7 @@ def _write_person_hours_grid(
 
         ext_start = entry["start"]
         ext_end = entry["end"]
-        preserved_months = (
-            preserved_for_person.get(entry["project"])
-            if preserved_for_person else None
-        )
+        preserved_months = preserved_for_person.get(entry["project"]) if preserved_for_person else None
 
         for mi in range(project_params["months"]):
             c = month_col_start + mi
@@ -235,15 +239,14 @@ def _write_person_hours_grid(
                         val = p
                 style_cell(ws, r, c, val, font=BLUE_INPUT, fmt=HOUR_FMT)
             else:
-                style_cell(ws, r, c, "", font=BLUE_INPUT, fill=GREY_FILL,
-                           fmt=HOUR_FMT)
+                style_cell(ws, r, c, "", font=BLUE_INPUT, fill=GREY_FILL, fmt=HOUR_FMT)
 
         sum_range = month_range_ref(r, month_col_start, month_col_end)
-        style_cell(ws, r, val_col_sum, font=BLACK_FORMULA,
-                   fmt=HOUR_FMT).value = f"=SUM({sum_range})"
-        style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA,
-                   fmt=HOUR_FMT).value = _cum_hours_formula(
-            r, month_col_start, project_params["months"],
+        style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fmt=HOUR_FMT).value = f"=SUM({sum_range})"
+        style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA, fmt=HOUR_FMT).value = _cum_hours_formula(
+            r,
+            month_col_start,
+            project_params["months"],
         )
 
         external_rows[entry["project"]] = r
@@ -271,19 +274,19 @@ def _write_person_hours_grid(
     for mi in range(project_params["months"]):
         c = month_col_start + mi
         cl = col_letter(c)
-        style_cell(ws, r, c, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-                   fmt=HOUR_FMT).value = (
-            f"=SUM({cl}{data_row_start}:{cl}{data_row_end})"
-        )
+        style_cell(
+            ws, r, c, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt=HOUR_FMT
+        ).value = f"=SUM({cl}{data_row_start}:{cl}{data_row_end})"
     scl = col_letter(val_col_sum)
-    style_cell(ws, r, val_col_sum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt=HOUR_FMT).value = (
-        f"=SUM({scl}{data_row_start}:{scl}{data_row_end})"
-    )
-    style_cell(ws, r, cum_hours_col, font=BLACK_FORMULA,
-               fill=LIGHT_GREEN_FILL,
-               fmt=HOUR_FMT).value = _cum_hours_formula(
-        r, month_col_start, project_params["months"],
+    style_cell(
+        ws, r, val_col_sum, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt=HOUR_FMT
+    ).value = f"=SUM({scl}{data_row_start}:{scl}{data_row_end})"
+    style_cell(
+        ws, r, cum_hours_col, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt=HOUR_FMT
+    ).value = _cum_hours_formula(
+        r,
+        month_col_start,
+        project_params["months"],
     )
     r += 1
 
@@ -352,7 +355,8 @@ def build_actuals_hours_sheet(
     outline_pr = ws.sheet_properties.outlinePr
     if outline_pr is None:
         ws.sheet_properties.outlinePr = Outline(
-            summaryRight=True, summaryBelow=False,
+            summaryRight=True,
+            summaryBelow=False,
         )
     else:
         outline_pr.summaryRight = True
@@ -364,7 +368,10 @@ def build_actuals_hours_sheet(
     # 2 and 3.
     r = 2
     year_header_row, month_header_row, r = build_year_month_headers(
-        ws, r, project_params, month_col_start,
+        ws,
+        r,
+        project_params,
+        month_col_start,
         val_headers=[(val_col_sum, "Sum")],
     )
 
@@ -377,9 +384,9 @@ def build_actuals_hours_sheet(
     # Cum-hours header: year row blank but fill-matched; month row carries
     # the label. Green so the reader sees this col as a helper aggregate.
     style_cell(ws, year_header_row, cum_hours_col, fill=LIGHT_GREEN_FILL)
-    style_cell(ws, month_header_row, cum_hours_col,
-               value="Cum hours (to date)", font=HEADER_FONT,
-               fill=LIGHT_GREEN_FILL)
+    style_cell(
+        ws, month_header_row, cum_hours_col, value="Cum hours (to date)", font=HEADER_FONT, fill=LIGHT_GREEN_FILL
+    )
     ws.cell(row=month_header_row, column=cum_hours_col).comment = sized_comment(
         "Cumulative hours on this row through the `hours_actuals_through_month` "
         "named range (`'Actuals-Hours'!$D$1`). Capacity's to-date Actual PM reads this cell "
@@ -397,8 +404,7 @@ def build_actuals_hours_sheet(
         per_person_assignments.setdefault(entry["person"], []).append(entry)
 
     wp_active_map: dict[str, frozenset[int]] = {
-        wp["id"]: wp_active_months(wp["id"], work_packages)
-        for wp in work_packages
+        wp["id"]: wp_active_months(wp["id"], work_packages) for wp in work_packages
     }
 
     person_groups: dict[str, dict] = {}
@@ -417,7 +423,9 @@ def build_actuals_hours_sheet(
         name = member["name"]
         preserved_for_person = preserved.get(name) if preserved else None
         r, group = _write_person_hours_grid(
-            ws, r, member,
+            ws,
+            r,
+            member,
             ctx=ctx,
             person_assignments=per_person_assignments.get(name, []),
             cum_hours_col=cum_hours_col,
@@ -444,52 +452,45 @@ def build_actuals_hours_sheet(
         scan_terms = []
         for r0, r1 in grant_wp_ranges:
             rng = f"${ms_strip}${r0}:${me_strip}${r1}"
-            scan_terms.append(
-                f"SUMPRODUCT(MAX((COLUMN({rng})-COLUMN(${ms_strip}$1)+1)"
-                f"*ISNUMBER({rng})))"
-            )
+            scan_terms.append(f"SUMPRODUCT(MAX((COLUMN({rng})-COLUMN(${ms_strip}$1)+1)*ISNUMBER({rng})))")
         auto_formula = f"=MAX({','.join(scan_terms)})"
     else:
         auto_formula = "=0"
 
-    style_cell(ws, 1, 1, value="Hours Actuals Through Month:",
-               font=HEADER_FONT, border=False)
+    style_cell(ws, 1, 1, value="Hours Actuals Through Month:", font=HEADER_FONT, border=False)
     ws.cell(row=1, column=1).comment = sized_comment(
         "Trust boundary for hours-side cumulative figures. The effective "
         "value in column D is what Capacity and Trends consume via the "
         "named range `hours_actuals_through_month`. Override (B) beats "
         "auto-derived (C) only when it holds a number."
     )
-    style_cell(ws, 1, 2, value=hours_through_override, font=BLUE_INPUT,
-               fmt="0", border=False)
+    style_cell(ws, 1, 2, value=hours_through_override, font=BLUE_INPUT, fmt="0", border=False)
     ws.cell(row=1, column=2).comment = sized_comment(
         "Optional override — enter an integer month index (1-based) to "
         "force a tighter hours trust cutoff than the auto-derived value. "
         "Leave blank to defer to the auto scan in column C. Blue = user "
         "input."
     )
-    style_cell(ws, 1, 3, font=BLACK_FORMULA, fmt="0", border=False).value = (
-        auto_formula
-    )
+    style_cell(ws, 1, 3, font=BLACK_FORMULA, fmt="0", border=False).value = auto_formula
     ws.cell(row=1, column=3).comment = sized_comment(
         "Auto-derived: largest 1-based month index with any numeric hour "
         "value across every person's programme-WP rows (externals and per-person "
         "TOTAL rows are excluded). Returns 0 when no hours have been "
         "posted yet. Do not edit."
     )
-    style_cell(ws, 1, 4, font=BLACK_FORMULA, fmt="0", border=False).value = (
-        "=IF(ISNUMBER(B1),B1,C1)"
-    )
+    style_cell(ws, 1, 4, font=BLACK_FORMULA, fmt="0", border=False).value = "=IF(ISNUMBER(B1),B1,C1)"
     ws.cell(row=1, column=4).comment = sized_comment(
         "Effective hours trust cutoff consumed by Capacity and Trends via "
         "the named range `hours_actuals_through_month`. Override in B wins "
         "when numeric; otherwise falls through to the auto scan in C. Do "
         "not edit."
     )
-    wb.defined_names.add(DefinedName(
-        "hours_actuals_through_month",
-        attr_text=f"'{SHEET_ACTUALS_HOURS}'!$D$1",
-    ))
+    wb.defined_names.add(
+        DefinedName(
+            "hours_actuals_through_month",
+            attr_text=f"'{SHEET_ACTUALS_HOURS}'!$D$1",
+        )
+    )
 
     ws.freeze_panes = f"C{first_person_header_row}"
     ws.column_dimensions["B"].width = 25

@@ -1,11 +1,18 @@
 """Tests for the Actuals sheet builder."""
+
 import pytest
 import openpyxl
 
 from budget_planner.config import (
-    WORK_PACKAGES, NUM_WPS, MONTH_COL_START,
-    VAL_COL_SLOPE, VAL_COL_BUDGET, VAL_COL_DIFF,
-    VAL_COL_POSTED, VAL_COL_PCT_CEIL, VAL_COL_BREACH,
+    WORK_PACKAGES,
+    NUM_WPS,
+    MONTH_COL_START,
+    VAL_COL_SLOPE,
+    VAL_COL_BUDGET,
+    VAL_COL_DIFF,
+    VAL_COL_POSTED,
+    VAL_COL_PCT_CEIL,
+    VAL_COL_BREACH,
 )
 from budget_planner.layout import wp_month_bounds
 from budget_planner.styles import col_letter
@@ -41,6 +48,7 @@ def test_actuals_wp_count(actuals_workbook):
 def test_actuals_demo_values_seeded(actuals_workbook):
     """Fresh demo workbook has non-zero EUR in active months up to DEMO_CURRENT_MONTH."""
     from budget_planner.config import DEMO_CURRENT_MONTH
+
     ws = actuals_workbook["Actuals"]
     first_wp_row = None
     for r in range(1, ws.max_row + 1):
@@ -71,18 +79,16 @@ def test_actuals_inactive_months_empty(actuals_workbook):
             break
     assert first_wp_row is not None
     # Find any WP with start > 1 -- months before start should be inactive
-    late_idx = next(
-        i for i, w in enumerate(WORK_PACKAGES)
-        if wp_month_bounds(w["id"], WORK_PACKAGES)[0] > 1
-    )
+    late_idx = next(i for i, w in enumerate(WORK_PACKAGES) if wp_month_bounds(w["id"], WORK_PACKAGES)[0] > 1)
     late_start = wp_month_bounds(WORK_PACKAGES[late_idx]["id"], WORK_PACKAGES)[0]
     row = first_wp_row + late_idx
     for m in range(late_start - 1):
         c = MONTH_COL_START + m
         cell = ws.cell(row, c)
-        assert cell.value is None or cell.value == "", f"M{m+1} should be inactive, got {cell.value}"
-        assert cell.fill.fgColor and cell.fill.fgColor.rgb and "D9D9D9" in str(cell.fill.fgColor.rgb), \
-            f"M{m+1} should have grey fill"
+        assert cell.value is None or cell.value == "", f"M{m + 1} should be inactive, got {cell.value}"
+        assert cell.fill.fgColor and cell.fill.fgColor.rgb and "D9D9D9" in str(cell.fill.fgColor.rgb), (
+            f"M{m + 1} should have grey fill"
+        )
 
 
 def test_actuals_slope_formula(actuals_workbook):
@@ -242,6 +248,7 @@ def test_actuals_plus_i_headers(actuals_workbook):
     """
     from budget_planner.layout import val_columns
     from budget_planner.config import PROJECT_MONTHS
+
     ws = actuals_workbook["Actuals"]
     year_row = _find_year_row(ws)
     assert year_row is not None
@@ -260,6 +267,7 @@ def test_actuals_plus_i_header_fills(actuals_workbook):
     LIGHT_BLUE_FILL that build_year_month_headers writes."""
     from budget_planner.layout import val_columns
     from budget_planner.config import PROJECT_MONTHS
+
     ws = actuals_workbook["Actuals"]
     year_row = _find_year_row(ws)
     assert year_row is not None
@@ -269,17 +277,14 @@ def test_actuals_plus_i_header_fills(actuals_workbook):
         return str(cell.fill.fgColor.rgb).upper() if cell.fill.fgColor else ""
 
     # +i mirror cols use light-green fill
-    for key in ("slope_plus_i", "budget_plus_i", "diff_plus_i",
-                "posted_plus_i", "pct_ceil_plus_i", "breach_plus_i"):
+    for key in ("slope_plus_i", "budget_plus_i", "diff_plus_i", "posted_plus_i", "pct_ceil_plus_i", "breach_plus_i"):
         assert _fg(ws.cell(year_row, vcols[key])).endswith("E2EFDA"), (
-            f"col {key} expected WITH_INDIRECT_HEADER_FILL (E2EFDA), "
-            f"got {_fg(ws.cell(year_row, vcols[key]))}"
+            f"col {key} expected WITH_INDIRECT_HEADER_FILL (E2EFDA), got {_fg(ws.cell(year_row, vcols[key]))}"
         )
     # -i rollup cols use pale-orange fill
     for key in ("slope", "budget", "diff", "posted", "pct_ceil", "breach"):
         assert _fg(ws.cell(year_row, vcols[key])).endswith("FBE5D6"), (
-            f"col {key} expected WITHOUT_INDIRECT_HEADER_FILL (FBE5D6), "
-            f"got {_fg(ws.cell(year_row, vcols[key]))}"
+            f"col {key} expected WITHOUT_INDIRECT_HEADER_FILL (FBE5D6), got {_fg(ws.cell(year_row, vcols[key]))}"
         )
 
 
@@ -289,6 +294,7 @@ def test_actuals_slope_plus_i_formula_multiplies_by_1_25(actuals_workbook):
     surfaces as blank in the +i mirror."""
     from budget_planner.layout import val_columns
     from budget_planner.config import PROJECT_MONTHS
+
     ws = actuals_workbook["Actuals"]
     first_wp_row = _find_first_wp_row(ws)
     assert first_wp_row is not None
@@ -305,6 +311,7 @@ def test_actuals_budget_plus_i_uses_named_range(actuals_workbook):
     ×1.25 — Config Budget +i is already with-indirect by D4."""
     from budget_planner.layout import val_columns
     from budget_planner.config import PROJECT_MONTHS
+
     ws = actuals_workbook["Actuals"]
     first_wp_row = _find_first_wp_row(ws)
     assert first_wp_row is not None
@@ -337,37 +344,44 @@ def test_actuals_minus_i_band_outline_level(actuals_workbook):
     posted_value) that join the band; +i mirrors stay outside.
     """
     from budget_planner.layout import (
-        MONTH_COL_START, val_columns,
+        MONTH_COL_START,
+        val_columns,
         month_col_end as _mce,
     )
     from budget_planner.config import PROJECT_MONTHS
+
     ws = actuals_workbook["Actuals"]
     vcols = val_columns(PROJECT_MONTHS)
     mce = _mce(PROJECT_MONTHS)
 
     inside = (
         *range(MONTH_COL_START, mce + 1),
-        vcols["slope"], vcols["budget"], vcols["diff"],
-        vcols["posted"], vcols["pct_ceil"], vcols["breach"],
-        vcols["posted_idx"], vcols["posted_value"],
+        vcols["slope"],
+        vcols["budget"],
+        vcols["diff"],
+        vcols["posted"],
+        vcols["pct_ceil"],
+        vcols["breach"],
+        vcols["posted_idx"],
+        vcols["posted_value"],
     )
     for col in inside:
         lvl = _col_outline_level(ws, col)
-        assert lvl == 1, (
-            f"col {col_letter(col)} (idx {col}) should be in outline "
-            f"band, got outline_level={lvl}"
-        )
+        assert lvl == 1, f"col {col_letter(col)} (idx {col}) should be in outline band, got outline_level={lvl}"
 
     # +i mirrors stay outside the outline band
     outside = (
-        vcols["slope_plus_i"], vcols["budget_plus_i"], vcols["diff_plus_i"],
-        vcols["posted_plus_i"], vcols["pct_ceil_plus_i"], vcols["breach_plus_i"],
+        vcols["slope_plus_i"],
+        vcols["budget_plus_i"],
+        vcols["diff_plus_i"],
+        vcols["posted_plus_i"],
+        vcols["pct_ceil_plus_i"],
+        vcols["breach_plus_i"],
     )
     for col in outside:
         lvl = _col_outline_level(ws, col)
         assert lvl == 0, (
-            f"col {col_letter(col)} (+i mirror idx {col}) should NOT "
-            f"be in outline band, got outline_level={lvl}"
+            f"col {col_letter(col)} (+i mirror idx {col}) should NOT be in outline band, got outline_level={lvl}"
         )
 
 

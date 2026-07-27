@@ -1,4 +1,5 @@
 """Tests for reader behaviour — indirect-view Ceiling→Budget migration."""
+
 import pytest
 from openpyxl import Workbook
 
@@ -55,8 +56,18 @@ def _seed_legacy_config(ws, wps):
     header_row = 12
     first_data_row = 13
     ws.cell(row=section_row, column=1, value="WP BUDGET")
-    headers = ["WP ID", "WP Name", "FTE Budget", "Rate (€/PM)", "Ceiling (€)",
-               "Assigned PM", "Variance", "Start", "End", "Type"]
+    headers = [
+        "WP ID",
+        "WP Name",
+        "FTE Budget",
+        "Rate (€/PM)",
+        "Ceiling (€)",
+        "Assigned PM",
+        "Variance",
+        "Start",
+        "End",
+        "Type",
+    ]
     for col, hdr in enumerate(headers, start=1):
         ws.cell(row=header_row, column=col, value=hdr)
 
@@ -93,15 +104,15 @@ def test_legacy_ceiling_layout_migrates_to_budget_plus_i():
     _seed_legacy_config(
         ws,
         [
-            ("WP1", "Mgmt",   12.0, 7500, 1, 60, "flat"),
-            ("WP2", "Design",  8.0, 7500, 1, 18, "flat"),
+            ("WP1", "Mgmt", 12.0, 7500, 1, 60, "flat"),
+            ("WP2", "Design", 8.0, 7500, 1, 18, "flat"),
         ],
     )
     with pytest.warns(RuntimeWarning, match="Ceiling value"):
         _params, parsed = read_config_sheet(ws)
     by_id = {wp["id"]: wp for wp in parsed}
     assert by_id["WP1"]["budget_plus_i"] == 112_500  # 12 × 7500 × 1.25
-    assert by_id["WP2"]["budget_plus_i"] == 75_000   #  8 × 7500 × 1.25
+    assert by_id["WP2"]["budget_plus_i"] == 75_000  #  8 × 7500 × 1.25
 
 
 def test_legacy_migration_sanity_guard_blocks_oversized_values(monkeypatch):

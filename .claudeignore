@@ -17,7 +17,7 @@ __pycache__/
 docs/grant-architecture.html
 
 # Completed plans (active plans stay accessible)
-docs/plans/archived/
+docs/plans/archive/
 
 # Analysis artifacts from prior sessions
 docs/analysis/

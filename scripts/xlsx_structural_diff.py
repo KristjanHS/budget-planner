@@ -22,8 +22,8 @@ Schema versions
     string-literal cells the same way ``kind_change`` does (subject to the
     existing D2 label-zone + SENSITIVE_LITERAL_RE safety filters).
 
-Designs: docs/plans/archived/2026-04-23-xlsx-structural-diff-design.md (v1)
-         docs/plans/archived/2026-04-23-diff-noise-suppression-stage-1-design.md (v2)
+Designs: docs/plans/archive/2026-04-23-xlsx-structural-diff-design.md (v1)
+         docs/plans/archive/2026-04-23-diff-noise-suppression-stage-1-design.md (v2)
 """
 
 from __future__ import annotations
@@ -47,11 +47,11 @@ SCHEMA_VERSION = 2
 
 # D2 — safe-literal sensitive-value regex.
 SENSITIVE_LITERAL_RE = re.compile(
-    r"[\d][\d,.\s]*[€%]"          # currency/percent-ish
-    r"|@"                          # email markers
-    r"|\b\d{4}-\d{2}-\d{2}\b"     # ISO dates
-    r"|\b\d+[,.]\d+\b"            # decimals
-    r"|\b\d{4,}\b"                # 4+ digit numbers (IDs, years, round euros)
+    r"[\d][\d,.\s]*[€%]"  # currency/percent-ish
+    r"|@"  # email markers
+    r"|\b\d{4}-\d{2}-\d{2}\b"  # ISO dates
+    r"|\b\d+[,.]\d+\b"  # decimals
+    r"|\b\d{4,}\b"  # 4+ digit numbers (IDs, years, round euros)
 )
 
 # D6 — A1 reference parsing.
@@ -170,9 +170,7 @@ def _is_label_zone(sheet_name: str, row: int, col: int) -> bool:
     return False
 
 
-def _emit_literal_value(
-    sheet_name: str, row: int, col: int, cell: Cell
-) -> tuple[str | None, bool]:
+def _emit_literal_value(sheet_name: str, row: int, col: int, cell: Cell) -> tuple[str | None, bool]:
     """Return (value_to_emit, value_was_suppressed_due_to_regex).
 
     value_to_emit is None when not in label zone or non-string.
@@ -326,9 +324,7 @@ def _defined_names_map(wb: Any) -> dict[str, str]:
     return out
 
 
-def _diff_defined_names(
-    a_names: dict[str, str], b_names: dict[str, str]
-) -> dict[str, Any]:
+def _diff_defined_names(a_names: dict[str, str], b_names: dict[str, str]) -> dict[str, Any]:
     a_keys = set(a_names)
     b_keys = set(b_names)
     added = {k: b_names[k] for k in sorted(b_keys - a_keys)}
@@ -570,9 +566,7 @@ def _diff_sheet(
             entry["data_type"] = cell.data_type
             # N4 fix: mirror the `added` branch — serialize string literal value
             # through the label-zone + regex safety filter.
-            value, suppressed = _emit_literal_value(
-                sheet_name, coord[0], coord[1], cell
-            )
+            value, suppressed = _emit_literal_value(sheet_name, coord[0], coord[1], cell)
             if value is not None:
                 entry["value"] = value
             elif suppressed:
@@ -588,9 +582,7 @@ def _diff_sheet(
         if sa == sb:
             continue
         coord_s = _coord_str(coord)
-        entry = _build_change_entry(
-            sheet_name, coord, ca, cb, sa, sb, counter, keep_noise
-        )
+        entry = _build_change_entry(sheet_name, coord, ca, cb, sa, sb, counter, keep_noise)
         if entry:
             cells_diff[coord_s] = entry
         if sa["kind"] == "formula" and sb["kind"] == "formula" and sa.get("formula") != sb.get("formula"):
@@ -675,9 +667,7 @@ def _build_change_entry(
     # backslashes); counter bumps when a raw mismatch collapses to canonical match.
     # keep_noise retains the record and stamps `noise_class`.
     if sa["number_format"] != sb["number_format"]:
-        equal, noise_class = _compare_numfmt(
-            sa["number_format"], sb["number_format"], counter
-        )
+        equal, noise_class = _compare_numfmt(sa["number_format"], sb["number_format"], counter)
         if not equal or (keep_noise and noise_class):
             entry["number_format"] = {
                 "old": sa["number_format"],
@@ -715,8 +705,16 @@ def _diff_structure(
 ) -> dict[str, Any]:
     out: dict[str, Any] = {}
 
-    a_dim = {"max_row": int(ws_a.max_row or 0), "max_col": int(ws_a.max_column or 0)} if ws_a else {"max_row": 0, "max_col": 0}
-    b_dim = {"max_row": int(ws_b.max_row or 0), "max_col": int(ws_b.max_column or 0)} if ws_b else {"max_row": 0, "max_col": 0}
+    a_dim = (
+        {"max_row": int(ws_a.max_row or 0), "max_col": int(ws_a.max_column or 0)}
+        if ws_a
+        else {"max_row": 0, "max_col": 0}
+    )
+    b_dim = (
+        {"max_row": int(ws_b.max_row or 0), "max_col": int(ws_b.max_column or 0)}
+        if ws_b
+        else {"max_row": 0, "max_col": 0}
+    )
     if a_dim != b_dim:
         out["dimensions"] = {"old": a_dim, "new": b_dim}
 
@@ -756,9 +754,7 @@ def _diff_structure(
 # ---------- top-level diff ----------
 
 
-def diff_workbooks(
-    path_a: Path, path_b: Path, keep_noise: bool = False
-) -> dict[str, Any]:
+def diff_workbooks(path_a: Path, path_b: Path, keep_noise: bool = False) -> dict[str, Any]:
     wb_a = load_workbook(filename=str(path_a), data_only=False)
     wb_b = load_workbook(filename=str(path_b), data_only=False)
 
@@ -784,9 +780,7 @@ def diff_workbooks(
     for name in sorted(a_sheets | b_sheets):
         ws_a = wb_a[name] if name in a_sheets else None
         ws_b = wb_b[name] if name in b_sheets else None
-        sheet_diffs[name] = _diff_sheet(
-            name, ws_a, ws_b, noise_counter, keep_noise
-        )
+        sheet_diffs[name] = _diff_sheet(name, ws_a, ws_b, noise_counter, keep_noise)
 
     formula_changes = 0
     cells_added = 0
@@ -812,9 +806,7 @@ def diff_workbooks(
         "sheets_added": len(sheets_added),
         "sheets_removed": len(sheets_removed),
         "defined_names_changed": (
-            len(defined_names["added"])
-            + len(defined_names["removed"])
-            + len(defined_names["changed"])
+            len(defined_names["added"]) + len(defined_names["removed"]) + len(defined_names["changed"])
         ),
         "formula_changes": formula_changes,
         "cells_added": cells_added,
@@ -871,21 +863,16 @@ def _pick_oldest_newest(dir_path: Path) -> tuple[Path, Path]:
     if not dir_path.is_dir():
         raise SystemExit(f"--dir {dir_path} is not a directory")
     candidates = [
-        p for p in dir_path.iterdir()
-        if p.is_file() and p.suffix.lower() == ".xlsx" and not p.name.startswith("~$")
+        p for p in dir_path.iterdir() if p.is_file() and p.suffix.lower() == ".xlsx" and not p.name.startswith("~$")
     ]
     if len(candidates) < 2:
-        raise SystemExit(
-            f"--dir {dir_path}: need at least 2 .xlsx files (found {len(candidates)})"
-        )
+        raise SystemExit(f"--dir {dir_path}: need at least 2 .xlsx files (found {len(candidates)})")
     candidates.sort(key=lambda p: p.stat().st_mtime)
     return candidates[0], candidates[-1]
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Emit a confidentiality-safe structural diff between two .xlsx files."
-    )
+    parser = argparse.ArgumentParser(description="Emit a confidentiality-safe structural diff between two .xlsx files.")
     parser.add_argument("file_a", type=Path, nargs="?")
     parser.add_argument("file_b", type=Path, nargs="?")
     parser.add_argument(

@@ -128,4 +128,4 @@ Same gates as S1.T4. Demo regen + full pytest + pyright + ruff. Commit per task.
 
 - Empty-window intersection suppression (Q2.1 option (b)). Revisit when a user reports the visual noise.
 - Per-year EU ceiling CF migration to Trends or Summary (the Q1.3 = B / C alternatives the user declined). Revisit only if Capacity-preview loss proves painful in practice.
-- Plan-hygiene archival of this plan: `git mv` to `docs/plans/archived/` after Stage 2 ships and commit references are in place.
+- Plan-hygiene archival of this plan: `git mv` to `docs/plans/archive/` after Stage 2 ships and commit references are in place.

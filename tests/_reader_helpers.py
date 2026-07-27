@@ -1,4 +1,5 @@
 """Shared synthetic-Config builders for tests/test_reader_*.py."""
+
 from openpyxl import Workbook
 
 from budget_planner.config import PROJECT_START
@@ -18,10 +19,8 @@ def _make_config_wb():
         "rate": 7500,
     }
     wps = [
-        {"id": "WP1", "name": "Mgmt", "fte": 12.0,
-         "start": 1, "end": 24, "type": "flat"},
-        {"id": "WP2", "name": "Dev",  "fte":  8.0,
-         "start": 1, "end": 18, "type": "flat"},
+        {"id": "WP1", "name": "Mgmt", "fte": 12.0, "start": 1, "end": 24, "type": "flat"},
+        {"id": "WP2", "name": "Dev", "fte": 8.0, "start": 1, "end": 18, "type": "flat"},
     ]
     build_config_sheet(ws, wb, params, wps)
     return wb
@@ -80,10 +79,8 @@ def _make_config_wb_with_assignments(assignments=None, externals=None):
         "eu_ceiling_pm": 12.0,
     }
     wps = [
-        {"id": "WP1", "name": "Mgmt", "fte": 12.0,
-         "start": 1, "end": 60, "type": "flat"},
-        {"id": "WP2", "name": "Dev", "fte": 8.0,
-         "start": 1, "end": 60, "type": "flat"},
+        {"id": "WP1", "name": "Mgmt", "fte": 12.0, "start": 1, "end": 60, "type": "flat"},
+        {"id": "WP2", "name": "Dev", "fte": 8.0, "start": 1, "end": 60, "type": "flat"},
     ]
     build_config_sheet(
         ws,

@@ -5,12 +5,17 @@ Tests skip gracefully when LibreOffice is not available.
 Shared fixtures (`demo_wb_path`, `demo_recalc`) live in `conftest.py` at
 session scope so other modules can consume the same recalc'd workbook.
 """
+
 import openpyxl
 
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    NUM_WPS, PROJECT_MONTHS, PROJECT_START,
-    WORK_PACKAGES, VAL_COL_BUDGET, DEFAULT_RATE,
+    NUM_WPS,
+    PROJECT_MONTHS,
+    PROJECT_START,
+    WORK_PACKAGES,
+    VAL_COL_BUDGET,
+    DEFAULT_RATE,
 )
 
 
@@ -60,16 +65,15 @@ def test_summary_total_plan_fte_equals_year_sum(demo_wb_path, demo_recalc):
             if isinstance(val, (int, float)):
                 year_sum += val
         total_val = summary.cell(row, _TOTAL_GROUP_START).value
-        assert isinstance(total_val, (int, float)), \
-            f"WP row {row}: total Plan FTE should be numeric, got {total_val}"
-        assert abs(total_val - year_sum) < 0.01, \
-            f"WP row {row}: total {total_val} != year sum {year_sum}"
+        assert isinstance(total_val, (int, float)), f"WP row {row}: total Plan FTE should be numeric, got {total_val}"
+        assert abs(total_val - year_sum) < 0.01, f"WP row {row}: total {total_val} != year sum {year_sum}"
     wb.close()
 
 
 def test_summary_actual_eur_seeded(demo_wb_path, demo_recalc):
     """Fresh demo workbook: Summary Actual EUR reflects seeded actuals data."""
     from budget_planner.config import DEMO_CURRENT_MONTH
+
     wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
     summary = wb["Summary"]
     first_wp = _find_summary_first_wp_row(summary)
@@ -78,8 +82,9 @@ def test_summary_actual_eur_seeded(demo_wb_path, demo_recalc):
     row = first_wp  # WP1 (active from M1)
     col = _YEAR_GROUP_START + 0 * _COLS_PER_YEAR + 2  # First year Actual EUR
     val = summary.cell(row, col).value
-    assert isinstance(val, (int, float)) and val > 0, \
+    assert isinstance(val, (int, float)) and val > 0, (
         f"WP1 first calendar year Act EUR should be > 0 in demo mode, got {val}"
+    )
 
     # Find the first calendar year group that starts after DEMO_CURRENT_MONTH
     # (all its months are beyond the seeded range, so actuals should be 0)
@@ -91,8 +96,9 @@ def test_summary_actual_eur_seeded(demo_wb_path, demo_recalc):
     assert unseeded_year_idx is not None, "All calendar years fall within demo seed range"
     col_unseeded = _YEAR_GROUP_START + unseeded_year_idx * _COLS_PER_YEAR + 2
     val_unseeded = summary.cell(row, col_unseeded).value
-    assert val_unseeded is None or val_unseeded == 0, \
-        f"WP1 calendar year {unseeded_year_idx+1} Act EUR should be 0, got {val_unseeded}"
+    assert val_unseeded is None or val_unseeded == 0, (
+        f"WP1 calendar year {unseeded_year_idx + 1} Act EUR should be 0, got {val_unseeded}"
+    )
     wb.close()
 
 
@@ -112,17 +118,20 @@ def test_summary_budget_overview_after_recalc(demo_wb_path, demo_recalc):
             personnel_ceiling = summary.cell(row, 2).value
 
     assert personnel_actual is not None, "Personnel Actual label not found"
-    assert isinstance(personnel_actual, (int, float)) and personnel_actual > 0, \
+    assert isinstance(personnel_actual, (int, float)) and personnel_actual > 0, (
         f"Personnel Actual should be > 0 in demo mode, got {personnel_actual}"
+    )
 
     assert personnel_ceiling is not None, "Personnel Ceiling label not found"
-    assert isinstance(personnel_ceiling, (int, float)) and personnel_ceiling > 0, \
+    assert isinstance(personnel_ceiling, (int, float)) and personnel_ceiling > 0, (
         f"Personnel Ceiling should be > 0, got {personnel_ceiling}"
+    )
 
     # Cross-check: ceiling = sum(FTE * per-WP rate), all WPs default to DEFAULT_RATE
     expected_ceiling = sum(wp["fte"] for wp in WORK_PACKAGES) * DEFAULT_RATE
-    assert abs(personnel_ceiling - expected_ceiling) < 0.01, \
+    assert abs(personnel_ceiling - expected_ceiling) < 0.01, (
         f"Personnel Ceiling {personnel_ceiling} != expected {expected_ceiling}"
+    )
     wb.close()
 
 
@@ -145,10 +154,6 @@ def test_actuals_total_ceiling_equals_partner_ceiling(demo_wb_path, demo_recalc)
     total_row = _find_actuals_total_row(actuals)
     val = actuals.cell(total_row, VAL_COL_BUDGET).value
     expected = sum(wp["fte"] for wp in WORK_PACKAGES) * DEFAULT_RATE
-    assert isinstance(val, (int, float)), \
-        f"Actuals TOTAL Ceiling should be numeric, got {val}"
-    assert abs(val - expected) < 0.01, \
-        f"Actuals TOTAL Ceiling {val} != expected partner_ceiling {expected}"
+    assert isinstance(val, (int, float)), f"Actuals TOTAL Ceiling should be numeric, got {val}"
+    assert abs(val - expected) < 0.01, f"Actuals TOTAL Ceiling {val} != expected partner_ceiling {expected}"
     wb.close()
-
-

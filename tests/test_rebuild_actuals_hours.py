@@ -4,6 +4,7 @@ Covers:
 - Blue-input hours survive a rebuild (init -> Excel edit -> rebuild -> reopen).
 - Internal blank WP rows inside a person section don't truncate the reader.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,13 +29,11 @@ def _set(ws, row: int, col: int, value: float | int) -> None:
 
 def _find_person_header_row(ws, person_name: str) -> int:
     """Person headers carry the literal name in col A and are merged A:B."""
-    merged = [(mr.min_row, mr.min_col, mr.max_col)
-              for mr in ws.merged_cells.ranges]
+    merged = [(mr.min_row, mr.min_col, mr.max_col) for mr in ws.merged_cells.ranges]
     for r in range(1, ws.max_row + 1):
         if ws.cell(r, 1).value != person_name:
             continue
-        if any(mr_r == r and mr_c1 == 1 and mr_c2 >= 2
-               for mr_r, mr_c1, mr_c2 in merged):
+        if any(mr_r == r and mr_c1 == 1 and mr_c2 >= 2 for mr_r, mr_c1, mr_c2 in merged):
             return r
     raise AssertionError(f"Person header {person_name!r} not found")
 
@@ -46,6 +45,7 @@ def _find_wp_row_under_person(ws, header_row: int, wp_id: str) -> int:
     """
     config_ws = ws.parent["Config"]
     import re
+
     for r in range(header_row + 1, ws.max_row + 1):
         val = ws.cell(r, 1).value
         if val is None:
@@ -80,13 +80,11 @@ def test_reader_round_trip_preserves_hours(tmp_path: Path):
     wp_p1 = by_person[p1][0]
     wp_p2 = by_person[p2][0]
     # Use assignment start month so the cell is definitely an active (blue) cell.
-    asgn_p1 = next(a for a in DEMO_CAPACITY_ASSIGNMENTS
-                   if a["person"] == p1 and a["wp"] == wp_p1)
-    asgn_p2 = next(a for a in DEMO_CAPACITY_ASSIGNMENTS
-                   if a["person"] == p2 and a["wp"] == wp_p2)
+    asgn_p1 = next(a for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == p1 and a["wp"] == wp_p1)
+    asgn_p2 = next(a for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == p2 and a["wp"] == wp_p2)
     edits = [
         (p1, wp_p1, asgn_p1["start"] - 1, 120.0),
-        (p1, wp_p1, asgn_p1["start"],     80.0),
+        (p1, wp_p1, asgn_p1["start"], 80.0),
         (p2, wp_p2, asgn_p2["start"] - 1, 40.0),
     ]
 
@@ -111,14 +109,9 @@ def test_reader_round_trip_preserves_hours(tmp_path: Path):
 
     for person, wp_id, month_idx, expected in edits:
         assert person in hours_data, f"person {person!r} missing from reader"
-        assert wp_id in hours_data[person], (
-            f"WP {wp_id!r} missing for {person!r}: "
-            f"{list(hours_data[person].keys())}"
-        )
+        assert wp_id in hours_data[person], f"WP {wp_id!r} missing for {person!r}: {list(hours_data[person].keys())}"
         got = hours_data[person][wp_id][month_idx]
-        assert got == expected, (
-            f"{person}/{wp_id}/month{month_idx}: expected {expected}, got {got}"
-        )
+        assert got == expected, f"{person}/{wp_id}/month{month_idx}: expected {expected}, got {got}"
 
 
 def test_reader_tolerates_internal_blank_rows(tmp_path: Path):

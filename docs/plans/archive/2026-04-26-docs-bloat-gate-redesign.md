@@ -161,5 +161,5 @@ Blocking immediately, all signals. No shadow mode.
 - `.claude/hooks/README.md` — hook docs
 - `docs/analysis/bloat-overrides.log` — override audit trail (gitignored)
 - `CLAUDE.md` Critical Rule 7 — gate list
-- `docs/plans/archived/2026-04-25-doc-bloat-root-causes-brainstorm.md` — original gate design
-- `docs/plans/archived/2026-04-25-prose-rules-to-hooks-audit.md` — Wave-1 hook backlog
+- `docs/plans/archive/2026-04-25-doc-bloat-root-causes-brainstorm.md` — original gate design
+- `docs/plans/archive/2026-04-25-prose-rules-to-hooks-audit.md` — Wave-1 hook backlog

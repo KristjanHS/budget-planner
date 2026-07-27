@@ -21,7 +21,8 @@ import openpyxl
 
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    PROJECT_MONTHS, PROJECT_START,
+    PROJECT_MONTHS,
+    PROJECT_START,
 )
 from budget_planner.styles import col_letter
 
@@ -62,6 +63,7 @@ def _collect_cf_rules(ws):
 
 # Helpers
 
+
 def _grey_rules(rules):
     return [r for r in rules if r[2] is not None and r[2].endswith(_GREY_HEX)]
 
@@ -71,6 +73,7 @@ def _red_rules(rules):
 
 
 # Grey partial-year rules present per year
+
 
 @pytest.mark.parametrize("y", range(_NUM_YEARS))
 def test_act_eur_has_grey_cf_per_year(summary_wb, y):
@@ -82,14 +85,9 @@ def test_act_eur_has_grey_cf_per_year(summary_wb, y):
     sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
     act_col_l = col_letter(sc + 2)
     expected_formula = f"eur_actuals_through_month<{year_end_pm}"
-    matches = [
-        r for r in rules
-        if r[0].startswith(f"{act_col_l}")
-        and any(expected_formula == f for f in r[1])
-    ]
+    matches = [r for r in rules if r[0].startswith(f"{act_col_l}") and any(expected_formula == f for f in r[1])]
     assert len(matches) == 1, (
-        f"Year {y} Act € grey CF: expected 1 rule with formula "
-        f"{expected_formula!r}, got {len(matches)}"
+        f"Year {y} Act € grey CF: expected 1 rule with formula {expected_formula!r}, got {len(matches)}"
     )
 
 
@@ -107,20 +105,18 @@ def test_var_eur_has_grey_cf_per_year_with_min(summary_wb, y):
     sc = _YEAR_GROUP_START + y * _COLS_PER_YEAR
     var_col_l = col_letter(sc + 3)
     matches = [
-        r for r in rules
+        r
+        for r in rules
         if r[0].startswith(f"{var_col_l}")
         and any(
-            "MIN(eur_actuals_through_month,hours_actuals_through_month)" in f
-            and f"<{year_end_pm}" in f
-            for f in r[1]
+            "MIN(eur_actuals_through_month,hours_actuals_through_month)" in f and f"<{year_end_pm}" in f for f in r[1]
         )
     ]
-    assert len(matches) == 1, (
-        f"Year {y} Var € grey CF (MIN): expected 1 rule, got {len(matches)}"
-    )
+    assert len(matches) == 1, f"Year {y} Var € grey CF (MIN): expected 1 rule, got {len(matches)}"
 
 
 # Project-end Forecast EUR red CF (replacement for the retired per-year rule)
+
 
 def test_project_end_forecast_red_cf_present(summary_wb):
     """A single red CF on the project-end Forecast EUR column compares
@@ -131,10 +127,9 @@ def test_project_end_forecast_red_cf_present(summary_wb):
     fc_l = col_letter(_FORECAST_COL)
     plan_total_l = col_letter(_TOTAL_GROUP_START + 1)
     matches = [
-        r for r in rules
-        if r[0].startswith(f"{fc_l}")
-        and any('0.8*' in f and '<>""' in f and plan_total_l in f
-                for f in r[1])
+        r
+        for r in rules
+        if r[0].startswith(f"{fc_l}") and any("0.8*" in f and '<>""' in f and plan_total_l in f for f in r[1])
     ]
     assert len(matches) == 1, (
         f"Project-end Forecast red CF: expected 1 rule on col {fc_l} with "
@@ -146,36 +141,28 @@ def test_project_end_forecast_red_cf_present(summary_wb):
     # 0.8* red rule. Catches a regression where the helper accidentally
     # writes the rule to `forecast_col - 1` or duplicates onto the year band.
     adjacent_var_l = col_letter(_FORECAST_COL - 1)
-    adjacent_hits = [
-        r for r in rules
-        if r[0].startswith(f"{adjacent_var_l}")
-        and any('0.8*' in f for f in r[1])
-    ]
-    assert len(adjacent_hits) == 0, (
-        f"0.8* red CF unexpectedly on adjacent col {adjacent_var_l}: "
-        f"{adjacent_hits}"
-    )
+    adjacent_hits = [r for r in rules if r[0].startswith(f"{adjacent_var_l}") and any("0.8*" in f for f in r[1])]
+    assert len(adjacent_hits) == 0, f"0.8* red CF unexpectedly on adjacent col {adjacent_var_l}: {adjacent_hits}"
 
 
 # PROJECT TOTAL block has no grey CF
+
 
 def test_project_total_block_has_no_grey_cf(summary_wb):
     """PROJECT TOTAL columns (across-years) must have no grey partial-year CF."""
     ws = summary_wb["Summary"]
     rules = _grey_rules(_collect_cf_rules(ws))
-    total_col_letters = {
-        col_letter(_TOTAL_GROUP_START + i) for i in range(_COLS_PER_YEAR)
-    }
+    total_col_letters = {col_letter(_TOTAL_GROUP_START + i) for i in range(_COLS_PER_YEAR)}
     for sqref, formulas, _fg in rules:
         # sqref like "H5:H9" — take column prefix
         col_prefix = sqref.split(":", 1)[0].rstrip("0123456789")
         assert col_prefix not in total_col_letters, (
-            f"Grey CF unexpectedly applied to PROJECT TOTAL col {col_prefix} "
-            f"(sqref={sqref}, formula={formulas})"
+            f"Grey CF unexpectedly applied to PROJECT TOTAL col {col_prefix} (sqref={sqref}, formula={formulas})"
         )
 
 
 # Negative-variance CFs unchanged
+
 
 def test_negative_variance_red_cfs_unchanged(summary_wb):
     """Negative-Variance red CFs remain simple ``<colLetter><row><0`` formulas.
@@ -188,7 +175,8 @@ def test_negative_variance_red_cfs_unchanged(summary_wb):
     rules = _red_rules(_collect_cf_rules(ws))
     # Variance red rules: range sqref, "<0" but not "0.8*" and not AND(...)
     var_red = [
-        r for r in rules
+        r
+        for r in rules
         if ":" in r[0]
         and any("<0" in f for f in r[1])
         and not any("0.8*" in f for f in r[1])
@@ -199,8 +187,7 @@ def test_negative_variance_red_cfs_unchanged(summary_wb):
     # calendar-year block count as a lower bound — that's what this scope
     # covers.
     assert len(var_red) >= _NUM_YEARS + 1, (
-        f"Expected >= {_NUM_YEARS + 1} simple <0 red variance CFs, "
-        f"got {len(var_red)}"
+        f"Expected >= {_NUM_YEARS + 1} simple <0 red variance CFs, got {len(var_red)}"
     )
 
     # Locate the calendar-year first WP row dynamically — sqrefs from the RP
@@ -221,12 +208,10 @@ def test_negative_variance_red_cfs_unchanged(summary_wb):
         var_col = _YEAR_GROUP_START + y * _COLS_PER_YEAR + 3
         var_col_l = col_letter(var_col)
         matches = [
-            r for r in var_red
+            r
+            for r in var_red
             if r[0].startswith(f"{var_col_l}{first_wp_row}")
-            and any(
-                f.startswith(var_col_l) and f.endswith("<0")
-                for f in r[1]
-            )
+            and any(f.startswith(var_col_l) and f.endswith("<0") for f in r[1])
         ]
         assert len(matches) == 1, (
             f"Year {y} Var € red <0 CF: expected 1 unchanged rule on col "

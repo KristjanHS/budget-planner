@@ -248,9 +248,7 @@ def discover_layout(ws) -> dict:
     WP table rows (row 8+ by default).
     """
     # Find PLANNED block header
-    planned_header_row = _find_header_row(
-        ws, SECTION_HEADER_LABELS["planned_fte"], required=True
-    )
+    planned_header_row = _find_header_row(ws, SECTION_HEADER_LABELS["planned_fte"], required=True)
 
     # Find the first WP data row after the PLANNED header.
     # WP rows have a formula (e.g. =Config!A8) or literal WP ID in column A.
@@ -265,10 +263,7 @@ def discover_layout(ws) -> dict:
             planned_first_wp_row = r
             break
         # A literal WP ID (skip known header labels)
-        if not any(
-            kw in val_str.upper()
-            for kw in ("PLANNED", "YEAR", "SUM", "BUDGET", "WP ID", "WP NAME")
-        ):
+        if not any(kw in val_str.upper() for kw in ("PLANNED", "YEAR", "SUM", "BUDGET", "WP ID", "WP NAME")):
             planned_first_wp_row = r
             break
     if planned_first_wp_row is None:
@@ -300,20 +295,15 @@ def discover_layout(ws) -> dict:
     if cfg_wp_first is None:
         # Fallback: discover from Config sheet directly (legacy workbooks
         # with literal WP IDs instead of =Config!A{n} formulas)
-        config_ws = (
-            ws.parent[SHEET_CONFIG] if SHEET_CONFIG in ws.parent.sheetnames else None
-        )
+        config_ws = ws.parent[SHEET_CONFIG] if SHEET_CONFIG in ws.parent.sheetnames else None
         wp_section = (
-            _find_header_row(
-                config_ws, SECTION_HEADER_LABELS["wp_budget"], required=False
-            )
+            _find_header_row(config_ws, SECTION_HEADER_LABELS["wp_budget"], required=False)
             if config_ws is not None
             else None
         )
         if wp_section is None:
             raise ValueError(
-                "Cannot locate Config WP Budget section. "
-                "Regenerate workbook with `python -m budget_planner init`."
+                "Cannot locate Config WP Budget section. Regenerate workbook with `python -m budget_planner init`."
             )
         cfg_wp_first = _data_row_after(wp_section)
     cfg_wp_last = cfg_wp_first + num_wps - 1

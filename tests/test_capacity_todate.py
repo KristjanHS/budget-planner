@@ -91,9 +91,7 @@ def test_todate_headers(cap_formulas, todate_cols):
         (todate_cols["actual"], "Actual PM"),
         (todate_cols["var"], "Variance PM"),
     ]:
-        found = any(
-            cap_formulas.cell(r, c).value == expected for r in range(1, 6)
-        )
+        found = any(cap_formulas.cell(r, c).value == expected for r in range(1, 6))
         assert found, f"Header {expected!r} not found in col {c}"
 
 
@@ -162,10 +160,7 @@ def test_total_actual_sums_wp_actuals(cap_values, todate_cols):
         if isinstance(a, str) and a.startswith("WP"):
             wp_rows.append(r)
     assert wp_rows, "Expected at least one WP row for Alice"
-    wp_actual_sum = sum(
-        cap_values.cell(r, todate_cols["actual"]).value or 0
-        for r in wp_rows
-    )
+    wp_actual_sum = sum(cap_values.cell(r, todate_cols["actual"]).value or 0 for r in wp_rows)
     total_actual = cap_values.cell(total_row, todate_cols["actual"]).value
     assert total_actual is not None
     assert abs(total_actual - wp_actual_sum) < 1e-6
@@ -180,5 +175,3 @@ def test_total_variance_resolves_nonnegative_under_demo_seed(cap_values, todate_
     var = cap_values.cell(total_row, todate_cols["var"]).value
     assert var is not None
     assert isinstance(var, (int, float))
-
-

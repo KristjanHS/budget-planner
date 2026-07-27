@@ -41,9 +41,7 @@ def read_actuals_override(ws) -> int | None:
     return None
 
 
-def read_actuals_values(
-    ws, project_months, month_col_start=MONTH_COL_START
-) -> dict[str, list]:
+def read_actuals_values(ws, project_months, month_col_start=MONTH_COL_START) -> dict[str, list]:
     """Read Actuals EUR values for round-trip preservation.
 
     Args:
@@ -69,10 +67,7 @@ def read_actuals_values(
     try:
         wp_header_row = _find_header_row(ws, SECTION_HEADER_LABELS["wp_id_column"])
     except ValueError:
-        raise ValueError(
-            "Cannot find 'WP ID' header row in Actuals sheet. "
-            "Was the sheet structure manually edited?"
-        )
+        raise ValueError("Cannot find 'WP ID' header row in Actuals sheet. Was the sheet structure manually edited?")
     first_wp_row = wp_header_row + 1
     r = first_wp_row
     while r <= ws.max_row:

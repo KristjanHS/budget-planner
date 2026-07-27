@@ -13,25 +13,30 @@ from dateutil.relativedelta import relativedelta
 
 from budget_planner.styles import (
     style_cell,
-    HEADER_FONT, LIGHT_BLUE_FILL, CENTER,
+    HEADER_FONT,
+    LIGHT_BLUE_FILL,
+    CENTER,
 )
 
 
 # Config!B-column parameter rows (Section 1 of Config sheet). Keys mirror the
 # literal label strings written into col A — using a TypedDict here surfaces
 # typos in consumer lookups at pyright time instead of at runtime.
-ConfigParamRows = TypedDict("ConfigParamRows", {
-    "Project Title": int,
-    "Project Start": int,
-    "Project Months": int,
-    "FTE Rate (EUR)": int,
-    "EU Annual Ceiling (PM/FTE/year)": int,
-    "Hours per FTE Month": int,
-    "Vacation Month": int,
-    "Num Vacation Months": int,
-    "Rebuild from month #": int,
-    "Version Stamp": int,
-})
+ConfigParamRows = TypedDict(
+    "ConfigParamRows",
+    {
+        "Project Title": int,
+        "Project Start": int,
+        "Project Months": int,
+        "FTE Rate (EUR)": int,
+        "EU Annual Ceiling (PM/FTE/year)": int,
+        "Hours per FTE Month": int,
+        "Vacation Month": int,
+        "Num Vacation Months": int,
+        "Rebuild from month #": int,
+        "Version Stamp": int,
+    },
+)
 
 # ── Sheet name constants ──
 SHEET_CONFIG = "Config"
@@ -55,7 +60,7 @@ MONTH_COL_START = 3
 # PER-PERSON SUMMARY band reuses col A for Person; metrics live at B..H
 # (Assigned, Pool, Over-pool?, Switches, First log, Last log, Rate). Rate is
 # duplicated only once per person — on the summary row.
-TIMELOG_MONTH_COL_START = 2   # col B
+TIMELOG_MONTH_COL_START = 2  # col B
 
 # PER-WP SUMMARY base-column span: A..J (10 cols: WP code + 9 metrics).
 # Year cols (``Y{yyyy} +i``) start at TIMELOG_WP_SUMMARY_BASE_LAST_COL + 1 = K.
@@ -75,9 +80,7 @@ TIMELOG_YEARLY_LABEL_COL = 10
 # Timelog Plan grid section title — written by the builder into col A and used
 # by the reader as the row anchor for the merged grid band. Lives here (not in
 # timelog_plan) so the reader doesn't depend on a sheet builder for layout.
-SECTION_TITLE_GRID = (
-    "TIMELOG GRID (edit freely — rebuild re-solves from Config!B9 onward)"
-)
+SECTION_TITLE_GRID = "TIMELOG GRID (edit freely — rebuild re-solves from Config!B9 onward)"
 
 # ── Section header contract ──
 # Every labelled section on the Config sheet uses: title row, header row,
@@ -108,13 +111,13 @@ COL_WP_ID = 1
 COL_WP_NAME = 2
 COL_WP_FTE = 3
 COL_WP_RATE = 4
-COL_WP_BUDGET_MINUS_I = 5   # black-formula = Budget +i / 1.25 (orange header)
-COL_WP_BUDGET_PLUS_I = 6    # black-formula (structured-ref, Aiko-port T1); green header
+COL_WP_BUDGET_MINUS_I = 5  # black-formula = Budget +i / 1.25 (orange header)
+COL_WP_BUDGET_PLUS_I = 6  # black-formula (structured-ref, Aiko-port T1); green header
 COL_WP_ASSIGNED_PM = 7  # SUMIFS formula: total assigned PM per WP
-COL_WP_VARIANCE = 8     # FTE Budget - Assigned PM
-COL_WP_START = 9        # project-month start (blue input, 1-indexed)
-COL_WP_END = 10         # project-month end (blue input, 1-indexed)
-COL_WP_TYPE = 11        # distribution curve (blue input, data-validation list)
+COL_WP_VARIANCE = 8  # FTE Budget - Assigned PM
+COL_WP_START = 9  # project-month start (blue input, 1-indexed)
+COL_WP_END = 10  # project-month end (blue input, 1-indexed)
+COL_WP_TYPE = 11  # distribution curve (blue input, data-validation list)
 WP_BUDGET_LAST_COL = 11  # for table ref / section header merge
 
 # Compat alias for out-of-T1-scope consumers (actuals.py, tests/test_layout.py)
@@ -146,7 +149,7 @@ COL_ASSIGN_START = 4
 COL_ASSIGN_END = 5
 COL_ASSIGN_SIG_ASSIGNED = 6  # SUMIFS: total assigned FTE for this person
 COL_ASSIGN_SIG_EXTERNAL = 7  # SUMIFS: total external FTE for this person
-COL_ASSIGN_BALANCE = 8       # Available PM - Assigned - External
+COL_ASSIGN_BALANCE = 8  # Available PM - Assigned - External
 ASSIGN_LAST_COL = 8
 # Minimum number of rows in the assignments section (populated + blank template
 # rows). Ensures named ranges span a realistic area even when assignments=[],
@@ -172,7 +175,7 @@ EXT_LAST_COL = 6
 # Actuals semantic: offset 1 = Slope (avg-burn = posted_value/posted_idx);
 # offset 4 = Posted (latest-filled cumulative through current_month).
 # Posted-cumulative redesign (2026-05-09) replaced Sum/Cum on the Actuals
-# sheet — see ``docs/plans/archived/2026-05-09-actuals-posted-cumulative-design.md``.
+# sheet — see ``docs/plans/archive/2026-05-09-actuals-posted-cumulative-design.md``.
 VAL_OFFSET_SLOPE = 1
 VAL_OFFSET_BUDGET = 2
 VAL_OFFSET_DIFF = 3
@@ -209,7 +212,7 @@ VAL_OFFSET_CUM_PLUS_I = VAL_OFFSET_POSTED_PLUS_I
 # Alert thresholds
 TREND_OK_BAND = 0.05
 TREND_OVER_THRESHOLD = 0.15
-TREND_WATCH_THRESHOLD = 0.05   # same as OK_BAND, used for WATCH vs OK boundary
+TREND_WATCH_THRESHOLD = 0.05  # same as OK_BAND, used for WATCH vs OK boundary
 TREND_SLOW_THRESHOLD = -0.10
 CAPACITY_AMBER_LOAD = 0.80
 CAPACITY_VARIANCE_FTE_RED = 0.2  # |Planned FTE - Actual FTE| > this → red
@@ -284,8 +287,6 @@ def val_columns(project_months: int) -> dict[str, int]:
     }
 
 
-
-
 def wp_active_months(wp_id: str, work_packages: list[dict]) -> frozenset[int]:
     """Return frozenset of active month numbers for a WP.
 
@@ -322,8 +323,7 @@ def _calendar_year_groups(project_start, project_months):
         m += span
 
 
-def build_year_month_headers(ws, start_row, project_params, month_col_start,
-                             val_headers=None):
+def build_year_month_headers(ws, start_row, project_params, month_col_start, val_headers=None):
     """Write year + month header rows. Returns (year_row, month_row, next_row).
 
     Args:
@@ -352,29 +352,23 @@ def build_year_month_headers(ws, start_row, project_params, month_col_start,
         cal_date = project_start + relativedelta(months=group_start)
         year_label = str(cal_date.year)
         if span > 1:
-            ws.merge_cells(start_row=r, start_column=year_start_col,
-                           end_row=r, end_column=year_end_col)
-        style_cell(ws, r, year_start_col, year_label, font=HEADER_FONT,
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
+            ws.merge_cells(start_row=r, start_column=year_start_col, end_row=r, end_column=year_end_col)
+        style_cell(ws, r, year_start_col, year_label, font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
         for c2 in range(year_start_col + 1, year_end_col + 1):
             style_cell(ws, r, c2, fill=LIGHT_BLUE_FILL)
     for col, label in val_headers:
-        style_cell(ws, r, col, label, font=HEADER_FONT,
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
+        style_cell(ws, r, col, label, font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
     r += 1
 
     # ── Month header row ──
     month_row = r
-    style_cell(ws, r, 1, "WP ID", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-               alignment=CENTER)
-    style_cell(ws, r, 2, "WP Name", font=HEADER_FONT, fill=LIGHT_BLUE_FILL,
-               alignment=CENTER)
+    style_cell(ws, r, 1, "WP ID", font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
+    style_cell(ws, r, 2, "WP Name", font=HEADER_FONT, fill=LIGHT_BLUE_FILL, alignment=CENTER)
     for mi in range(project_months):
         c = month_col_start + mi
         cal_date = project_start + relativedelta(months=mi)
         mlabel = f"M{mi + 1}-{cal_date.strftime('%b%y')}"
-        style_cell(ws, r, c, mlabel, font=Font(name="Arial", size=8),
-                   fill=LIGHT_BLUE_FILL, alignment=CENTER)
+        style_cell(ws, r, c, mlabel, font=Font(name="Arial", size=8), fill=LIGHT_BLUE_FILL, alignment=CENTER)
     for col, _label in val_headers:
         style_cell(ws, r, col, "", fill=LIGHT_BLUE_FILL)
     r += 1

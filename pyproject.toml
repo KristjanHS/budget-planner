@@ -17,5 +17,30 @@ dev = ["pytest>=7.0"]
 [tool.setuptools.packages.find]
 include = ["budget_planner*"]
 
+[tool.ruff]
+line-length = 120
+# Pinned rather than inferred from requires-python: ruff 0.12.9 treats py314 as
+# preview and warns on every invocation. py313 is the highest stable target and
+# no rule in our select = ["E","F","W"] set differs between the two.
+target-version = "py313"
+# scripts/office/ is a vendored OOXML validate/pack toolkit, not our code — keeping it
+# out of both the formatter and the linter leaves it byte-comparable with upstream.
+# extend-exclude, not exclude: the bare key REPLACES ruff's built-in defaults
+# (.venv, node_modules, …), and with force-exclude on that would gate third-party
+# files whenever the hook passes one explicitly (verified: 12 lint errors inside .venv).
+# scripts/office = vendored OOXML toolkit. **/*.md because ruff ≥0.16 formats Python
+# inside Markdown code blocks: unexcluded it rewrites docs/spec.md — whose named-range
+# table test_config_named_range_targets_match_spec_doc parses — and archived plans.
+extend-exclude = ["scripts/office", "**/*.md"]
+# The PostToolUse ruff hook passes one explicit file path, and a plain `exclude` only
+# filters directory traversal — without this, excluded files still get gated per-file.
+force-exclude = true
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]     # T20/I deliberately not enabled — print() is legitimate in the CLI scripts
+# The formatter owns line width; E501 would only ever flag long comments and string
+# literals it cannot split. Our own modules are still kept under 120 by hand.
+ignore = ["E501"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

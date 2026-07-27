@@ -1,15 +1,20 @@
 """Tests for merged cell ranges across sheets."""
+
 import pytest
 import openpyxl
 
 from budget_planner.layout import _calendar_year_groups
 from budget_planner.config import (
-    PROJECT_MONTHS, PROJECT_START, MONTH_COL_START,
-    VAL_COL_DIFF, VAL_COL_BREACH,
+    PROJECT_MONTHS,
+    PROJECT_START,
+    MONTH_COL_START,
+    VAL_COL_DIFF,
+    VAL_COL_BREACH,
 )
 
 
 # ── Fixtures ──
+
 
 @pytest.fixture(scope="module")
 def workbook(fresh_wb_path):
@@ -17,6 +22,7 @@ def workbook(fresh_wb_path):
 
 
 # ── Helpers ──
+
 
 def _year_merges_on_row(ws, row: int) -> list[tuple[int, int]]:
     """Return sorted (min_col, max_col) for all merges on the given row
@@ -54,6 +60,7 @@ def _expected_year_spans() -> list[tuple[int, int]]:
 
 # ── Tests ──
 
+
 class TestPlanYearHeaders:
     """Plan year headers merge exactly 12 cells per year (or fewer for final year)."""
 
@@ -67,11 +74,7 @@ class TestPlanYearHeaders:
         year_row = info[0] + 1
 
         actual = _year_merges_on_row(ws, year_row)
-        assert actual == expected, (
-            f"Plan year header merges mismatch.\n"
-            f"  Expected: {expected}\n"
-            f"  Actual:   {actual}"
-        )
+        assert actual == expected, f"Plan year header merges mismatch.\n  Expected: {expected}\n  Actual:   {actual}"
 
 
 class TestCapacityYearHeaders:
@@ -98,6 +101,7 @@ class TestCapacityYearHeaders:
         # is the planned-side spans plus the two band mirrors.
         from budget_planner.config import PROJECT_MONTHS as _PM
         from budget_planner.layout import val_columns as _val_columns
+
         val_diff = _val_columns(_PM)["diff"]
         actual_start = val_diff + 2
         variance_start = actual_start + _PM + 1
@@ -105,14 +109,9 @@ class TestCapacityYearHeaders:
         expected = list(expected_planned)
         for band_start in (actual_start, variance_start):
             for ps, pe in expected_planned:
-                expected.append(
-                    (ps - planned_start + band_start,
-                     pe - planned_start + band_start)
-                )
+                expected.append((ps - planned_start + band_start, pe - planned_start + band_start))
         assert actual == expected, (
-            f"Capacity year header merges mismatch.\n"
-            f"  Expected: {expected}\n"
-            f"  Actual:   {actual}"
+            f"Capacity year header merges mismatch.\n  Expected: {expected}\n  Actual:   {actual}"
         )
 
 
@@ -164,20 +163,21 @@ class TestSummaryYearHeaders:
         # Expected: all year merges + PROJECT TOTAL merge
         all_expected = sorted(expected_year + [expected_total])
         assert actual == all_expected, (
-            f"Summary year header merges mismatch.\n"
-            f"  Expected: {all_expected}\n"
-            f"  Actual:   {actual}"
+            f"Summary year header merges mismatch.\n  Expected: {all_expected}\n  Actual:   {actual}"
         )
 
 
 class TestSectionHeaders:
     """Section headers span the correct column range."""
 
-    @pytest.mark.parametrize("sheet_name,header_text,expected_cols", [
-        ("Plan", "PLANNED FTE", (1, VAL_COL_DIFF)),
-        ("Config", "EXTERNAL COMMITMENTS", (1, 6)),
-        ("Actuals", "ACTUAL EUR", (1, VAL_COL_BREACH)),
-    ])
+    @pytest.mark.parametrize(
+        "sheet_name,header_text,expected_cols",
+        [
+            ("Plan", "PLANNED FTE", (1, VAL_COL_DIFF)),
+            ("Config", "EXTERNAL COMMITMENTS", (1, 6)),
+            ("Actuals", "ACTUAL EUR", (1, VAL_COL_BREACH)),
+        ],
+    )
     def test_section_header_span(self, workbook, sheet_name, header_text, expected_cols):
         ws = workbook[sheet_name]
         info = _find_section_merge(ws, header_text)

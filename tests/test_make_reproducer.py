@@ -13,8 +13,7 @@ def test_make_reproducer_writes_both_artifacts_into_out_dir(tmp_path):
     assert synth_path == out_dir / SYNTH_FILENAME
     assert fp_path.exists()
     assert synth_path.exists()
-    assert extract_fingerprint(str(synth_path))["config_sections"] == \
-           extract_fingerprint(str(real))["config_sections"]
+    assert extract_fingerprint(str(synth_path))["config_sections"] == extract_fingerprint(str(real))["config_sections"]
 
 
 def test_make_reproducer_overwrites_prior_artifacts(tmp_path):
@@ -26,7 +25,7 @@ def test_make_reproducer_overwrites_prior_artifacts(tmp_path):
     out_dir = tmp_path / "artifacts"
     out_dir.mkdir()
     stale = out_dir / FP_FILENAME
-    stale.write_text("{\"stale\": true}")
+    stale.write_text('{"stale": true}')
 
     make_reproducer(str(real), out_dir=out_dir)
 

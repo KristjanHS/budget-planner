@@ -1,4 +1,5 @@
 """Tests for column grouping by year."""
+
 import pytest
 from openpyxl import load_workbook, Workbook
 from budget_planner.styles import apply_year_groups, col_letter

@@ -10,6 +10,7 @@ seed module-shaped data (lists of dicts matching ``budget_planner/config.py``) a
 dispatch directly into it, bypassing the config-module defaults that
 ``init_workbook`` uses.
 """
+
 from __future__ import annotations
 
 import os

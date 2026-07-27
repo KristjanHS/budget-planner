@@ -4,17 +4,23 @@ import pytest
 import openpyxl
 
 from budget_planner.config import (
-    TEAM, EXTERNAL_COMMITMENTS, DEMO_CAPACITY_ASSIGNMENTS,
-    MONTH_COL_START, PROJECT_MONTHS,
+    TEAM,
+    EXTERNAL_COMMITMENTS,
+    DEMO_CAPACITY_ASSIGNMENTS,
+    MONTH_COL_START,
+    PROJECT_MONTHS,
 )
 from budget_planner.layout import (
-    SHEET_ACTUALS_HOURS, CAPACITY_VARIANCE_FTE_RED, CAPACITY_AMBER_LOAD,
+    SHEET_ACTUALS_HOURS,
+    CAPACITY_VARIANCE_FTE_RED,
+    CAPACITY_AMBER_LOAD,
     val_columns,
 )
 from budget_planner.styles import col_letter
 
 
 # ── Fixtures ──
+
 
 @pytest.fixture(scope="module")
 def wb_and_cap(assigned_wb_path):
@@ -63,6 +69,7 @@ def _collect_cf_rules(ws):
 
 # ── Positional tests ──
 
+
 def test_actual_band_columns_after_last_planned_month(cap_ws, band_cols):
     """The Actual band starts 2 columns after the planned Variance column
     (1-col gutter), and spans PROJECT_MONTHS columns."""
@@ -74,10 +81,7 @@ def test_actual_band_columns_after_last_planned_month(cap_ws, band_cols):
 def test_variance_band_columns_follow_actual_band(band_cols):
     """Variance band starts 2 columns after Actual band end (1-col gutter)."""
     assert band_cols["variance_start"] == band_cols["actual_end"] + 2
-    assert (
-        band_cols["variance_end"] - band_cols["variance_start"] + 1
-        == PROJECT_MONTHS
-    )
+    assert band_cols["variance_end"] - band_cols["variance_start"] + 1 == PROJECT_MONTHS
 
 
 def test_band_columns_have_outline_level_1(cap_ws, band_cols):
@@ -85,14 +89,10 @@ def test_band_columns_have_outline_level_1(cap_ws, band_cols):
     can collapse them via Excel's outline (summaryRight)."""
     for c in range(band_cols["actual_start"], band_cols["actual_end"] + 1):
         dim = cap_ws.column_dimensions[col_letter(c)]
-        assert dim.outline_level == 1, (
-            f"Actual col {col_letter(c)} outline_level={dim.outline_level}"
-        )
+        assert dim.outline_level == 1, f"Actual col {col_letter(c)} outline_level={dim.outline_level}"
     for c in range(band_cols["variance_start"], band_cols["variance_end"] + 1):
         dim = cap_ws.column_dimensions[col_letter(c)]
-        assert dim.outline_level == 1, (
-            f"Variance col {col_letter(c)} outline_level={dim.outline_level}"
-        )
+        assert dim.outline_level == 1, f"Variance col {col_letter(c)} outline_level={dim.outline_level}"
 
 
 def test_capacity_sheet_summary_right_set(cap_ws):
@@ -102,6 +102,7 @@ def test_capacity_sheet_summary_right_set(cap_ws):
 
 
 # ── Formula content tests (rely on cap_ws + a layout probe) ──
+
 
 def _find_any_wp_row(cap_ws):
     """Return (row, asgn) for the first demo assignment on the Capacity sheet."""
@@ -114,8 +115,12 @@ def _find_any_wp_row(cap_ws):
         a_val = cap_ws.cell(row=r, column=1).value
         b_val = cap_ws.cell(row=r, column=2).value
         # Header/section rows have string values; WP rows are formulas.
-        if (isinstance(a_val, str) and a_val.startswith("=Config!A")
-                and isinstance(b_val, str) and b_val.startswith("=Config!B")):
+        if (
+            isinstance(a_val, str)
+            and a_val.startswith("=Config!A")
+            and isinstance(b_val, str)
+            and b_val.startswith("=Config!B")
+        ):
             # Match by loading the target Config row — we only need ANY WP row
             # to verify the formula pattern.
             return r, asgn
@@ -134,9 +139,7 @@ def test_actual_fte_formula_references_actuals_hours(cap_ws, band_cols):
             assert SHEET_ACTUALS_HOURS in formula or "Actuals-Hours" in formula, (
                 f"Actual FTE formula missing sheet ref: {formula}"
             )
-            assert "hours_per_fte_month" in formula, (
-                f"Actual FTE formula missing divisor: {formula}"
-            )
+            assert "hours_per_fte_month" in formula, f"Actual FTE formula missing divisor: {formula}"
             found = True
             break
     assert found, f"No Actual FTE formula cell found on row {wp_row}"
@@ -155,8 +158,7 @@ def test_variance_formula_is_planned_minus_actual(cap_ws, band_cols):
             planned_ref = f"{col_letter(planned_c)}{wp_row}"
             actual_ref = f"{col_letter(actual_c)}{wp_row}"
             assert planned_ref in cell.value and actual_ref in cell.value, (
-                f"Variance formula should contain {planned_ref} and "
-                f"{actual_ref}: {cell.value}"
+                f"Variance formula should contain {planned_ref} and {actual_ref}: {cell.value}"
             )
             assert f"{planned_ref}-{actual_ref}" in cell.value, (
                 f"Variance formula must compute planned − actual: {cell.value}"
@@ -174,13 +176,12 @@ def test_utilisation_cf_references_max_fte_on_total_row(cap_ws, band_cols):
     # Find utilisation rules — sqref in Actual-band columns, formula with
     # Config!$B$<row> (the roster Max FTE cell) and without a SUM( prefix.
     util_rules = [
-        r for r in rules
-        if a_start <= _sqref_first_col_index(r[0]) <= a_end
-        and any("Config!$B$" in f and "SUM(" not in f for f in r[1])
+        r
+        for r in rules
+        if a_start <= _sqref_first_col_index(r[0]) <= a_end and any("Config!$B$" in f and "SUM(" not in f for f in r[1])
     ]
     assert len(util_rules) >= 2 * len(TEAM), (
-        f"Expected ≥ {2 * len(TEAM)} utilisation CF rules (amber+red per "
-        f"person), got {len(util_rules)}"
+        f"Expected ≥ {2 * len(TEAM)} utilisation CF rules (amber+red per person), got {len(util_rules)}"
     )
     # At least one is red, at least one is amber.
     reds = [r for r in util_rules if r[2] and r[2].endswith("FFC7CE")]
@@ -190,10 +191,7 @@ def test_utilisation_cf_references_max_fte_on_total_row(cap_ws, band_cols):
     # Red formula must reference Max FTE (Config!$B$<roster_row>) and NOT use
     # the amber 0.8 multiplier.
     for _sqref, formulas, _fg in reds:
-        assert any(
-            "Config!$B$" in f and f"{CAPACITY_AMBER_LOAD}*" not in f
-            for f in formulas
-        )
+        assert any("Config!$B$" in f and f"{CAPACITY_AMBER_LOAD}*" not in f for f in formulas)
 
 
 def test_variance_cf_red_on_abs_threshold(cap_ws, band_cols):
@@ -202,23 +200,20 @@ def test_variance_cf_red_on_abs_threshold(cap_ws, band_cols):
     v_start = band_cols["variance_start"]
     v_end = band_cols["variance_end"]
     variance_rules = [
-        r for r in rules
-        if v_start <= _sqref_first_col_index(r[0]) <= v_end
-        and any("ABS(" in f for f in r[1])
+        r for r in rules if v_start <= _sqref_first_col_index(r[0]) <= v_end and any("ABS(" in f for f in r[1])
     ]
     assert len(variance_rules) >= 1, "No variance ABS red CF rules found"
     for _sqref, formulas, fg in variance_rules:
-        assert fg and fg.endswith("FFC7CE"), (
-            f"Variance ABS rule should be red, got {fg}"
+        assert fg and fg.endswith("FFC7CE"), f"Variance ABS rule should be red, got {fg}"
+        assert any(f">{CAPACITY_VARIANCE_FTE_RED}" in f for f in formulas), (
+            f"Variance formula missing >{CAPACITY_VARIANCE_FTE_RED}: {formulas}"
         )
-        assert any(
-            f">{CAPACITY_VARIANCE_FTE_RED}" in f for f in formulas
-        ), f"Variance formula missing >{CAPACITY_VARIANCE_FTE_RED}: {formulas}"
 
 
 def _sqref_first_col_index(sqref: str) -> int:
     """Parse first column letter from a CF sqref like 'AX12:BB12' → column index."""
     import re
+
     m = re.match(r"([A-Z]+)", sqref)
     if not m:
         return -1
@@ -232,6 +227,7 @@ def _sqref_first_col_index(sqref: str) -> int:
 
 # ── Font color tests ──
 
+
 def test_actual_cells_use_green_xref_font(cap_ws, band_cols):
     """Actual FTE formula cells use green cross-sheet font (006080 family)."""
     wp_row, _ = _find_any_wp_row(cap_ws)
@@ -239,13 +235,9 @@ def test_actual_cells_use_green_xref_font(cap_ws, band_cols):
         cell = cap_ws.cell(row=wp_row, column=c)
         if isinstance(cell.value, str) and cell.value.startswith("="):
             font = cell.font
-            assert font.color and font.color.rgb, (
-                f"Actual cell ({wp_row},{c}) has no font color"
-            )
+            assert font.color and font.color.rgb, f"Actual cell ({wp_row},{c}) has no font color"
             rgb = str(font.color.rgb).upper()
-            assert rgb.endswith("008000"), (
-                f"Actual cell font expected green (008000), got {rgb}"
-            )
+            assert rgb.endswith("008000"), f"Actual cell font expected green (008000), got {rgb}"
             return
     pytest.fail(f"No Actual FTE formula cell found on row {wp_row}")
 
@@ -257,13 +249,9 @@ def test_variance_cells_use_black_formula_font(cap_ws, band_cols):
         cell = cap_ws.cell(row=wp_row, column=c)
         if isinstance(cell.value, str) and cell.value.startswith("="):
             font = cell.font
-            assert font.color and font.color.rgb, (
-                f"Variance cell ({wp_row},{c}) has no font color"
-            )
+            assert font.color and font.color.rgb, f"Variance cell ({wp_row},{c}) has no font color"
             rgb = str(font.color.rgb).upper()
-            assert rgb.endswith("000000"), (
-                f"Variance cell font expected black (000000), got {rgb}"
-            )
+            assert rgb.endswith("000000"), f"Variance cell font expected black (000000), got {rgb}"
             return
     pytest.fail(f"No variance formula cell found on row {wp_row}")
 
@@ -280,12 +268,11 @@ def test_actual_total_row_cells_use_black_formula_font(cap_ws, band_cols):
     cell = cap_ws.cell(row=total_row, column=band_cols["actual_start"])
     assert isinstance(cell.value, str) and cell.value.startswith("=")
     rgb = str(cell.font.color.rgb).upper()
-    assert rgb.endswith("000000"), (
-        f"Actual TOTAL cell expected black font, got {rgb}"
-    )
+    assert rgb.endswith("000000"), f"Actual TOTAL cell expected black font, got {rgb}"
 
 
 # ── Inactive month greying on band cells ──
+
 
 def test_band_inactive_months_are_grey(cap_ws, band_cols):
     """Inactive months on the band must be empty + grey, mirroring planned side."""
@@ -303,23 +290,24 @@ def test_band_inactive_months_are_grey(cap_ws, band_cols):
     for r in range(1, 400):
         a_val = cap_ws.cell(row=r, column=1).value
         b_val = cap_ws.cell(row=r, column=2).value
-        if not (isinstance(a_val, str) and a_val.startswith("=Config!A")
-                and isinstance(b_val, str) and b_val.startswith("=Config!B")):
+        if not (
+            isinstance(a_val, str)
+            and a_val.startswith("=Config!A")
+            and isinstance(b_val, str)
+            and b_val.startswith("=Config!B")
+        ):
             continue
         planned_m1_fill = cap_ws.cell(row=r, column=MONTH_COL_START).fill
-        planned_m1_rgb = (str(planned_m1_fill.fgColor.rgb)
-                          if planned_m1_fill.fgColor else "")
+        planned_m1_rgb = str(planned_m1_fill.fgColor.rgb) if planned_m1_fill.fgColor else ""
         if not planned_m1_rgb.endswith("D9D9D9"):
             continue  # not an inactive-M1 row
         # Planned M1 is grey → both band M1 cells must be grey too.
         actual_m1 = cap_ws.cell(row=r, column=band_cols["actual_start"])
         var_m1 = cap_ws.cell(row=r, column=band_cols["variance_start"])
-        assert (str(actual_m1.fill.fgColor.rgb).endswith("D9D9D9")
-                if actual_m1.fill.fgColor else False), (
+        assert str(actual_m1.fill.fgColor.rgb).endswith("D9D9D9") if actual_m1.fill.fgColor else False, (
             f"Band Actual M1 should be grey on inactive row {r}"
         )
-        assert (str(var_m1.fill.fgColor.rgb).endswith("D9D9D9")
-                if var_m1.fill.fgColor else False), (
+        assert str(var_m1.fill.fgColor.rgb).endswith("D9D9D9") if var_m1.fill.fgColor else False, (
             f"Band Variance M1 should be grey on inactive row {r}"
         )
         found = True
@@ -329,20 +317,17 @@ def test_band_inactive_months_are_grey(cap_ws, band_cols):
 
 # ── External rows included in variance CF ──
 
+
 def test_external_rows_get_variance_cf(cap_ws, band_cols):
     """External commitment rows must also get the variance-red CF rule."""
     rules = _collect_cf_rules(cap_ws)
     v_start = band_cols["variance_start"]
     v_end = band_cols["variance_end"]
     variance_rules_count = sum(
-        1 for r in rules
-        if v_start <= _sqref_first_col_index(r[0]) <= v_end
-        and any("ABS(" in f for f in r[1])
+        1 for r in rules if v_start <= _sqref_first_col_index(r[0]) <= v_end and any("ABS(" in f for f in r[1])
     )
     # One rule per WP row + one per external row.
-    expected_min = (len(DEMO_CAPACITY_ASSIGNMENTS)
-                    + len(EXTERNAL_COMMITMENTS))
+    expected_min = len(DEMO_CAPACITY_ASSIGNMENTS) + len(EXTERNAL_COMMITMENTS)
     assert variance_rules_count >= expected_min, (
-        f"Expected ≥ {expected_min} variance CF rules "
-        f"(WPs + externals), got {variance_rules_count}"
+        f"Expected ≥ {expected_min} variance CF rules (WPs + externals), got {variance_rules_count}"
     )

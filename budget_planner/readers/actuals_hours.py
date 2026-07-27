@@ -55,9 +55,7 @@ def read_actuals_hours_sheet(
 
     # Hour columns span the full month grid — no outline-grouped derived
     # columns interleave the user-input cells on Actuals-Hours.
-    hour_cols: list[int] = [
-        month_col_start + mi for mi in range(project_months)
-    ]
+    hour_cols: list[int] = [month_col_start + mi for mi in range(project_months)]
 
     # ── Find person header rows ──
     # Convention (actuals_hours.py): person headers are A:B merged with a

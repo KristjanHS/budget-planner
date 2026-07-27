@@ -3,6 +3,7 @@
 Mirrors the user's workflow: generate a workbook, hand-edit Config in Excel
 (simulated via openpyxl), run rebuild, assert no data loss.
 """
+
 from pathlib import Path
 
 import openpyxl
@@ -88,10 +89,7 @@ def test_blank_row_mid_roster_does_not_truncate_rebuild(tmp_path: Path):
     wb.close()
     names = [p["name"] for p in roster]
     for n in existing_names:
-        assert n in names, (
-            f"Pre-rebuild read dropped person {n!r} after blank-row insertion. "
-            f"Roster read: {names}"
-        )
+        assert n in names, f"Pre-rebuild read dropped person {n!r} after blank-row insertion. Roster read: {names}"
 
     # Rebuild must succeed and preserve all persons.
     rebuild_workbook(str(path))
@@ -102,8 +100,7 @@ def test_blank_row_mid_roster_does_not_truncate_rebuild(tmp_path: Path):
     names_after = [p["name"] for p in roster_after]
     for n in existing_names:
         assert n in names_after, (
-            f"Rebuild dropped person {n!r} across blank-row insertion. "
-            f"Roster after rebuild: {names_after}"
+            f"Rebuild dropped person {n!r} across blank-row insertion. Roster after rebuild: {names_after}"
         )
     dropped_assignees = {a["person"] for a in assignments_after} - set(names_after)
     assert not dropped_assignees, (
@@ -135,21 +132,15 @@ def test_through_month_overrides_round_trip(tmp_path: Path):
 
     wb = openpyxl.load_workbook(path)
     assert wb["Actuals"]["B1"].value == 3, (
-        f"Rebuild clobbered eur through-month override: "
-        f"expected 3, got {wb['Actuals']['B1'].value!r}"
+        f"Rebuild clobbered eur through-month override: expected 3, got {wb['Actuals']['B1'].value!r}"
     )
     assert wb["Actuals-Hours"]["B1"].value == 5, (
-        f"Rebuild clobbered hours through-month override: "
-        f"expected 5, got {wb['Actuals-Hours']['B1'].value!r}"
+        f"Rebuild clobbered hours through-month override: expected 5, got {wb['Actuals-Hours']['B1'].value!r}"
     )
 
     # Named ranges still point at the effective cells (D1) on each sheet.
-    assert wb.defined_names["eur_actuals_through_month"].attr_text == (
-        "Actuals!$D$1"
-    )
-    assert wb.defined_names["hours_actuals_through_month"].attr_text == (
-        "'Actuals-Hours'!$D$1"
-    )
+    assert wb.defined_names["eur_actuals_through_month"].attr_text == ("Actuals!$D$1")
+    assert wb.defined_names["hours_actuals_through_month"].attr_text == ("'Actuals-Hours'!$D$1")
     wb.close()
 
     # ── Second rebuild: stability ──
@@ -186,10 +177,7 @@ def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
     roster = read_team_from_config(wb["Config"])
     wb.close()
     names = [p["name"] for p in roster]
-    assert "Midway Mary" in names, (
-        f"Pre-rebuild read already loses inserted person — reader bug. "
-        f"Roster read: {names}"
-    )
+    assert "Midway Mary" in names, f"Pre-rebuild read already loses inserted person — reader bug. Roster read: {names}"
 
     rebuild_workbook(str(path))
 
@@ -197,9 +185,7 @@ def test_mid_insert_in_team_roster_preserved_through_rebuild(tmp_path: Path):
     roster_after = read_team_from_config(wb["Config"])
     assignments_after = read_assignments_from_config(wb["Config"])
     names_after = [p["name"] for p in roster_after]
-    assert "Midway Mary" in names_after, (
-        f"Rebuild dropped the mid-inserted person. Roster after rebuild: {names_after}"
-    )
+    assert "Midway Mary" in names_after, f"Rebuild dropped the mid-inserted person. Roster after rebuild: {names_after}"
     mary = next(p for p in roster_after if p["name"] == "Midway Mary")
     assert mary["grade"] == next(iter(cfg.GRADE_RATES.keys())), (
         f"Rebuild dropped the mid-inserted person's grade. Got {mary['grade']!r}"

@@ -10,6 +10,7 @@ Usage:
 The real workbook can live anywhere (absolute path recommended). The
 synthetic artifacts always land inside the chosen out-dir.
 """
+
 from __future__ import annotations
 
 import json

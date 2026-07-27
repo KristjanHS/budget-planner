@@ -5,6 +5,8 @@ import os
 import warnings
 from collections.abc import Iterator
 
+from openpyxl.utils import get_column_letter
+
 from budget_planner.layout import (
     COL_ASSIGN_END,
     COL_ASSIGN_FTE,
@@ -73,11 +75,7 @@ def _iter_config_section_rows(
     it is skipped as a mid-insert blank. Callers extract row payloads.
     """
     wb = ws.parent
-    span = (
-        _iter_named_range_rows(wb, named_range)
-        if wb is not None and named_range
-        else None
-    )
+    span = _iter_named_range_rows(wb, named_range) if wb is not None and named_range else None
     expected_first = _data_row_after(header_row)
     if span is not None and span[0] < expected_first:
         span = None
@@ -172,10 +170,7 @@ def _read_wp_budget_section(ws, project_months: int) -> list[dict]:
                 f"{project_months}. Shorten the WP or extend the project."
             )
         if type_str not in valid_types:
-            raise ValueError(
-                f"WP '{id_str}' has invalid Type {type_str!r}. Must be one of: "
-                f"{sorted(valid_types)}."
-            )
+            raise ValueError(f"WP '{id_str}' has invalid Type {type_str!r}. Must be one of: {sorted(valid_types)}.")
         fte_val = float(ws.cell(r, COL_WP_FTE).value or 0)
         rate_numeric = _safe_float(rate_cell, 6500)
         if is_legacy_ceiling_layout:
@@ -306,20 +301,20 @@ def read_plan_config(ws, layout) -> list[dict]:
             }
         )
     if not wps:
-        raise ValueError(
-            "Config table has zero WP rows. "
-            "Regenerate from defaults with: python -m budget_planner"
-        )
+        raise ValueError("Config table has zero WP rows. Regenerate from defaults with: python -m budget_planner")
     return wps
 
 
 def read_grade_rates(ws) -> dict[str, int | float]:
     """Grade -> EUR/PM rate (e.g. {"Senior": 12500, ...}). Falls back to
     ``budget_planner.config.GRADE_RATES`` when the RATE BY GRADE section is missing
-    (legacy workbooks)."""
-    section_row = _find_header_row(
-        ws, SECTION_HEADER_LABELS["rate_by_grade"], required=False
-    )
+    (legacy workbooks).
+
+    A row with a grade name but a non-numeric rate is a data error, not a
+    section terminator: raising here names the offending cell instead of
+    silently truncating the dict and surfacing as a ``KeyError`` deep inside
+    the Timelog solver."""
+    section_row = _find_header_row(ws, SECTION_HEADER_LABELS["rate_by_grade"], required=False)
     if section_row is None:
         from budget_planner.config import GRADE_RATES
 
@@ -331,13 +326,31 @@ def read_grade_rates(ws) -> dict[str, int | float]:
         grade_name = ws.cell(r, 1).value
         if grade_name is None or str(grade_name).strip() == "":
             break
+        grade_name = str(grade_name).strip()
         rate_val = ws.cell(r, COL_GRADE_RATE).value
-        if rate_val is None or not isinstance(rate_val, (int, float)):
-            break
-        rates[str(grade_name).strip()] = rate_val
+        # bool is an int subclass — TRUE would otherwise read as a rate of 1.
+        if rate_val is None or isinstance(rate_val, bool) or not isinstance(rate_val, (int, float)):
+            raise ValueError(_grade_rate_error(ws, r, grade_name, rate_val))
+        rates[grade_name] = rate_val
         r += 1
 
     return rates
+
+
+def _grade_rate_error(ws, row: int, grade_name: str, rate_val) -> str:
+    """Human-actionable message for a RATE BY GRADE cell that is not a literal number."""
+    cell_ref = f"{ws.title}!{get_column_letter(COL_GRADE_RATE)}{row}"
+    if isinstance(rate_val, str) and rate_val.startswith("="):
+        found = f"the formula {rate_val!r}"
+    elif rate_val is None or (isinstance(rate_val, str) and rate_val.strip() == ""):
+        found = "an empty cell"
+    else:
+        found = f"{rate_val!r}"
+    return (
+        f"RATE BY GRADE row {row} (grade {grade_name!r}): rate must be a literal number "
+        f"(blue input cell), found {found} in {cell_ref}. Open the workbook in Excel, replace "
+        f"that cell with its computed value, and re-run."
+    )
 
 
 def read_team_from_config(ws) -> list[dict]:
@@ -346,9 +359,7 @@ def read_team_from_config(ws) -> list[dict]:
     workbooks)."""
     from budget_planner.config import DEFAULT_GRADE
 
-    roster_section = _find_header_row(
-        ws, SECTION_HEADER_LABELS["team_roster"], required=True
-    )
+    roster_section = _find_header_row(ws, SECTION_HEADER_LABELS["team_roster"], required=True)
 
     # Detect Grade / Priority columns by header inspection (legacy compat).
     person_header = roster_section + 1
@@ -397,9 +408,7 @@ def read_team_from_config(ws) -> list[dict]:
 def read_reporting_periods(ws, fallback_months=None):
     """Read REPORTING PERIODS -> list of {id, start, end}. When the section
     is missing: generate defaults for ``fallback_months`` if provided, else []."""
-    rp_section = _find_header_row(
-        ws, SECTION_HEADER_LABELS["reporting_periods"], required=False
-    )
+    rp_section = _find_header_row(ws, SECTION_HEADER_LABELS["reporting_periods"], required=False)
     if rp_section is None:
         if fallback_months is not None:
             from budget_planner.config import default_reporting_periods
@@ -430,9 +439,7 @@ def read_reporting_periods(ws, fallback_months=None):
 def read_assignments_from_config(ws) -> list[dict]:
     """Read PERSON-WP ASSIGNMENTS -> list of {person, wp, total_fte, start, end}.
     Empty list if the section is missing."""
-    assignments_header = _find_header_row(
-        ws, SECTION_HEADER_LABELS["assignments"], required=False
-    )
+    assignments_header = _find_header_row(ws, SECTION_HEADER_LABELS["assignments"], required=False)
     if assignments_header is None:
         return []
 
@@ -464,9 +471,7 @@ def read_assignments_from_config(ws) -> list[dict]:
 def read_externals_from_config(ws) -> list[dict]:
     """Read EXTERNAL COMMITMENTS -> list of {person, project, fte, start, end,
     is_eu}. Empty list if the section is missing."""
-    ext_config_header = _find_header_row(
-        ws, SECTION_HEADER_LABELS["externals"], required=False
-    )
+    ext_config_header = _find_header_row(ws, SECTION_HEADER_LABELS["externals"], required=False)
     if ext_config_header is None:
         return []
 

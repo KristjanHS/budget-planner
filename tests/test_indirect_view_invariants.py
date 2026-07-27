@@ -23,6 +23,7 @@ Trends, Summary, and Plan are intentionally out of scope — they will be
 aligned in the follow-on overhaul plan noted in
 ``memory/project_state.md``.
 """
+
 import re
 
 import openpyxl
@@ -108,10 +109,7 @@ def test_minus_i_fill_carries_minus_i_token(assigned_wb_path):
                 if _BAND_MIRROR_LABEL_RE.match(text.strip()):
                     continue
                 if "-i" not in text:
-                    offenders.append(
-                        f"{sheet_name}!{cell.coordinate}={text!r} has -i fill "
-                        "but no -i token"
-                    )
+                    offenders.append(f"{sheet_name}!{cell.coordinate}={text!r} has -i fill but no -i token")
     assert not offenders, "-i fill without -i token:\n" + "\n".join(offenders)
 
 
@@ -167,15 +165,11 @@ def test_budget_plus_i_minus_i_round_trip(demo_recalc_path):
         if isinstance(v, str) and v.strip() == "Budget -i":
             header_row = r
             break
-    assert header_row is not None, (
-        "Could not locate 'Budget -i' header on Config col "
-        f"{COL_WP_BUDGET_MINUS_I}"
-    )
+    assert header_row is not None, f"Could not locate 'Budget -i' header on Config col {COL_WP_BUDGET_MINUS_I}"
 
     plus_i_header = ws.cell(header_row, COL_WP_BUDGET_PLUS_I).value
     assert isinstance(plus_i_header, str) and plus_i_header.strip() == "Budget +i", (
-        f"Expected 'Budget +i' header at col {COL_WP_BUDGET_PLUS_I}, "
-        f"got {plus_i_header!r}"
+        f"Expected 'Budget +i' header at col {COL_WP_BUDGET_PLUS_I}, got {plus_i_header!r}"
     )
 
     failures = []
@@ -187,16 +181,10 @@ def test_budget_plus_i_minus_i_round_trip(demo_recalc_path):
         plus_i = ws.cell(r, COL_WP_BUDGET_PLUS_I).value
         if not isinstance(minus_i, (int, float)) or not isinstance(plus_i, (int, float)):
             failures.append(
-                f"WP {wp_id!r} row {r}: non-numeric Budget "
-                f"(-i={minus_i!r}, +i={plus_i!r}) — recalc incomplete?"
+                f"WP {wp_id!r} row {r}: non-numeric Budget (-i={minus_i!r}, +i={plus_i!r}) — recalc incomplete?"
             )
             continue
         expected = plus_i / 1.25
         if abs(expected - minus_i) > 1e-6:
-            failures.append(
-                f"WP {wp_id!r}: +i {plus_i} / 1.25 = {expected} "
-                f"!= -i {minus_i}"
-            )
-    assert failures == [], (
-        "Budget +i/-i round-trip failures:\n" + "\n".join(failures)
-    )
+            failures.append(f"WP {wp_id!r}: +i {plus_i} / 1.25 = {expected} != -i {minus_i}")
+    assert failures == [], "Budget +i/-i round-trip failures:\n" + "\n".join(failures)

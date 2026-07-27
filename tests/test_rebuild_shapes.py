@@ -13,6 +13,7 @@ Variants covered here:
 ``default`` — init → rebuild with no edits — is a no-op implicitly
 exercised by every other rebuild test.)
 """
+
 import shutil
 from pathlib import Path
 
@@ -49,9 +50,7 @@ def _first_data_row_after(ws, section_label: str) -> int:
     "variant",
     ["extra_wp", "extra_external", "extra_grade"],
 )
-def test_rebuild_roundtrip_shape_variant(
-    tmp_path: Path, variant: str, fresh_wb_path: str
-):
+def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str, fresh_wb_path: str):
     path = tmp_path / f"wb_{variant}.xlsx"
     shutil.copy(fresh_wb_path, path)
 
@@ -72,9 +71,9 @@ def test_rebuild_roundtrip_shape_variant(
         # Single-range WP schedule merged into WP BUDGET (cols I/J/K post-
         # indirect-view restructure — shifted right by one vs pre-restructure
         # because Budget +i was inserted at col 6).
-        config_ws.cell(insert_at, 9, 1)          # Start (col I)
-        config_ws.cell(insert_at, 10, 24)        # End (col J)
-        config_ws.cell(insert_at, 11, "flat")    # Type (col K)
+        config_ws.cell(insert_at, 9, 1)  # Start (col I)
+        config_ws.cell(insert_at, 10, 24)  # End (col J)
+        config_ws.cell(insert_at, 11, "flat")  # Type (col K)
     elif variant == "extra_external":
         data_start = _first_data_row_after(config_ws, SECTION_LABELS["externals"])
         insert_at = data_start + 1
@@ -109,19 +108,13 @@ def test_rebuild_roundtrip_shape_variant(
         assert "WPX" in ids, f"Rebuild dropped inserted WP. Got {ids}"
     elif variant == "extra_external":
         projects = [e["project"] for e in read_externals_from_config(config_ws)]
-        assert "Other Grant" in projects, (
-            f"Rebuild dropped inserted external commitment. Got {projects}"
-        )
+        assert "Other Grant" in projects, f"Rebuild dropped inserted external commitment. Got {projects}"
     elif variant == "extra_grade":
         grades = read_grade_rates(config_ws)
-        assert "Principal" in grades, (
-            f"Rebuild dropped inserted grade. Got {list(grades)}"
-        )
+        assert "Principal" in grades, f"Rebuild dropped inserted grade. Got {list(grades)}"
 
     # Universal invariant: every assignment points at a live roster name.
     roster_names = {p["name"] for p in read_team_from_config(config_ws)}
-    orphaned = {
-        a["person"] for a in read_assignments_from_config(config_ws)
-    } - roster_names
+    orphaned = {a["person"] for a in read_assignments_from_config(config_ws)} - roster_names
     assert not orphaned, f"Orphaned assignments after rebuild: {orphaned}"
     wb.close()

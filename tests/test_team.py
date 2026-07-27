@@ -48,9 +48,7 @@ def test_config_roster_max_fte_values(config_wb):
     for member in TEAM:
         row = layout["person_rows"][member["name"]]
         cell_val = ws.cell(row=row, column=2).value
-        assert cell_val == member["max_fte"], (
-            f"{member['name']}: expected {member['max_fte']}, got {cell_val}"
-        )
+        assert cell_val == member["max_fte"], f"{member['name']}: expected {member['max_fte']}, got {cell_val}"
 
 
 def test_config_roster_cells_are_blue_input(config_wb):

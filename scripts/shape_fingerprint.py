@@ -5,6 +5,7 @@ sheet names, and named-range names. No cell values ever. If you extend this
 module, do not add fields that store string or numeric data read from cells.
 A canary test guards this contract — see tests/test_shape_fingerprint.py.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,18 +25,27 @@ from budget_planner.reader import (
 )
 
 SAFE_NAMED_RANGES = [
-    "roster_ftes", "roster_grades",
-    "assign_persons", "assign_wps", "assign_ftes",
-    "ext_persons", "ext_ftes",
-    "tbl_GradeRates", "project_start", "fte_rate",
-    "eu_annual_ceiling_pm", "partner_ceiling", "current_month",
+    "roster_ftes",
+    "roster_grades",
+    "assign_persons",
+    "assign_wps",
+    "assign_ftes",
+    "ext_persons",
+    "ext_ftes",
+    "tbl_GradeRates",
+    "project_start",
+    "fte_rate",
+    "eu_annual_ceiling_pm",
+    "partner_ceiling",
+    "current_month",
     # v2 hours-timelog named ranges: the through-month trust boundary.
     # eur_/hours_actuals_through_month point to per-sheet D1 effective cells
     # on Actuals / Actuals-Hours after the 2026-04-18 Config-through-month
     # cleanup; derived helpers (months_elapsed_*, reconciled_through_month)
     # are inlined at callsites and no longer exist as named ranges.
     "hours_per_fte_month",
-    "eur_actuals_through_month", "hours_actuals_through_month",
+    "eur_actuals_through_month",
+    "hours_actuals_through_month",
     # Post-v2 version-stamp audit cell on Config. Single-cell named range;
     # value written fresh by init/rebuild so build_from_fingerprint emits
     # "unknown" (the default when no git context is passed).
@@ -79,12 +89,12 @@ def extract_fingerprint(path: str) -> dict:
 
     _, wps = read_config_sheet(config_ws)
     sections = {
-        "work_packages":        {"row_count": len(wps)},
-        "team_roster":          {"row_count": len(read_team_from_config(config_ws))},
-        "assignments":          {"row_count": len(read_assignments_from_config(config_ws))},
+        "work_packages": {"row_count": len(wps)},
+        "team_roster": {"row_count": len(read_team_from_config(config_ws))},
+        "assignments": {"row_count": len(read_assignments_from_config(config_ws))},
         "external_commitments": {"row_count": len(read_externals_from_config(config_ws))},
-        "reporting_periods":    {"row_count": len(read_reporting_periods(config_ws))},
-        "grade_rates":          {"row_count": len(read_grade_rates(config_ws))},
+        "reporting_periods": {"row_count": len(read_reporting_periods(config_ws))},
+        "grade_rates": {"row_count": len(read_grade_rates(config_ws))},
     }
 
     cross = {}

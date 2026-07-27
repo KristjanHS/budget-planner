@@ -1,15 +1,18 @@
 """Posted-cumulative helper / slope tests on the Actuals sheet.
 
 Posted-cumulative redesign (2026-05-09) — design doc
-``docs/plans/archived/2026-05-09-actuals-posted-cumulative-design.md``
+``docs/plans/archive/2026-05-09-actuals-posted-cumulative-design.md``
 — made each WP-row cell on Actuals hold the posted-cumulative value
 through that month (gaps allowed inside the active window). Three
 load-bearing helpers drive every downstream consumer:
 
-* ``posted_idx``   — SUMPRODUCT-MAX-ISNUMBER scan returning the latest
-                     1-based month index with a numeric posting at-or-
-                     before ``current_month``. Banned-pattern-safe form
-                     (MATCH / LOOKUP fail under openpyxl + LO recalc).
+* ``posted_idx``   — SUMPRODUCT-MAX scan over ``(range<>"")`` returning the
+                     latest 1-based month index with a posting at-or-before
+                     ``current_month``. Banned-pattern-safe form (MATCH /
+                     LOOKUP fail under openpyxl + LO recalc); the filled
+                     test MUST NOT be ``ISNUMBER(range)``, which Excel
+                     evaluates without array context outside CSE — see
+                     ``2026-07-27-isnumber-array-context-excel-fix.md``.
 * ``posted_value`` — ``IFERROR(INDEX(rng, posted_idx), "")``: latest
                      filled cumulative through ``current_month`` or ""
                      sentinel.
@@ -26,6 +29,7 @@ This file pins:
      blank, fill]`` pattern, asserts ``posted_idx`` = LATEST-filled (not
      first-filled, not count, not max-of-values).
 """
+
 import json
 import subprocess
 from pathlib import Path
@@ -63,16 +67,19 @@ def _find_first_wp_row(ws):
 # ── Helper-cell formula shape (banned-pattern protection) ──
 
 
-def test_posted_idx_helper_uses_sumproduct_max_isnumber(actuals_ws, vcols):
-    """``posted_idx`` MUST use SUMPRODUCT(MAX(...ISNUMBER(...))) array form
+def test_posted_idx_helper_uses_sumproduct_max_nonblank(actuals_ws, vcols):
+    """``posted_idx`` MUST use SUMPRODUCT(MAX(...(range<>"")...)) array form
     — MATCH and LOOKUP variants parse but silently break under
     openpyxl + LO recalc (see ``.claude/rules/openpyxl.md`` § Core
-    patterns). This is the specific regression class the test guards.
+    patterns), and ``ISNUMBER(range)`` gets no array context in Excel
+    outside CSE, collapsing the whole scan to 0 while LibreOffice recalc
+    stays green. Both regression classes are guarded here.
     """
     row = _find_first_wp_row(actuals_ws)
     formula = str(actuals_ws.cell(row, vcols["posted_idx"]).value)
     assert formula.startswith("=SUMPRODUCT(MAX("), formula
-    assert "ISNUMBER(" in formula, formula
+    assert '<>""' in formula, formula
+    assert "ISNUMBER(" not in formula, formula
     assert "current_month" in formula, formula
     # Banned forms: any of these would parse but fail under recalc.
     assert "MATCH(" not in formula, formula
@@ -103,9 +110,7 @@ def test_visible_posted_mirrors_helper_formula(actuals_ws, vcols):
     helper = str(actuals_ws.cell(row, vcols["posted_value"]).value)
     visible = str(actuals_ws.cell(row, vcols["posted"]).value)
     assert visible == helper, (
-        f"Posted -i should mirror posted_value helper verbatim.\n"
-        f"  helper:  {helper}\n"
-        f"  visible: {visible}"
+        f"Posted -i should mirror posted_value helper verbatim.\n  helper:  {helper}\n  visible: {visible}"
     )
 
 
@@ -120,9 +125,7 @@ def test_slope_formula_divides_posted_value_by_posted_idx(actuals_ws, vcols):
     formula = str(actuals_ws.cell(row, vcols["slope"]).value)
     idx_l = col_letter(vcols["posted_idx"])
     val_l = col_letter(vcols["posted_value"])
-    assert formula == (
-        f'=IF({idx_l}{row}=0,"",{val_l}{row}/{idx_l}{row})'
-    ), formula
+    assert formula == (f'=IF({idx_l}{row}=0,"",{val_l}{row}/{idx_l}{row})'), formula
 
 
 # ── Mid-window gap handling under recalc (load-bearing) ──
@@ -158,9 +161,9 @@ def gap_recalc_path(tmp_path_factory):
     # then write the gap pattern at months 1, 3, 5.
     for m in range(PROJECT_MONTHS):
         ws.cell(row=first_wp_row, column=MONTH_COL_START + m, value=None)
-    ws.cell(row=first_wp_row, column=MONTH_COL_START + 0, value=200)    # M1
-    ws.cell(row=first_wp_row, column=MONTH_COL_START + 2, value=380)    # M3
-    ws.cell(row=first_wp_row, column=MONTH_COL_START + 4, value=500)    # M5
+    ws.cell(row=first_wp_row, column=MONTH_COL_START + 0, value=200)  # M1
+    ws.cell(row=first_wp_row, column=MONTH_COL_START + 2, value=380)  # M3
+    ws.cell(row=first_wp_row, column=MONTH_COL_START + 4, value=500)  # M5
 
     # Override BOTH through-month controls so the SUMPRODUCT scan filter
     # (`<= current_month`) is deterministic. The ``current_month`` named
@@ -179,7 +182,8 @@ def gap_recalc_path(tmp_path_factory):
 
     result = subprocess.run(
         ["python3", str(SCRIPTS_DIR / "recalc.py"), str(out)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         pytest.skip(f"LibreOffice recalc unavailable: {result.stderr}")

@@ -21,6 +21,7 @@ Out-of-scope and lives in sibling files:
 * ``tests/test_reader_team_priority.py`` — TEAM ROSTER Priority field
   round-trip + clamping.
 """
+
 import pytest
 from openpyxl import Workbook, load_workbook
 
@@ -59,6 +60,7 @@ from tests._reader_helpers import (
 def test_read_plan_config_extracts_wp_definitions(fresh_wb_path):
     """read_plan_config returns list matching WORK_PACKAGES."""
     import openpyxl
+
     wb = openpyxl.load_workbook(fresh_wb_path)
     layout = discover_layout(wb["Plan"])
     wps = read_plan_config(wb["Plan"], layout)
@@ -77,6 +79,7 @@ def test_read_plan_config_extracts_wp_definitions(fresh_wb_path):
 def test_read_team_from_config_names_and_fte(fresh_wb_path):
     """read_team_from_config returns roster with correct name, max_fte, grade."""
     import openpyxl
+
     wb = openpyxl.load_workbook(fresh_wb_path)
     roster = read_team_from_config(wb["Config"])
 
@@ -143,9 +146,7 @@ def test_read_team_accepts_european_text_max_fte_and_keeps_following_rows(
     n_before = len(read_team_from_config(ws))
     assert n_before >= 3
 
-    section = _find_header_row(
-        ws, SECTION_HEADER_LABELS["team_roster"], required=True
-    )
+    section = _find_header_row(ws, SECTION_HEADER_LABELS["team_roster"], required=True)
     person_header = section + 1
     # Second roster data row: force European-style text (Excel "number stored as text")
     ws.cell(person_header + 2, COL_ROSTER_FTE, value="0,35")
@@ -177,9 +178,7 @@ def test_read_team_tolerates_blank_row_inside_named_range():
     ws.cell(14, 1, value="Bob")
     ws.cell(14, 2, value=0.5)
     ws.cell(14, 3, value="Junior")
-    wb.defined_names["roster_ftes"] = DefinedName(
-        name="roster_ftes", attr_text="Config!$B$12:$B$14"
-    )
+    wb.defined_names["roster_ftes"] = DefinedName(name="roster_ftes", attr_text="Config!$B$12:$B$14")
 
     roster = read_team_from_config(ws)
     names = [p["name"] for p in roster]
@@ -192,6 +191,7 @@ def test_read_team_tolerates_blank_row_inside_named_range():
 def test_read_assignments_from_config_round_trip(assigned_wb_path):
     """Assignments section on Config round-trips correctly."""
     import openpyxl
+
     wb = openpyxl.load_workbook(assigned_wb_path)
     assignments = read_assignments_from_config(wb["Config"])
 
@@ -208,6 +208,7 @@ def test_read_assignments_from_config_round_trip(assigned_wb_path):
 def test_read_assignments_from_config_empty_for_plain_init(fresh_wb_path):
     """Plain init workbook has no assignments in the Config section."""
     import openpyxl
+
     wb = openpyxl.load_workbook(fresh_wb_path)
     assignments = read_assignments_from_config(wb["Config"])
     assert assignments == []
@@ -283,9 +284,7 @@ def test_read_assignments_tolerates_blank_row_inside_named_range():
     ws.cell(24, 3, value=0.3)
     ws.cell(24, 4, value=6)
     ws.cell(24, 5, value=18)
-    wb.defined_names["assign_persons"] = DefinedName(
-        name="assign_persons", attr_text="Config!$A$22:$A$24"
-    )
+    wb.defined_names["assign_persons"] = DefinedName(name="assign_persons", attr_text="Config!$A$22:$A$24")
 
     out = read_assignments_from_config(ws)
     persons = [a["person"] for a in out]
@@ -348,9 +347,7 @@ def test_read_externals_tolerates_blank_row_inside_named_range():
     ws.cell(34, 4, value=6)
     ws.cell(34, 5, value=18)
     ws.cell(34, 6, value="Yes")
-    wb.defined_names["ext_persons"] = DefinedName(
-        name="ext_persons", attr_text="Config!$A$32:$A$34"
-    )
+    wb.defined_names["ext_persons"] = DefinedName(name="ext_persons", attr_text="Config!$A$32:$A$34")
 
     out = read_externals_from_config(ws)
     persons = [e["person"] for e in out]
@@ -375,9 +372,7 @@ class TestConfigSheetValidation:
         """Raises ValueError when no row has Project Title."""
         wb, ws = self._make_empty_config_ws()
         # Leave sheet empty
-        with pytest.raises(
-            ValueError, match="missing param row matching 'Project Title'"
-        ):
+        with pytest.raises(ValueError, match="missing param row matching 'Project Title'"):
             read_config_sheet(ws)
         wb.close()
 
@@ -385,9 +380,7 @@ class TestConfigSheetValidation:
         """Raises ValueError when Project Start label is missing."""
         wb, ws = self._make_empty_config_ws()
         ws.cell(1, 1, "Project Title")
-        with pytest.raises(
-            ValueError, match="missing param row matching 'Project Start'"
-        ):
+        with pytest.raises(ValueError, match="missing param row matching 'Project Start'"):
             read_config_sheet(ws)
         wb.close()
 
@@ -444,9 +437,7 @@ class TestConfigSheetValidation:
         ws = wb["Config"]
         # Append a legacy section marker somewhere past the existing content.
         ws.cell(row=ws.max_row + 2, column=1, value="WP SCHEDULE")
-        with pytest.raises(
-            ValueError, match="Legacy Config layout detected"
-        ):
+        with pytest.raises(ValueError, match="Legacy Config layout detected"):
             read_config_sheet(ws)
         wb.close()
 
@@ -463,10 +454,8 @@ class TestConfigSheetValidation:
             "rate": 7500,
         }
         wps = [
-            {"id": "WP1", "name": "Mgmt", "fte": 12.0,
-             "start": 1, "end": 24, "type": "flat"},
-            {"id": "WP1", "name": "Dup",  "fte":  8.0,
-             "start": 1, "end": 18, "type": "flat"},
+            {"id": "WP1", "name": "Mgmt", "fte": 12.0, "start": 1, "end": 24, "type": "flat"},
+            {"id": "WP1", "name": "Dup", "fte": 8.0, "start": 1, "end": 18, "type": "flat"},
         ]
         build_config_sheet(ws, wb, params, wps)
         with pytest.raises(ValueError, match="Duplicate WP id"):
@@ -554,3 +543,58 @@ def test_read_grade_rates_fallback_for_legacy_wb():
     assert rates == dict(GRADE_RATES)
 
 
+def _grade_rate_sheet(rows):
+    """Minimal Config sheet holding just a RATE BY GRADE section of ``rows``."""
+    from budget_planner.layout import COL_GRADE_RATE, SECTION_HEADER_LABELS
+    from budget_planner.readers.layout_discovery import _data_row_after
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Config"
+    header = 1
+    ws.cell(row=header, column=1, value=SECTION_HEADER_LABELS["rate_by_grade"])
+    ws.cell(row=header + 1, column=1, value="Grade")
+    ws.cell(row=header + 1, column=COL_GRADE_RATE, value="Rate (EUR/PM) -i")
+    r = _data_row_after(header)
+    for grade, rate in rows:
+        ws.cell(row=r, column=1, value=grade)
+        if rate is not None:
+            ws.cell(row=r, column=COL_GRADE_RATE, value=rate)
+        r += 1
+    return wb, ws
+
+
+def test_read_grade_rates_rejects_formula_rate():
+    """A hand-edited formula in a rate cell raises, naming the row and grade.
+
+    Regression: the reader used to ``break`` here, returning a truncated dict
+    that surfaced as ``KeyError: '<grade>'`` inside the Timelog solver.
+    """
+    from budget_planner.reader import read_grade_rates
+
+    wb, ws = _grade_rate_sheet([("Senior", 6550), ("Mid", "=B3*0.85"), ("Junior", 5010)])
+
+    with pytest.raises(ValueError) as exc:
+        read_grade_rates(ws)
+    wb.close()
+
+    msg = str(exc.value)
+    assert "Mid" in msg
+    assert "=B3*0.85" in msg
+    assert "RATE BY GRADE row 4" in msg
+
+
+def test_read_grade_rates_blank_name_ends_section():
+    """A blank grade name is a section terminator, not a data error."""
+    from budget_planner.reader import read_grade_rates
+
+    wb, ws = _grade_rate_sheet([("Senior", 6550), ("Mid", 5567)])
+    # Row after the last grade is blank in col A but carries unrelated content.
+    ws.cell(row=5, column=1, value=None)
+    ws.cell(row=5, column=2, value="TIMELOG SOLVER — STOP REASONS")
+
+    rates = read_grade_rates(ws)
+    wb.close()
+
+    assert rates == {"Senior": 6550, "Mid": 5567}

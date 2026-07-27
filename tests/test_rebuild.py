@@ -1,4 +1,5 @@
 """Tests for rebuild round-trip, preservation, orphaned data, and validation."""
+
 import os
 
 import pytest
@@ -31,6 +32,7 @@ class TestCapacityPreservation:
     def assigned_wb(self, tmp_path):
         """Create a workbook with demo assignments for rebuild testing."""
         from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
+
         path = str(tmp_path / "assigned.xlsx")
         init_workbook(output_path=path, assignments=DEMO_CAPACITY_ASSIGNMENTS)
         return path
@@ -57,6 +59,7 @@ class TestCapacityPreservation:
             assert got["start"] == expected["start"]
             assert got["end"] == expected["end"]
         wb.close()
+
 
 class TestActualsPreservation:
     """Actuals EUR values are always preserved on rebuild."""
@@ -100,8 +103,7 @@ class TestValidation:
     """_validate_config catches bad data."""
 
     def _params(self, **overrides):
-        p = {"title": "Test", "start": PROJECT_START,
-             "months": 60, "rate": 7500}
+        p = {"title": "Test", "start": PROJECT_START, "months": 60, "rate": 7500}
         p.update(overrides)
         return p
 
@@ -112,33 +114,27 @@ class TestValidation:
         return [{"name": "Alice", "max_fte": 1.0}]
 
     def test_valid_config_no_errors(self):
-        errors, warnings = _validate_config(
-            self._params(), self._wps(), self._team(), [])
+        errors, warnings = _validate_config(self._params(), self._wps(), self._team(), [])
         assert len(errors) == 0
 
     def test_months_out_of_range(self):
-        errors, _ = _validate_config(
-            self._params(months=0), self._wps(), self._team(), [])
+        errors, _ = _validate_config(self._params(months=0), self._wps(), self._team(), [])
         assert any("PROJECT_MONTHS" in e for e in errors)
 
     def test_months_too_high(self):
-        errors, _ = _validate_config(
-            self._params(months=200), self._wps(), self._team(), [])
+        errors, _ = _validate_config(self._params(months=200), self._wps(), self._team(), [])
         assert any("PROJECT_MONTHS" in e for e in errors)
 
     def test_rate_zero(self):
-        errors, _ = _validate_config(
-            self._params(rate=0), self._wps(), self._team(), [])
+        errors, _ = _validate_config(self._params(rate=0), self._wps(), self._team(), [])
         assert any("FTE rate" in e for e in errors)
 
     def test_empty_wps(self):
-        errors, _ = _validate_config(
-            self._params(), [], self._team(), [])
+        errors, _ = _validate_config(self._params(), [], self._team(), [])
         assert any("empty" in e.lower() for e in errors)
 
     def test_empty_team(self):
-        errors, _ = _validate_config(
-            self._params(), self._wps(), [], [])
+        errors, _ = _validate_config(self._params(), self._wps(), [], [])
         assert any("empty" in e.lower() for e in errors)
 
     def test_duplicate_wp_id(self):
@@ -146,24 +142,18 @@ class TestValidation:
             {"id": "WP1", "name": "A", "fte": 1},
             {"id": "WP1", "name": "B", "fte": 1},
         ]
-        errors, _ = _validate_config(
-            self._params(), wps, self._team(), [])
+        errors, _ = _validate_config(self._params(), wps, self._team(), [])
         assert any("Duplicate" in e for e in errors)
 
     def test_external_person_not_in_team(self):
-        ext = [{"person": "Unknown", "project": "X", "fte": 1,
-                "start": 1, "end": 12}]
-        errors, _ = _validate_config(
-            self._params(), self._wps(), self._team(), ext)
+        ext = [{"person": "Unknown", "project": "X", "fte": 1, "start": 1, "end": 12}]
+        errors, _ = _validate_config(self._params(), self._wps(), self._team(), ext)
         assert any("Unknown" in e for e in errors)
 
     def test_wp_start_gt_end_warning(self):
-        wps = [{"id": "WP1", "name": "Bad", "fte": 1,
-                "start": 10, "end": 5, "type": "flat"}]
-        _, warnings = _validate_config(
-            self._params(), wps, self._team(), [])
+        wps = [{"id": "WP1", "name": "Bad", "fte": 1, "start": 10, "end": 5, "type": "flat"}]
+        _, warnings = _validate_config(self._params(), wps, self._team(), [])
         assert any("start" in w.lower() for w in warnings)
-
 
 
 class TestRebuildErrors:
@@ -176,6 +166,7 @@ class TestRebuildErrors:
     def test_rebuild_no_config_sheet(self, tmp_path):
         """Rebuild fails if workbook has no Config sheet."""
         from openpyxl import Workbook
+
         path = str(tmp_path / "no_config.xlsx")
         wb = Workbook()
         wb.save(path)
@@ -190,8 +181,7 @@ class TestBackup:
     def test_rebuild_creates_backup(self, init_wb, tmp_path):
         rebuild_workbook(input_path=init_wb)
         # Check that a backup file was created in the same directory
-        backup_files = [f for f in os.listdir(tmp_path)
-                        if f != "test.xlsx" and f.endswith(".xlsx")]
+        backup_files = [f for f in os.listdir(tmp_path) if f != "test.xlsx" and f.endswith(".xlsx")]
         assert len(backup_files) >= 1, "No backup file created"
 
 
@@ -270,9 +260,7 @@ class TestFteRateFormula:
         # post-rebuild cell will retain the stale refs.
         wb = load_workbook(path)
         cfg = wb["Config"]
-        stale_formula = (
-            "=SUMPRODUCT(($C$1:$C$5=$A$1)*$B$1,$B$1:$B$5)/SUM($B$1:$B$5)"
-        )
+        stale_formula = "=SUMPRODUCT(($C$1:$C$5=$A$1)*$B$1,$B$1:$B$5)/SUM($B$1:$B$5)"
         b4_cell = cfg.cell(4, 2)
         assert isinstance(b4_cell, Cell)
         b4_cell.value = stale_formula
@@ -290,16 +278,7 @@ class TestFteRateFormula:
         b4 = cfg["B4"].value
         wb.close()
 
-        assert isinstance(b4, str) and b4.startswith("=SUMPRODUCT("), (
-            f"B4 should be a SUMPRODUCT formula; got {b4!r}"
-        )
-        assert "$C$1:$C$5" not in b4, (
-            f"Stale pre-rebuild refs leaked through; got {b4!r}"
-        )
-        assert f"$C${roster_first}:" in b4, (
-            f"B4 should reference roster from live row {roster_first}; got {b4!r}"
-        )
-        assert f"$A${grade_first}" in b4, (
-            f"B4 should reference grades starting at live row {grade_first}; "
-            f"got {b4!r}"
-        )
+        assert isinstance(b4, str) and b4.startswith("=SUMPRODUCT("), f"B4 should be a SUMPRODUCT formula; got {b4!r}"
+        assert "$C$1:$C$5" not in b4, f"Stale pre-rebuild refs leaked through; got {b4!r}"
+        assert f"$C${roster_first}:" in b4, f"B4 should reference roster from live row {roster_first}; got {b4!r}"
+        assert f"$A${grade_first}" in b4, f"B4 should reference grades starting at live row {grade_first}; got {b4!r}"

@@ -1,15 +1,20 @@
-"""CLI entry point: python -m budget_planner [init|rebuild|--snapshot|--restore]"""
+"""CLI entry point: python -m budget_planner [init|rebuild|archive|--snapshot|--restore]"""
+
 import argparse
 import sys
 
 from budget_planner.workbook import (
-    init_workbook, rebuild_workbook, snapshot_workbook, restore_workbook,
+    archive_workbook,
+    init_workbook,
+    rebuild_workbook,
+    snapshot_workbook,
+    restore_workbook,
     seed_demo_data,
 )
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] in ("init", "rebuild"):
+    if len(sys.argv) > 1 and sys.argv[1] in ("init", "rebuild", "archive"):
         _subcommand_mode()
     else:
         _snapshot_restore_mode()
@@ -22,8 +27,7 @@ def _subcommand_mode():
     )
 
     if command == "init":
-        parser.add_argument("--demo", action="store_true",
-                            help="Seed Capacity + Actuals with demo data")
+        parser.add_argument("--demo", action="store_true", help="Seed Capacity + Actuals with demo data")
         # Default is None so we can distinguish "user overrode" from
         # "auto-pick based on --demo" — demo runs land at a _demo-suffixed
         # path by default so they don't clobber the real workbook.
@@ -37,27 +41,28 @@ def _subcommand_mode():
             output = "output/budget_plan.xlsx"
         if args.demo:
             from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
-            init_workbook(output_path=output,
-                          assignments=DEMO_CAPACITY_ASSIGNMENTS)
+
+            init_workbook(output_path=output, assignments=DEMO_CAPACITY_ASSIGNMENTS)
             seed_demo_data(output)
         else:
             init_workbook(output_path=output)
 
     elif command == "rebuild":
-        parser.add_argument("path", nargs="?",
-                            default="output/budget_plan.xlsx",
-                            help="Path to existing workbook")
+        parser.add_argument("path", nargs="?", default="output/budget_plan.xlsx", help="Path to existing workbook")
         args = parser.parse_args(sys.argv[2:])
         rebuild_workbook(input_path=args.path)
+
+    elif command == "archive":
+        parser.add_argument("path", nargs="?", default="output/budget_plan.xlsx", help="Workbook to archive")
+        args = parser.parse_args(sys.argv[2:])
+        archive_workbook(args.path)
 
 
 def _snapshot_restore_mode():
     """CLI for snapshot/restore: python -m budget_planner [--snapshot|--restore] PATH"""
     parser = argparse.ArgumentParser(description="programme budget workbook utilities")
-    parser.add_argument("--snapshot", metavar="PATH",
-                        help="Save snapshot for scenario comparison")
-    parser.add_argument("--restore", metavar="PATH",
-                        help="Restore from snapshot")
+    parser.add_argument("--snapshot", metavar="PATH", help="Save snapshot for scenario comparison")
+    parser.add_argument("--restore", metavar="PATH", help="Restore from snapshot")
     args = parser.parse_args()
 
     if args.snapshot:

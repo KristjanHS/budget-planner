@@ -7,6 +7,7 @@ reproducer pipeline end-to-end. The marker must not appear in:
 
 If either assertion fails, a cell value is leaking — investigate immediately.
 """
+
 from __future__ import annotations
 
 import json
@@ -89,10 +90,6 @@ def test_marker_never_leaks_through_reproducer_pipeline(tmp_path: Path) -> None:
             for cell in row:
                 v = cell.value
                 if isinstance(v, str):
-                    assert MARKER not in v, (
-                        f"Marker leaked into {ws.title}!{cell.coordinate}"
-                    )
+                    assert MARKER not in v, f"Marker leaked into {ws.title}!{cell.coordinate}"
                 elif isinstance(v, (int, float)) and not isinstance(v, bool):
-                    assert v != MAGIC_NUMERIC, (
-                        f"Magic number leaked into {ws.title}!{cell.coordinate}"
-                    )
+                    assert v != MAGIC_NUMERIC, f"Magic number leaked into {ws.title}!{cell.coordinate}"

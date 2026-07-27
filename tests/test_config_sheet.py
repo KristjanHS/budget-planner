@@ -1,4 +1,5 @@
 """Tests for Config sheet builder."""
+
 from openpyxl import Workbook
 from budget_planner.config import PROJECT_START
 from budget_planner.config_sheet import build_config_sheet
@@ -42,6 +43,7 @@ def test_config_sheet_params():
     assert _find_param_value(ws, "Project Months") == 60
     # FTE Rate is now a formula (weighted average of grade rates)
     from openpyxl.worksheet.formula import ArrayFormula
+
     fte_rate_val = _find_param_value(ws, "FTE Rate")
     assert isinstance(fte_rate_val, (str, ArrayFormula))
 
@@ -145,8 +147,7 @@ def test_reporting_periods_section():
         {"id": "RP1", "start": 1, "end": 6},
         {"id": "RP2", "start": 7, "end": 12},
     ]
-    layout = build_config_sheet(ws, wb, _sample_params(), _sample_wps(),
-                                reporting_periods=rps)
+    layout = build_config_sheet(ws, wb, _sample_params(), _sample_wps(), reporting_periods=rps)
 
     # Find REPORTING PERIODS section header
     rp_header_row = None
@@ -181,6 +182,7 @@ def test_reporting_periods_section():
 def test_config_round_trip_eu_ceiling():
     """EU ceiling param survives write → read round-trip."""
     from budget_planner.reader import read_config_sheet
+
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -194,10 +196,11 @@ def test_config_round_trip_eu_ceiling():
 
 # ── Grade-based rates tests ──
 
+
 def _sample_team():
     return [
         {"name": "Alice", "max_fte": 1.0, "grade": "Senior"},
-        {"name": "Bob",   "max_fte": 1.0, "grade": "Mid"},
+        {"name": "Bob", "max_fte": 1.0, "grade": "Mid"},
         {"name": "Carol", "max_fte": 0.5, "grade": "Junior"},
     ]
 
@@ -213,7 +216,10 @@ def _build_with_grades():
     assert ws is not None
     ws.title = "Config"
     layout = build_config_sheet(
-        ws, wb, _sample_params(), _sample_wps(),
+        ws,
+        wb,
+        _sample_params(),
+        _sample_wps(),
         team=_sample_team(),
         grade_rates=_sample_grade_rates(),
     )
@@ -251,20 +257,14 @@ def test_roster_has_grade_and_rate_columns():
     first = layout["roster_first_row"]
     # Grade is blue user input.
     grade_font = str(ws.cell(first, 3).font.color.rgb).upper()
-    assert grade_font.endswith("0000FF"), (
-        f"Grade should be blue input, got {grade_font}"
-    )
+    assert grade_font.endswith("0000FF"), f"Grade should be blue input, got {grade_font}"
     # Rate is a black formula doing VLOOKUP against tbl_GradeRates.
     rate_val = ws.cell(first, 4).value
-    assert isinstance(rate_val, str) and rate_val.startswith("="), (
-        f"Expected Rate formula, got {rate_val!r}"
-    )
+    assert isinstance(rate_val, str) and rate_val.startswith("="), f"Expected Rate formula, got {rate_val!r}"
     assert "VLOOKUP" in rate_val
     assert "tbl_GradeRates" in rate_val
     rate_font = str(ws.cell(first, 4).font.color.rgb).upper()
-    assert rate_font.endswith("000000"), (
-        f"Rate should be black formula, got {rate_font}"
-    )
+    assert rate_font.endswith("000000"), f"Rate should be black formula, got {rate_font}"
     # Rate number format is EUR.
     assert "€" in ws.cell(first, 4).number_format
 
@@ -273,10 +273,7 @@ def test_roster_lookup_spans_cols_a_to_d():
     """roster_lookup named range covers A:D (name, max_fte, grade, rate)."""
     wb, _ws, layout = _build_with_grades()
     target = wb.defined_names["roster_lookup"].attr_text
-    expected = (
-        f"Config!$A${layout['roster_first_row']}"
-        f":$D${layout['roster_last_row']}"
-    )
+    expected = f"Config!$A${layout['roster_first_row']}:$D${layout['roster_last_row']}"
     assert target == expected, f"Expected {expected!r}, got {target!r}"
 
 
@@ -286,9 +283,8 @@ def test_fte_rate_is_formula():
     rate_row = layout["param_rows"]["FTE Rate (EUR)"]
     val = ws.cell(rate_row, 2).value
     from openpyxl.worksheet.formula import ArrayFormula
-    assert isinstance(val, (str, ArrayFormula)), (
-        f"Expected formula, got: {val}"
-    )
+
+    assert isinstance(val, (str, ArrayFormula)), f"Expected formula, got: {val}"
     formula_text = str(val.text if isinstance(val, ArrayFormula) else val)
     assert "SUMPRODUCT" in formula_text
 
@@ -305,8 +301,7 @@ def test_fte_rate_font_is_black():
 def test_tbl_grade_rates_named_range():
     """tbl_GradeRates named range exists and covers grade data rows."""
     wb, _ws, layout = _build_with_grades()
-    names = {dn.name: dn.attr_text for name in wb.defined_names
-             for dn in [wb.defined_names[name]]}
+    names = {dn.name: dn.attr_text for name in wb.defined_names for dn in [wb.defined_names[name]]}
     assert "tbl_GradeRates" in names
     expected = f"Config!$A${layout['grade_first_row']}:$B${layout['grade_last_row']}"
     assert names["tbl_GradeRates"] == expected
@@ -315,8 +310,7 @@ def test_tbl_grade_rates_named_range():
 def test_roster_ftes_named_range():
     """roster_ftes named range exists and covers FTE data column."""
     wb, _ws, layout = _build_with_grades()
-    names = {dn.name: dn.attr_text for name in wb.defined_names
-             for dn in [wb.defined_names[name]]}
+    names = {dn.name: dn.attr_text for name in wb.defined_names for dn in [wb.defined_names[name]]}
     assert "roster_ftes" in names
     expected = f"Config!$B${layout['roster_first_row']}:$B${layout['roster_last_row']}"
     assert names["roster_ftes"] == expected
@@ -325,8 +319,7 @@ def test_roster_ftes_named_range():
 def test_roster_grades_named_range():
     """roster_grades named range exists and covers Grade data column."""
     wb, _ws, layout = _build_with_grades()
-    names = {dn.name: dn.attr_text for name in wb.defined_names
-             for dn in [wb.defined_names[name]]}
+    names = {dn.name: dn.attr_text for name in wb.defined_names for dn in [wb.defined_names[name]]}
     assert "roster_grades" in names
     expected = f"Config!$C${layout['roster_first_row']}:$C${layout['roster_last_row']}"
     assert names["roster_grades"] == expected
@@ -357,6 +350,7 @@ def test_layout_includes_grade_rows():
 
 # ── Assignment and External section tests ──
 
+
 def _sample_assignments():
     return [
         {"person": "Alice", "wp": "WP1", "total_fte": 4.5, "start": 1, "end": 14},
@@ -377,7 +371,10 @@ def _build_with_assignments():
     assert ws is not None
     ws.title = "Config"
     layout = build_config_sheet(
-        ws, wb, _sample_params(), _sample_wps(),
+        ws,
+        wb,
+        _sample_params(),
+        _sample_wps(),
         team=_sample_team(),
         grade_rates=_sample_grade_rates(),
         assignments=_sample_assignments(),
@@ -520,9 +517,7 @@ def test_config_wp_budget_minus_i_is_derived_from_plus_i():
     # Table column names. Literal seeding was retired in the Aiko-port (Q-F).
     plus_i = ws.cell(first, 6).value
     plus_i_str = str(plus_i)
-    assert plus_i_str.startswith("="), (
-        f"Budget +i should be a formula, got {plus_i!r}"
-    )
+    assert plus_i_str.startswith("="), f"Budget +i should be a formula, got {plus_i!r}"
     assert "tbl_WorkPackages" in plus_i_str
     assert "[FTE Budget]" in plus_i_str
     assert "[Rate (€/PM) -i]" in plus_i_str
@@ -534,9 +529,9 @@ def test_config_wp_budget_with_indirect_named_range():
     wb, _ws, layout = _build_with_assignments()
     assert "wp_budget_with_indirect" in wb.defined_names
     attr = wb.defined_names["wp_budget_with_indirect"].attr_text
-    assert (
-        f"Config!$F${layout['wp_first_row']}:$F${layout['wp_last_row']}" in attr
-    ), f"unexpected named-range target: {attr!r}"
+    assert f"Config!$F${layout['wp_first_row']}:$F${layout['wp_last_row']}" in attr, (
+        f"unexpected named-range target: {attr!r}"
+    )
 
 
 def test_config_new_named_ranges():
@@ -544,9 +539,13 @@ def test_config_new_named_ranges():
     wb, _ws, _layout = _build_with_assignments()
     names = set(wb.defined_names.keys())
     expected = {
-        "assign_persons", "assign_wps", "assign_ftes",
-        "ext_persons", "ext_ftes",
-        "roster_lookup", "project_months",
+        "assign_persons",
+        "assign_wps",
+        "assign_ftes",
+        "ext_persons",
+        "ext_ftes",
+        "roster_lookup",
+        "project_months",
     }
     for name in expected:
         assert name in names, f"Named range '{name}' not found"
@@ -555,12 +554,16 @@ def test_config_new_named_ranges():
 def test_config_assignments_empty_list():
     """When assignments=[], section has ASSIGN_MIN_ROWS blank template rows with formulas."""
     from budget_planner.layout import ASSIGN_MIN_ROWS
+
     wb = Workbook()
     ws = wb.active
     assert ws is not None
     ws.title = "Config"
     layout = build_config_sheet(
-        ws, wb, _sample_params(), _sample_wps(),
+        ws,
+        wb,
+        _sample_params(),
+        _sample_wps(),
         team=_sample_team(),
         grade_rates=_sample_grade_rates(),
         assignments=[],
@@ -585,12 +588,16 @@ def test_config_assignments_cf_refs_row_local():
     """CF rules on blank template rows reference row-local cells, so blank
     Person yields ""<0 (FALSE) and never triggers the red/yellow fill."""
     from budget_planner.layout import ASSIGN_MIN_ROWS
+
     wb = Workbook()
     ws = wb.active
     assert ws is not None
     ws.title = "Config"
     layout = build_config_sheet(
-        ws, wb, _sample_params(), _sample_wps(),
+        ws,
+        wb,
+        _sample_params(),
+        _sample_wps(),
         team=_sample_team(),
         grade_rates=_sample_grade_rates(),
         assignments=[],
@@ -614,9 +621,7 @@ def test_config_assignments_cf_refs_row_local():
         target = f"H{r}"
         assert target in rules_by_cell, f"No CF on {target}"
         formulas = rules_by_cell[target]
-        assert any(f"H{r}<0" in f for f in formulas), (
-            f"Row {r} missing red rule or ref is not row-local: {formulas}"
-        )
+        assert any(f"H{r}<0" in f for f in formulas), f"Row {r} missing red rule or ref is not row-local: {formulas}"
         assert any(f"A{r}" in f and "VLOOKUP" in f for f in formulas), (
             f"Row {r} yellow rule missing row-local Person ref: {formulas}"
         )
@@ -626,9 +631,13 @@ def test_config_layout_includes_new_keys():
     """Layout dict has assign_* and ext_* keys."""
     _wb, _ws, layout = _build_with_assignments()
     for key in [
-        "assign_header_row", "assign_first_row", "assign_last_row",
+        "assign_header_row",
+        "assign_first_row",
+        "assign_last_row",
         "assign_config_rows",
-        "ext_header_row", "ext_first_row", "ext_last_row",
+        "ext_header_row",
+        "ext_first_row",
+        "ext_last_row",
         "external_config_rows",
     ]:
         assert key in layout, f"Layout key '{key}' not found"
@@ -677,21 +686,18 @@ def test_through_month_named_ranges_point_at_actuals_sheets(tmp_path):
 
     names = wb.defined_names
     assert names["eur_actuals_through_month"].attr_text == "Actuals!$D$1"
-    assert names["hours_actuals_through_month"].attr_text == (
-        "'Actuals-Hours'!$D$1"
-    )
+    assert names["hours_actuals_through_month"].attr_text == ("'Actuals-Hours'!$D$1")
     # Derived helpers are gone.
     for dropped in (
         "months_elapsed_hours",
         "months_elapsed_eur",
         "reconciled_through_month",
     ):
-        assert dropped not in names, (
-            f"{dropped} should be inlined at callsites, not a named range"
-        )
+        assert dropped not in names, f"{dropped} should be inlined at callsites, not a named range"
 
 
 # ── Version stamp (post-v2 follow-up) ──
+
 
 def test_version_stamp_default_and_named_range():
     """Default (no version passed) is 'unknown'; named range points at B10.
@@ -723,7 +729,10 @@ def test_version_stamp_explicit_value_round_trips():
     assert ws is not None
     ws.title = "Config"
     build_config_sheet(
-        ws, wb, _sample_params(), _sample_wps(),
+        ws,
+        wb,
+        _sample_params(),
+        _sample_wps(),
         version_stamp="v1.2.3-4-gabcdef1-dirty",
     )
     # The value is written as a literal string (not as a formula starting
@@ -744,9 +753,11 @@ def test_resolve_version_stamp_fallback_on_git_failure(monkeypatch):
 
 # ── Roster Priority column (Task T1 of Timelog Plan) ──
 
+
 def test_roster_priority_header():
     """Priority column header has label, HEADER_FONT, and LIGHT_BLUE_FILL."""
     from budget_planner.layout import COL_ROSTER_PRIORITY
+
     _wb, ws, layout = _build_with_grades()
     header_row = layout["roster_header_row"]
     cell = ws.cell(header_row, COL_ROSTER_PRIORITY)
@@ -763,6 +774,7 @@ def test_roster_priority_header():
 def test_roster_priority_data_defaults_to_2_blue():
     """Priority data cells default to 2 with BLUE_INPUT font when unspecified."""
     from budget_planner.layout import COL_ROSTER_PRIORITY
+
     _wb, ws, layout = _build_with_grades()
     team = _sample_team()
     first = layout["roster_first_row"]
@@ -771,28 +783,25 @@ def test_roster_priority_data_defaults_to_2_blue():
         cell = ws.cell(row, COL_ROSTER_PRIORITY)
         assert cell.value == 2, f"row {row}: expected default priority 2, got {cell.value!r}"
         rgb = str(cell.font.color.rgb).upper()
-        assert rgb.endswith("0000FF"), (
-            f"row {row}: priority should be BLUE_INPUT, got {rgb}"
-        )
+        assert rgb.endswith("0000FF"), f"row {row}: priority should be BLUE_INPUT, got {rgb}"
 
 
 def test_team_priorities_named_range():
     """team_priorities named range resolves to the Priority column of roster rows."""
     from openpyxl.utils import get_column_letter
     from budget_planner.layout import COL_ROSTER_PRIORITY
+
     wb, _ws, layout = _build_with_grades()
     assert "team_priorities" in wb.defined_names
     cl = get_column_letter(COL_ROSTER_PRIORITY)
-    expected = (
-        f"Config!${cl}${layout['roster_first_row']}"
-        f":${cl}${layout['roster_last_row']}"
-    )
+    expected = f"Config!${cl}${layout['roster_first_row']}:${cl}${layout['roster_last_row']}"
     assert wb.defined_names["team_priorities"].attr_text == expected
 
 
 def test_roster_priority_header_has_comment():
     """Priority header cell carries an explanatory comment for solver fill order."""
     from budget_planner.layout import COL_ROSTER_PRIORITY
+
     _wb, ws, layout = _build_with_grades()
     header_row = layout["roster_header_row"]
     cell = ws.cell(header_row, COL_ROSTER_PRIORITY)
@@ -849,22 +858,18 @@ def test_config_named_range_targets_match_spec_doc():
     # against the Actuals/Actuals-Hours paragraphs elsewhere; the derived
     # helpers were dropped entirely and are not doc-worthy.
     required = {
-        "project_start", "fte_rate",
+        "project_start",
+        "fte_rate",
     }
     missing = required - doc_map.keys()
-    assert not missing, (
-        f"docs/spec.md Config paragraph is missing named-range rows "
-        f"for {sorted(missing)}"
-    )
+    assert not missing, f"docs/spec.md Config paragraph is missing named-range rows for {sorted(missing)}"
 
     for name, expected_row in doc_map.items():
         assert name in wb.defined_names, (
-            f"Named range {name!r} documented in internals.md but missing "
-            f"from the workbook"
+            f"Named range {name!r} documented in internals.md but missing from the workbook"
         )
         expected_attr = f"Config!$B${expected_row}"
         actual = wb.defined_names[name].attr_text
         assert actual == expected_attr, (
-            f"Named range {name!r}: spec.md says {expected_attr!r}, "
-            f"workbook has {actual!r} — update whichever is wrong"
+            f"Named range {name!r}: spec.md says {expected_attr!r}, workbook has {actual!r} — update whichever is wrong"
         )

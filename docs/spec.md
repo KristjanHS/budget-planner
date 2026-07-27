@@ -93,6 +93,12 @@ Readers encountering a pre-v2 workbook (no `timelog_rebuild_from_month` name) de
 
 Formulas that pick the first/last non-empty index via `MATCH(1, (arr<>"")*1, 0)` or `LOOKUP(2, 1/(arr<>""), headers)` depend on CSE array coercion that **openpyxl-written workbooks do not carry** — LibreOffice recalc returns `""` or the wrong extreme silently. Use `SUMPRODUCT(MIN((arr<>"")*COL(...)))` / `SUMPRODUCT(MAX(...))` instead — SUMPRODUCT forces array context natively and survives the openpyxl→LO round-trip.
 
+### Banned: `ISNUMBER(range)` in any array scan — use `(range<>"")`
+
+**Invariant: no emitted cell formula may pass a multi-cell range to `ISNUMBER`.** Excel gives `ISNUMBER(range)` no array context inside a non-CSE formula — it collapses to a scalar, so `SUMPRODUCT(MAX(… * ISNUMBER(range)))` returns `0` and every cell guarded by `IF(idx=0,"",…)` renders blank. The `SUMPRODUCT` wrapper does **not** rescue it (unlike `COLUMN(range)`, which array-evaluates correctly and is not banned). Test filled-ness with `(range<>"")` instead. Scalar uses (`IF(ISNUMBER(B1),B1,C1)`, CF rule predicates) are fine and stay.
+
+LibreOffice array-evaluates `ISNUMBER(range)` correctly, so **`make check` cannot see this defect class** — a recalc test asserting the right index stays green while the workbook is broken in Excel. The guard is therefore static: `tests/test_formula_array_context_guard.py` walks the built workbook and fails on any range argument, with `KNOWN_CSE_GAPS` naming the deliberately-unfixed `Actuals-Hours` sheet. Diagnosis and Excel-computed evidence: `2026-07-27-isnumber-array-context-excel-fix.md` (docs/plans/).
+
 ---
 
 ## Indirect-view EUR header suffix — `+i` / `-i`
@@ -366,6 +372,9 @@ python -m budget_planner init --demo
 
 # Rebuild from existing workbook (preserves assignments + Actuals EUR)
 python -m budget_planner rebuild
+
+# Copy to output/budget_plan.<YYYYmmdd_HHMMSS>.xlsx, original left in place
+python -m budget_planner archive
 ```
 
 After any generation, run recalc + tests — see CLAUDE.md Critical Rule 2.
@@ -439,10 +448,9 @@ When resuming a plan from memory, verify actual file state before acting — mem
 
 ### Planning & Implementation (/impag)
 
-For multi-session or ≥3-file work: write a plan doc under `docs/plans/` as a dated .md file immediately — context gets compressed. For single-session / ≤2-file work: no plan doc (see `.claude/rules/plan-hygiene.md § When to write a plan doc`); commit message + code diff is the record.
+Whether the work earns a plan doc at all: `.claude/rules/plan-hygiene.md § When to write a plan doc`. When it does, write it under `docs/plans/` as a dated .md file immediately — context gets compressed.
 Run brainstorm → write-plan → worktree isolation for each multi-session P-item. Don't skip planning even if the spec looks detailed.
-Run `superpowers:code-reviewer` after every /impag stage — not just at the end. Each stage boundary is a review checkpoint.
-Fix pre-existing test failures when encountered during implementation — don't defer them.
+Review at every /impag stage boundary, not just at the end — each boundary is a checkpoint.
 Commit or resolve dirty files at session start before executing any tasks.
 **Before starting a `/impag` default-selected plan:** the default is the most recent plan by mtime, which is often a *just-completed* plan still in `docs/plans/`. Cross-check recent `git log` to confirm it's not already landed. If it is, ask the user which queued plan to run instead.
 

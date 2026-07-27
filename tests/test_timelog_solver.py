@@ -27,12 +27,7 @@ from budget_planner.timelog_solver import (
 
 
 def _placed_count(assigned: Assignment, wp_code: str) -> int:
-    return sum(
-        1
-        for row in assigned.values()
-        for v in row.values()
-        if v == wp_code
-    )
+    return sum(1 for row in assigned.values() for v in row.values() if v == wp_code)
 
 
 def _assignments(
@@ -145,9 +140,7 @@ def test_pool_never_exceeded():
     assigned = solve(persons, wps, windows, project_months=8)
     for p in persons:
         placed = sum(1 for v in assigned[p.name].values() if v is not None)
-        assert placed <= p.pool, (
-            f"{p.name}: placed {placed} > pool {p.pool}"
-        )
+        assert placed <= p.pool, f"{p.name}: placed {placed} > pool {p.pool}"
 
 
 # ---------------------------------------------------------------------------
@@ -168,13 +161,10 @@ def test_person_wp_window_honoured():
     ]
     assigned = solve(persons, wps, windows, project_months=12)
 
-    windows_idx = {(w.person_name, w.wp_code): (w.start_month, w.end_month)
-                   for w in windows}
+    windows_idx = {(w.person_name, w.wp_code): (w.start_month, w.end_month) for w in windows}
     for name, m, code in _assignments(assigned):
         lo, hi = windows_idx[(name, code)]
-        assert lo <= m <= hi, (
-            f"({name}, m={m}) -> {code} outside person-WP window {lo}-{hi}"
-        )
+        assert lo <= m <= hi, f"({name}, m={m}) -> {code} outside person-WP window {lo}-{hi}"
 
 
 # ---------------------------------------------------------------------------
@@ -214,9 +204,7 @@ def test_overshoot_tolerated():
     windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
     assigned = greedy_pass(persons, wps, windows, project_months=10)
     placed = _placed_count(assigned, "WP1")
-    assert placed in (3, 4), (
-        f"expected 3 or 4 (ceiling or ceiling+1), got {placed}"
-    )
+    assert placed in (3, 4), f"expected 3 or 4 (ceiling or ceiling+1), got {placed}"
     # Crucially: never placed = ceiling + 2 or more.
     assert placed <= 4
 
@@ -271,15 +259,9 @@ def test_undershoot_to_overshoot_jump_one_month():
     ]
     assigned = greedy_pass(persons, wps, windows, project_months=12)
     rate_by_name = {"Alice": 73, "Bob": 35}
-    placed_eur = sum(
-        rate_by_name[name]
-        for name, row in assigned.items()
-        for code in row.values()
-        if code == "WP1"
-    )
+    placed_eur = sum(rate_by_name[name] for name, row in assigned.items() for code in row.values() if code == "WP1")
     assert placed_eur == 108, (
-        f"expected jump to 108 € (+8%), got {placed_eur} "
-        f"({(placed_eur - ceiling) / ceiling:+.0%})"
+        f"expected jump to 108 € (+8%), got {placed_eur} ({(placed_eur - ceiling) / ceiling:+.0%})"
     )
 
 
@@ -368,7 +350,7 @@ def test_switch_reduction_actually_reduces_on_interleaved_input():
     # → total 2; per-WP sums (WP1×3, WP2×3) preserved; pools unchanged.
     start: Assignment = {
         "Alice": {1: "WP1", 2: "WP2", 3: "WP1"},
-        "Bob":   {1: "WP2", 2: "WP1", 3: "WP2"},
+        "Bob": {1: "WP2", 2: "WP1", 3: "WP2"},
     }
     before = _count_switches(start)
     assert before == 4, f"precondition: fixture should start with 4 switches, got {before}"
@@ -376,15 +358,13 @@ def test_switch_reduction_actually_reduces_on_interleaved_input():
     after = switch_reduction_pass(start, persons, wps, windows, project_months=3)
     after_switches = _count_switches(after)
     assert after_switches < before, (
-        f"switch_reduction_pass should consolidate runs: "
-        f"before={before}, after={after_switches}"
+        f"switch_reduction_pass should consolidate runs: before={before}, after={after_switches}"
     )
 
     # Per-WP totals must be preserved (design §4 invariant).
     def _wp_sum(assigned: Assignment, wp_code: str) -> int:
-        return sum(
-            1 for p_row in assigned.values() for v in p_row.values() if v == wp_code
-        )
+        return sum(1 for p_row in assigned.values() for v in p_row.values() if v == wp_code)
+
     assert _wp_sum(after, "WP1") == _wp_sum(start, "WP1")
     assert _wp_sum(after, "WP2") == _wp_sum(start, "WP2")
 
@@ -486,7 +466,10 @@ def test_solver_skips_vacation():
     # as vacation — solver must skip both, placing at most 8 cells (10 - 2).
     persons = [
         Person(
-            "Alice", priority=1, pool=10, rate_eur_per_pm=1,
+            "Alice",
+            priority=1,
+            pool=10,
+            rate_eur_per_pm=1,
             vacation_months=frozenset({3, 7}),
         ),
     ]
@@ -506,11 +489,17 @@ def test_switch_reduction_respects_vacation():
     """Switch-reduction pass won't swap a cell into or out of a vacation month."""
     persons = [
         Person(
-            "Alice", priority=1, pool=4, rate_eur_per_pm=1,
+            "Alice",
+            priority=1,
+            pool=4,
+            rate_eur_per_pm=1,
             vacation_months=frozenset({4}),
         ),
         Person(
-            "Bob", priority=1, pool=4, rate_eur_per_pm=1,
+            "Bob",
+            priority=1,
+            pool=4,
+            rate_eur_per_pm=1,
             vacation_months=frozenset({4}),
         ),
     ]
@@ -527,10 +516,14 @@ def test_switch_reduction_respects_vacation():
     # Pre-seed an assignment that would tempt the pass to swap across month 4.
     pre_assigned: Assignment = {
         "Alice": {1: "WP1", 2: "WP2", 3: "WP1", 4: None, 5: "WP2"},
-        "Bob":   {1: "WP2", 2: "WP1", 3: "WP2", 4: None, 5: "WP1"},
+        "Bob": {1: "WP2", 2: "WP1", 3: "WP2", 4: None, 5: "WP1"},
     }
     out = switch_reduction_pass(
-        pre_assigned, persons, wps, windows, project_months=5,
+        pre_assigned,
+        persons,
+        wps,
+        windows,
+        project_months=5,
     )
     assert out["Alice"][4] is None, "vacation month must stay empty for Alice"
     assert out["Bob"][4] is None, "vacation month must stay empty for Bob"
@@ -540,16 +533,11 @@ def test_switch_reduction_respects_vacation():
     # preserved. A broken guard that cleared all cells would make the vacation
     # assertions pass vacuously; this bystander catches that.
     from collections import Counter
+
     non_vac_months = [1, 2, 3, 5]
-    pre_codes = Counter(
-        pre_assigned[p][m] for p in ("Alice", "Bob") for m in non_vac_months
-    )
-    post_codes = Counter(
-        out[p][m] for p in ("Alice", "Bob") for m in non_vac_months
-    )
-    assert pre_codes == post_codes, (
-        f"non-vacation code multiset changed: pre={pre_codes}, post={post_codes}"
-    )
+    pre_codes = Counter(pre_assigned[p][m] for p in ("Alice", "Bob") for m in non_vac_months)
+    post_codes = Counter(out[p][m] for p in ("Alice", "Bob") for m in non_vac_months)
+    assert pre_codes == post_codes, f"non-vacation code multiset changed: pre={pre_codes}, post={post_codes}"
 
 
 def test_vacation_months_default_empty():
@@ -569,9 +557,7 @@ def test_stop_reason_filled():
     wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=50)]
     windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
     assigned = greedy_pass(persons, wps, windows, project_months=10)
-    reasons = classify_wp_stop_reasons(
-        assigned, persons, wps, windows, project_months=10
-    )
+    reasons = classify_wp_stop_reasons(assigned, persons, wps, windows, project_months=10)
     assert reasons["WP1"] == "Filled"
 
 
@@ -582,9 +568,7 @@ def test_stop_reason_overshoot_override():
     wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=1000)]
     windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
     assigned = greedy_pass(persons, wps, windows, project_months=10)
-    reasons = classify_wp_stop_reasons(
-        assigned, persons, wps, windows, project_months=10
-    )
+    reasons = classify_wp_stop_reasons(assigned, persons, wps, windows, project_months=10)
     assert reasons["WP1"] == "-11% override"
 
 
@@ -608,9 +592,7 @@ def test_stop_reason_upper_cap():
         PersonWPWindow("Carol", "WP1", 1, 12),
     ]
     assigned = greedy_pass(persons, wps, windows, project_months=12)
-    reasons = classify_wp_stop_reasons(
-        assigned, persons, wps, windows, project_months=12
-    )
+    reasons = classify_wp_stop_reasons(assigned, persons, wps, windows, project_months=12)
     assert reasons["WP1"] == "+12% cap"
 
 
@@ -622,9 +604,7 @@ def test_stop_reason_pool_empty():
     wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=10000)]
     windows = [PersonWPWindow("Alice", "WP1", 1, 10)]
     assigned = greedy_pass(persons, wps, windows, project_months=10)
-    reasons = classify_wp_stop_reasons(
-        assigned, persons, wps, windows, project_months=10
-    )
+    reasons = classify_wp_stop_reasons(assigned, persons, wps, windows, project_months=10)
     assert reasons["WP1"] == "Pool empty"
 
 
@@ -636,9 +616,7 @@ def test_stop_reason_window_full():
     wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=100)]
     windows = [PersonWPWindow("Alice", "WP1", 5, 5)]
     assigned = greedy_pass(persons, wps, windows, project_months=10)
-    reasons = classify_wp_stop_reasons(
-        assigned, persons, wps, windows, project_months=10
-    )
+    reasons = classify_wp_stop_reasons(assigned, persons, wps, windows, project_months=10)
     assert reasons["WP1"] == "Window full"
 
 
@@ -649,9 +627,7 @@ def test_stop_reason_no_window():
     wps = [WP("WP1", active_start=10, active_end=12, ceiling_eur=100)]
     windows = [PersonWPWindow("Alice", "WP1", 1, 5)]
     assigned = greedy_pass(persons, wps, windows, project_months=12)
-    reasons = classify_wp_stop_reasons(
-        assigned, persons, wps, windows, project_months=12
-    )
+    reasons = classify_wp_stop_reasons(assigned, persons, wps, windows, project_months=12)
     assert reasons["WP1"] == "No window"
 
 
@@ -661,7 +637,5 @@ def test_stop_reason_no_candidates():
     wps = [WP("WP1", active_start=1, active_end=10, ceiling_eur=100)]
     windows: list[PersonWPWindow] = []
     assigned = greedy_pass(persons, wps, windows, project_months=10)
-    reasons = classify_wp_stop_reasons(
-        assigned, persons, wps, windows, project_months=10
-    )
+    reasons = classify_wp_stop_reasons(assigned, persons, wps, windows, project_months=10)
     assert reasons["WP1"] == "No candidates"

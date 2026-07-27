@@ -15,16 +15,16 @@ row/column positions consumed by downstream builders::
 
 ## Builder dependency chain
 
-| Builder        | Needs from upstream                                                                                             |
-|----------------|-----------------------------------------------------------------------------------------------------------------|
-| config_sheet   | (none)                                                                                                          |
-| plan           | config_layout.wp_first_row                                                                                      |
-| capacity       | config_layout.person_rows, plan_layout                                                                          |
-| plan (patch)   | capacity_layout.person_groups.wp_rows                                                                           |
-| timelog_plan   | config_layout + Trends-stub ``current_month`` named range + ``team_priorities`` / ``roster_lookup`` named ranges |
-| actuals        | plan_layout                                                                                                     |
-| summary        | plan_layout + actuals_layout                                                                                    |
-| trends         | all upstream layouts                                                                                            |
+| Builder        | Needs from upstream                                                                                |
+|----------------|----------------------------------------------------------------------------------------------------|
+| config_sheet   | (none)                                                                                             |
+| plan           | config_layout.wp_first_row                                                                         |
+| capacity       | config_layout.person_rows, plan_layout                                                             |
+| plan (patch)   | capacity_layout.person_groups.wp_rows                                                              |
+| timelog_plan   | config_layout + ``roster_lookup``/``team_priorities`` (Config) + Trends-stub ``current_month``     |
+| actuals        | plan_layout                                                                                        |
+| summary        | plan_layout + actuals_layout                                                                       |
+| trends         | all upstream layouts                                                                               |
 
 ## Build order (load-bearing — downstream builders consume layout dicts
 produced by upstream ones, so reordering silently breaks cross-sheet
@@ -81,7 +81,8 @@ from openpyxl.workbook.defined_name import DefinedName
 from budget_planner.config_sheet import build_config_sheet
 from budget_planner.plan import build_plan_sheet, _apply_planned_formulas
 from budget_planner.capacity import (
-    build_capacity_sheet, apply_capacity_todate_formulas,
+    build_capacity_sheet,
+    apply_capacity_todate_formulas,
 )
 from budget_planner.actuals import build_actuals_sheet
 from budget_planner.actuals_hours import build_actuals_hours_sheet
@@ -100,9 +101,14 @@ from budget_planner.layout import (
     cell_ref,
 )
 from budget_planner.styles import (
-    BLACK_FORMULA, HEADER_FONT, style_cell, apply_year_groups, sized_comment,
+    BLACK_FORMULA,
+    HEADER_FONT,
+    style_cell,
+    apply_year_groups,
+    sized_comment,
 )
 from budget_planner import config
+
 # Re-exported for backwards compatibility — actual implementation in demo_seed.
 from budget_planner.demo_seed import seed_demo_data as seed_demo_data  # noqa: F401
 
@@ -132,6 +138,28 @@ def _resolve_version_stamp() -> str:
     return result.stdout.strip() or "unknown"
 
 
+def archive_workbook(filepath: str) -> str | None:
+    """Copy workbook to <stem>.<YYYYmmdd_HHMMSS>.xlsx, leaving the original in place.
+
+    Returns the archive path, or None when there is nothing to archive. The single
+    timestamped-copy implementation: ``init``/``rebuild`` call it before overwriting
+    their target, and it is exposed as ``python -m budget_planner archive`` for on-demand
+    backups — so the .bat wrappers must NOT archive as well, or every rebuild leaves
+    two identical copies. Timestamps stay in Python — ``for /f`` over a
+    ``powershell Get-Date`` leaks PowerShell stderr into the captured stdout
+    (see .claude/rules/windows-scripts.md).
+    """
+    if not os.path.exists(filepath):
+        print("No existing workbook to archive.")
+        return None
+    stem, ext = os.path.splitext(filepath)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archive_path = f"{stem}.{timestamp}{ext}"
+    shutil.copy2(filepath, archive_path)
+    print(f"Archived current workbook to {archive_path}")
+    return archive_path
+
+
 def snapshot_workbook(filepath: str) -> str:
     """Copy workbook to <stem>.snapshot.xlsx."""
     if not os.path.exists(filepath):
@@ -149,15 +177,9 @@ def restore_workbook(filepath: str) -> str:
     snapshot_path = f"{stem}.snapshot{ext}"
     if not os.path.exists(snapshot_path):
         raise FileNotFoundError(
-            f"No snapshot found at {snapshot_path}. "
-            f"Create one first with: python -m budget_planner --snapshot {filepath}"
+            f"No snapshot found at {snapshot_path}. Create one first with: python -m budget_planner --snapshot {filepath}"
         )
-    # Back up current file with timestamp
-    if os.path.exists(filepath):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = f"{stem}.{timestamp}{ext}"
-        shutil.copy2(filepath, backup_path)
-        print(f"Backup of current: {backup_path}")
+    archive_workbook(filepath)  # back up current file with timestamp
     shutil.copy2(snapshot_path, filepath)
     print(f"Restored from: {snapshot_path}")
     return filepath
@@ -179,9 +201,7 @@ class BuildContext:
     summary_layout: dict[str, Any] | None = None
 
 
-def _validate_config(
-    project_params, work_packages, team, external_commitments
-):
+def _validate_config(project_params, work_packages, team, external_commitments):
     """Validate extracted config data.
 
     Returns:
@@ -216,9 +236,7 @@ def _validate_config(
     team_names = {m["name"] for m in team}
     for ext in external_commitments:
         if ext["person"] not in team_names:
-            errors.append(
-                f"External commitment person '{ext['person']}' not in team roster"
-            )
+            errors.append(f"External commitment person '{ext['person']}' not in team roster")
 
     # WP-level warnings
     for wp in work_packages:
@@ -227,9 +245,7 @@ def _validate_config(
         start = wp.get("start")
         end = wp.get("end")
         if start is not None and end is not None and start > end:
-            warnings.append(
-                f"WP {wp['id']}: start ({start}) > end ({end})"
-            )
+            warnings.append(f"WP {wp['id']}: start ({start}) > end ({end})")
 
     return errors, warnings
 
@@ -272,6 +288,7 @@ def _build_all_sheets(
     # individual builders can stay strict.
     if reporting_periods is None:
         from budget_planner.config import REPORTING_PERIODS
+
         reporting_periods = REPORTING_PERIODS
 
     # Stage 1 — Config (no dependencies)
@@ -335,17 +352,14 @@ def _build_all_sheets(
     trends_ws.sheet_properties.tabColor = "FFD700"
     style_cell(trends_ws, 1, 1, "Current Month:", font=HEADER_FONT, border=False)
     _cm_formula = (
-        f"=MAX(1,MIN({SHEET_CONFIG}!B3,"
-        f"(YEAR(TODAY())-YEAR(project_start))*12"
-        f"+MONTH(TODAY())-MONTH(project_start)+1))"
+        f"=MAX(1,MIN({SHEET_CONFIG}!B3,(YEAR(TODAY())-YEAR(project_start))*12+MONTH(TODAY())-MONTH(project_start)+1))"
     )
     style_cell(trends_ws, 1, 2, font=BLACK_FORMULA, border=False)
     trends_ws["B1"].value = _cm_formula
-    trends_ws["B1"].comment = sized_comment("Auto-calculated from project start and today's date. "
-        "Override with a static number to freeze.")
-    wb.defined_names.add(
-        DefinedName("current_month", attr_text=cell_ref(SHEET_TRENDS, 1, 2))
+    trends_ws["B1"].comment = sized_comment(
+        "Auto-calculated from project start and today's date. Override with a static number to freeze."
     )
+    wb.defined_names.add(DefinedName("current_month", attr_text=cell_ref(SHEET_TRENDS, 1, 2)))
 
     # Stage 5b — Timelog Plan (consumes config_layout + Trends-stub
     # ``current_month`` named range used by per-WP "Burn rate needed" wallclock
@@ -444,7 +458,8 @@ def _build_all_sheets(
     #   tabs sit up-front). Remaining sheets keep their relative build order.
     # Idempotent: computed offsets collapse to 0 when already in place.
     for target_idx, name in enumerate(
-        [SHEET_TIMELOG_PLAN, SHEET_ACTUALS_HOURS], start=1,
+        [SHEET_TIMELOG_PLAN, SHEET_ACTUALS_HOURS],
+        start=1,
     ):
         if name in wb.sheetnames:
             wb.move_sheet(name, offset=target_idx - wb.sheetnames.index(name))
@@ -473,18 +488,6 @@ def _apply_all_year_groups(wb, project_params, current_month=None):
                 current_month,
                 project_start=project_params["start"],
             )
-
-
-def _backup_existing(filepath):
-    """Back up existing file with timestamp. Returns backup path or None."""
-    if os.path.exists(filepath):
-        stem, ext = os.path.splitext(filepath)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = f"{stem}.{timestamp}{ext}"
-        shutil.copy2(filepath, backup_path)
-        print(f"Backup: {backup_path}")
-        return backup_path
-    return None
 
 
 def init_workbook(
@@ -538,15 +541,13 @@ def init_workbook(
     _today = date.today()
     _pstart = project_params["start"]
     _delta = _rd(_today, _pstart.date() if hasattr(_pstart, "date") else _pstart)
-    _current_month = max(
-        1, min(_delta.years * 12 + _delta.months + 1, project_params["months"])
-    )
+    _current_month = max(1, min(_delta.years * 12 + _delta.months + 1, project_params["months"]))
     _apply_all_year_groups(wb, project_params, current_month=_current_month)
 
     wb.active = wb.sheetnames.index(SHEET_CONFIG)
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    _backup_existing(output_path)
+    archive_workbook(output_path)
     wb.save(output_path)
     print(f"Saved to {output_path}")
     return output_path
@@ -586,10 +587,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
 
     # Print source file timestamp
     mod_time = datetime.fromtimestamp(os.path.getmtime(input_path))
-    print(
-        f"Reading from: {os.path.basename(input_path)} "
-        f"(modified {mod_time.strftime('%Y-%m-%d %H:%M')})"
-    )
+    print(f"Reading from: {os.path.basename(input_path)} (modified {mod_time.strftime('%Y-%m-%d %H:%M')})")
 
     existing_wb = load_workbook(input_path, data_only=False)
 
@@ -599,12 +597,9 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     if SHEET_CONFIG not in existing_wb.sheetnames:
         existing_wb.close()
         raise ValueError(
-            "Workbook has no Config sheet. "
-            "Run 'python -m budget_planner init' to create a fresh workbook first."
+            "Workbook has no Config sheet. Run 'python -m budget_planner init' to create a fresh workbook first."
         )
-    project_params, work_packages = read_config_sheet(
-        existing_wb[SHEET_CONFIG]
-    )
+    project_params, work_packages = read_config_sheet(existing_wb[SHEET_CONFIG])
 
     # Team roster from Config sheet
     team = read_team_from_config(existing_wb[SHEET_CONFIG])
@@ -623,21 +618,11 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     # not by the section being present-but-empty (user-cleared). This preserves
     # intentional empty state after migration.
     config_ws = existing_wb[SHEET_CONFIG]
-    has_assign_section = (
-        _find_header_row(
-            config_ws, SECTION_HEADER_LABELS["assignments"], required=False
-        )
-        is not None
-    )
-    has_ext_section = (
-        _find_header_row(config_ws, SECTION_HEADER_LABELS["externals"], required=False)
-        is not None
-    )
+    has_assign_section = _find_header_row(config_ws, SECTION_HEADER_LABELS["assignments"], required=False) is not None
+    has_ext_section = _find_header_row(config_ws, SECTION_HEADER_LABELS["externals"], required=False) is not None
 
     assignments = read_assignments_from_config(config_ws) if has_assign_section else []
-    external_commitments = (
-        read_externals_from_config(config_ws) if has_ext_section else []
-    )
+    external_commitments = read_externals_from_config(config_ws) if has_ext_section else []
 
     if not has_assign_section or not has_ext_section:
         if SHEET_CAPACITY not in existing_wb.sheetnames:
@@ -661,9 +646,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             existing_wb[SHEET_ACTUALS],
             project_params["months"],
         )
-        preserved_eur_through_override = read_actuals_override(
-            existing_wb[SHEET_ACTUALS]
-        )
+        preserved_eur_through_override = read_actuals_override(existing_wb[SHEET_ACTUALS])
 
     # Preserve Actuals-Hours blue-input hours across rebuild.
     preserved_actuals_hours: dict[str, dict[str, list[float | None]]] | None = None
@@ -673,16 +656,12 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             existing_wb[SHEET_ACTUALS_HOURS],
             project_months=project_params["months"],
         )
-        preserved_hours_through_override = read_actuals_override(
-            existing_wb[SHEET_ACTUALS_HOURS]
-        )
+        preserved_hours_through_override = read_actuals_override(existing_wb[SHEET_ACTUALS_HOURS])
 
     # Preserve Timelog Plan grid values + rebuild-from-month N (freeze-point).
     # Missing sheet → {"grid": {}, "rebuild_from_month": 1} (pre-freeze-point
     # workbook; builder still renders and the solver will populate the grid).
-    preserved_timelog: dict = read_timelog_plan(
-        existing_wb, project_params["months"]
-    )
+    preserved_timelog: dict = read_timelog_plan(existing_wb, project_params["months"])
 
     # Calculate current_month from project start and today's date
     from datetime import date
@@ -691,9 +670,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     _today = date.today()
     _pstart = project_params["start"]
     _delta = _rd(_today, _pstart.date() if hasattr(_pstart, "date") else _pstart)
-    current_month = max(
-        1, min(_delta.years * 12 + _delta.months + 1, project_params["months"])
-    )
+    current_month = max(1, min(_delta.years * 12 + _delta.months + 1, project_params["months"]))
 
     existing_wb.close()
 
@@ -713,13 +690,9 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     valid_assignments = []
     for asgn in assignments:
         if asgn["person"] not in team_names:
-            warnings.append(
-                f"Orphaned Assignment: person '{asgn['person']}' removed from team"
-            )
+            warnings.append(f"Orphaned Assignment: person '{asgn['person']}' removed from team")
         elif asgn["wp"] not in wp_ids:
-            warnings.append(
-                f"Orphaned Assignment: WP '{asgn['wp']}' removed for {asgn['person']}"
-            )
+            warnings.append(f"Orphaned Assignment: WP '{asgn['wp']}' removed for {asgn['person']}")
         else:
             valid_assignments.append(asgn)
     assignments = valid_assignments
@@ -738,14 +711,10 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             person, _month = key
             code = _timelog_grid[key]
             if person not in team_names:
-                warnings.append(
-                    f"Orphaned Timelog Plan cell: person '{person}' removed from team"
-                )
+                warnings.append(f"Orphaned Timelog Plan cell: person '{person}' removed from team")
                 del _timelog_grid[key]
             elif code not in wp_ids:
-                warnings.append(
-                    f"Orphaned Timelog Plan cell: WP '{code}' removed (was set for {person})"
-                )
+                warnings.append(f"Orphaned Timelog Plan cell: WP '{code}' removed (was set for {person})")
                 del _timelog_grid[key]
 
     # Prune orphaned hours (person or WP removed from config). Externals
@@ -763,15 +732,11 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
             person_exts = ext_projects_by_person.get(person, set())
             for key in list(per_wp.keys()):
                 if key not in wp_ids and key not in person_exts:
-                    warnings.append(
-                        f"Orphaned Hours: '{key}' removed for {person}"
-                    )
+                    warnings.append(f"Orphaned Hours: '{key}' removed for {person}")
                     del per_wp[key]
 
     if errors:
-        raise ValueError(
-            "Rebuild validation failed:\n" + "\n".join(f"  ERROR: {e}" for e in errors)
-        )
+        raise ValueError("Rebuild validation failed:\n" + "\n".join(f"  ERROR: {e}" for e in errors))
 
     for w in warnings:
         print(f"  WARNING: {w}")
@@ -802,7 +767,7 @@ def rebuild_workbook(input_path: str = "output/budget_plan.xlsx") -> str:
     wb.active = wb.sheetnames.index(SHEET_CONFIG)
 
     # Back up then overwrite
-    _backup_existing(input_path)
+    archive_workbook(input_path)
     wb.save(input_path)
     print(f"Rebuilt: {input_path}")
     return input_path

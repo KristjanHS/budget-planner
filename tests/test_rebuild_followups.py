@@ -9,6 +9,7 @@
   removed), the pruning block in ``rebuild_workbook`` drops those
   entries and emits an "Orphaned Hours" warning instead of crashing.
 """
+
 from __future__ import annotations
 
 import re
@@ -43,9 +44,7 @@ def _blank_config_section_headers(ws, labels: list[str]) -> None:
             _set(ws, r, 1, None)
 
 
-def _write_legacy_assignments_on_capacity(
-    ws, assignments: list[dict], start_row: int
-) -> None:
+def _write_legacy_assignments_on_capacity(ws, assignments: list[dict], start_row: int) -> None:
     """Emulate a pre-Phase-1 workbook by writing a PERSON-WP ASSIGNMENTS
     config block on the Capacity sheet. Layout mirrors what the legacy
     reader expects: header row, column-header row, then data rows in
@@ -76,15 +75,11 @@ def test_rebuild_falls_back_to_capacity_when_config_sections_absent(
 
     # Surrogate legacy scenario: Config sections gone, Capacity carries data.
     wb = openpyxl.load_workbook(path)
-    _blank_config_section_headers(
-        wb["Config"], ["PERSON-WP ASSIGNMENTS", "EXTERNAL COMMITMENTS"]
-    )
+    _blank_config_section_headers(wb["Config"], ["PERSON-WP ASSIGNMENTS", "EXTERNAL COMMITMENTS"])
     # Write a legacy-style assignments block on Capacity below existing content.
     # Use a subset (first 2) so we can verify the fallback actually parses it.
     legacy_subset = DEMO_CAPACITY_ASSIGNMENTS[:2]
-    _write_legacy_assignments_on_capacity(
-        wb["Capacity"], legacy_subset, start_row=wb["Capacity"].max_row + 3
-    )
+    _write_legacy_assignments_on_capacity(wb["Capacity"], legacy_subset, start_row=wb["Capacity"].max_row + 3)
     wb.save(path)
     wb.close()
 
@@ -94,12 +89,12 @@ def test_rebuild_falls_back_to_capacity_when_config_sections_absent(
     # data that the fallback recovered from Capacity.
     wb = openpyxl.load_workbook(path)
     config_ws = wb["Config"]
-    assert _find_header_row(
-        config_ws, "PERSON-WP ASSIGNMENTS", required=False
-    ) is not None, "Config PERSON-WP ASSIGNMENTS header missing after rebuild"
-    assert _find_header_row(
-        config_ws, "EXTERNAL COMMITMENTS", required=False
-    ) is not None, "Config EXTERNAL COMMITMENTS header missing after rebuild"
+    assert _find_header_row(config_ws, "PERSON-WP ASSIGNMENTS", required=False) is not None, (
+        "Config PERSON-WP ASSIGNMENTS header missing after rebuild"
+    )
+    assert _find_header_row(config_ws, "EXTERNAL COMMITMENTS", required=False) is not None, (
+        "Config EXTERNAL COMMITMENTS header missing after rebuild"
+    )
 
     rebuilt = read_assignments_from_config(config_ws)
     # Externals on Capacity were untouched in this test — externals section
@@ -109,10 +104,7 @@ def test_rebuild_falls_back_to_capacity_when_config_sections_absent(
 
     recovered = {(a["person"], a["wp"]) for a in rebuilt}
     expected = {(a["person"], a["wp"]) for a in legacy_subset}
-    assert expected <= recovered, (
-        f"Fallback failed to recover legacy assignments: "
-        f"expected {expected}, got {recovered}"
-    )
+    assert expected <= recovered, f"Fallback failed to recover legacy assignments: expected {expected}, got {recovered}"
 
 
 def _find_hours_wp_row(ws, config_ws, person: str, wp_id: str) -> int:
@@ -137,14 +129,10 @@ def _find_hours_wp_row(ws, config_ws, person: str, wp_id: str) -> int:
                 resolved = config_ws.cell(int(m.group(1)), 1).value
                 if resolved and str(resolved).strip() == wp_id:
                     return r
-    raise AssertionError(
-        f"Could not locate Actuals-Hours row for {person!r}/{wp_id!r}"
-    )
+    raise AssertionError(f"Could not locate Actuals-Hours row for {person!r}/{wp_id!r}")
 
 
-def test_rebuild_prunes_orphaned_hours_when_person_removed(
-    tmp_path: Path, capsys
-):
+def test_rebuild_prunes_orphaned_hours_when_person_removed(tmp_path: Path, capsys):
     """Hours logged against a person later removed from the roster are
     dropped on rebuild with an 'Orphaned Hours' warning; hours logged
     for a bystander person with no roster changes survive the rebuild."""
@@ -158,9 +146,7 @@ def test_rebuild_prunes_orphaned_hours_when_person_removed(
         (a for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] != target_person),
         None,
     )
-    assert bystander_asgn is not None, (
-        "demo data must contain at least two distinct assigned people"
-    )
+    assert bystander_asgn is not None, "demo data must contain at least two distinct assigned people"
 
     target_hours = 96.0
     bystander_hours = 48.5
@@ -169,15 +155,9 @@ def test_rebuild_prunes_orphaned_hours_when_person_removed(
     ah = wb["Actuals-Hours"]
     config_ws = wb["Config"]
 
-    target_row = _find_hours_wp_row(
-        ah, config_ws, target_person, target_asgn["wp"]
-    )
-    bystander_row = _find_hours_wp_row(
-        ah, config_ws, bystander_asgn["person"], bystander_asgn["wp"]
-    )
-    _set(
-        ah, target_row, MONTH_COL_START + target_asgn["start"] - 1, target_hours
-    )
+    target_row = _find_hours_wp_row(ah, config_ws, target_person, target_asgn["wp"])
+    bystander_row = _find_hours_wp_row(ah, config_ws, bystander_asgn["person"], bystander_asgn["wp"])
+    _set(ah, target_row, MONTH_COL_START + target_asgn["start"] - 1, target_hours)
     bystander_month_idx = bystander_asgn["start"] - 1
     _set(
         ah,
@@ -199,9 +179,7 @@ def test_rebuild_prunes_orphaned_hours_when_person_removed(
             break
     assert removed, f"{target_person} not found in Config TEAM ROSTER"
 
-    assign_section = _find_header_row(
-        config_ws, "PERSON-WP ASSIGNMENTS", required=False
-    )
+    assign_section = _find_header_row(config_ws, "PERSON-WP ASSIGNMENTS", required=False)
     assert assign_section is not None
     for r in range(assign_section + 2, config_ws.max_row + 1):
         if config_ws.cell(r, 1).value == target_person:
@@ -213,9 +191,7 @@ def test_rebuild_prunes_orphaned_hours_when_person_removed(
 
     rebuild_workbook(input_path=path)
     captured = capsys.readouterr()
-    assert "Orphaned Hours" in captured.out, (
-        f"Expected 'Orphaned Hours' warning on stdout; got: {captured.out!r}"
-    )
+    assert "Orphaned Hours" in captured.out, f"Expected 'Orphaned Hours' warning on stdout; got: {captured.out!r}"
     assert target_person in captured.out
 
     wb = openpyxl.load_workbook(path)
@@ -226,15 +202,10 @@ def test_rebuild_prunes_orphaned_hours_when_person_removed(
     # The bystander check is the real correctness gate — without it, the test
     # would pass even if pruning dropped every person.
     assert target_person not in hours_data, (
-        f"{target_person}'s hours should be pruned as orphaned; "
-        f"still present in: {list(hours_data.keys())}"
+        f"{target_person}'s hours should be pruned as orphaned; still present in: {list(hours_data.keys())}"
     )
     bystander = bystander_asgn["person"]
-    assert bystander in hours_data, (
-        f"bystander {bystander!r} missing after rebuild: {list(hours_data.keys())}"
-    )
+    assert bystander in hours_data, f"bystander {bystander!r} missing after rebuild: {list(hours_data.keys())}"
     assert bystander_asgn["wp"] in hours_data[bystander]
     got = hours_data[bystander][bystander_asgn["wp"]][bystander_month_idx]
-    assert got == bystander_hours, (
-        f"bystander hours clobbered: expected {bystander_hours}, got {got}"
-    )
+    assert got == bystander_hours, f"bystander hours clobbered: expected {bystander_hours}, got {got}"

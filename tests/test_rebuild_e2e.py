@@ -4,6 +4,7 @@ These tests prove rebuild works correctly after changing FTE budgets,
 WP start/end months, team names, and allocations — without hardcoding
 any specific values from config.py.
 """
+
 import json
 import re
 import subprocess
@@ -15,8 +16,11 @@ from openpyxl.cell import Cell
 
 from budget_planner.workbook import init_workbook, rebuild_workbook
 from budget_planner.reader import (
-    discover_layout, read_config_sheet, read_team_from_config,
-    read_capacity_sheet, read_plan_config,
+    discover_layout,
+    read_config_sheet,
+    read_team_from_config,
+    read_capacity_sheet,
+    read_plan_config,
     read_assignments_from_config,
 )
 from budget_planner.config import MONTH_COL_START
@@ -27,6 +31,7 @@ SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 def _get_config_first_wp_row():
     """Derive Config WP data start row from a generated workbook."""
     import tempfile
+
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
         path = f.name
     try:
@@ -34,11 +39,13 @@ def _get_config_first_wp_row():
         wb = openpyxl.load_workbook(path)
         try:
             from budget_planner.reader import _find_header_row
+
             return _find_header_row(wb["Config"], "WP BUDGET") + 2
         finally:
             wb.close()
     finally:
         import os
+
         os.unlink(path)
 
 
@@ -53,6 +60,7 @@ def _find_sched_rows(config_ws):
     """
     from budget_planner.reader import _find_header_row
     from budget_planner.layout import COL_WP_START, COL_WP_END
+
     wp_header = _find_header_row(config_ws, "WP BUDGET")
     first_row = wp_header + 2  # skip section header + column headers
     entries = []
@@ -64,9 +72,14 @@ def _find_sched_rows(config_ws):
             break
         if isinstance(col_b, str) and col_b.strip().upper() == "TOTAL":
             break
-        entries.append({"row": r, "id": str(wp_id),
-                        "start": config_ws.cell(r, COL_WP_START).value,
-                        "end": config_ws.cell(r, COL_WP_END).value})
+        entries.append(
+            {
+                "row": r,
+                "id": str(wp_id),
+                "start": config_ws.cell(r, COL_WP_START).value,
+                "end": config_ws.cell(r, COL_WP_END).value,
+            }
+        )
         r += 1
     return entries
 
@@ -113,6 +126,7 @@ def init_path(tmp_path):
 def assigned_init_path(tmp_path):
     """Create a fresh workbook with demo assignments for rebuild testing."""
     from budget_planner.config import DEMO_CAPACITY_ASSIGNMENTS
+
     path = str(tmp_path / "test.xlsx")
     init_workbook(output_path=path, assignments=DEMO_CAPACITY_ASSIGNMENTS)
     return path
@@ -173,18 +187,15 @@ class TestRebuildWithChangedPeriods:
         sched_entries = _find_sched_rows(wb["Config"])
 
         # Find a schedule entry that starts at M1 and push its start to M7
-        target_entry = next(
-            (e for e in sched_entries if e["start"] == 1), None
-        )
+        target_entry = next((e for e in sched_entries if e["start"] == 1), None)
         if target_entry is None:
             pytest.skip("No schedule entry starts at M1 to modify")
 
         # Map schedule WP ID to budget WP index
-        target_idx = next(
-            i for i, wp in enumerate(wps) if wp["id"] == target_entry["id"]
-        )
+        target_idx = next(i for i, wp in enumerate(wps) if wp["id"] == target_entry["id"])
 
         from budget_planner.layout import COL_WP_START
+
         new_start = 7
         _set(wb["Config"], target_entry["row"], COL_WP_START, new_start)
         wb.save(init_path)
@@ -199,9 +210,7 @@ class TestRebuildWithChangedPeriods:
         row = layout["planned_first_wp_row"] + target_idx
         for m in range(new_start - 1):  # months 1 to new_start-1
             val = plan.cell(row, MONTH_COL_START + m).value
-            assert val is None or val == "" or val == 0, (
-                f"M{m+1} should be inactive after start change, got {val}"
-            )
+            assert val is None or val == "" or val == 0, f"M{m + 1} should be inactive after start change, got {val}"
         wb.close()
 
     def test_changed_end_month_greys_out_new_inactive(self, init_path):
@@ -219,11 +228,10 @@ class TestRebuildWithChangedPeriods:
             pytest.skip("No schedule entry ends at project end to modify")
 
         # Map schedule WP ID to budget WP index
-        target_idx = next(
-            i for i, wp in enumerate(wps) if wp["id"] == target_entry["id"]
-        )
+        target_idx = next(i for i, wp in enumerate(wps) if wp["id"] == target_entry["id"])
 
         from budget_planner.layout import COL_WP_END
+
         new_end = 36
         _set(wb["Config"], target_entry["row"], COL_WP_END, new_end)
         wb.save(init_path)
@@ -238,9 +246,7 @@ class TestRebuildWithChangedPeriods:
         # Month after new_end should be inactive
         for m in range(new_end, params["months"]):
             val = plan.cell(row, MONTH_COL_START + m).value
-            assert val is None or val == "" or val == 0, (
-                f"M{m+1} should be inactive after end change, got {val}"
-            )
+            assert val is None or val == "" or val == 0, f"M{m + 1} should be inactive after end change, got {val}"
         wb.close()
 
 
@@ -283,6 +289,7 @@ class TestRebuildWithChangedTeam:
         roster = read_team_from_config(config_ws)
         # Find the roster rows by scanning for TEAM ROSTER header
         from budget_planner.reader import _find_header_row
+
         section_row = _find_header_row(config_ws, "TEAM ROSTER")
         # Column header is always the next row after section header
         person_header = section_row + 1
@@ -312,12 +319,8 @@ class TestRebuildWithChangedTeam:
         layout = discover_layout(plan)
         config_wps = read_plan_config(plan, layout)
         cap_data = read_capacity_sheet(wb["Capacity"], config_wps)
-        assert new_name in cap_data["person_groups"], (
-            f"Renamed person '{new_name}' not found in Capacity"
-        )
-        assert old_name not in cap_data["person_groups"], (
-            f"Old name '{old_name}' still in Capacity after rename"
-        )
+        assert new_name in cap_data["person_groups"], f"Renamed person '{new_name}' not found in Capacity"
+        assert old_name not in cap_data["person_groups"], f"Old name '{old_name}' still in Capacity after rename"
         wb.close()
 
     def test_renamed_person_capacity_has_no_wps(self, init_path):
@@ -379,9 +382,7 @@ class TestRebuildWithChangedAllocations:
 
         wb = openpyxl.load_workbook(assigned_init_path)
         rebuilt = read_assignments_from_config(wb["Config"])
-        first = next(a for a in rebuilt
-                     if a["person"] == original[0]["person"]
-                     and a["wp"] == original[0]["wp"])
+        first = next(a for a in rebuilt if a["person"] == original[0]["person"] and a["wp"] == original[0]["wp"])
         assert first["total_fte"] == pytest.approx(new_total_fte)
         wb.close()
 
@@ -403,8 +404,7 @@ class TestRebuildWithInsertedRows:
         for r in range(1, config_ws.max_row + 1):
             person = config_ws.cell(r, 1).value
             wp = config_ws.cell(r, 2).value
-            if person and wp and any(a["person"] == str(person) and a["wp"] == str(wp)
-                                     for a in original):
+            if person and wp and any(a["person"] == str(person) and a["wp"] == str(wp) for a in original):
                 last_asgn_row = r
 
         assert last_asgn_row is not None
@@ -414,8 +414,7 @@ class TestRebuildWithInsertedRows:
         target_person = original[0]["person"]
         _, all_wps = read_config_sheet(config_ws)
         assigned_wps = {a["wp"] for a in original if a["person"] == target_person}
-        new_wp = next((wp["id"] for wp in all_wps
-                       if wp["id"] not in assigned_wps), None)
+        new_wp = next((wp["id"] for wp in all_wps if wp["id"] not in assigned_wps), None)
         if new_wp is None:
             pytest.skip("All WPs already assigned to first person")
 
@@ -424,9 +423,9 @@ class TestRebuildWithInsertedRows:
         config_ws.insert_rows(new_row)
         _set(config_ws, new_row, 1, target_person)
         _set(config_ws, new_row, 2, new_wp)
-        _set(config_ws, new_row, 3, 2.0)   # total FTE
-        _set(config_ws, new_row, 4, 1)     # start month
-        _set(config_ws, new_row, 5, 12)    # end month
+        _set(config_ws, new_row, 3, 2.0)  # total FTE
+        _set(config_ws, new_row, 4, 1)  # start month
+        _set(config_ws, new_row, 5, 12)  # end month
         wb.save(assigned_init_path)
         wb.close()
 
@@ -436,9 +435,7 @@ class TestRebuildWithInsertedRows:
         _, wps = read_config_sheet(wb["Config"])
         cap_data = read_capacity_sheet(wb["Capacity"], wps)
         person_wps = cap_data["person_groups"][target_person]["wp_values"]
-        assert new_wp in person_wps, (
-            f"{target_person} should have WP row for {new_wp} after rebuild"
-        )
+        assert new_wp in person_wps, f"{target_person} should have WP row for {new_wp} after rebuild"
         wb.close()
 
     def test_added_external_commitment_row_appears_after_rebuild(self, assigned_init_path):
@@ -481,9 +478,7 @@ class TestRebuildWithInsertedRows:
         _, wps = read_config_sheet(wb["Config"])
         cap_data = read_capacity_sheet(wb["Capacity"], wps)
         person_ext = cap_data["person_groups"][new_person]["external_values"]
-        assert new_project in person_ext, (
-            f"{new_person} should have external row for {new_project} after rebuild"
-        )
+        assert new_project in person_ext, f"{new_person} should have external row for {new_project} after rebuild"
         wb.close()
 
     def test_added_team_member_gets_capacity_group_after_rebuild(self, init_path):
@@ -515,9 +510,7 @@ class TestRebuildWithInsertedRows:
         wb = openpyxl.load_workbook(init_path)
         _, wps = read_config_sheet(wb["Config"])
         cap_data = read_capacity_sheet(wb["Capacity"], wps)
-        assert "Eve" in cap_data["person_groups"], (
-            "'Eve' should have a Capacity person group after rebuild"
-        )
+        assert "Eve" in cap_data["person_groups"], "'Eve' should have a Capacity person group after rebuild"
         # Verify Eve appears in rebuilt roster
         roster = read_team_from_config(wb["Config"])
         names = {p["name"] for p in roster}
@@ -550,10 +543,7 @@ class TestRebuildFormulaIntegrity:
             cell_val = plan.cell(row, first_active_col).value
 
             # WPs without any person assigned have no Capacity refs
-            assigned_count = sum(
-                1 for pg in cap_data["person_groups"].values()
-                if wp["id"] in pg["wp_values"]
-            )
+            assigned_count = sum(1 for pg in cap_data["person_groups"].values() if wp["id"] in pg["wp_values"])
             if assigned_count == 0:
                 continue
 
@@ -565,8 +555,7 @@ class TestRebuildFormulaIntegrity:
             # Count person refs in formula should match assigned persons
             cap_refs = re.findall(r"Capacity!\w+(\d+)", cell_val)
             assert len(cap_refs) == assigned_count, (
-                f"{wp['id']}: formula refs {len(cap_refs)} rows, "
-                f"but {assigned_count} persons assigned"
+                f"{wp['id']}: formula refs {len(cap_refs)} rows, but {assigned_count} persons assigned"
             )
         wb.close()
 
@@ -617,6 +606,7 @@ class TestRebuildFullScenario:
 
         # 2. Shorten second WP end month via WP BUDGET End col (I)
         from budget_planner.layout import COL_WP_END
+
         wp2_sched = next(e for e in sched_entries if e["id"] == wps[1]["id"])
         original_end = wp2_sched["end"]
         shortened_end = max(wp2_sched["start"], original_end - 6)
@@ -624,9 +614,7 @@ class TestRebuildFullScenario:
 
         # 3. Rename a team member without external commitments
         roster = TestRebuildWithChangedTeam._read_roster_with_rows(wb["Config"])
-        person = TestRebuildWithChangedTeam._find_person_without_externals(
-            roster, wb["Config"]
-        )
+        person = TestRebuildWithChangedTeam._find_person_without_externals(roster, wb["Config"])
         assert person is not None, "Need at least one person without externals"
         _set(wb["Config"], person["row"], 1, "Zara")
 
@@ -661,8 +649,7 @@ class TestRebuildFullScenario:
         assert "Zara" in cap_data["person_groups"]
 
         # All sheets present
-        for name in ["Config", "Plan", "Capacity",
-                      "Actuals", "Summary", "Trends"]:
+        for name in ["Config", "Plan", "Capacity", "Actuals", "Summary", "Trends"]:
             assert name in wb.sheetnames
 
         # WP count consistent across sheets
@@ -697,7 +684,8 @@ class TestRebuildRecalc:
 
         result = subprocess.run(
             ["python3", str(SCRIPTS_DIR / "recalc.py"), path],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             pytest.skip("LibreOffice not available")
@@ -720,15 +708,14 @@ class TestRebuildRecalc:
         _, wps = read_config_sheet(config)
 
         from budget_planner.reader import _find_header_row
+
         wp_section = _find_header_row(config, "WP BUDGET")
         first_wp = wp_section + 2
         expected_ceiling = 0.0
         for i in range(len(wps)):
             r = first_wp + i
             minus_i = config.cell(r, 5).value  # Budget -i column
-            assert isinstance(minus_i, (int, float)), (
-                f"WP row {r}: Budget -i={minus_i} — expected numeric after recalc"
-            )
+            assert isinstance(minus_i, (int, float)), f"WP row {r}: Budget -i={minus_i} — expected numeric after recalc"
             expected_ceiling += minus_i
 
         plan = wb["Plan"]

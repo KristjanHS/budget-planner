@@ -1,4 +1,5 @@
 """Tests that no builder imports config.py at module level."""
+
 import ast
 from pathlib import Path
 
@@ -26,16 +27,8 @@ def test_no_module_level_config_import():
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, ast.ImportFrom):
                 if node.module and "budget_planner.config" in node.module:
-                    pytest.fail(
-                        f"{module_name} has module-level import from "
-                        f"budget_planner.config (line {node.lineno})"
-                    )
+                    pytest.fail(f"{module_name} has module-level import from budget_planner.config (line {node.lineno})")
             elif isinstance(node, ast.Import):
                 for alias in node.names:
                     if "budget_planner.config" in alias.name:
-                        pytest.fail(
-                            f"{module_name} has module-level import of "
-                            f"budget_planner.config (line {node.lineno})"
-                        )
-
-
+                        pytest.fail(f"{module_name} has module-level import of budget_planner.config (line {node.lineno})")

@@ -6,7 +6,7 @@ sheet trust boundary (``eur_actuals_through_month`` named range at
 ``Actuals!$D$1``) and the through-month / two-cadence rules are
 canonical in ``docs/spec.md`` § Two-cadence actuals. Posted-cumulative
 redesign rationale:
-``docs/plans/archived/2026-05-09-actuals-posted-cumulative-design.md``.
+``docs/plans/archive/2026-05-09-actuals-posted-cumulative-design.md``.
 
 ## Per-WP columns (in display order)
 
@@ -43,24 +43,43 @@ Hidden helpers (-i side, outline-grouped, BLACK_FORMULA):
 """
 
 from openpyxl.formatting.rule import FormulaRule
+from openpyxl.styles import Font
 from openpyxl.workbook.defined_name import DefinedName
 
 from budget_planner.layout import (
-    MONTH_COL_START, SHEET_ACTUALS, SHEET_CONFIG,
+    MONTH_COL_START,
+    SHEET_ACTUALS,
+    SHEET_CONFIG,
     COL_WP_BUDGET_MINUS_I,
-    ACTUALS_AMBER_PCT_CEIL, ACTUALS_AMBER_BREACH_MONTHS, ACTUALS_RED_BREACH_MONTHS,
-    build_year_month_headers, cell_ref, month_range_ref,
-    month_col_end as _month_col_end, val_columns,
+    ACTUALS_AMBER_PCT_CEIL,
+    ACTUALS_AMBER_BREACH_MONTHS,
+    ACTUALS_RED_BREACH_MONTHS,
+    build_year_month_headers,
+    cell_ref,
+    month_range_ref,
+    month_col_end as _month_col_end,
+    val_columns,
     wp_active_months,
 )
 from budget_planner.styles import (
-    BLUE_INPUT, BLACK_FORMULA, GREEN_XREF, HEADER_FONT, SECTION_FONT,
-    GREY_FILL, LIGHT_BLUE_FILL, LIGHT_GREEN_FILL,
+    BLUE_INPUT,
+    BLACK_FORMULA,
+    GREEN_XREF,
+    HEADER_FONT,
+    SECTION_FONT,
+    GREY_FILL,
+    LIGHT_BLUE_FILL,
+    LIGHT_GREEN_FILL,
     SECTION_FILL,
-    WITH_INDIRECT_HEADER_FILL, WITHOUT_INDIRECT_HEADER_FILL,
-    CF_RED_FILL, CF_AMBER_FILL, CF_GREY_FILL,
+    WITH_INDIRECT_HEADER_FILL,
+    WITHOUT_INDIRECT_HEADER_FILL,
+    CF_RED_FILL,
+    CF_AMBER_FILL,
+    CF_GREY_FILL,
     CENTER,
-    sized_comment, style_cell, col_letter,
+    sized_comment,
+    style_cell,
+    col_letter,
 )
 from budget_planner import config
 
@@ -103,9 +122,14 @@ def _resolve_actuals_layout(project_params, work_packages, layout):
     # at offsets 7..12 stay outside (default-visible).
     _minus_i_band_cols = (
         *range(month_col_start, month_col_end + 1),
-        val_col_slope, val_col_budget, val_col_diff,
-        val_col_posted, val_col_pct_ceil, val_col_breach,
-        val_col_posted_idx, val_col_posted_value,
+        val_col_slope,
+        val_col_budget,
+        val_col_diff,
+        val_col_posted,
+        val_col_pct_ceil,
+        val_col_breach,
+        val_col_posted_idx,
+        val_col_posted_value,
     )
 
     config_first_wp_row = layout["config_first_wp_row"]
@@ -133,6 +157,79 @@ def _resolve_actuals_layout(project_params, work_packages, layout):
     }
 
 
+def _month_index_range_ref(alayout):
+    """Absolute A1 ref for the literal month-index row, e.g. ``$C$4:$AT$4``.
+
+    Requires ``alayout["midx_row"]``, published by ``build_actuals_sheet``
+    once the row geometry is known.
+    """
+    ms = col_letter(alayout["month_col_start"])
+    me = col_letter(alayout["month_col_end"])
+    midx_row = alayout["midx_row"]
+    return f"${ms}${midx_row}:${me}${midx_row}"
+
+
+def _write_month_index_row(ws, r, alayout):
+    """Write the hidden literal month-index row (1..N) used by the array
+    scans instead of ``COLUMN(range)``.
+
+    ``COLUMN(range)`` is NOT broken under plain entry — it array-evaluates
+    correctly inside ``SUMPRODUCT`` (proven against Excel-computed values in
+    ``2026-07-27-isnumber-array-context-excel-fix.md``). This row exists
+    because a literal index is clearer than the ``COLUMN()-COLUMN()+1``
+    arithmetic, matching the ``grid_midx_row`` idiom in ``timelog_plan.py``.
+    The construct that genuinely lacks array context in Excel is
+    ``ISNUMBER(range)`` — see the posted-scan comments; use ``(range<>"")``.
+
+    Placement differs from ``timelog_plan.py`` deliberately: this row sits
+    ABOVE the year/month headers, because ``readers/actuals.py`` derives
+    ``first_wp_row`` as the row after the "WP ID" header — a literal row
+    directly beneath that header would be read back as WP data on rebuild.
+
+    **Rule 3 deviation (font-color convention).** These cells hold literal
+    integers but are NOT blue user input — they are builder-written
+    structural metadata, the same carve-out ``config_sheet.py`` uses for its
+    version stamp. Per ``.claude/rules/openpyxl.md`` that deviation owes both
+    a builder-code note (this docstring) and an in-cell comment, written
+    below. Grey/8pt/borderless matches ``timelog_plan.py``'s ``grid_midx_row``
+    so the row reads as machinery rather than data if ever unhidden.
+
+    The row is load-bearing and the workbook is unprotected: clearing it
+    zeroes every ``posted_idx`` and the ``C1`` scan, which reproduces the
+    exact blank-column symptom this row exists to fix. Hence ``hidden=True``
+    (not an outline group — a lone grouped row would add a row-outline
+    gutter to a sheet that has only column groups).
+    """
+    month_col_start = alayout["month_col_start"]
+    month_col_end = alayout["month_col_end"]
+    _midx_font = Font(name="Arial", color="808080", size=8)
+    style_cell(
+        ws,
+        r,
+        1,
+        value="(month idx)",
+        font=Font(name="Arial", italic=True, color="808080", size=8),
+        border=False,
+    )
+    for c in range(month_col_start, month_col_end + 1):
+        style_cell(
+            ws,
+            r,
+            c,
+            value=c - month_col_start + 1,
+            font=_midx_font,
+            alignment=CENTER,
+            border=False,
+        )
+    ws.cell(row=r, column=month_col_start).comment = sized_comment(
+        "Builder-written month index (1..N). Do not edit or clear — every "
+        "posted_idx helper and the C1 through-month scan multiply against "
+        "this row; blanking it returns 0 from all of them and blanks every "
+        "guarded -i/+i column. Grey = builder metadata, not user input."
+    )
+    ws.row_dimensions[r].hidden = True
+
+
 def _write_asof_header_row(ws, r, alayout):
     """Write the "Posted through:" header row (row 2 — shifted down by the
     row 1 through-month strip).
@@ -146,12 +243,17 @@ def _write_asof_header_row(ws, r, alayout):
     """
     del alayout  # signature kept consistent with peer helpers
     _ASOF_DATE_FMT = "MMM YYYY"
-    style_cell(ws, r, 2, value="Posted through:", font=HEADER_FONT,
-               fill=LIGHT_BLUE_FILL, border=False)
-    style_cell(ws, r, 3,
-               value="=EDATE(project_start, eur_actuals_through_month - 1)",
-               font=GREEN_XREF, fill=LIGHT_BLUE_FILL,
-               fmt=_ASOF_DATE_FMT, border=False)
+    style_cell(ws, r, 2, value="Posted through:", font=HEADER_FONT, fill=LIGHT_BLUE_FILL, border=False)
+    style_cell(
+        ws,
+        r,
+        3,
+        value="=EDATE(project_start, eur_actuals_through_month - 1)",
+        font=GREEN_XREF,
+        fill=LIGHT_BLUE_FILL,
+        fmt=_ASOF_DATE_FMT,
+        border=False,
+    )
 
 
 def _write_section_headers(ws, r, alayout):
@@ -168,10 +270,8 @@ def _write_section_headers(ws, r, alayout):
     val_col_breach_pi = alayout["val_col_breach_pi"]
 
     def _section_header(first_col, last_col, label):
-        ws.merge_cells(start_row=r, start_column=first_col,
-                       end_row=r, end_column=last_col)
-        style_cell(ws, r, first_col, label, font=SECTION_FONT,
-                   fill=SECTION_FILL, alignment=CENTER)
+        ws.merge_cells(start_row=r, start_column=first_col, end_row=r, end_column=last_col)
+        style_cell(ws, r, first_col, label, font=SECTION_FONT, fill=SECTION_FILL, alignment=CENTER)
         for c2 in range(first_col + 1, last_col + 1):
             style_cell(ws, r, c2, fill=SECTION_FILL)
 
@@ -186,12 +286,20 @@ def _apply_header_fill_overrides(ws, year_row, month_row, alayout):
     visually distinguishable at the month-header row).
     """
     _minus_i_header_cols = (
-        alayout["val_col_slope"], alayout["val_col_budget"], alayout["val_col_diff"],
-        alayout["val_col_posted"], alayout["val_col_pct_ceil"], alayout["val_col_breach"],
+        alayout["val_col_slope"],
+        alayout["val_col_budget"],
+        alayout["val_col_diff"],
+        alayout["val_col_posted"],
+        alayout["val_col_pct_ceil"],
+        alayout["val_col_breach"],
     )
     _plus_i_header_cols = (
-        alayout["val_col_slope_pi"], alayout["val_col_budget_pi"], alayout["val_col_diff_pi"],
-        alayout["val_col_posted_pi"], alayout["val_col_pct_ceil_pi"], alayout["val_col_breach_pi"],
+        alayout["val_col_slope_pi"],
+        alayout["val_col_budget_pi"],
+        alayout["val_col_diff_pi"],
+        alayout["val_col_posted_pi"],
+        alayout["val_col_pct_ceil_pi"],
+        alayout["val_col_breach_pi"],
     )
     for c in _minus_i_header_cols:
         ws.cell(year_row, c).fill = WITHOUT_INDIRECT_HEADER_FILL
@@ -217,8 +325,7 @@ def _append_minus_i_year_anchor_suffix(ws, year_row, month_col_start):
         _year_anchor.value = "-i"
 
 
-def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved,
-                   project_params):
+def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved, project_params):
     """Write one row per WP — blue-input posted-cumulative EUR cells +
     -i visible rollups + +i mirrors + hidden helpers (posted_idx /
     posted_value).
@@ -229,7 +336,7 @@ def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved,
     posted through that month (blank = no posting recorded). Visible
     Posted -i / Slope -i / Variance / % / Breach -i columns are derived
     from the two hidden helper cells (posted_idx, posted_value); see
-    ``docs/plans/archived/2026-05-09-actuals-posted-cumulative-design.md`` § 2.
+    ``docs/plans/archive/2026-05-09-actuals-posted-cumulative-design.md`` § 2.
     """
     month_col_start = alayout["month_col_start"]
     month_col_end = alayout["month_col_end"]
@@ -249,7 +356,7 @@ def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved,
     val_col_posted_idx = alayout["val_col_posted_idx"]
     val_col_posted_value = alayout["val_col_posted_value"]
 
-    ms = col_letter(month_col_start)
+    midx_range = _month_index_range_ref(alayout)
 
     r = first_wp_row
     for i, wp in enumerate(work_packages):
@@ -269,14 +376,17 @@ def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved,
             c = month_col_start + m_idx
             month_num = m_idx + 1
             if month_num in active:
-                if preserved_values is not None and m_idx < len(preserved_values) and preserved_values[m_idx] is not None:
+                if (
+                    preserved_values is not None
+                    and m_idx < len(preserved_values)
+                    and preserved_values[m_idx] is not None
+                ):
                     eur_value: int | float = preserved_values[m_idx]
                     style_cell(ws, row, c, eur_value, font=BLUE_INPUT, fmt="€#,##0")
                 else:
                     style_cell(ws, row, c, font=BLUE_INPUT, fmt="€#,##0")
             else:
-                style_cell(ws, row, c, "", font=BLUE_INPUT, fill=GREY_FILL,
-                           fmt="€#,##0")
+                style_cell(ws, row, c, "", font=BLUE_INPUT, fill=GREY_FILL, fmt="€#,##0")
 
         # ── Hidden helpers (outline-grouped, BLACK_FORMULA). Written
         #     BEFORE the visible -i columns so the visible-column
@@ -285,63 +395,61 @@ def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved,
         # at-or-before current_month. SUMPRODUCT-MAX-array form is the
         # banned-pattern-safe replacement for MATCH/LOOKUP under
         # openpyxl + LO recalc (see openpyxl.md § Core patterns).
+        # The posted test is ({range}<>""), NOT ISNUMBER({range}): inside a
+        # non-CSE formula Excel gives ISNUMBER(range) no array context — it
+        # collapses to a scalar and MAX(...*ISNUMBER(range)) returns 0, which
+        # blanks every guarded +i/-i column. LibreOffice array-evaluates it
+        # correctly, so no LO-recalced test can see the defect. (<>"") is the
+        # form timelog_plan.py already proves in Excel. The month index comes
+        # from the literal midx row; COLUMN(range) is NOT the problem — it
+        # array-evaluates fine inside SUMPRODUCT — but the literal row is
+        # clearer and stays.
         wp_range = month_range_ref(row, month_col_start, month_col_end)
         idx_l = col_letter(val_col_posted_idx)
         val_l = col_letter(val_col_posted_value)
-        style_cell(ws, row, val_col_posted_idx, font=BLACK_FORMULA,
-                   fmt="0").value = (
-            f"=SUMPRODUCT(MAX("
-            f"(COLUMN({wp_range})-COLUMN(${ms}$1)+1<=current_month)"
-            f"*(COLUMN({wp_range})-COLUMN(${ms}$1)+1)"
-            f"*ISNUMBER({wp_range})"
-            f"))"
-        )
+        style_cell(
+            ws, row, val_col_posted_idx, font=BLACK_FORMULA, fmt="0"
+        ).value = f'=SUMPRODUCT(MAX(({midx_range}<=current_month)*{midx_range}*({wp_range}<>"")))'
         # posted_value: INDEX into the WP row at posted_idx; "" when
         # posted_idx=0 (no postings yet) so downstream consumers can
         # treat the empty-string sentinel as "no data."
-        style_cell(ws, row, val_col_posted_value, font=BLACK_FORMULA,
-                   fmt="€#,##0").value = (
-            f"=IFERROR(INDEX({wp_range},{idx_l}{row}),\"\")"
-        )
+        style_cell(
+            ws, row, val_col_posted_value, font=BLACK_FORMULA, fmt="€#,##0"
+        ).value = f'=IFERROR(INDEX({wp_range},{idx_l}{row}),"")'
 
         # ── -i visible rollup block (inside collapsible band) ──
         # Slope -i: avg-burn = posted_value / posted_idx (per design §3).
         # Guard against /0 when no postings; "" sentinel surfaces as
         # blank in display.
-        style_cell(ws, row, val_col_slope, font=BLACK_FORMULA,
-                   fmt="€#,##0").value = (
-            f'=IF({idx_l}{row}=0,"",{val_l}{row}/{idx_l}{row})'
-        )
+        style_cell(
+            ws, row, val_col_slope, font=BLACK_FORMULA, fmt="€#,##0"
+        ).value = f'=IF({idx_l}{row}=0,"",{val_l}{row}/{idx_l}{row})'
         # Budget -i (from Config WP Budget -i column — the black-formula
         # cell that derives = Budget +i / 1.25, so the numeric value here
         # matches the legacy Ceiling value)
-        style_cell(ws, row, val_col_budget, font=GREEN_XREF,
-                   fmt="€#,##0").value = (
-            f"={cell_ref(SHEET_CONFIG, config_row, COL_WP_BUDGET_MINUS_I, absolute=False)}"
-        )
+        style_cell(
+            ws, row, val_col_budget, font=GREEN_XREF, fmt="€#,##0"
+        ).value = f"={cell_ref(SHEET_CONFIG, config_row, COL_WP_BUDGET_MINUS_I, absolute=False)}"
         # Posted -i: latest filled cumulative through current_month.
         # Identical formula to the posted_value helper — cell-level
         # redundancy is intentional (user clicks the cell, sees the
         # calc; the helper is hidden).
-        style_cell(ws, row, val_col_posted, font=BLACK_FORMULA,
-                   fmt="€#,##0").value = (
-            f"=IFERROR(INDEX({wp_range},{idx_l}{row}),\"\")"
-        )
+        style_cell(
+            ws, row, val_col_posted, font=BLACK_FORMULA, fmt="€#,##0"
+        ).value = f'=IFERROR(INDEX({wp_range},{idx_l}{row}),"")'
         budget_l = col_letter(val_col_budget)
         posted_l = col_letter(val_col_posted)
         # Variance -i = Budget -i - Posted -i. Guarded by posted_idx so
         # "" (no postings) surfaces as blank, not a misleading
         # Budget-minus-empty.
-        style_cell(ws, row, val_col_diff, font=BLACK_FORMULA,
-                   fmt="€#,##0").value = (
-            f'=IF({idx_l}{row}=0,"",{budget_l}{row}-{posted_l}{row})'
-        )
+        style_cell(
+            ws, row, val_col_diff, font=BLACK_FORMULA, fmt="€#,##0"
+        ).value = f'=IF({idx_l}{row}=0,"",{budget_l}{row}-{posted_l}{row})'
         # % of Budget -i = Posted -i / Budget -i. Same blank-sentinel
         # guard as Variance.
-        style_cell(ws, row, val_col_pct_ceil, font=BLACK_FORMULA,
-                   fmt="0.0%").value = (
-            f'=IF({idx_l}{row}=0,"",{posted_l}{row}/{budget_l}{row})'
-        )
+        style_cell(
+            ws, row, val_col_pct_ceil, font=BLACK_FORMULA, fmt="0.0%"
+        ).value = f'=IF({idx_l}{row}=0,"",{posted_l}{row}/{budget_l}{row})'
         # Breach-In -i = months until Budget -i exhausted at posted-to-
         # date rate. Denominator inlines MAX(1,
         # eur_actuals_through_month) so the slope reflects spend per
@@ -349,8 +457,7 @@ def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved,
         # Outer guard: posted_idx=0 → ""; inner guard preserves the
         # legacy Posted=0 → "—" branch (genuine zero spend, distinct
         # from "no postings yet").
-        style_cell(ws, row, val_col_breach, font=BLACK_FORMULA,
-                   fmt="0").value = (
+        style_cell(ws, row, val_col_breach, font=BLACK_FORMULA, fmt="0").value = (
             f'=IF({idx_l}{row}=0,"",'
             f'IF({posted_l}{row}=0,"—",'
             f"({budget_l}{row}-{posted_l}{row})"
@@ -360,38 +467,32 @@ def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved,
         # ── +i mirror block (default-visible) ──
         # Slope +i = ROUND(Slope -i * 1.25, 0).
         slope_l = col_letter(val_col_slope)
-        style_cell(ws, row, val_col_slope_pi, font=BLACK_FORMULA,
-                   fmt="€#,##0").value = (
-            f'=IF({idx_l}{row}=0,"",ROUND({slope_l}{row}*1.25,0))'
-        )
+        style_cell(
+            ws, row, val_col_slope_pi, font=BLACK_FORMULA, fmt="€#,##0"
+        ).value = f'=IF({idx_l}{row}=0,"",ROUND({slope_l}{row}*1.25,0))'
         # Budget +i = INDEX(wp_budget_with_indirect, i+1). This targets
         # the Config Budget +i column directly and is already
         # with-indirect, so NO ×1.25 applied.
-        style_cell(ws, row, val_col_budget_pi, font=GREEN_XREF,
-                   fmt="€#,##0").value = (
-            f"=INDEX(wp_budget_with_indirect,{i + 1})"
-        )
+        style_cell(
+            ws, row, val_col_budget_pi, font=GREEN_XREF, fmt="€#,##0"
+        ).value = f"=INDEX(wp_budget_with_indirect,{i + 1})"
         # Posted +i = ROUND(Posted -i * 1.25, 0). Same blank-sentinel
         # guard as Slope.
-        style_cell(ws, row, val_col_posted_pi, font=BLACK_FORMULA,
-                   fmt="€#,##0").value = (
-            f'=IF({idx_l}{row}=0,"",ROUND({posted_l}{row}*1.25,0))'
-        )
+        style_cell(
+            ws, row, val_col_posted_pi, font=BLACK_FORMULA, fmt="€#,##0"
+        ).value = f'=IF({idx_l}{row}=0,"",ROUND({posted_l}{row}*1.25,0))'
         budget_pi_l = col_letter(val_col_budget_pi)
         posted_pi_l = col_letter(val_col_posted_pi)
         # Variance +i = Budget +i - Posted +i (guarded).
-        style_cell(ws, row, val_col_diff_pi, font=BLACK_FORMULA,
-                   fmt="€#,##0").value = (
-            f'=IF({idx_l}{row}=0,"",{budget_pi_l}{row}-{posted_pi_l}{row})'
-        )
+        style_cell(
+            ws, row, val_col_diff_pi, font=BLACK_FORMULA, fmt="€#,##0"
+        ).value = f'=IF({idx_l}{row}=0,"",{budget_pi_l}{row}-{posted_pi_l}{row})'
         # % of Budget +i = Posted +i / Budget +i (guarded).
-        style_cell(ws, row, val_col_pct_ceil_pi, font=BLACK_FORMULA,
-                   fmt="0.0%").value = (
-            f'=IF({idx_l}{row}=0,"",{posted_pi_l}{row}/{budget_pi_l}{row})'
-        )
+        style_cell(
+            ws, row, val_col_pct_ceil_pi, font=BLACK_FORMULA, fmt="0.0%"
+        ).value = f'=IF({idx_l}{row}=0,"",{posted_pi_l}{row}/{budget_pi_l}{row})'
         # Breach-In +i — same shape as -i, against the +i cells.
-        style_cell(ws, row, val_col_breach_pi, font=BLACK_FORMULA,
-                   fmt="0").value = (
+        style_cell(ws, row, val_col_breach_pi, font=BLACK_FORMULA, fmt="0").value = (
             f'=IF({idx_l}{row}=0,"",'
             f'IF({posted_pi_l}{row}=0,"—",'
             f"({budget_pi_l}{row}-{posted_pi_l}{row})"
@@ -402,8 +503,7 @@ def _write_wp_rows(ws, first_wp_row, alayout, work_packages, preserved,
     return last_wp_row
 
 
-def _write_total_row_monthly_grid(ws, total_row, first_wp_row, last_wp_row,
-                                  alayout, project_params):
+def _write_total_row_monthly_grid(ws, total_row, first_wp_row, last_wp_row, alayout, project_params):
     """Write the TOTAL row label + the monthly-grid SUM cells."""
     month_col_start = alayout["month_col_start"]
     style_cell(ws, total_row, 1, "", fill=LIGHT_GREEN_FILL)
@@ -411,8 +511,9 @@ def _write_total_row_monthly_grid(ws, total_row, first_wp_row, last_wp_row,
     for m_idx in range(project_params["months"]):
         c = month_col_start + m_idx
         col_range = f"{col_letter(c)}{first_wp_row}:{col_letter(c)}{last_wp_row}"
-        style_cell(ws, total_row, c, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-                   fmt="€#,##0").value = f"=SUM({col_range})"
+        style_cell(
+            ws, total_row, c, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="€#,##0"
+        ).value = f"=SUM({col_range})"
 
 
 def _write_total_row_minus_i(ws, total_row, first_wp_row, last_wp_row, alayout):
@@ -434,35 +535,32 @@ def _write_total_row_minus_i(ws, total_row, first_wp_row, last_wp_row, alayout):
     val_col_breach = alayout["val_col_breach"]
 
     # Slope -i = SUM over WP -i Slope column (avg-burn aggregated).
-    slope_range = (f"{col_letter(val_col_slope)}{first_wp_row}:"
-                   f"{col_letter(val_col_slope)}{last_wp_row}")
-    style_cell(ws, r, val_col_slope, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="€#,##0").value = f"=SUM({slope_range})"
+    slope_range = f"{col_letter(val_col_slope)}{first_wp_row}:{col_letter(val_col_slope)}{last_wp_row}"
+    style_cell(
+        ws, r, val_col_slope, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="€#,##0"
+    ).value = f"=SUM({slope_range})"
     # Budget -i = partner_ceiling (without-indirect).
-    style_cell(ws, r, val_col_budget, font=GREEN_XREF, fill=LIGHT_GREEN_FILL,
-               fmt="€#,##0").value = "=partner_ceiling"
+    style_cell(ws, r, val_col_budget, font=GREEN_XREF, fill=LIGHT_GREEN_FILL, fmt="€#,##0").value = "=partner_ceiling"
     # Posted -i = SUM over WP -i Posted column.
-    posted_range = (f"{col_letter(val_col_posted)}{first_wp_row}:"
-                    f"{col_letter(val_col_posted)}{last_wp_row}")
-    style_cell(ws, r, val_col_posted, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="€#,##0").value = f"=SUM({posted_range})"
+    posted_range = f"{col_letter(val_col_posted)}{first_wp_row}:{col_letter(val_col_posted)}{last_wp_row}"
+    style_cell(
+        ws, r, val_col_posted, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="€#,##0"
+    ).value = f"=SUM({posted_range})"
     # Variance -i = Budget -i - Posted -i
-    style_cell(ws, r, val_col_diff, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="€#,##0").value = (
-        f"={col_letter(val_col_budget)}{r}"
-        f"-{col_letter(val_col_posted)}{r}"
-    )
+    style_cell(
+        ws, r, val_col_diff, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="€#,##0"
+    ).value = f"={col_letter(val_col_budget)}{r}-{col_letter(val_col_posted)}{r}"
     # % of Budget -i = Posted -i / partner_ceiling
     posted_l = col_letter(val_col_posted)
-    style_cell(ws, r, val_col_pct_ceil, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="0.0%").value = f"={posted_l}{r}/partner_ceiling"
+    style_cell(
+        ws, r, val_col_pct_ceil, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="0.0%"
+    ).value = f"={posted_l}{r}/partner_ceiling"
     # Breach-In -i — inlines MAX(1, eur_actuals_through_month). At the
     # TOTAL level we treat aggregate Posted=0 as "no spend yet" → "—".
-    style_cell(ws, r, val_col_breach, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="0").value = (
-        f'=IF({posted_l}{r}=0,"—",'
-        f"(partner_ceiling-{posted_l}{r})"
-        f"/({posted_l}{r}/MAX(1,eur_actuals_through_month)))"
+    style_cell(
+        ws, r, val_col_breach, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="0"
+    ).value = (
+        f'=IF({posted_l}{r}=0,"—",(partner_ceiling-{posted_l}{r})/({posted_l}{r}/MAX(1,eur_actuals_through_month)))'
     )
 
 
@@ -477,40 +575,38 @@ def _write_total_row_plus_i(ws, total_row, first_wp_row, last_wp_row, alayout):
     val_col_breach_pi = alayout["val_col_breach_pi"]
 
     # Slope +i = SUM over WP +i Slope column.
-    slope_pi_range = (f"{col_letter(val_col_slope_pi)}{first_wp_row}:"
-                      f"{col_letter(val_col_slope_pi)}{last_wp_row}")
-    style_cell(ws, r, val_col_slope_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="€#,##0").value = f"=SUM({slope_pi_range})"
+    slope_pi_range = f"{col_letter(val_col_slope_pi)}{first_wp_row}:{col_letter(val_col_slope_pi)}{last_wp_row}"
+    style_cell(
+        ws, r, val_col_slope_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="€#,##0"
+    ).value = f"=SUM({slope_pi_range})"
     # Budget +i = partner_ceiling * 1.25. (The partner_ceiling named range
     # is -i; consumers apply ×1.25 — no separate +i named range.)
-    style_cell(ws, r, val_col_budget_pi, font=GREEN_XREF, fill=LIGHT_GREEN_FILL,
-               fmt="€#,##0").value = "=ROUND(partner_ceiling*1.25,0)"
+    style_cell(
+        ws, r, val_col_budget_pi, font=GREEN_XREF, fill=LIGHT_GREEN_FILL, fmt="€#,##0"
+    ).value = "=ROUND(partner_ceiling*1.25,0)"
     # Posted +i = SUM over WP +i Posted column.
-    posted_pi_range = (f"{col_letter(val_col_posted_pi)}{first_wp_row}:"
-                       f"{col_letter(val_col_posted_pi)}{last_wp_row}")
-    style_cell(ws, r, val_col_posted_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="€#,##0").value = f"=SUM({posted_pi_range})"
+    posted_pi_range = f"{col_letter(val_col_posted_pi)}{first_wp_row}:{col_letter(val_col_posted_pi)}{last_wp_row}"
+    style_cell(
+        ws, r, val_col_posted_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="€#,##0"
+    ).value = f"=SUM({posted_pi_range})"
     # Variance +i = Budget +i - Posted +i
-    style_cell(ws, r, val_col_diff_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="€#,##0").value = (
-        f"={col_letter(val_col_budget_pi)}{r}"
-        f"-{col_letter(val_col_posted_pi)}{r}"
-    )
+    style_cell(
+        ws, r, val_col_diff_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="€#,##0"
+    ).value = f"={col_letter(val_col_budget_pi)}{r}-{col_letter(val_col_posted_pi)}{r}"
     # % of Budget +i = Posted +i / (partner_ceiling * 1.25)
     posted_pi_l = col_letter(val_col_posted_pi)
-    style_cell(ws, r, val_col_pct_ceil_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="0.0%").value = f"={posted_pi_l}{r}/(partner_ceiling*1.25)"
+    style_cell(
+        ws, r, val_col_pct_ceil_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="0.0%"
+    ).value = f"={posted_pi_l}{r}/(partner_ceiling*1.25)"
     # Breach-In +i — same shape as -i, against +i cells.
-    style_cell(ws, r, val_col_breach_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL,
-               fmt="0").value = (
+    style_cell(ws, r, val_col_breach_pi, font=BLACK_FORMULA, fill=LIGHT_GREEN_FILL, fmt="0").value = (
         f'=IF({posted_pi_l}{r}=0,"—",'
         f"((partner_ceiling*1.25)-{posted_pi_l}{r})"
         f"/({posted_pi_l}{r}/MAX(1,eur_actuals_through_month)))"
     )
 
 
-def _apply_conditional_formatting(ws, first_wp_row, last_wp_row, total_row,
-                                  alayout):
+def _apply_conditional_formatting(ws, first_wp_row, last_wp_row, total_row, alayout):
     """Apply all conditional-formatting rules.
 
     CF priority is order-sensitive (first added = highest priority). The
@@ -530,61 +626,99 @@ def _apply_conditional_formatting(ws, first_wp_row, last_wp_row, total_row,
     # -- Conditional formatting: red on negative variance --
     diff_col_l = col_letter(val_col_diff)
     cell_range = f"{diff_col_l}{first_wp_row}:{diff_col_l}{last_wp_row}"
-    ws.conditional_formatting.add(cell_range, FormulaRule(
-        formula=[f"{diff_col_l}{first_wp_row}<0"], fill=CF_RED_FILL,
-    ))
+    ws.conditional_formatting.add(
+        cell_range,
+        FormulaRule(
+            formula=[f"{diff_col_l}{first_wp_row}<0"],
+            fill=CF_RED_FILL,
+        ),
+    )
 
     # -- Conditional formatting: % Ceiling column (amber >ACTUALS_AMBER_PCT_CEIL, red >100%) --
     # Red first = highest priority (lower number wins in Excel CF)
     pct_col_l = col_letter(val_col_pct_ceil)
     pct_range = f"{pct_col_l}{first_wp_row}:{pct_col_l}{last_wp_row}"
-    ws.conditional_formatting.add(pct_range, FormulaRule(
-        formula=[f"{pct_col_l}{first_wp_row}>1"], fill=CF_RED_FILL,
-    ))
-    ws.conditional_formatting.add(pct_range, FormulaRule(
-        formula=[f"{pct_col_l}{first_wp_row}>{ACTUALS_AMBER_PCT_CEIL}"], fill=CF_AMBER_FILL,
-    ))
+    ws.conditional_formatting.add(
+        pct_range,
+        FormulaRule(
+            formula=[f"{pct_col_l}{first_wp_row}>1"],
+            fill=CF_RED_FILL,
+        ),
+    )
+    ws.conditional_formatting.add(
+        pct_range,
+        FormulaRule(
+            formula=[f"{pct_col_l}{first_wp_row}>{ACTUALS_AMBER_PCT_CEIL}"],
+            fill=CF_AMBER_FILL,
+        ),
+    )
 
-    # -- Conditional formatting: Breach In column (amber <ACTUALS_AMBER_BREACH_MONTHS, red <ACTUALS_RED_BREACH_MONTHS) --
+    # -- Conditional formatting: Breach In column --
+    # (amber <ACTUALS_AMBER_BREACH_MONTHS, red <ACTUALS_RED_BREACH_MONTHS)
     # Red first = highest priority
     breach_col_l = col_letter(val_col_breach)
     breach_range = f"{breach_col_l}{first_wp_row}:{breach_col_l}{last_wp_row}"
-    ws.conditional_formatting.add(breach_range, FormulaRule(
-        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_RED_BREACH_MONTHS}"], fill=CF_RED_FILL,
-    ))
-    ws.conditional_formatting.add(breach_range, FormulaRule(
-        formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_AMBER_BREACH_MONTHS}"], fill=CF_AMBER_FILL,
-    ))
+    ws.conditional_formatting.add(
+        breach_range,
+        FormulaRule(
+            formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_RED_BREACH_MONTHS}"],
+            fill=CF_RED_FILL,
+        ),
+    )
+    ws.conditional_formatting.add(
+        breach_range,
+        FormulaRule(
+            formula=[f"{breach_col_l}{first_wp_row}<{ACTUALS_AMBER_BREACH_MONTHS}"],
+            fill=CF_AMBER_FILL,
+        ),
+    )
 
     # ── Conditional formatting: +i mirror block. Every -i CF rule above
     # has a +i sibling targeting the mirror columns. ──
     # Variance +i: red if < 0
     diff_pi_col_l = col_letter(val_col_diff_pi)
     diff_pi_range = f"{diff_pi_col_l}{first_wp_row}:{diff_pi_col_l}{last_wp_row}"
-    ws.conditional_formatting.add(diff_pi_range, FormulaRule(
-        formula=[f"{diff_pi_col_l}{first_wp_row}<0"], fill=CF_RED_FILL,
-    ))
+    ws.conditional_formatting.add(
+        diff_pi_range,
+        FormulaRule(
+            formula=[f"{diff_pi_col_l}{first_wp_row}<0"],
+            fill=CF_RED_FILL,
+        ),
+    )
     # % of Budget +i: red >100%, amber >=ACTUALS_AMBER_PCT_CEIL
     pct_pi_col_l = col_letter(val_col_pct_ceil_pi)
     pct_pi_range = f"{pct_pi_col_l}{first_wp_row}:{pct_pi_col_l}{last_wp_row}"
-    ws.conditional_formatting.add(pct_pi_range, FormulaRule(
-        formula=[f"{pct_pi_col_l}{first_wp_row}>1"], fill=CF_RED_FILL,
-    ))
-    ws.conditional_formatting.add(pct_pi_range, FormulaRule(
-        formula=[f"{pct_pi_col_l}{first_wp_row}>{ACTUALS_AMBER_PCT_CEIL}"],
-        fill=CF_AMBER_FILL,
-    ))
+    ws.conditional_formatting.add(
+        pct_pi_range,
+        FormulaRule(
+            formula=[f"{pct_pi_col_l}{first_wp_row}>1"],
+            fill=CF_RED_FILL,
+        ),
+    )
+    ws.conditional_formatting.add(
+        pct_pi_range,
+        FormulaRule(
+            formula=[f"{pct_pi_col_l}{first_wp_row}>{ACTUALS_AMBER_PCT_CEIL}"],
+            fill=CF_AMBER_FILL,
+        ),
+    )
     # Breach-In +i: red/amber bands
     breach_pi_col_l = col_letter(val_col_breach_pi)
     breach_pi_range = f"{breach_pi_col_l}{first_wp_row}:{breach_pi_col_l}{last_wp_row}"
-    ws.conditional_formatting.add(breach_pi_range, FormulaRule(
-        formula=[f"{breach_pi_col_l}{first_wp_row}<{ACTUALS_RED_BREACH_MONTHS}"],
-        fill=CF_RED_FILL,
-    ))
-    ws.conditional_formatting.add(breach_pi_range, FormulaRule(
-        formula=[f"{breach_pi_col_l}{first_wp_row}<{ACTUALS_AMBER_BREACH_MONTHS}"],
-        fill=CF_AMBER_FILL,
-    ))
+    ws.conditional_formatting.add(
+        breach_pi_range,
+        FormulaRule(
+            formula=[f"{breach_pi_col_l}{first_wp_row}<{ACTUALS_RED_BREACH_MONTHS}"],
+            fill=CF_RED_FILL,
+        ),
+    )
+    ws.conditional_formatting.add(
+        breach_pi_range,
+        FormulaRule(
+            formula=[f"{breach_pi_col_l}{first_wp_row}<{ACTUALS_AMBER_BREACH_MONTHS}"],
+            fill=CF_AMBER_FILL,
+        ),
+    )
 
     # ── Reconciliation visual: grey out monthly Actual EUR cells whose
     # month index is past the user-controlled `eur_actuals_through_month`
@@ -595,13 +729,13 @@ def _apply_conditional_formatting(ws, first_wp_row, last_wp_row, total_row,
     ms = col_letter(month_col_start)
     me = col_letter(month_col_end)
     actual_eur_range = f"{ms}{first_wp_row}:{me}{total_row}"
-    ws.conditional_formatting.add(actual_eur_range, FormulaRule(
-        formula=[
-            f"COLUMN({ms}{first_wp_row})-COLUMN(${ms}$1)+1"
-            f">eur_actuals_through_month"
-        ],
-        fill=CF_GREY_FILL,
-    ))
+    ws.conditional_formatting.add(
+        actual_eur_range,
+        FormulaRule(
+            formula=[f"COLUMN({ms}{first_wp_row})-COLUMN(${ms}$1)+1>eur_actuals_through_month"],
+            fill=CF_GREY_FILL,
+        ),
+    )
 
 
 def _apply_outline_group(ws, alayout):
@@ -621,13 +755,13 @@ def _apply_outline_group(ws, alayout):
         dim.hidden = True
     if ws.sheet_properties.outlinePr is None:
         from openpyxl.worksheet.properties import Outline
+
         ws.sheet_properties.outlinePr = Outline(summaryRight=True)
     else:
         ws.sheet_properties.outlinePr.summaryRight = True
 
 
-def _write_through_month_strip(ws, first_wp_row, last_wp_row, alayout,
-                               eur_through_override):
+def _write_through_month_strip(ws, first_wp_row, last_wp_row, alayout, eur_through_override):
     """Write the row 1 EUR through-month control strip.
 
     A: label, B: override (blue; blank by default), C: auto-derived scan
@@ -637,16 +771,14 @@ def _write_through_month_strip(ws, first_wp_row, last_wp_row, alayout,
     """
     month_col_start = alayout["month_col_start"]
     month_col_end = alayout["month_col_end"]
-    style_cell(ws, 1, 1, value="EUR Actuals Through Month:",
-               font=HEADER_FONT, border=False)
+    style_cell(ws, 1, 1, value="EUR Actuals Through Month:", font=HEADER_FONT, border=False)
     ws.cell(row=1, column=1).comment = sized_comment(
         "Trust boundary for EUR-side cumulative figures. The effective "
         "value in column D is what downstream sheets consume via the "
         "named range `eur_actuals_through_month`. Override (B) beats auto-"
         "derived (C) only when it holds a number."
     )
-    style_cell(ws, 1, 2, value=eur_through_override, font=BLUE_INPUT, fmt="0",
-               border=False)
+    style_cell(ws, 1, 2, value=eur_through_override, font=BLUE_INPUT, fmt="0", border=False)
     ws.cell(row=1, column=2).comment = sized_comment(
         "Optional override — enter an integer month index (1-based) to "
         "force a tighter EUR trust cutoff than the auto-derived value. "
@@ -655,22 +787,20 @@ def _write_through_month_strip(ws, first_wp_row, last_wp_row, alayout,
     )
     ms_strip = col_letter(month_col_start)
     me_strip = col_letter(month_col_end)
-    wp_scan_range = (
-        f"${ms_strip}${first_wp_row}:${me_strip}${last_wp_row}"
-    )
-    style_cell(ws, 1, 3, font=BLACK_FORMULA, fmt="0", border=False).value = (
-        f"=SUMPRODUCT(MAX((COLUMN({wp_scan_range})"
-        f"-COLUMN(${ms_strip}$1)+1)"
-        f"*ISNUMBER({wp_scan_range})))"
-    )
+    wp_scan_range = f"${ms_strip}${first_wp_row}:${me_strip}${last_wp_row}"
+    # The posted test is ({range}<>""), not ISNUMBER({range}) — Excel gives
+    # ISNUMBER(range) no array context outside CSE and the scan returns 0.
+    # The 1xN literal midx row broadcasts against the MxN posted block.
+    midx_range = _month_index_range_ref(alayout)
+    style_cell(
+        ws, 1, 3, font=BLACK_FORMULA, fmt="0", border=False
+    ).value = f'=SUMPRODUCT(MAX({midx_range}*({wp_scan_range}<>"")))'
     ws.cell(row=1, column=3).comment = sized_comment(
         "Auto-derived: largest 1-based month index with any numeric "
         "value in the WP data block (TOTAL row excluded). Returns 0 "
         "when no actuals have been logged yet. Do not edit."
     )
-    style_cell(ws, 1, 4, font=BLACK_FORMULA, fmt="0", border=False).value = (
-        "=IF(ISNUMBER(B1),B1,C1)"
-    )
+    style_cell(ws, 1, 4, font=BLACK_FORMULA, fmt="0", border=False).value = "=IF(ISNUMBER(B1),B1,C1)"
     ws.cell(row=1, column=4).comment = sized_comment(
         "Effective EUR trust cutoff consumed by Actuals, Summary, and "
         "Trends via the named range `eur_actuals_through_month`. Override "
@@ -682,15 +812,17 @@ def _write_through_month_strip(ws, first_wp_row, last_wp_row, alayout,
 def _register_named_ranges(wb):
     """Register the ``eur_actuals_through_month`` named range pointing at
     the row 1 effective cell (Actuals!$D$1)."""
-    wb.defined_names.add(DefinedName(
-        "eur_actuals_through_month",
-        attr_text=f"{SHEET_ACTUALS}!$D$1",
-    ))
+    wb.defined_names.add(
+        DefinedName(
+            "eur_actuals_through_month",
+            attr_text=f"{SHEET_ACTUALS}!$D$1",
+        )
+    )
 
 
-def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
-                        preserved=None,
-                        eur_through_override: int | None = None):
+def build_actuals_sheet(
+    wb, layout, *, project_params=None, work_packages=None, preserved=None, eur_through_override: int | None = None
+):
     """Build the Actuals sheet for posted-cumulative EUR per WP per month.
 
     Monthly EUR cells are always left empty (blue input) for manual entry
@@ -703,7 +835,7 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
         layout: Layout dict from build_plan_sheet(), needs config_first_wp_row.
 
     Returns:
-        Layout dict with keys: asof_row, year_row, month_row,
+        Layout dict with keys: asof_row, midx_row, year_row, month_row,
         first_wp_row, last_wp_row, total_row + per-WP column refs.
     """
     if project_params is None or work_packages is None:
@@ -734,8 +866,22 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     _write_section_headers(ws, r, alayout)
     r += 1
 
+    # -- Hidden literal month-index row (1..N) --
+    #    Feeds the SUMPRODUCT(MAX(...)) scans in place of COLUMN(range) —
+    #    for readability, not correctness (COLUMN(range) evaluates fine).
+    #    Must sit ABOVE the "WP ID" header row — see _write_month_index_row.
+    midx_row = r
+    _write_month_index_row(ws, midx_row, alayout)
+    # Row anchor is only known here (rows are laid out sequentially), so it
+    # is published back into alayout for the scan-writing helpers below.
+    alayout["midx_row"] = midx_row
+    r += 1
+
     year_row, month_row, r = build_year_month_headers(
-        ws, r, project_params, alayout["month_col_start"],
+        ws,
+        r,
+        project_params,
+        alayout["month_col_start"],
         val_headers=[
             # -i visible rollup block (collapsible band)
             (alayout["val_col_slope"], "Slope -i"),
@@ -763,25 +909,43 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
 
     # -- WP rows (blue input EUR cells) --
     last_wp_row = _write_wp_rows(
-        ws, first_wp_row, alayout, work_packages, preserved, project_params,
+        ws,
+        first_wp_row,
+        alayout,
+        work_packages,
+        preserved,
+        project_params,
     )
 
     # -- TOTAL row --
     total_row = last_wp_row + 1
     _write_total_row_monthly_grid(
-        ws, total_row, first_wp_row, last_wp_row, alayout, project_params,
+        ws,
+        total_row,
+        first_wp_row,
+        last_wp_row,
+        alayout,
+        project_params,
     )
     _write_total_row_minus_i(ws, total_row, first_wp_row, last_wp_row, alayout)
     _write_total_row_plus_i(ws, total_row, first_wp_row, last_wp_row, alayout)
 
     _apply_conditional_formatting(
-        ws, first_wp_row, last_wp_row, total_row, alayout,
+        ws,
+        first_wp_row,
+        last_wp_row,
+        total_row,
+        alayout,
     )
     _apply_outline_group(ws, alayout)
 
     # ── Row 1: EUR through-month control strip ──
     _write_through_month_strip(
-        ws, first_wp_row, last_wp_row, alayout, eur_through_override,
+        ws,
+        first_wp_row,
+        last_wp_row,
+        alayout,
+        eur_through_override,
     )
     _register_named_ranges(wb)
 
@@ -790,7 +954,11 @@ def build_actuals_sheet(wb, layout, *, project_params=None, work_packages=None,
     ws.column_dimensions["B"].width = 25
 
     return {
-        "asof_row": 1,       # "Posted through:" header row (T7 addition; section header shifted to row 2)
+        # "Posted through:" header row. Written at row 2 (row 1 is the EUR
+        # through-month control strip); this key read 1 for a long time, which
+        # was simply wrong — no consumer exists, so the correction is inert.
+        "asof_row": 2,
+        "midx_row": midx_row,
         "year_row": year_row,
         "month_row": month_row,
         "first_wp_row": first_wp_row,

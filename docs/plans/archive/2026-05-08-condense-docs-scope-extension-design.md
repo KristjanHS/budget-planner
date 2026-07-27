@@ -23,7 +23,7 @@ The deferred follow-up: extend `condense`'s globs to also cover `<project>/docs/
 
 ## Non-goals
 
-- Editing `docs/plans/archived/**` — frozen post-mortems, never modified.
+- Editing `docs/plans/archive/**` — frozen post-mortems, never modified.
 - Touching `docs/analysis/**` — `.claudeignore`'d one-offs.
 - Auto-firing on hook events. New triggers surface as `/retro` reminders, never invoke condense unprompted.
 - Changes to the bloat-gate's enforcement logic (sentinel cap, override log, tier caps). Only rule *definitions* move.
@@ -93,7 +93,7 @@ Existing 75 hook tests in `tests/hooks/test_docs_bloat_gate_v2.py` cover S2/S3 b
 6. docs/plans/*.md                    (NEW — top level only, no archived/)
 ```
 
-Explicit non-targets: `docs/plans/archived/**`, `docs/analysis/**`.
+Explicit non-targets: `docs/plans/archive/**`, `docs/analysis/**`.
 
 **Phase 2 — Analysis, four new types layered on existing three:**
 

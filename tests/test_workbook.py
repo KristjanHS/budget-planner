@@ -1,4 +1,5 @@
 """Structural checks for the generated workbook — maps from verify.py."""
+
 import re
 
 import pytest
@@ -12,6 +13,7 @@ from budget_planner.workbook import init_workbook
 
 # ── Fixtures that don't need LibreOffice ──
 
+
 @pytest.fixture(scope="module")
 def workbook(fresh_wb_path):
     return openpyxl.load_workbook(fresh_wb_path, data_only=False)
@@ -24,9 +26,9 @@ def layout(workbook):
 
 # ── Check 2-3: Sheet existence + global params ──
 
+
 def test_sheets_exist(workbook):
-    for name in ["Config", "Plan", "Capacity", "Actuals",
-                 "Actuals-Hours", "Summary"]:
+    for name in ["Config", "Plan", "Capacity", "Actuals", "Actuals-Hours", "Summary"]:
         assert name in workbook.sheetnames, f"Missing sheet: {name}"
 
 
@@ -47,12 +49,12 @@ def test_global_params(workbook):
             break
     assert rate_val is not None, "Config FTE Rate cell is empty"
     from openpyxl.worksheet.formula import ArrayFormula
-    assert isinstance(rate_val, (str, ArrayFormula)), (
-        f"Config FTE Rate should be a formula, got: {rate_val}"
-    )
+
+    assert isinstance(rate_val, (str, ArrayFormula)), f"Config FTE Rate should be a formula, got: {rate_val}"
 
 
 # ── Check 4: Named ranges ──
+
 
 def test_named_ranges(workbook):
     defined = {}
@@ -65,6 +67,7 @@ def test_named_ranges(workbook):
 
 
 # ── Check 5: Config table ──
+
 
 @pytest.mark.parametrize("wp_idx", [0, 2])
 def test_wp_config_valid(workbook, layout, wp_idx):
@@ -79,6 +82,7 @@ def test_wp_config_valid(workbook, layout, wp_idx):
 
 
 # ── Check 11: Inactive months empty ──
+
 
 def _wp_indices_with_inactive_months():
     """Find WP indices that have inactive months (start > 1 or end < PROJECT_MONTHS)."""
@@ -103,11 +107,13 @@ def test_inactive_months_empty(workbook, layout, wp_idx):
         col = MONTH_COL_START + m
         if month_num < start or month_num > end:
             val = plan.cell(row, col).value
-            assert val is None or val == "" or val == 0, \
-                f"WP{wp_idx+1} M{month_num} row {row}: '{val}' in inactive month"
+            assert val is None or val == "" or val == 0, (
+                f"WP{wp_idx + 1} M{month_num} row {row}: '{val}' in inactive month"
+            )
 
 
 # ── Check 12: Summary ──
+
 
 def test_summary_wp_count(workbook):
     summary = workbook["Summary"]
@@ -139,18 +145,14 @@ def test_freeze_panes_set_at_column_c(workbook, sheet_name):
     col, row = _parse_freeze_panes(fp)
     assert col == "C", f"{sheet_name} freeze_panes column is '{col}', expected 'C'"
     assert row > 1, f"{sheet_name} freeze_panes row {row} should be > 1"
-    assert row <= ws.max_row, (
-        f"{sheet_name} freeze_panes row {row} exceeds max_row {ws.max_row}"
-    )
+    assert row <= ws.max_row, f"{sheet_name} freeze_panes row {row} exceeds max_row {ws.max_row}"
 
 
 def test_freeze_panes_plan_exact(workbook, layout):
     """Plan freeze_panes is exactly C{planned_first_wp_row}."""
     plan = workbook["Plan"]
     expected = f"C{layout['planned_first_wp_row']}"
-    assert plan.freeze_panes == expected, (
-        f"Plan freeze_panes is '{plan.freeze_panes}', expected '{expected}'"
-    )
+    assert plan.freeze_panes == expected, f"Plan freeze_panes is '{plan.freeze_panes}', expected '{expected}'"
 
 
 def test_freeze_panes_actuals_at_first_wp(workbook):
@@ -163,9 +165,7 @@ def test_freeze_panes_actuals_at_first_wp(workbook):
     for r in range(1, ws.max_row + 1):
         val = ws.cell(r, 1).value
         if isinstance(val, str) and val.startswith("=Config!A"):
-            assert freeze_row == r, (
-                f"Actuals freeze row {freeze_row} != first WP row {r}"
-            )
+            assert freeze_row == r, f"Actuals freeze row {freeze_row} != first WP row {r}"
             return
     pytest.fail("Could not find first WP formula row in Actuals column A")
 
@@ -180,9 +180,7 @@ def test_freeze_panes_summary_at_first_wp(workbook):
     for r in range(1, ws.max_row + 1):
         val = ws.cell(r, 1).value
         if val is not None and isinstance(val, str) and val.startswith("=Config!A"):
-            assert freeze_row == r, (
-                f"Summary freeze row {freeze_row} != first WP row {r}"
-            )
+            assert freeze_row == r, f"Summary freeze row {freeze_row} != first WP row {r}"
             return
     pytest.fail("Could not find first WP formula row in Summary column A")
 
@@ -207,8 +205,7 @@ class TestConfigAssignments:
         assert len(assignments) == len(DEMO_CAPACITY_ASSIGNMENTS)
         # Spot-check first entry
         first = DEMO_CAPACITY_ASSIGNMENTS[0]
-        match = [a for a in assignments
-                 if a["person"] == first["person"] and a["wp"] == first["wp"]]
+        match = [a for a in assignments if a["person"] == first["person"] and a["wp"] == first["wp"]]
         assert match, f"Expected assignment for {first['person']}/{first['wp']}"
         assert match[0]["total_fte"] == pytest.approx(first["total_fte"])
 
@@ -220,8 +217,7 @@ class TestConfigAssignments:
         externals = read_externals_from_config(demo_wb["Config"])
         assert len(externals) == len(EXTERNAL_COMMITMENTS)
         first = EXTERNAL_COMMITMENTS[0]
-        match = [e for e in externals
-                 if e["person"] == first["person"] and e["project"] == first["project"]]
+        match = [e for e in externals if e["person"] == first["person"] and e["project"] == first["project"]]
         assert match, f"Expected external for {first['person']}/{first['project']}"
         assert match[0]["fte"] == pytest.approx(first["fte"])
 
@@ -244,13 +240,13 @@ class TestConfigAssignments:
 
         # Verify data integrity after round-trip
         for orig in DEMO_CAPACITY_ASSIGNMENTS:
-            match = [a for a in assignments
-                     if a["person"] == orig["person"] and a["wp"] == orig["wp"]]
+            match = [a for a in assignments if a["person"] == orig["person"] and a["wp"] == orig["wp"]]
             assert match, f"Lost assignment {orig['person']}/{orig['wp']} after rebuild"
             assert match[0]["total_fte"] == pytest.approx(orig["total_fte"])
 
 
 # ── Build-order enforcement (integration check) ──
+
 
 def test_build_order_yields_resolved_cross_sheet_dependencies(assigned_wb_path):
     """Replaces a prior 9-spy chain that asserted patched-call order

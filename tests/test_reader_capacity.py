@@ -23,6 +23,7 @@ Out-of-scope and lives in sibling files:
 * ``tests/test_reader_team_priority.py`` — TEAM ROSTER Priority field
   round-trip + clamping.
 """
+
 import pytest
 
 from budget_planner.config import (
@@ -49,6 +50,7 @@ from tests._reader_helpers import (
 def test_read_capacity_discovers_person_groups(assigned_wb_path):
     """read_capacity_sheet finds all persons."""
     import openpyxl
+
     wb = openpyxl.load_workbook(assigned_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
@@ -62,6 +64,7 @@ def test_read_capacity_discovers_person_groups(assigned_wb_path):
 def test_read_capacity_classifies_grant_vs_external_rows(assigned_wb_path):
     """First person's programme WP rows match their assignments."""
     import openpyxl
+
     wb = openpyxl.load_workbook(assigned_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
@@ -70,13 +73,9 @@ def test_read_capacity_classifies_grant_vs_external_rows(assigned_wb_path):
     member = TEAM[0]
     group = cap["person_groups"][member["name"]]
     # Person has only their assigned WPs
-    expected_wps = {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS
-                    if a["person"] == member["name"]}
+    expected_wps = {a["wp"] for a in DEMO_CAPACITY_ASSIGNMENTS if a["person"] == member["name"]}
     assert set(group["wp_values"].keys()) == expected_wps
-    expected_ext = {
-        e["project"] for e in EXTERNAL_COMMITMENTS
-        if e["person"] == member["name"]
-    }
+    expected_ext = {e["project"] for e in EXTERNAL_COMMITMENTS if e["person"] == member["name"]}
     assert set(group["external_values"].keys()) == expected_ext
     wb.close()
 
@@ -84,6 +83,7 @@ def test_read_capacity_classifies_grant_vs_external_rows(assigned_wb_path):
 def test_read_capacity_assigned_values_are_distributed(assigned_wb_path):
     """Assigned WP monthly values have auto-distributed non-None values."""
     import openpyxl
+
     wb = openpyxl.load_workbook(assigned_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
@@ -95,19 +95,16 @@ def test_read_capacity_assigned_values_are_distributed(assigned_wb_path):
     assert len(values) == PROJECT_MONTHS
     # Active months should have non-None values
     active_values = [values[m - 1] for m in range(asgn["start"], asgn["end"] + 1)]
-    assert all(v is not None for v in active_values), (
-        "Expected distributed values, got None at some active months"
-    )
+    assert all(v is not None for v in active_values), "Expected distributed values, got None at some active months"
     # Total should match total_fte
-    assert sum(v for v in active_values if v is not None) == pytest.approx(
-        asgn["total_fte"], rel=0.01
-    )
+    assert sum(v for v in active_values if v is not None) == pytest.approx(asgn["total_fte"], rel=0.01)
     wb.close()
 
 
 def test_read_capacity_external_commitments_round_trip(assigned_wb_path):
     """read_capacity_sheet extracts external_commitments matching config."""
     import openpyxl
+
     wb = openpyxl.load_workbook(assigned_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
@@ -130,9 +127,7 @@ def test_read_capacity_prefers_config_assignments():
     externals = _sample_externals()
 
     # Build a workbook with Config sheet that has assignments + externals
-    wb = _make_config_wb_with_assignments(
-        assignments=assignments, externals=externals
-    )
+    wb = _make_config_wb_with_assignments(assignments=assignments, externals=externals)
 
     # Build minimal Plan + Capacity sheets so _read_person_grids doesn't error
     plan_ws = wb.create_sheet("Plan")
@@ -170,6 +165,7 @@ def test_read_capacity_prefers_config_assignments():
 def test_init_capacity_no_wp_rows(fresh_wb_path):
     """Init workbook without assignments has no WP rows per person."""
     import openpyxl
+
     wb = openpyxl.load_workbook(fresh_wb_path)
     layout = discover_layout(wb["Plan"])
     config_wps = read_plan_config(wb["Plan"], layout)
@@ -180,6 +176,6 @@ def test_init_capacity_no_wp_rows(fresh_wb_path):
     for name, group in cap["person_groups"].items():
         # No WP rows in plain init (no assignments)
         assert len(group["wp_values"]) == 0, (
-            f"{name}: expected no WP rows in plain init, "
-            f"got {set(group['wp_values'].keys())}")
+            f"{name}: expected no WP rows in plain init, got {set(group['wp_values'].keys())}"
+        )
     wb.close()

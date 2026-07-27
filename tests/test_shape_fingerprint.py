@@ -1,4 +1,5 @@
 """Fingerprint must be value-free by construction."""
+
 from pathlib import Path
 
 from scripts.shape_fingerprint import extract_fingerprint
@@ -17,9 +18,7 @@ def test_generator_produces_workbook_matching_fingerprint(tmp_path: Path):
     build_from_fingerprint(fp, str(synth))
 
     fp2 = extract_fingerprint(str(synth))
-    assert fp2["config_sections"] == fp["config_sections"], (
-        "Synthetic must preserve row counts per Config section"
-    )
+    assert fp2["config_sections"] == fp["config_sections"], "Synthetic must preserve row counts per Config section"
     assert set(fp2["named_ranges"].keys()) == set(fp["named_ranges"].keys())
 
     # Surviving scalar-cell named ranges (post-2026-04-18 through-month
@@ -29,18 +28,15 @@ def test_generator_produces_workbook_matching_fingerprint(tmp_path: Path):
     # on a trivially empty intersection.
     surviving_names = {
         "hours_per_fte_month",
-        "eur_actuals_through_month", "hours_actuals_through_month",
+        "eur_actuals_through_month",
+        "hours_actuals_through_month",
     }
     missing = surviving_names - fp["named_ranges"].keys()
-    assert not missing, (
-        f"Fresh-init fingerprint missing surviving scalar named ranges: "
-        f"{sorted(missing)}"
-    )
+    assert not missing, f"Fresh-init fingerprint missing surviving scalar named ranges: {sorted(missing)}"
     # Synthetic side must emit them too — otherwise the set-equality
     # round-trip above passes while ``build_from_fingerprint`` silently
     # drops them, leaving the forward guard on ``fp`` alone.
     missing_synth = surviving_names - fp2["named_ranges"].keys()
     assert not missing_synth, (
-        f"Synthetic-rebuild fingerprint missing surviving scalar named "
-        f"ranges: {sorted(missing_synth)}"
+        f"Synthetic-rebuild fingerprint missing surviving scalar named ranges: {sorted(missing_synth)}"
     )

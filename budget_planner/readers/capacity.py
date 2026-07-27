@@ -43,9 +43,7 @@ def read_capacity_assignments(ws) -> list[dict]:
         List of dicts with keys: person, wp, total_fte, start, end.
         Empty list if the block is not found.
     """
-    assignments_header = _find_header_row(
-        ws, SECTION_HEADER_LABELS["assignments"], required=False
-    )
+    assignments_header = _find_header_row(ws, SECTION_HEADER_LABELS["assignments"], required=False)
     if assignments_header is None:
         return []
 
@@ -84,9 +82,7 @@ def _read_externals_from_capacity(ws) -> list[dict]:
         List of dicts with keys: person, project, fte, start, end, is_eu.
         Empty list if the section is not found.
     """
-    ext_config_header = _find_header_row(
-        ws, SECTION_HEADER_LABELS["externals"], required=False
-    )
+    ext_config_header = _find_header_row(ws, SECTION_HEADER_LABELS["externals"], required=False)
     if ext_config_header is None:
         return []
 
@@ -235,9 +231,7 @@ def _read_person_grids(
                 col_a_str = str(col_a)
                 if not col_a_str.startswith("="):
                     # External project row
-                    monthly = _read_monthly_values(
-                        ws, dr, month_col_start, project_months
-                    )
+                    monthly = _read_monthly_values(ws, dr, month_col_start, project_months)
                     external_values[col_a_str] = monthly
 
         person_groups[name] = {
@@ -248,9 +242,7 @@ def _read_person_grids(
     return person_groups
 
 
-def read_capacity_sheet(
-    ws, config_wps, project_months=None, month_col_start=MONTH_COL_START
-) -> dict:
+def read_capacity_sheet(ws, config_wps, project_months=None, month_col_start=MONTH_COL_START) -> dict:
     """Read Capacity sheet person groups.
 
     Prefers the Config-sheet assignments/externals sections when present:

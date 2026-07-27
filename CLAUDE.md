@@ -4,7 +4,7 @@
 
 An openpyxl-based Excel workbook generator for EU project FTE budget planning. The user will iterate on this with you.
 
-<!-- L1=this file (always), L2=docs/ (on demand via trigger table), L3=.claude/rules/ (path-gated) -->
+<!-- L1=this file (always), L2=.claude/rules/ (path-gated), L3=docs/ (on demand via trigger table) -->
 
 ## Reference Index (encounter a problem? check here)
 
@@ -17,16 +17,16 @@ An openpyxl-based Excel workbook generator for EU project FTE budget planning. T
 ## Critical Rules
 
 1. **Always use Excel formulas, never hardcode calculated values in Python.** The spreadsheet must remain dynamic.
-2. **After every generation: `python scripts/recalc.py output/budget_plan.xlsx` then `pytest tests/ -v`.** Skipping recalc makes `data_only=True` reads return None — tests pass silently on broken output. Verify all pass before presenting to user.
+2. **After every generation: `make check`** (= `python scripts/recalc.py output/budget_plan.xlsx` then `pytest tests/ -q`). Skipping recalc makes `data_only=True` reads return None — tests pass silently on broken output. Verify all pass before presenting to user.
 3. **Font color convention is sacred**: Blue = input, Black = formula, Green = cross-sheet ref. Never mix these.
 4. **Inactive month cells must be greyed out and empty.** Auditors flag time logged outside WP active periods.
 5. **Named ranges `project_start` and `fte_rate`** must always exist and point to Config!$B$2 and Config!$B$4.
 6. **New architectural invariants** (cross-sheet constraint, trust boundary, derived-metric rule) must be recorded in `docs/spec.md` before merge. Rationale + scope carve-out in `.claude/rules/dev-workflow.md`.
-7. **Skills that emit markdown by default** (retro, reflect, kaizen:*, mybrain, senior-architect, architecture-diagram-creator, brutal-honesty-review, deep-research): prefer conversation output unless the artifact survives past this session. Write-time gates and override sentinels are enforced by hooks in `.claude/hooks/` — see `.claude/hooks/README.md` (7 active) for the full table + troubleshooting. Active gates: `docs-bloat-gate` (reference docs / rules / audit-keyword `docs/*.md`), `docs-only-plan-gate` (`git mv` of plans → `archived/` requires fresh pytest-pass stamp), `external-process-test-gate` (`tests/**/*.py` outside `tests/manual/` blocks docker/kubectl/playwright/selenium/`requests` patterns). One-off analyses go to `docs/analysis/` (`.claudeignore`'d).
+7. **Skills that emit markdown by default** (retro, reflect, kaizen:*, mybrain, senior-architect, architecture-diagram-creator, brutal-honesty-review, deep-research) fall under the global conversation-output default. This project owns no hooks — every gate that fires here is global (`external-process-test-gate`, `docs-bloat-gate`; behaviour + troubleshooting in `~/.claude/hooks/README.md`). Archiving a docs-only plan is no longer machine-gated: run `pytest tests/ -q` yourself first, because `docs/spec.md` is test-coupled. Both that gate and the `docs/analysis/` home for one-off analyses: `.claude/rules/plan-hygiene.md` (§ Doc hygiene).
 
 ## Large Files
 
-Thresholds + intent-declaration rule in `~/.claude/rules/reading-large-files.md` (auto-loads on `.py`/`.md` reads). Project-specific addendum: archived plans in `docs/plans/archived/` aren't listed — treat all of them as large by default. List active large files on demand: `wc -l budget_planner/*.py tests/*.py | sort -rn | head`.
+Archived plans in `docs/plans/archive/` aren't listed anywhere — treat all of them as large by default. List active large files on demand: `wc -l budget_planner/*.py tests/*.py | sort -rn | head`.
 
 ## Rules Index (path-gated — auto-loaded when touching matching files)
 
@@ -34,8 +34,7 @@ Thresholds + intent-declaration rule in `~/.claude/rules/reading-large-files.md`
 |-----------|-------------|-------------|
 | `.claude/rules/dev-workflow.md` | `**/*.py` | Build/test, linting, formatting, invariants (core cross-cutting) |
 | `.claude/rules/testing-project.md` | `tests/**`, `**/test_*.py` | Project testing rules (no hardcoded seeds, round-trip, docs-only stages) |
-| `.claude/rules/plan-hygiene.md` | `docs/**`, `CLAUDE.md`, `.claude/rules/**` | Write-gate (no plan doc for ≤2-file/1-session work), delete-not-archive for shipped single-session plans, doc hygiene |
-| `.claude/rules/rule-authoring.md` | `.claude/rules/**` | Copy shipped-fix form verbatim when adding rule examples |
+| `.claude/rules/plan-hygiene.md` | `docs/**`, `CLAUDE.md`, `.claude/rules/**` | Write-gate (no plan doc for ≤2-file/1-session work), delete-not-archive for shipped single-session plans, archive mechanics (pathspec both halves, merge-base gate), cite-by-stem, §-heading grep |
 | `.claude/rules/openpyxl.md` | builder `.py` files (not `styles.py`) | openpyxl/LO core: CF, formulas, Rule 3 styling, charts |
 | `.claude/rules/openpyxl-infra.md` | `workbook.py`, `reader.py`, `config_sheet.py`, `scripts/**` | Workbook primitives, named-range auto-extend, section-reader guards |
 | `.claude/rules/windows-scripts.md` | `*.bat`, `*.cmd` | Wrappers target cmd.exe — no PS subprocess; delegate complex logic to Python |

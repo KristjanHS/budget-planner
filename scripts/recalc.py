@@ -52,24 +52,17 @@ RECALCULATE_MACRO = """<?xml version="1.0" encoding="UTF-8"?>
 
 def has_gtimeout():
     try:
-        subprocess.run(
-            ["gtimeout", "--version"], capture_output=True, timeout=1, check=False
-        )
+        subprocess.run(["gtimeout", "--version"], capture_output=True, timeout=1, check=False)
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
 
 
 def setup_libreoffice_macro():
-    macro_dir = os.path.expanduser(
-        MACRO_DIR_MACOS if platform.system() == "Darwin" else MACRO_DIR_LINUX
-    )
+    macro_dir = os.path.expanduser(MACRO_DIR_MACOS if platform.system() == "Darwin" else MACRO_DIR_LINUX)
     macro_file = os.path.join(macro_dir, MACRO_FILENAME)
 
-    if (
-        os.path.exists(macro_file)
-        and "RecalculateAndSave" in Path(macro_file).read_text()
-    ):
+    if os.path.exists(macro_file) and "RecalculateAndSave" in Path(macro_file).read_text():
         return True
 
     if not os.path.exists(macro_dir):
@@ -128,8 +121,7 @@ def recalc(filename, timeout=30):
     # Restore chart XML that LibreOffice mangled
     if chart_backups:
         tmp_path = abs_path + ".tmp"
-        with zipfile.ZipFile(abs_path, "r") as zin, \
-             zipfile.ZipFile(tmp_path, "w") as zout:
+        with zipfile.ZipFile(abs_path, "r") as zin, zipfile.ZipFile(tmp_path, "w") as zout:
             for item in zin.infolist():
                 if item.filename in chart_backups:
                     zout.writestr(item, chart_backups[item.filename])
@@ -175,8 +167,6 @@ def recalc(filename, timeout=30):
                                 total_errors += 1
                                 break
 
-        wb.close()
-
         result = {
             "status": "success" if total_errors == 0 else "errors_found",
             "total_errors": total_errors,
@@ -198,19 +188,41 @@ def recalc(filename, timeout=30):
 
         wb_formulas = load_workbook(filename, data_only=False)
         formula_count = 0
+        formula_coords: list[tuple[str, str]] = []
         for sheet_name in wb_formulas.sheetnames:
             ws = wb_formulas[sheet_name]
             for row in ws.iter_rows():
                 for cell in row:
-                    if (
-                        cell.value
-                        and isinstance(cell.value, str)
-                        and cell.value.startswith("=")
-                    ):
+                    if cell.value and isinstance(cell.value, str) and cell.value.startswith("="):
                         formula_count += 1
+                        formula_coords.append((sheet_name, cell.coordinate))
         wb_formulas.close()
 
         result["total_formulas"] = formula_count
+
+        # ── Did the calc engine actually run? ──
+        # LibreOffice can silently no-op on a workbook (it has, on
+        # Excel-saved files) and leave every formula cell as an empty
+        # <v></v> shell. openpyxl then reads None for all of them, and
+        # `data_only=True` tests see None whether the formula is correct,
+        # wrong, or never evaluated — so a green suite proves nothing.
+        # A formula legitimately returning "" also reads as None, hence
+        # the deliberately conservative rule: only a workbook where NOT A
+        # SINGLE formula produced a value counts as un-recalculated.
+        values_present = 0
+        for sheet_name, coord in formula_coords:
+            if wb[sheet_name][coord].value is not None:
+                values_present += 1
+        result["formula_values_present"] = values_present
+
+        if formula_count > 0 and values_present == 0:
+            result["status"] = "not_recalculated"
+            result["hint"] = (
+                "LibreOffice produced no cached values — the recalc did not run. "
+                "Do NOT trust a passing pytest run against this file."
+            )
+
+        wb.close()
 
         return result
 
@@ -229,6 +241,8 @@ def main():
         print("  - error_summary: Breakdown by error type with locations")
         print("    - #VALUE!, #DIV/0!, #REF!, #NAME?, #NULL!, #NUM!")
         print("  - na_count: #N/A cells (intentional NA() — e.g., chart clipping)")
+        print("  - formula_values_present: formula cells that produced a value")
+        print("\nExits non-zero on 'errors_found' / 'not_recalculated' / 'error'.")
         sys.exit(1)
 
     filename = sys.argv[1]
@@ -236,6 +250,12 @@ def main():
 
     result = recalc(filename, timeout)
     print(json.dumps(result, indent=2))
+
+    # Exit non-zero so `make check` (recalc && pytest) actually gates. Before
+    # this, main() always returned 0 — a workbook full of #REF! or one the
+    # calc engine never touched still let the suite run and "pass".
+    if result.get("status") != "success":
+        sys.exit(1)
 
 
 if __name__ == "__main__":

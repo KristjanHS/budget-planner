@@ -1,4 +1,5 @@
 """Plan v2 tests — planned FTE cells are cross-sheet SUM formulas from Capacity."""
+
 import re
 
 import openpyxl
@@ -8,7 +9,9 @@ from openpyxl import Workbook
 from budget_planner.reader import discover_layout
 from budget_planner import config as _config
 from budget_planner.config import (
-    WORK_PACKAGES, MONTH_COL_START, PROJECT_MONTHS,
+    WORK_PACKAGES,
+    MONTH_COL_START,
+    PROJECT_MONTHS,
 )
 from budget_planner.config_sheet import build_config_sheet
 from budget_planner.plan import build_plan_sheet, _apply_planned_formulas
@@ -28,10 +31,9 @@ def v2_layout(v2_workbook):
 
 # ── Planned FTE cells reference Capacity ──
 
+
 @pytest.mark.parametrize("wp_idx", [0, 2])
-def test_planned_fte_formula_refs_match_capacity_layout(
-    v2_workbook, v2_layout, wp_idx
-):
+def test_planned_fte_formula_refs_match_capacity_layout(v2_workbook, v2_layout, wp_idx):
     """SUM formula row references match the capacity_layout person_groups."""
     plan = v2_workbook["Plan"]
     capacity = v2_workbook["Capacity"]
@@ -74,9 +76,7 @@ def test_planned_fte_formula_refs_match_capacity_layout(
             )
         else:
             # Direct value (shouldn't happen for programme WPs, but handle gracefully)
-            assert cap_val == wp["id"], (
-                f"Capacity!A{cap_row} = '{cap_val}', expected '{wp['id']}'"
-            )
+            assert cap_val == wp["id"], f"Capacity!A{cap_row} = '{cap_val}', expected '{wp['id']}'"
 
 
 def _build_plan_standalone(*, project_params, work_packages):
@@ -92,8 +92,12 @@ def _build_plan_standalone(*, project_params, work_packages):
     cfg_params = project_params if project_params is not None else _config.default_project_params()
     cfg_wps = work_packages if work_packages is not None else _config.WORK_PACKAGES
     cfg_layout = build_config_sheet(
-        cfg_ws, wb, cfg_params, cfg_wps,
-        team=_config.TEAM, reporting_periods=_config.REPORTING_PERIODS,
+        cfg_ws,
+        wb,
+        cfg_params,
+        cfg_wps,
+        team=_config.TEAM,
+        reporting_periods=_config.REPORTING_PERIODS,
         grade_rates=_config.GRADE_RATES,
         assignments=_config.DEMO_CAPACITY_ASSIGNMENTS,
         external_commitments=_config.EXTERNAL_COMMITMENTS,
@@ -101,7 +105,8 @@ def _build_plan_standalone(*, project_params, work_packages):
 
     plan_ws = wb.create_sheet("Plan")
     layout = build_plan_sheet(
-        plan_ws, wb,
+        plan_ws,
+        wb,
         project_params=project_params,
         work_packages=work_packages,
         config_layout=cfg_layout,
@@ -109,15 +114,20 @@ def _build_plan_standalone(*, project_params, work_packages):
 
     cap_ws = wb.create_sheet("Capacity")
     cap_layout = build_capacity_sheet(
-        cap_ws, cfg_layout,
-        project_params=cfg_params, work_packages=cfg_wps,
-        team=_config.TEAM, external_commitments=_config.EXTERNAL_COMMITMENTS,
+        cap_ws,
+        cfg_layout,
+        project_params=cfg_params,
+        work_packages=cfg_wps,
+        team=_config.TEAM,
+        external_commitments=_config.EXTERNAL_COMMITMENTS,
         assignments=_config.DEMO_CAPACITY_ASSIGNMENTS,
         config_first_wp_row=layout["config_first_wp_row"],
     )
 
     _apply_planned_formulas(
-        plan_ws, layout, cap_layout,
+        plan_ws,
+        layout,
+        cap_layout,
         work_packages=work_packages,
         project_params=project_params,
     )
@@ -132,11 +142,14 @@ def _build_plan_standalone(*, project_params, work_packages):
     return layout, snapshot
 
 
-@pytest.mark.parametrize("kwargs", [
-    {"project_params": None},
-    {"work_packages": None},
-    {"project_params": None, "work_packages": None},
-])
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"project_params": None},
+        {"work_packages": None},
+        {"project_params": None, "work_packages": None},
+    ],
+)
 def test_build_plan_none_defaults_match_explicit(kwargs):
     """None-defaulted params produce the same Plan sheet as explicit config values.
 
@@ -154,9 +167,7 @@ def test_build_plan_none_defaults_match_explicit(kwargs):
     mixed.update(kwargs)
     _, variant = _build_plan_standalone(**mixed)
 
-    assert variant == baseline, (
-        f"None-defaulted {list(kwargs)} produced different Plan formulas"
-    )
+    assert variant == baseline, f"None-defaulted {list(kwargs)} produced different Plan formulas"
 
 
 @pytest.mark.parametrize("wp_idx", [0, 2])
@@ -173,13 +184,8 @@ def test_planned_fte_cells_have_black_font(v2_workbook, v2_layout, wp_idx):
             cell = plan.cell(row, MONTH_COL_START + m)
             color = cell.font.color
             # Black font: color value is "000000" or theme 1
-            assert color is not None, (
-                f"WP {wp['id']} M{month_num}: font color is None"
-            )
+            assert color is not None, f"WP {wp['id']} M{month_num}: font color is None"
             if color.rgb and color.rgb != "00000000":
                 assert color.rgb in ("FF000000", "00000000", "000000"), (
-                    f"WP {wp['id']} M{month_num}: expected black font, "
-                    f"got {color.rgb}"
+                    f"WP {wp['id']} M{month_num}: expected black font, got {color.rgb}"
                 )
-
-

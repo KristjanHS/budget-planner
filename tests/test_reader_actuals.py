@@ -18,6 +18,7 @@ Out-of-scope and lives in sibling files:
 * ``tests/test_reader_team_priority.py`` — TEAM ROSTER Priority field
   round-trip + clamping.
 """
+
 import pathlib
 
 import pytest
@@ -136,6 +137,7 @@ def test_read_actuals_values_resolves_formula_refs():
     readers/actuals.py::read_actuals_values).
     """
     from budget_planner.reader import read_actuals_values
+
     wb = _make_actuals_wb()
     result = read_actuals_values(wb["Actuals"], project_months=3)
     assert "WP1" in result
@@ -150,6 +152,7 @@ def test_read_actuals_values_keeps_all_zero_rows():
     covers the all-None case introduced by T8.
     """
     from budget_planner.reader import read_actuals_values
+
     wb = _make_actuals_wb()
     result = read_actuals_values(wb["Actuals"], project_months=3)
     assert "WP2" in result
@@ -160,6 +163,7 @@ def test_read_actuals_values_keeps_all_zero_rows():
 def test_read_actuals_values_stops_at_total():
     """read_actuals_values stops scanning at the TOTAL row."""
     from budget_planner.reader import read_actuals_values
+
     wb = _make_actuals_wb()
     result = read_actuals_values(wb["Actuals"], project_months=3)
     assert len(result) == 2
@@ -174,6 +178,7 @@ def test_read_actuals_values_preserves_all_blank_row():
     contract is now: every Actuals WP row is preserved, blank cells included.
     """
     from budget_planner.reader import read_actuals_values
+
     wb = Workbook()
     plan_ws = wb.active
     assert plan_ws is not None
@@ -213,6 +218,7 @@ def test_read_actuals_values_literal_wp_ids():
     coverage.
     """
     from budget_planner.reader import read_actuals_values
+
     wb = Workbook()
     plan_ws = wb.active
     assert plan_ws is not None
@@ -252,10 +258,9 @@ def _find_row_by_label(ws, label_prefix):
 def _set_cell(ws, row: int, col: int, value) -> None:
     """Set a cell value with pyright-safe type narrowing (skips MergedCell)."""
     from openpyxl.cell import Cell
+
     cell = ws.cell(row, col)
-    assert isinstance(cell, Cell), (
-        f"Expected regular Cell at ({row}, {col}); got {type(cell).__name__}"
-    )
+    assert isinstance(cell, Cell), f"Expected regular Cell at ({row}, {col}); got {type(cell).__name__}"
     cell.value = value
 
 
@@ -315,9 +320,7 @@ class TestFormulaRateRoundTrip:
         rebuilt_wp_header = _find_row_by_label(out_ws, "WP BUDGET")
         rebuilt_first_wp = rebuilt_wp_header + 2
         rebuilt_rate_val = out_ws.cell(rebuilt_first_wp, COL_WP_RATE).value
-        assert rebuilt_rate_val == formula, (
-            f"Builder lost formula on rewrite; got {rebuilt_rate_val!r}"
-        )
+        assert rebuilt_rate_val == formula, f"Builder lost formula on rewrite; got {rebuilt_rate_val!r}"
 
     def test_formula_wp_rate_roundtrip(self, tmp_path):
         """End-to-end: per-WP Rate formula survives init → edit → rebuild."""
@@ -335,14 +338,13 @@ class TestFormulaRateRoundTrip:
 
         # Full rebuild must preserve the per-WP formula in its Config cell
         from budget_planner.workbook import rebuild_workbook
+
         rebuild_workbook(input_path=path)
 
         wb = load_workbook(path)
         rebuilt_val = wb["Config"].cell(first_wp_row, COL_WP_RATE).value
         wb.close()
-        assert rebuilt_val == formula, (
-            f"Rebuild clobbered user WP Rate formula; got {rebuilt_val!r}"
-        )
+        assert rebuilt_val == formula, f"Rebuild clobbered user WP Rate formula; got {rebuilt_val!r}"
 
     def test_numeric_rate_still_works(self, tmp_path):
         """Baseline: a numeric per-WP rate round-trips as a float."""
@@ -445,9 +447,9 @@ class TestExactSectionHeaderMatching:
             # module (builders, layout helper, or workbook orchestrator).
             quoted_variants = (f'"{label}"', f"'{label}'")
             found_in = [
-                name for name, src in builder_sources.items()
-                if any(q in src for q in quoted_variants)
-                or f'SECTION_HEADER_LABELS["{key}"]' in src
+                name
+                for name, src in builder_sources.items()
+                if any(q in src for q in quoted_variants) or f'SECTION_HEADER_LABELS["{key}"]' in src
             ]
             assert found_in, (
                 f"Label {key!r}={label!r} is declared in SECTION_HEADER_LABELS "

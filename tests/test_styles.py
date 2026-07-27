@@ -1,4 +1,5 @@
 """Tests for styles module additions."""
+
 from openpyxl import Workbook
 from budget_planner.styles import style_cell
 

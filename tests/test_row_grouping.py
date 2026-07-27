@@ -26,8 +26,7 @@ def _find_person_header_rows(ws) -> list[int]:
     """
     headers: list[int] = []
     for mr in ws.merged_cells.ranges:
-        if (mr.min_col == 1 and mr.max_col == 2
-                and mr.min_row == mr.max_row):
+        if mr.min_col == 1 and mr.max_col == 2 and mr.min_row == mr.max_row:
             headers.append(mr.min_row)
     return sorted(headers)
 
@@ -59,10 +58,7 @@ def _assert_person_blocks_grouped(ws, sheet_name: str) -> None:
     for i, hr in enumerate(headers):
         next_hr = headers[i + 1] if i + 1 < len(headers) else None
         body = _person_body_rows(ws, hr, next_hr)
-        grouped_in_body = [
-            r for r in body
-            if (ws.row_dimensions[r].outline_level or 0) == 1
-        ]
+        grouped_in_body = [r for r in body if (ws.row_dimensions[r].outline_level or 0) == 1]
         if not grouped_in_body:
             # Not a person header — e.g. a pre-grid section label merge.
             continue
@@ -78,8 +74,7 @@ def _assert_person_blocks_grouped(ws, sheet_name: str) -> None:
         for br in body:
             level = ws.row_dimensions[br].outline_level or 0
             assert level == 1, (
-                f"{sheet_name}: body row {br} under person header {hr} "
-                f"must be outline_level 1 (actual: {level})"
+                f"{sheet_name}: body row {br} under person header {hr} must be outline_level 1 (actual: {level})"
             )
 
 
@@ -87,8 +82,7 @@ def _assert_summary_below_false(ws, sheet_name: str) -> None:
     op = ws.sheet_properties.outlinePr
     assert op is not None, f"{sheet_name}: outlinePr should be set"
     assert op.summaryBelow is False, (
-        f"{sheet_name}: summaryBelow must be False so the row-outline "
-        f"button sits next to each person header"
+        f"{sheet_name}: summaryBelow must be False so the row-outline button sits next to each person header"
     )
 
 
@@ -122,10 +116,7 @@ def test_row_grouping_survives_rebuild(tmp_path):
     initial: dict[str, frozenset[int]] = {}
     for sheet in ("Capacity", "Actuals-Hours"):
         ws = wb[sheet]
-        initial[sheet] = frozenset(
-            r for r, dim in ws.row_dimensions.items()
-            if (dim.outline_level or 0) == 1
-        )
+        initial[sheet] = frozenset(r for r, dim in ws.row_dimensions.items() if (dim.outline_level or 0) == 1)
     wb.close()
 
     # Sanity: initial grouping actually happened.
@@ -138,10 +129,7 @@ def test_row_grouping_survives_rebuild(tmp_path):
     for sheet in ("Capacity", "Actuals-Hours"):
         ws = wb[sheet]
         _assert_summary_below_false(ws, sheet)
-        rebuilt = frozenset(
-            r for r, dim in ws.row_dimensions.items()
-            if (dim.outline_level or 0) == 1
-        )
+        rebuilt = frozenset(r for r, dim in ws.row_dimensions.items() if (dim.outline_level or 0) == 1)
         assert rebuilt == initial[sheet], (
             f"{sheet}: grouped-row set drifted across rebuild\n"
             f"  initial: {sorted(initial[sheet])}\n"

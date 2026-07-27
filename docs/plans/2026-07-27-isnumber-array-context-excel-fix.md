@@ -204,6 +204,28 @@ is correct-by-accident while no hours are posted, and wrong the moment any are.
 
 ---
 
+## Absorbed from the archived design doc (A8)
+
+`2026-07-27-actuals-posted-idx-cse-design.md` was archived once its still-live content landed here
+or in code. What it uniquely held, and where each piece now lives:
+
+- **Option 1 ruling (literal midx row over inline array constant / dropping the scan).** Shipped in
+  `8ab774c`; the row stays for readability, not correctness. Rationale now in
+  `actuals.py::_write_month_index_row`'s docstring.
+- **Placement constraint** — the midx row must sit ABOVE the year row, because
+  `readers/actuals.py` derives `first_wp_row` from the "WP ID" header and a literal row directly
+  beneath it would be read back as WP data on rebuild. Also in that docstring.
+- **Consumers verified shift-safe** — `summary.py` and `trends.py` read `first_wp_row` from the
+  layout dict; no module hardcodes an `Actuals!<row>` literal outside `actuals.py`. Historical;
+  re-derivable by grep.
+- **Its "USER still owed: Ctrl+Shift+Enter check" action is MOOT.** That check existed to isolate
+  whether `SUMPRODUCT` propagates array context into a nested `COLUMN(range)`. §`COLUMN(range)` is
+  exonerated answers it from Excel-computed values: it does. The open premise now concerns
+  `ISNUMBER(range)`'s exact collapse mechanism, which §Open, not chased records and which the fix
+  does not depend on.
+- **`Actuals!D1`→`B1` literal move** — still deferred, still unowned. Recorded here so archiving the
+  old doc does not drop it.
+
 ## Open, not chased
 
 `2026-07-27-actuals-posted-idx-cse-design.md` §3 asks why LO no-ops on the user's Excel-saved

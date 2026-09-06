@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/output/**)",
+      "Read(**/*.xlsx)",
+      "Read(**/*.egg-info/**)",
+      "Read(**/__pycache__/**)",
+      "Read(**/.venv/**)",
+      "Read(**/.ruff_cache/**)",
+      "Read(**/.pytest_cache/**)",
+      "Read(**/.codex/**)",
+      "Read(**/.cursor/**)",
+      "Read(./docs/grant-architecture.html)",
+      "Read(./docs/plans/archive/**)",
+      "Read(./docs/analysis/**)",
+      "Read(./docs/human/**)",
+      "Read(**/*.bat)"
+    ]
+  }
+}

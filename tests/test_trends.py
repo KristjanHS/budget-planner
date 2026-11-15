@@ -447,7 +447,7 @@ def _build_trends_only(num_wps: int, num_team: int) -> "Worksheet":
         "title": "Test",
         "start": PROJECT_START,
         "months": 24,
-        "rate": 7500,
+        "rate": 10000,
     }
 
     wb = WB()

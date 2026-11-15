@@ -10,7 +10,7 @@ def _sample_params():
         "title": "Test Project",
         "start": PROJECT_START,
         "months": 60,
-        "rate": 7500,
+        "rate": 10000,
         "eu_ceiling_pm": 12.0,
     }
 

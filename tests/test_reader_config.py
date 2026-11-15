@@ -407,7 +407,7 @@ class TestConfigSheetValidation:
         ws.cell(4, 1, "Project Months")
         ws.cell(4, 2, 60)
         ws.cell(5, 1, "FTE Rate (EUR)")
-        ws.cell(5, 2, 7500)
+        ws.cell(5, 2, 11000)  # off the DEFAULT_RATE fallback
         ws.cell(6, 1, "EU Annual Ceiling (PM)")
         ws.cell(6, 2, 12.0)
         # Need a WP BUDGET section for full parse
@@ -415,7 +415,7 @@ class TestConfigSheetValidation:
         ws.cell(9, 1, "WP ID")
         params, wps = read_config_sheet(ws)
         assert params["title"] == "Test"
-        assert params["rate"] == 7500
+        assert params["rate"] == 11000
         wb.close()
 
     def test_valid_config_passes_validation(self):
@@ -452,7 +452,7 @@ class TestConfigSheetValidation:
             "title": "Test",
             "start": PROJECT_START,
             "months": 24,
-            "rate": 7500,
+            "rate": 10000,
         }
         wps = [
             {"id": "WP1", "name": "Mgmt", "fte": 12.0, "start": 1, "end": 24, "type": "flat"},

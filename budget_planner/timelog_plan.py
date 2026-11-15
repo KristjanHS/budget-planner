@@ -1124,6 +1124,7 @@ def _build_wps(
     ``project_params["rate"]`` — the same default used by
     ``config_sheet.py`` to populate the sheet.
     """
+    # 10000 mirrors config.DEFAULT_RATE's public seed; stateless builder, so no config import.
     default_rate = project_params.get("rate", 10000)
     if not isinstance(default_rate, (int, float)):
         default_rate = 10000

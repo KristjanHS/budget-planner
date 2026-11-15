@@ -117,6 +117,8 @@ def _read_wp_budget_section(ws, project_months: int) -> list[dict]:
     legacy Ceiling→Budget +i ×1.25 migration + >€3M sanity guard.
     Pass ``project_months=0`` to skip the end<=months check.
     """
+    from budget_planner.config import DEFAULT_RATE
+
     # WP BUDGET row carries id/name/fte/rate + start/end/type (cols I/J/K post-
     # indirect-view; H/I/J pre-restructure). Layout detected via col-5 header.
     wp_section = _find_header_row(ws, SECTION_HEADER_LABELS["wp_budget"])
@@ -172,7 +174,7 @@ def _read_wp_budget_section(ws, project_months: int) -> list[dict]:
         if type_str not in valid_types:
             raise ValueError(f"WP '{id_str}' has invalid Type {type_str!r}. Must be one of: {sorted(valid_types)}.")
         fte_val = float(ws.cell(r, COL_WP_FTE).value or 0)
-        rate_numeric = _safe_float(rate_cell, 6500)
+        rate_numeric = _safe_float(rate_cell, DEFAULT_RATE)
         if is_legacy_ceiling_layout:
             # Legacy Ceiling = FTE×Rate; migrate to Budget +i with ×1.25 uplift.
             budget_plus_i = round(fte_val * rate_numeric * 1.25)
@@ -182,7 +184,7 @@ def _read_wp_budget_section(ws, project_months: int) -> list[dict]:
             # fte*rate*1.25 when the structured-ref hasn't been recalc'd.
             plus_i_raw = ws.cell(r, COL_WP_BUDGET_PLUS_I).value
             budget_plus_i = round(_safe_float(plus_i_raw, fte_val * rate_numeric * 1.25))
-        # ``rate``: numeric coercion (6500 fallback on formula cells).
+        # ``rate``: numeric coercion (DEFAULT_RATE fallback on formula cells).
         # ``rate_raw``: literal cell — preserves user formula on round-trip.
         work_packages.append(
             {

@@ -12,7 +12,7 @@ def _sample_params():
         "title": "Test",
         "start": PROJECT_START,
         "months": 24,
-        "rate": 7500,
+        "rate": 10000,
     }
 
 

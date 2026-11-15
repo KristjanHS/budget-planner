@@ -16,7 +16,7 @@ def _make_config_wb():
         "title": "Test",
         "start": PROJECT_START,
         "months": 24,
-        "rate": 7500,
+        "rate": 10000,
     }
     wps = [
         {"id": "WP1", "name": "Mgmt", "fte": 12.0, "start": 1, "end": 24, "type": "flat"},
@@ -75,7 +75,7 @@ def _make_config_wb_with_assignments(assignments=None, externals=None):
         "title": "Test",
         "start": PROJECT_START,
         "months": 60,
-        "rate": 7500,
+        "rate": 10000,
         "eu_ceiling_pm": 12.0,
     }
     wps = [

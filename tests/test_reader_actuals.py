@@ -312,7 +312,7 @@ class TestFormulaRateRoundTrip:
             "title": "Rebuild Test",
             "start": PROJECT_START,
             "months": 60,
-            "rate": 7500,
+            "rate": 10000,
             "eu_ceiling_pm": 12.0,
         }
         build_config_sheet(out_ws, out_wb, params_sample, wps_after)

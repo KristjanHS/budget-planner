@@ -16,6 +16,7 @@ from budget_planner.config import (
     DEMO_ACTUALS_MULTIPLIERS,
     DEMO_CAPACITY_ASSIGNMENTS,
     DEMO_CURRENT_MONTH,
+    DEFAULT_RATE,
     TEAM,
     WORK_PACKAGES,
 )
@@ -58,7 +59,7 @@ def seed_demo_data(workbook_path: str) -> str:
         wp_budget_row = _data_row_after(_find_header_row(config_ws, SECTION_HEADER_LABELS["wp_budget"]))
         for i, wp in enumerate(WORK_PACKAGES):
             row = first_wp_row + i
-            wp_rate = config_ws.cell(wp_budget_row + i, 4).value or 6500
+            wp_rate = config_ws.cell(wp_budget_row + i, 4).value or DEFAULT_RATE
             multiplier = DEMO_ACTUALS_MULTIPLIERS[i % len(DEMO_ACTUALS_MULTIPLIERS)]
             wp_start, wp_end = wp_month_bounds(wp["id"], WORK_PACKAGES)
             active_months = wp_end - wp_start + 1

@@ -13,7 +13,7 @@ def _sample_params():
         "title": "Reader Test",
         "start": PROJECT_START,
         "months": 60,
-        "rate": 7500,
+        "rate": 11000,  # off the DEFAULT_RATE fallback, so a dropped param shows
         "eu_ceiling_pm": 12.0,
     }
 
@@ -41,7 +41,7 @@ def _seed_legacy_config(ws, wps):
         ("Project Title", "Legacy Project"),
         ("Project Start", PROJECT_START),
         ("Project Months", 60),
-        ("FTE Rate (EUR)", 7500),
+        ("FTE Rate (EUR)", 11000),
         ("EU Annual Ceiling (PM/FTE/year)", 12.0),
         ("Hours per FTE Month", 143),
         ("Vacation Month", "Jul"),
@@ -90,8 +90,8 @@ def test_post_restructure_reader_reads_budget_plus_i_directly():
     _params, wps = read_config_sheet(ws)
     # Freshly built blue-input value seeded from fte × rate × 1.25.
     by_id = {wp["id"]: wp for wp in wps}
-    assert by_id["WP1"]["budget_plus_i"] == 112_500
-    assert by_id["WP2"]["budget_plus_i"] == 75_000
+    assert by_id["WP1"]["budget_plus_i"] == 165_000  # 12 × 11000 × 1.25
+    assert by_id["WP2"]["budget_plus_i"] == 110_000  #  8 × 11000 × 1.25
 
 
 def test_legacy_ceiling_layout_migrates_to_budget_plus_i():
@@ -104,15 +104,15 @@ def test_legacy_ceiling_layout_migrates_to_budget_plus_i():
     _seed_legacy_config(
         ws,
         [
-            ("WP1", "Mgmt", 12.0, 7500, 1, 60, "flat"),
-            ("WP2", "Design", 8.0, 7500, 1, 18, "flat"),
+            ("WP1", "Mgmt", 12.0, 11000, 1, 60, "flat"),
+            ("WP2", "Design", 8.0, 11000, 1, 18, "flat"),
         ],
     )
     with pytest.warns(RuntimeWarning, match="Ceiling value"):
         _params, parsed = read_config_sheet(ws)
     by_id = {wp["id"]: wp for wp in parsed}
-    assert by_id["WP1"]["budget_plus_i"] == 112_500  # 12 × 7500 × 1.25
-    assert by_id["WP2"]["budget_plus_i"] == 75_000  #  8 × 7500 × 1.25
+    assert by_id["WP1"]["budget_plus_i"] == 165_000  # 12 × 11000 × 1.25
+    assert by_id["WP2"]["budget_plus_i"] == 110_000  #  8 × 11000 × 1.25
 
 
 def test_legacy_migration_sanity_guard_blocks_oversized_values(monkeypatch):
@@ -123,8 +123,8 @@ def test_legacy_migration_sanity_guard_blocks_oversized_values(monkeypatch):
     ws = wb.active
     assert ws is not None
     ws.title = "Config"
-    # 350 × 7500 × 1.25 = 3,281,250 → over €3M cap
-    _seed_legacy_config(ws, [("WP1", "Huge", 350.0, 7500, 1, 60, "flat")])
+    # 350 × 11000 × 1.25 = 4,812,500 → over €3M cap
+    _seed_legacy_config(ws, [("WP1", "Huge", 350.0, 11000, 1, 60, "flat")])
     with pytest.raises(RuntimeError, match="GRANT_ACCEPT_CEILING_MIGRATION"):
         read_config_sheet(ws)
 
@@ -136,7 +136,7 @@ def test_legacy_migration_sanity_guard_bypassed_with_env_flag(monkeypatch):
     ws = wb.active
     assert ws is not None
     ws.title = "Config"
-    _seed_legacy_config(ws, [("WP1", "Huge", 350.0, 7500, 1, 60, "flat")])
+    _seed_legacy_config(ws, [("WP1", "Huge", 350.0, 11000, 1, 60, "flat")])
     with pytest.warns(RuntimeWarning, match="Ceiling value"):
         _params, parsed = read_config_sheet(ws)
-    assert parsed[0]["budget_plus_i"] == 3_281_250
+    assert parsed[0]["budget_plus_i"] == 4_812_500

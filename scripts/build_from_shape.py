@@ -2,7 +2,7 @@
 
 Given a fingerprint dict produced by ``scripts.shape_fingerprint.extract_fingerprint``,
 build a fresh ``.xlsx`` whose Config sections match the fingerprint's row counts.
-All cell values are deterministic placeholders (``Person_01``, ``WP1``, ``6500``,
+All cell values are deterministic placeholders (``Person_01``, ``WP1``, ``10000``,
 fixed dates) — safe to share as a bug reproducer.
 
 The real builder entry point is ``budget_planner.workbook._build_all_sheets`` — we

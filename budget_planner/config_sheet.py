@@ -222,9 +222,9 @@ def _write_budget_section(ws, start_row, work_packages, project_params):
     )
 
     # WP Budget data rows
-    default_rate = project_params.get("rate", 10000)
+    default_rate = project_params.get("rate", config.DEFAULT_RATE)
     if not isinstance(default_rate, (int, float)):
-        default_rate = 10000  # fall back when rate is a formula
+        default_rate = config.DEFAULT_RATE  # fall back when rate is a formula
     budget_last_data_row = budget_first_data_row + len(work_packages) - 1
     for row_idx, wp in enumerate(work_packages, start=budget_first_data_row):
         # Col A: WP ID

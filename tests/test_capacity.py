@@ -45,7 +45,7 @@ def capacity_layout(tmp_path_factory):
     config_layout = build_config_sheet(
         config_ws,
         wb,
-        {"title": "Test", "start": PROJECT_START, "months": PROJECT_MONTHS, "rate": 7500},
+        {"title": "Test", "start": PROJECT_START, "months": PROJECT_MONTHS, "rate": 10000},
         WORK_PACKAGES,
         assignments=DEMO_CAPACITY_ASSIGNMENTS,
         external_commitments=EXTERNAL_COMMITMENTS,

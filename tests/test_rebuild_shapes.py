@@ -65,10 +65,10 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str, fresh_wb_
         config_ws.cell(insert_at, 1, "WPX")
         config_ws.cell(insert_at, 2, "Extra WP")
         config_ws.cell(insert_at, 3, 1.0)
-        config_ws.cell(insert_at, 4, 6500)
+        config_ws.cell(insert_at, 4, 10000)
         # Budget +i blue-input (col F = 6) — reader expects the authoritative
-        # with-indirect EUR here; seeded to FTE × Rate × 1.25 = 7500.
-        config_ws.cell(insert_at, 6, 7500)
+        # with-indirect EUR here; seeded to FTE × Rate × 1.25 = 12500.
+        config_ws.cell(insert_at, 6, 12500)
         # Single-range WP schedule merged into WP BUDGET (cols I/J/K post-
         # indirect-view restructure — shifted right by one vs pre-restructure
         # because Budget +i was inserted at col 6).

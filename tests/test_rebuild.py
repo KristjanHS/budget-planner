@@ -103,7 +103,7 @@ class TestValidation:
     """_validate_config catches bad data."""
 
     def _params(self, **overrides):
-        p = {"title": "Test", "start": PROJECT_START, "months": 60, "rate": 7500}
+        p = {"title": "Test", "start": PROJECT_START, "months": 60, "rate": 10000}
         p.update(overrides)
         return p
 

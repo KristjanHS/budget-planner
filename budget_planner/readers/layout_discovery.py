@@ -87,11 +87,14 @@ def _parse_fte_rate(value) -> float:
     The builder always regenerates B4 as a SUMPRODUCT over the live grade/roster
     layout, so formula strings in the cell are intentionally discarded — the
     rate is a readout of the grade table, not an independent input. Numeric
-    values (and None) are coerced to float, defaulting to 7500.
+    values (and None) are coerced to float, defaulting to
+    ``budget_planner.config.DEFAULT_RATE``.
     """
+    from budget_planner.config import DEFAULT_RATE
+
     if isinstance(value, (int, float)):
-        return float(value or 7500)
-    return 7500.0
+        return float(value or DEFAULT_RATE)
+    return float(DEFAULT_RATE)
 
 
 @overload

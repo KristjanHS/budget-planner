@@ -7,6 +7,7 @@ session scope so other modules can consume the same recalc'd workbook.
 """
 
 import openpyxl
+import pytest
 
 from budget_planner.layout import MONTH_COL_START, _calendar_year_groups
 from budget_planner.config import (
@@ -91,7 +92,7 @@ def test_summary_actual_eur_seeded(demo_wb_path, demo_recalc):
         cells = [actuals.cell(act_row, MONTH_COL_START + m).value for m in range(group_start, group_start + span)]
         expected = sum(v for v in cells if isinstance(v, (int, float)))
         got = summary.cell(row, _YEAR_GROUP_START + y * _COLS_PER_YEAR + 2).value or 0
-        assert got == expected, f"WP1 calendar year {y + 1} Act EUR {got} != Actuals sum {expected}"
+        assert got == pytest.approx(expected), f"WP1 calendar year {y + 1} Act EUR {got} != Actuals sum {expected}"
     wb.close()
 
 

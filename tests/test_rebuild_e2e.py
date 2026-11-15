@@ -23,7 +23,7 @@ from budget_planner.reader import (
     read_plan_config,
     read_assignments_from_config,
 )
-from budget_planner.config import MONTH_COL_START
+from budget_planner.config import DEFAULT_RP_LENGTH, MONTH_COL_START
 
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 
@@ -785,9 +785,11 @@ def test_modified_reporting_periods_survive_rebuild(tmp_path):
             break
     assert rp_section is not None
 
-    # Change RP1 end from 18 to 12
+    # Shorten RP1 by one month (seeded end = DEFAULT_RP_LENGTH)
+    new_end = DEFAULT_RP_LENGTH - 1
     data_row = rp_section + 2  # skip header + col headers
-    _set(ws, data_row, 3, 12)  # End Month = 12
+    assert ws.cell(data_row, 3).value == DEFAULT_RP_LENGTH
+    _set(ws, data_row, 3, new_end)
 
     wb.save(out)
     wb.close()
@@ -800,4 +802,4 @@ def test_modified_reporting_periods_survive_rebuild(tmp_path):
     rps = read_reporting_periods(wb["Config"])
     wb.close()
 
-    assert rps[0]["end"] == 12  # Modified value preserved
+    assert rps[0]["end"] == new_end  # Modified value preserved

@@ -19,12 +19,14 @@ from typing import Any
 
 from openpyxl import Workbook
 
-from budget_planner.config import PROJECT_MONTHS
 from budget_planner.workbook import (
     SHEET_CONFIG,
     _apply_all_year_groups,
     _build_all_sheets,
 )
+
+
+_SYNTH_MONTHS = 24  # generic synthetic project length
 
 
 def _section_count(fp: dict, key: str) -> int:
@@ -46,7 +48,9 @@ def build_from_fingerprint(fp: dict, out_path: str) -> str:
     n_rp = _section_count(fp, "reporting_periods")
     n_grades = _section_count(fp, "grade_rates")
 
-    months = PROJECT_MONTHS
+    # A literal, never config.PROJECT_MONTHS: the fingerprint carries no month count, and the
+    # config value can come from the local overlay file this reproducer must not leak.
+    months = _SYNTH_MONTHS
 
     # Grade rates — realistic programme bookkeeping bands. "Mid" is the DEFAULT_GRADE
     # and must exist whenever the fingerprint has any grade rows so team
@@ -170,7 +174,7 @@ def build_from_fingerprint(fp: dict, out_path: str) -> str:
 
     project_params = {
         "title": "Synthetic",
-        "start": datetime(2025, 1, 1),
+        "start": datetime(2026, 1, 1),
         "months": months,
         "rate": 10000,
         "eu_ceiling_pm": 12.0,

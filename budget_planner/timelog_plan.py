@@ -1121,8 +1121,10 @@ def _build_wps(
     the Budget -i position at ``Config!E{wp_row}`` = ``FTE × Rate``. Per-WP
     rate is taken from ``wp["rate"]`` when present (post-reader rebuild
     path); on init the seed WP dicts may lack the key, so we fall back to
-    ``project_params["rate"]`` — the same default used by
-    ``config_sheet.py`` to populate the sheet.
+    ``project_params["rate"]``, as ``config_sheet.py`` does for Config col D.
+    When ``rate`` itself is absent the two diverge: config_sheet.py falls back
+    to ``config.DEFAULT_RATE`` (overlay-aware), this stateless builder to the
+    literal public seed 10000.
     """
     # 10000 mirrors config.DEFAULT_RATE's public seed; stateless builder, so no config import.
     default_rate = project_params.get("rate", 10000)

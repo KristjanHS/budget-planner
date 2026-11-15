@@ -14,7 +14,7 @@ Enforces the ``+i`` / ``-i`` convention across the in-scope sheets
   direction covers the +i side.
 * ``test_header_fill_matches_suffix`` — every bold header cell whose
   text carries a ``+i`` / ``-i`` token has the matching fill. Section
-  titles (SECTION_FILL) and calendar-year anchor cells ("2025 -i" on the
+  titles (SECTION_FILL) and calendar-year anchor cells ("2026 -i" on the
   Actuals year_row) are exempt per D8.
 * ``test_budget_plus_i_minus_i_round_trip`` — per WP, Config
   ``Budget +i / 1.25 == Budget -i`` after LibreOffice recalc.

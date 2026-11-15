@@ -167,9 +167,9 @@ def write_section_header(ws, row, title, merge_end):
 def apply_year_groups(ws, month_col_start, project_months, current_month=None, *, project_start=None):
     """Apply column grouping by calendar year (outline level 1).
 
-    Groups month columns by calendar-year boundaries. If current_month is
-    provided, expand the group containing that month and collapse others.
-    If current_month is None, expand the first group and collapse rest.
+    Groups month columns by calendar-year boundaries. With project_start,
+    expand the project's first two calendar years and collapse the rest;
+    otherwise expand the group containing current_month (or the first group).
 
     Args:
         ws: Worksheet to apply grouping to.
@@ -210,9 +210,9 @@ def apply_year_groups(ws, month_col_start, project_months, current_month=None, *
         else:
             cal_year = None
 
-        # Expand 2025-2026, collapse all other years
-        if cal_year is not None:
-            expand = cal_year in (2025, 2026)
+        # Expand the project's first two calendar years, collapse the rest
+        if cal_year is not None and project_start is not None:
+            expand = cal_year in (project_start.year, project_start.year + 1)
         elif current_month is not None:
             expand = group_start < current_month <= group_start + span
         else:

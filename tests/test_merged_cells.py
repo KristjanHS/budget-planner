@@ -36,15 +36,15 @@ def _year_merges_on_row(ws, row: int) -> list[tuple[int, int]]:
 
 
 def _find_section_merge(ws, text: str) -> tuple[int, int, int] | None:
-    """Find the merged range whose top-left cell contains *text*.
+    """(row, min_col, max_col) of the top-most, then left-most merge whose top-left cell contains *text*, or None.
 
-    Returns (row, min_col, max_col) or None.
-    """
-    for rng in ws.merged_cells.ranges:
-        cell = ws.cell(row=rng.min_row, column=rng.min_col)
-        if cell.value and text in str(cell.value):
-            return (rng.min_row, rng.min_col, rng.max_col)
-    return None
+    Explicit order: ranges iterate in hash order and a label can prefix a sibling band (ACTUAL EUR -i / +i)."""
+    hits = [
+        (rng.min_row, rng.min_col, rng.max_col)
+        for rng in ws.merged_cells.ranges
+        if (v := ws.cell(row=rng.min_row, column=rng.min_col).value) and text in str(v)
+    ]
+    return min(hits, default=None)
 
 
 def _expected_year_spans() -> list[tuple[int, int]]:

@@ -256,6 +256,8 @@ Each WP has a single contiguous active range and a single `Type` from `{flat, fr
 
 `reader.py` extracts structured data from an existing workbook so `rebuild_workbook()` can regenerate all sheets while preserving user-entered values. Most fragile module.
 
+**Config trust boundary.** Init seeds = `config.py` public defaults ← optional overlay file applied at import (`budget_planner/overlay_settings.py`; dir from `BUDGET_PLANNER_OVERLAY_DIR`, `""` disables, tests pin it off). Rebuild never consults either: it reads the workbook's own Config sheet.
+
 ### Formula chain resolution
 
 Reader follows cross-sheet refs to resolve actual values: `Actuals cell =Plan!A6 → Plan!A6 =Config!A8 → Config!A8 = "WP1"`. `_resolve_plan_ref()` follows up to 2 hops.

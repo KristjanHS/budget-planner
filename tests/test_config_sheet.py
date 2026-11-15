@@ -18,7 +18,7 @@ def _sample_params():
 def _sample_wps():
     return [
         {"id": "WP1", "name": "Management", "fte": 12.0, "start": 1, "end": 60},
-        {"id": "WP2", "name": "Design", "fte": 8.0, "start": 1, "end": 18},
+        {"id": "WP2", "name": "Design", "fte": 8.0, "start": 1, "end": 30},
     ]
 
 
@@ -144,8 +144,8 @@ def test_reporting_periods_section():
     assert ws is not None
     ws.title = "Config"
     rps = [
-        {"id": "RP1", "start": 1, "end": 6},
-        {"id": "RP2", "start": 7, "end": 12},
+        {"id": "RP1", "start": 1, "end": 30},
+        {"id": "RP2", "start": 31, "end": 60},
     ]
     layout = build_config_sheet(ws, wb, _sample_params(), _sample_wps(), reporting_periods=rps)
 
@@ -354,13 +354,13 @@ def test_layout_includes_grade_rows():
 def _sample_assignments():
     return [
         {"person": "Alice", "wp": "WP1", "total_fte": 4.5, "start": 1, "end": 60},
-        {"person": "Bob", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 18},
+        {"person": "Bob", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 30},
     ]
 
 
 def _sample_externals():
     return [
-        {"person": "Alice", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 11, "is_eu": False},
+        {"person": "Alice", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 30, "is_eu": False},
     ]
 
 

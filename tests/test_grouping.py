@@ -71,3 +71,16 @@ def test_apply_year_groups_with_current_month():
     y3_dim = ws.column_dimensions[col_letter(28)]
     assert y3_dim.hidden, "Year 3 should be hidden"
     wb.close()
+
+
+def test_apply_year_groups_expands_first_two_calendar_years_of_project():
+    """With project_start, the project's own first two calendar years expand; later years collapse."""
+    from datetime import datetime
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    apply_year_groups(ws, month_col_start=3, project_months=36, project_start=datetime(2030, 1, 1))
+    hidden = [bool(ws.column_dimensions[col_letter(c)].hidden) for c in (4, 16, 28)]  # 2nd month of each year
+    assert hidden == [False, False, True]
+    wb.close()

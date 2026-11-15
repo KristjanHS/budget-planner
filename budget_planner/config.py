@@ -18,12 +18,13 @@ _PRIVATE = load_overlay(overlay_dir_from_env())
 # ── PROJECT PARAMETERS ──
 
 PROJECT_TITLE: str = _PRIVATE.get("PROJECT_TITLE", "Programme Project Budget Plan")
-PROJECT_START: datetime = _PRIVATE.get("PROJECT_START", datetime(2026, 1, 1))  # First month of the project
-PROJECT_MONTHS: int = _PRIVATE.get("PROJECT_MONTHS", 12)  # Total project duration in months
+PROJECT_START: datetime = _PRIVATE.get("PROJECT_START", datetime(2026, 11, 1))  # First month (day must be 1)
+# Total duration in months; the default 14 spans two calendar years, the first one partial (Nov-Dec)
+PROJECT_MONTHS: int = _PRIVATE.get("PROJECT_MONTHS", 14)
 DEFAULT_RATE: int = _PRIVATE.get("DEFAULT_RATE", 10000)  # EUR per person-month (per-WP default rate)
 EU_ANNUAL_CEILING_PM = 12.0  # Max PM per calendar year across all EU grants (≈215 days)
 CFS_THRESHOLD = 430_000  # EUR — CFS audit certificate required above this
-DEFAULT_RP_LENGTH = 6  # Months per reporting period
+DEFAULT_RP_LENGTH: int = _PRIVATE.get("RP_LENGTH", 6)  # Months per reporting period
 
 # ── GRADE RATES ──
 # EUR per person-month by job grade (bookkeeping-provided bands)
@@ -136,8 +137,8 @@ def default_reporting_periods(project_months, rp_length=DEFAULT_RP_LENGTH):
 REPORTING_PERIODS = default_reporting_periods(PROJECT_MONTHS)
 
 # ── DEMO MODE ──
-# Months of actuals to seed in demo mode (end of Year 1, capped at project end)
-DEMO_CURRENT_MONTH = min(12, PROJECT_MONTHS)
+# Months of actuals to seed in demo mode: two thirds in, so the last third stays unseeded (forecast-only)
+DEMO_CURRENT_MONTH = max(1, PROJECT_MONTHS * 2 // 3)
 
 # Capacity assignments for demo mode — passed to init_workbook(assignments=...).
 # Each entry: person, WP id, total FTE, start month, end month.

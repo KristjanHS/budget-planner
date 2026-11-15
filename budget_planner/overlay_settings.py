@@ -10,16 +10,46 @@ from pathlib import Path
 OVERLAY_DIR_ENV = "BUDGET_PLANNER_OVERLAY_DIR"
 _DEFAULT_OVERLAY_DIR = Path(__file__).resolve().parents[2] / "budget-planner-overlay"
 
+
+def _month_count(value):
+    n = int(value)
+    if not 1 <= n <= 120:
+        raise ValueError(f"must be 1-120 months, got {n}")
+    return n
+
+
+def _rate(value):
+    n = int(value)
+    if n <= 0:
+        raise ValueError(f"must be > 0, got {n}")
+    return n
+
+
+def _first_of_month(value):
+    d = datetime.strptime(value, "%Y-%m-%d")
+    if d.day != 1:
+        raise ValueError(f"must fall on day 1 of a month, got {value}")
+    return d
+
+
 _PARSERS = {
     "PROJECT_TITLE": str,
-    "PROJECT_START": lambda v: datetime.strptime(v, "%Y-%m-%d"),
-    "PROJECT_MONTHS": int,
-    "DEFAULT_RATE": int,
-    "GRADE_RATE_SENIOR": int,
-    "GRADE_RATE_MID": int,
-    "GRADE_RATE_JUNIOR": int,
+    "PROJECT_START": _first_of_month,
+    "PROJECT_MONTHS": _month_count,
+    "RP_LENGTH": _month_count,
+    "DEFAULT_RATE": _rate,
+    "GRADE_RATE_SENIOR": _rate,
+    "GRADE_RATE_MID": _rate,
+    "GRADE_RATE_JUNIOR": _rate,
     **{f"WP{n}_NAME": str for n in range(1, 10)},
 }
+
+
+def _unquote(value):
+    """Strip one matching pair of surrounding quotes, nothing more."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
 
 
 def overlay_dir_from_env(environ=os.environ):
@@ -38,13 +68,16 @@ def load_overlay(overlay_dir):
     if not path.is_file():
         return {}
     settings = {}
-    for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for lineno, raw in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         key, sep, value = line.partition("=")
-        key, value = key.strip(), value.strip().strip("\"'")
+        key, value = key.strip(), _unquote(value.strip())
         if not sep or key not in _PARSERS:
             raise ValueError(f"{path}:{lineno}: unknown or malformed setting {key!r}")
-        settings[key] = _PARSERS[key](value)
+        try:
+            settings[key] = _PARSERS[key](value)
+        except ValueError as exc:
+            raise ValueError(f"{path}:{lineno}: invalid {key}: {exc}") from exc
     return settings

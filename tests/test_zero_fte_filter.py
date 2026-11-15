@@ -15,6 +15,8 @@ import openpyxl
 import pytest
 from openpyxl.cell import Cell
 
+from budget_planner.config import WORK_PACKAGES
+from budget_planner.layout import wp_month_bounds
 from budget_planner.person_section import filter_zero_fte_wps
 from budget_planner.workbook import init_workbook, rebuild_workbook
 from budget_planner.reader import (
@@ -22,6 +24,11 @@ from budget_planner.reader import (
     read_config_sheet,
     read_actuals_hours_sheet,
 )
+
+
+def _wp_window(wp_id: str) -> dict[str, int]:
+    start, end = wp_month_bounds(wp_id, WORK_PACKAGES)
+    return {"start": start, "end": end}
 
 
 def _set(ws, row: int, col: int, value):
@@ -61,10 +68,11 @@ def zero_fte_wb_path(tmp_path_factory):
     a multi-person fixture rather than a single-person edge.
     """
     out = tmp_path_factory.mktemp("zero_fte_wb") / "zero_fte.xlsx"
+    # Each window is its WP's own active range, so every row overlaps the project.
     assignments = [
-        {"person": "Alice", "wp": "WP1", "total_fte": 0.0, "start": 1, "end": 12},
-        {"person": "Alice", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 18},
-        {"person": "Bob", "wp": "WP5", "total_fte": 6.0, "start": 4, "end": 13},
+        {"person": "Alice", "wp": "WP1", "total_fte": 0.0, **_wp_window("WP1")},
+        {"person": "Alice", "wp": "WP2", "total_fte": 3.0, **_wp_window("WP2")},
+        {"person": "Bob", "wp": "WP5", "total_fte": 6.0, **_wp_window("WP5")},
     ]
     init_workbook(str(out), assignments=assignments)
     return str(out)

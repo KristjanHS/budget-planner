@@ -135,7 +135,7 @@ def test_actuals_hours_inactive_month_is_empty_and_grey(hrs):
 
 
 def test_actuals_hours_active_month_is_blue_and_empty(hrs):
-    """Alice WP1 is active M1-M14. Her WP1 row at M1 must be blue + empty."""
+    """Alice WP1 is active from M1 (flat, whole project). Her WP1 row at M1 must be blue + empty."""
     alice_header = _find_person_header_row(hrs, "Alice")
     wp1_row = alice_header + 1
     m1_col = MONTH_COL_START

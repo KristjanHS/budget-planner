@@ -20,7 +20,7 @@ def _make_config_wb():
     }
     wps = [
         {"id": "WP1", "name": "Mgmt", "fte": 12.0, "start": 1, "end": 24, "type": "flat"},
-        {"id": "WP2", "name": "Dev", "fte": 8.0, "start": 1, "end": 18, "type": "flat"},
+        {"id": "WP2", "name": "Dev", "fte": 8.0, "start": 1, "end": 12, "type": "flat"},
     ]
     build_config_sheet(ws, wb, params, wps)
     return wb
@@ -29,7 +29,7 @@ def _make_config_wb():
 def _sample_assignments():
     return [
         {"person": "Alice", "wp": "WP1", "total_fte": 4.5, "start": 1, "end": 24},
-        {"person": "Bob", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 18},
+        {"person": "Bob", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 12},
     ]
 
 
@@ -38,9 +38,9 @@ def _sample_externals():
         {
             "person": "Alice",
             "project": "ProjectX",
-            "fte": 3.0,
+            "fte": 2.0,
             "start": 1,
-            "end": 11,
+            "end": 24,
             "is_eu": False,
         },
         {

@@ -20,6 +20,7 @@ from pathlib import Path
 import openpyxl
 import pytest
 
+from budget_planner.config import PROJECT_MONTHS
 from budget_planner.reader import (
     read_assignments_from_config,
     read_config_sheet,
@@ -72,7 +73,7 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str, fresh_wb_
         # indirect-view restructure — shifted right by one vs pre-restructure
         # because Budget +i was inserted at col 6).
         config_ws.cell(insert_at, 9, 1)  # Start (col I)
-        config_ws.cell(insert_at, 10, 24)  # End (col J)
+        config_ws.cell(insert_at, 10, PROJECT_MONTHS)  # End (col J)
         config_ws.cell(insert_at, 11, "flat")  # Type (col K)
     elif variant == "extra_external":
         data_start = _first_data_row_after(config_ws, SECTION_LABELS["externals"])
@@ -82,7 +83,7 @@ def test_rebuild_roundtrip_shape_variant(tmp_path: Path, variant: str, fresh_wb_
         config_ws.cell(insert_at, 2, "Other Grant")
         config_ws.cell(insert_at, 3, 0.2)
         config_ws.cell(insert_at, 4, 1)
-        config_ws.cell(insert_at, 5, 24)
+        config_ws.cell(insert_at, 5, PROJECT_MONTHS)
         config_ws.cell(insert_at, 6, "Yes")
         for nr in ("ext_persons", "ext_ftes"):
             _simulate_excel_insert_in_named_range(wb, nr, insert_at, 1)

@@ -232,7 +232,7 @@ class TestRebuildWithChangedPeriods:
 
         from budget_planner.layout import COL_WP_END
 
-        new_end = 36
+        new_end = params["months"] * 3 // 4
         _set(wb["Config"], target_entry["row"], COL_WP_END, new_end)
         wb.save(init_path)
         wb.close()

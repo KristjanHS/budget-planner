@@ -1,12 +1,16 @@
 """Shared fixtures for programme budget planner tests."""
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
-import pytest
+# Before any budget_planner import: tests always run on the public placeholder seeds, never a local overlay.
+os.environ["BUDGET_PLANNER_OVERLAY_DIR"] = ""
 
-from budget_planner.workbook import init_workbook, seed_demo_data
+import pytest  # noqa: E402
+
+from budget_planner.workbook import init_workbook, seed_demo_data  # noqa: E402
 
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 

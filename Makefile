@@ -1,11 +1,12 @@
 WORKBOOK := output/budget_plan.xlsx
 
-.PHONY: help check test recalc lint fmt
+.PHONY: help check test recalc demo lint fmt
 
 help:
 	@echo "make check    - verification gate: recalc the workbook, then run the full pytest suite"
 	@echo "make test     - pytest only (skips recalc; data_only reads can return None)"
 	@echo "make recalc   - recalculate $(WORKBOOK) via LibreOffice"
+	@echo "make demo     - generate output/budget_plan_demo.xlsx (demo Capacity + Actuals)"
 	@echo "make lint     - pyright + ruff check + ruff format --check over the whole project"
 	@echo "make fmt      - ruff format (rewrites files in place)"
 	@echo "make syncwt|commit|commitwt - shared worktree targets (~/.config/make/worktree.mk)"
@@ -24,6 +25,9 @@ recalc:
 
 test:
 	@pytest tests/ -q
+
+demo:
+	@python -m budget_planner init --demo
 
 # ruff is a host tool here (deliberately not in uv.lock), so it runs bare — the same
 # binary the PostToolUse ruff hook falls back to, which keeps the two verdicts identical.

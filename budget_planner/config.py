@@ -7,22 +7,39 @@ All builder modules import from here.
 After editing, re-run: python -m budget_planner && pytest tests/ -v
 """
 
+import math
 from datetime import datetime
+
+from budget_planner.overlay_settings import load_overlay, overlay_dir_from_env
+
+# Optional local overlay; resolution rules live in overlay_dir_from_env().
+_PRIVATE = load_overlay(overlay_dir_from_env())
 
 # ── PROJECT PARAMETERS ──
 
-PROJECT_TITLE = "Programme Project Budget Plan"
-PROJECT_START = datetime(2026, 11, 1)  # First month of the project
-PROJECT_MONTHS = 14  # Total project duration in months
-DEFAULT_RATE = 10000  # EUR per person-month (per-WP default rate)
+PROJECT_TITLE: str = _PRIVATE.get("PROJECT_TITLE", "Programme Project Budget Plan")
+PROJECT_START: datetime = _PRIVATE.get("PROJECT_START", datetime(2026, 1, 1))  # First month of the project
+PROJECT_MONTHS: int = _PRIVATE.get("PROJECT_MONTHS", 12)  # Total project duration in months
+DEFAULT_RATE: int = _PRIVATE.get("DEFAULT_RATE", 10000)  # EUR per person-month (per-WP default rate)
 EU_ANNUAL_CEILING_PM = 12.0  # Max PM per calendar year across all EU grants (≈215 days)
 CFS_THRESHOLD = 430_000  # EUR — CFS audit certificate required above this
-DEFAULT_RP_LENGTH = 6  # Months per reporting period (programme typical: 12-18)
+DEFAULT_RP_LENGTH = 6  # Months per reporting period
 
 # ── GRADE RATES ──
 # EUR per person-month by job grade (bookkeeping-provided bands)
-GRADE_RATES = {"Senior": 12500, "Mid": 10000, "Junior": 7500}
+GRADE_RATES = {
+    "Senior": _PRIVATE.get("GRADE_RATE_SENIOR", 12500),
+    "Mid": _PRIVATE.get("GRADE_RATE_MID", 10000),
+    "Junior": _PRIVATE.get("GRADE_RATE_JUNIOR", 7500),
+}
 DEFAULT_GRADE = "Mid"
+
+
+def _months(lo, hi):
+    """Window over the fraction (lo, hi] of PROJECT_MONTHS, e.g. _months(1 / 2, 1) = second half."""
+    start = min(PROJECT_MONTHS, math.floor(round(lo * PROJECT_MONTHS, 9)) + 1)
+    return {"start": start, "end": max(start, math.floor(round(hi * PROJECT_MONTHS, 9)))}
+
 
 # ── WORK PACKAGES ──
 # Each WP dict has: id, name, fte (total person-months), start (1-indexed
@@ -31,26 +48,52 @@ DEFAULT_GRADE = "Mid"
 # Invariant: exactly one entry per WP id; 1 <= start <= end <= PROJECT_MONTHS.
 # Multi-segment schedules are not supported — every WP has a single contiguous
 # active range. The funder audits that no time is logged outside this range.
-# NOTE: WP3 seed was historically split M1-M3 + M5-M7 (demo "mid-WP gap");
-# collapsed to M1-M7 for the single-range schema.
+
+
+def _wp_name(n, default):
+    return _PRIVATE.get(f"WP{n}_NAME", default)
+
 
 WORK_PACKAGES = [
-    {"id": "WP1", "name": "Project Management", "fte": 4.0, "start": 1, "end": 14, "type": "flat"},
-    {"id": "WP2", "name": "Requirements and concept", "fte": 6.0, "start": 1, "end": 6, "type": "front-loaded"},
+    {"id": "WP1", "name": _wp_name(1, "Project Management"), "fte": 4.0, **_months(0, 1), "type": "flat"},
     {
-        "id": "WP3",
-        "name": "Research and analysis",
+        "id": "WP2",
+        "name": _wp_name(2, "Requirements and concept"),
         "fte": 6.0,
-        "start": 1,
-        "end": 7,
+        **_months(0, 1 / 2),
         "type": "front-loaded",
     },
-    {"id": "WP4", "name": "Architecture design", "fte": 12.0, "start": 2, "end": 11, "type": "bell"},
-    {"id": "WP5", "name": "Component design", "fte": 6.0, "start": 4, "end": 13, "type": "bell"},
-    {"id": "WP6", "name": "Subsystem design", "fte": 3.0, "start": 4, "end": 13, "type": "bell"},
-    {"id": "WP7", "name": "Software development", "fte": 3.0, "start": 6, "end": 14, "type": "bell"},
-    {"id": "WP8", "name": "Prototyping", "fte": 3.0, "start": 10, "end": 14, "type": "back-loaded"},
-    {"id": "WP9", "name": "Validation and demo", "fte": 3.0, "start": 12, "end": 14, "type": "back-loaded"},
+    {
+        "id": "WP3",
+        "name": _wp_name(3, "Research and analysis"),
+        "fte": 6.0,
+        **_months(0, 1 / 2),
+        "type": "front-loaded",
+    },
+    {"id": "WP4", "name": _wp_name(4, "Architecture design"), "fte": 12.0, **_months(1 / 4, 3 / 4), "type": "bell"},
+    {"id": "WP5", "name": _wp_name(5, "Component design"), "fte": 6.0, **_months(1 / 3, 1), "type": "bell"},
+    {
+        "id": "WP6",
+        "name": _wp_name(6, "Subsystem design"),
+        "fte": 3.0,
+        **_months(1 / 3, 1),
+        "type": "bell",
+    },
+    {"id": "WP7", "name": _wp_name(7, "Software development"), "fte": 3.0, **_months(1 / 2, 1), "type": "bell"},
+    {
+        "id": "WP8",
+        "name": _wp_name(8, "Prototyping"),
+        "fte": 3.0,
+        **_months(1 / 2, 1),
+        "type": "back-loaded",
+    },
+    {
+        "id": "WP9",
+        "name": _wp_name(9, "Validation and demo"),
+        "fte": 3.0,
+        **_months(3 / 4, 1),
+        "type": "back-loaded",
+    },
 ]
 
 # ── TEAM ──
@@ -65,23 +108,36 @@ TEAM = [
 # ── EXTERNAL COMMITMENTS ──
 # Seed data only — Excel Capacity sheet is primary after first generation
 EXTERNAL_COMMITMENTS = [
-    {"person": "Alice", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 11, "is_eu": False},
-    {"person": "Bob", "project": "ProjectX", "fte": 2.0, "start": 1, "end": 14, "is_eu": False},
-    {"person": "Bob", "project": "HorizonEU-Alpha", "fte": 2.0, "start": 1, "end": 7, "is_eu": True},
+    {"person": "Alice", "project": "ProjectX", "fte": 2.0, **_months(0, 1 / 2), "is_eu": False},
+    {"person": "Bob", "project": "ProjectX", "fte": 2.0, **_months(0, 1), "is_eu": False},
+    {"person": "Bob", "project": "HorizonEU-Alpha", "fte": 2.0, **_months(0, 1 / 2), "is_eu": True},
 ]
+
+
+def default_reporting_periods(project_months, rp_length=DEFAULT_RP_LENGTH):
+    """Generate default reporting periods from project duration.
+
+    Returns list of dicts with keys: id, start, end.
+    """
+    periods = []
+    m = 1
+    rp_num = 1
+    while m <= project_months:
+        end = min(m + rp_length - 1, project_months)
+        periods.append({"id": f"RP{rp_num}", "start": m, "end": end})
+        m = end + 1
+        rp_num += 1
+    return periods
+
 
 # ── REPORTING PERIODS ──
 # Seed data only — Config sheet is primary after first generation
 # Boundaries define when Form C / financial statements are due
-REPORTING_PERIODS = [
-    {"id": "RP1", "start": 1, "end": 6},
-    {"id": "RP2", "start": 7, "end": 12},
-    {"id": "RP3", "start": 13, "end": 14},
-]
+REPORTING_PERIODS = default_reporting_periods(PROJECT_MONTHS)
 
 # ── DEMO MODE ──
-# Months of actuals to seed in demo mode (end of Year 1)
-DEMO_CURRENT_MONTH = 12
+# Months of actuals to seed in demo mode (end of Year 1, capped at project end)
+DEMO_CURRENT_MONTH = min(12, PROJECT_MONTHS)
 
 # Capacity assignments for demo mode — passed to init_workbook(assignments=...).
 # Each entry: person, WP id, total FTE, start month, end month.
@@ -89,24 +145,22 @@ DEMO_CURRENT_MONTH = 12
 # Engineered to surface multiple Timelog Solver stop-reason branches so the
 # Stop reason column on Timelog Plan can be sanity-checked manually against
 # the STOP REASONS reference table on the Config sheet:
-#   WP1 → "+12% cap"      (Alice fills to 71400; 8th placement would breach +12%)
-#   WP2 → "No window"     (Dave's row [20,24] does not overlap WP2's [1,18])
+#   WP1 → "+12% cap"      (sole candidate Alice at Senior rate; a 4th month would breach +12%)
+#   WP2 → "No window"     (Dave's row covers the second half; WP2 runs in the first half)
 #   WP4 → "No candidates" (no PERSON-WP ASSIGNMENTS row references WP4)
 #   WP9 → "-11% override" (Alice forced past +12% cap; skipping would breach -11%)
-#   WP3, WP5, WP6, WP7, WP8 → "Filled"
+#   WP3, WP5, WP6, WP7, WP8 → "Filled" (verified at the default PROJECT_MONTHS and rates)
 DEMO_CAPACITY_ASSIGNMENTS = [
-    {"person": "Alice", "wp": "WP1", "start": 1, "end": 14, "total_fte": 4.0},
-    {"person": "Alice", "wp": "WP3", "start": 1, "end": 7, "total_fte": 3.0},
-    {"person": "Alice", "wp": "WP9", "start": 12, "end": 14, "total_fte": 3.0},
-    {"person": "Bob", "wp": "WP5", "start": 4, "end": 13, "total_fte": 5.0},
-    {"person": "Bob", "wp": "WP6", "start": 4, "end": 13, "total_fte": 2.0},
-    {"person": "Carol", "wp": "WP7", "start": 6, "end": 14, "total_fte": 3.0},
-    {"person": "Carol", "wp": "WP8", "start": 10, "end": 14, "total_fte": 3.0},
-    {"person": "Dave", "wp": "WP2", "start": 6, "end": 7, "total_fte": 1.00},
-    {"person": "Dave", "wp": "WP3", "start": 1, "end": 7, "total_fte": 6.0},
-    {"person": "Dave", "wp": "WP5", "start": 4, "end": 13, "total_fte": 1.0},
-    {"person": "Dave", "wp": "WP6", "start": 4, "end": 13, "total_fte": 1.0},
-    {"person": "Dave", "wp": "WP8", "start": 10, "end": 14, "total_fte": 3.0},
+    {"person": "Alice", "wp": "WP1", **_months(0, 1), "total_fte": 4.0},
+    {"person": "Alice", "wp": "WP9", **_months(3 / 4, 1), "total_fte": 3.0},
+    {"person": "Bob", "wp": "WP5", **_months(1 / 3, 1), "total_fte": 5.0},
+    {"person": "Bob", "wp": "WP6", **_months(1 / 3, 1), "total_fte": 2.0},
+    {"person": "Carol", "wp": "WP7", **_months(1 / 2, 1), "total_fte": 3.0},
+    {"person": "Dave", "wp": "WP2", **_months(1 / 2, 1), "total_fte": 1.0},
+    {"person": "Dave", "wp": "WP3", **_months(0, 1 / 2), "total_fte": 6.0},
+    {"person": "Dave", "wp": "WP5", **_months(1 / 3, 1), "total_fte": 1.0},
+    {"person": "Dave", "wp": "WP6", **_months(1 / 3, 1), "total_fte": 1.0},
+    {"person": "Dave", "wp": "WP8", **_months(1 / 2, 1), "total_fte": 3.0},
 ]
 
 # Spending multipliers per WP index for demo actuals.
@@ -117,12 +171,12 @@ DEMO_ACTUALS_MULTIPLIERS = [
     1.00,  # WP1 (Project Management)              — on-track  → "OK"
     1.28,  # WP2 (Requirements and concept)     — overspend → "OVER"
     0.30,  # WP3 (Research and analysis) — underspend → "SLOW"
-    1.00,  # WP4 (Architecture design)              — N/A (starts M2)
-    1.00,  # WP5 (Component design)                — N/A (starts M4)
-    1.00,  # WP6 (Subsystem design)   — N/A (starts M4)
-    1.00,  # WP7 (Software development)          — N/A (starts M6)
-    1.00,  # WP8 (Prototyping)         — N/A (starts M10)
-    1.00,  # WP9 (Validation and demo)        — N/A (starts M12)
+    1.00,  # WP4 (Architecture design)              — neutral
+    1.00,  # WP5 (Component design)                — neutral
+    1.00,  # WP6 (Subsystem design)   — neutral
+    1.00,  # WP7 (Software development)          — neutral
+    1.00,  # WP8 (Prototyping)         — neutral
+    1.00,  # WP9 (Validation and demo)        — neutral
 ]
 
 # ── LAYOUT CONSTANTS ──
@@ -159,19 +213,3 @@ def default_project_params():
         # default; readers fall back to 7 when the Config scalar is missing.
         "vacation_month_num": 7,
     }
-
-
-def default_reporting_periods(project_months, rp_length=DEFAULT_RP_LENGTH):
-    """Generate default reporting periods from project duration.
-
-    Returns list of dicts with keys: id, start, end.
-    """
-    periods = []
-    m = 1
-    rp_num = 1
-    while m <= project_months:
-        end = min(m + rp_length - 1, project_months)
-        periods.append({"id": f"RP{rp_num}", "start": m, "end": end})
-        m = end + 1
-        rp_num += 1
-    return periods

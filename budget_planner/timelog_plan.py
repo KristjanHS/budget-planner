@@ -1357,8 +1357,8 @@ def _vacation_months_in_span(
 ) -> frozenset[int]:
     """Return project-1-indexed month numbers whose calendar month == vac_month_num.
 
-    E.g. project_start = Nov 2026, project_months = 14, vac_month_num = 7 →
-    {9} (every July inside the span).
+    E.g. project_start = Jan 2026, project_months = 12, vac_month_num = 7 →
+    {7} (every July inside the span).
     """
     out: set[int] = set()
     for i in range(project_months):

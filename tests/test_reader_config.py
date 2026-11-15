@@ -26,6 +26,7 @@ import pytest
 from openpyxl import Workbook, load_workbook
 
 from budget_planner.config import (
+    DEFAULT_RP_LENGTH,
     DEMO_CAPACITY_ASSIGNMENTS,
     PROJECT_START,
     TEAM,
@@ -495,14 +496,16 @@ def test_read_reporting_periods_fallback():
     ws.cell(1, 1, "Project Title")
     ws.cell(1, 2, "Test")
 
-    rps = read_reporting_periods(ws, fallback_months=14)
+    length = DEFAULT_RP_LENGTH
+    rps = read_reporting_periods(ws, fallback_months=2 * length + 3)
     wb.close()
 
-    # Should get default 6-month periods for 14-month project
-    assert len(rps) == 3
-    assert rps[0] == {"id": "RP1", "start": 1, "end": 6}
-    assert rps[1] == {"id": "RP2", "start": 7, "end": 12}
-    assert rps[2] == {"id": "RP3", "start": 13, "end": 14}
+    # Two full default-length periods plus a 3-month remainder
+    assert rps == [
+        {"id": "RP1", "start": 1, "end": length},
+        {"id": "RP2", "start": length + 1, "end": 2 * length},
+        {"id": "RP3", "start": 2 * length + 1, "end": 2 * length + 3},
+    ]
 
 
 # ── read_grade_rates ──

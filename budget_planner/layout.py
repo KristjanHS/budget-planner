@@ -309,9 +309,8 @@ def wp_month_bounds(wp_id: str, work_packages: list[dict]) -> tuple[int, int]:
 def _calendar_year_groups(project_start, project_months):
     """Yield (group_start_month_index, span) tuples for calendar-year boundaries.
 
-    For a project starting Nov 2026 with 14 months:
-      2026: M1-M2 (indices 0-1, span=2)
-      2027: M3-M14 (indices 2-13, span=12)
+    For a project starting Jan 2026 with 12 months:
+      2026: M1-M12 (indices 0-11, span=12)
     """
     m = 0
     while m < project_months:

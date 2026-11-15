@@ -1,6 +1,6 @@
 # Budget Planner
 
-Excel workbook generator for tracking planned FTE allocation and actual EUR spend per work package across a multi-year EU-funded project. Includes per-person capacity planning with overcommitment detection.
+Excel workbook generator for tracking planned FTE allocation and actual EUR spend per work package across a multi-year EU grant project. Includes per-person capacity planning with overcommitment detection.
 
 ## Quick Start
 
@@ -10,6 +10,9 @@ uv venv && uv pip install -e ".[dev]"
 
 # Create a fresh workbook from config.py seed data
 python -m budget_planner init
+
+# Demo workbook (demo Capacity + Actuals) → output/budget_plan_demo.xlsx
+make demo
 
 # Rebuild from existing workbook (preserves Capacity FTE + Actuals EUR)
 python -m budget_planner rebuild
@@ -50,12 +53,23 @@ pytest tests/ -v
 
 ## Business Context
 
-This tool tracks a single organisation's share of a multi-partner EU-funded (programme) project. It derives euro amounts from FTE using a configurable rate. Key constraints:
+This tool tracks one partner's share of a multi-partner EU grant project. It derives euro amounts from FTE using a configurable rate. Key constraints:
 
 - **User**: Manages an R&D team's FTE across EU project work packages
 - **Funder constraint**: Total FTE per WP must stay within budget. Auditors flag time logged to a WP outside its active period. Annual planned-vs-actual is informational, not strictly enforced.
 - **Primary unit**: FTE (person-months). Euros are derived internally (FTE x monthly rate), not reported to funder.
 - **Single org**: Only our partner's share is tracked. No multi-partner view needed.
+
+| Activity    | Funding rate |
+|-------------|--------------|
+| Research    | 100%         |
+| Innovation  | up to 70%    |
+
+Indirect costs are a flat 25% on top of direct personnel costs.
+
+## Local overlay values
+
+`config.py` ships generic placeholder seeds (12-month project, round effort figures and rates). Real values live outside the repo in `settings.env` (`KEY=VALUE`: `PROJECT_TITLE`, `PROJECT_START` as `YYYY-MM-DD`, `PROJECT_MONTHS`, `DEFAULT_RATE`, `GRADE_RATE_{SENIOR,MID,JUNIOR}`, `WP1_NAME`…`WP9_NAME`) inside the directory named by `BUDGET_PLANNER_OVERLAY_DIR` (default `../budget-planner-overlay`; empty string disables it — the test suite does). Generated workbooks in `output/` are gitignored because they embed those values.
 
 ## Modifying
 
@@ -102,3 +116,7 @@ python -m budget_planner --restore output/budget_plan.xlsx
 - `openpyxl` >= 3.1.0
 - `python-dateutil`
 - LibreOffice (for formula recalculation via `scripts/recalc.py` — Linux/macOS only)
+
+## License
+
+MIT — see [LICENSE](LICENSE).

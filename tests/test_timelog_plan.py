@@ -702,9 +702,30 @@ def test_stop_reason_col_present(tlp, assigned_wb):
         assert v in valid, f"WP row {first_wp_row + i} col J: unexpected {v!r}"
 
 
-def test_year_cols_overlap_blanks(tlp, assigned_wb):
+@pytest.fixture(scope="module")
+def straddling_wb(assigned_wb_path, tmp_path_factory):
+    """Assigned workbook rebuilt with project_start moved half a project later, so it straddles two calendar years."""
+    import shutil
+
+    from dateutil.relativedelta import relativedelta
+
+    from budget_planner.config import PROJECT_MONTHS, PROJECT_START
+    from budget_planner.workbook import rebuild_workbook
+
+    dst = tmp_path_factory.mktemp("tlp_straddle") / "straddle.xlsx"
+    shutil.copyfile(assigned_wb_path, dst)
+    wb = load_workbook(dst)
+    wb["Config"].cell(row=2, column=2, value=PROJECT_START + relativedelta(months=PROJECT_MONTHS // 2))
+    wb.save(dst)
+    wb.close()
+    rebuild_workbook(input_path=str(dst))
+    return load_workbook(dst, data_only=False)
+
+
+def test_year_cols_overlap_blanks(straddling_wb):
     """Cells where WP's active window doesn't overlap the year are literal ``""``."""
-    params, wps = _read_config(assigned_wb)
+    tlp = straddling_wb[SHEET_TIMELOG_PLAN]
+    params, wps = _read_config(straddling_wb)
     groups = _expected_year_groups(params["start"], params["months"])
     first = _wp_summary_first_row(tlp)
     base_cols = 10
@@ -728,7 +749,7 @@ def test_year_cols_overlap_blanks(tlp, assigned_wb):
     # Bystander: ensure we actually exercised both branches.
     assert checked_overlap > 0
     # A non-overlap bystander is only possible if some WP doesn't span every
-    # year. In the demo fixture WPs are staggered, so expect ≥1 non-overlap.
+    # year. The straddling fixture splits first-half WPs off the second year, so expect ≥1.
     assert checked_nonoverlap > 0, "no non-overlap year cells in fixture — selectivity test is vacuous"
 
 

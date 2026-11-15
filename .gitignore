@@ -1,5 +1,5 @@
-output/*.xlsx
-!output/budget_plan_demo.xlsx
+# generated workbooks embed overlay values when a local overlay is configured
+output/
 __pycache__/
 *.pyc
 .venv/

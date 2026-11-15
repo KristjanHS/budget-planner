@@ -353,7 +353,7 @@ def test_layout_includes_grade_rows():
 
 def _sample_assignments():
     return [
-        {"person": "Alice", "wp": "WP1", "total_fte": 4.5, "start": 1, "end": 14},
+        {"person": "Alice", "wp": "WP1", "total_fte": 4.5, "start": 1, "end": 60},
         {"person": "Bob", "wp": "WP2", "total_fte": 3.0, "start": 1, "end": 18},
     ]
 

@@ -8,7 +8,7 @@ session scope so other modules can consume the same recalc'd workbook.
 
 import openpyxl
 
-from budget_planner.layout import _calendar_year_groups
+from budget_planner.layout import MONTH_COL_START, _calendar_year_groups
 from budget_planner.config import (
     NUM_WPS,
     PROJECT_MONTHS,
@@ -72,8 +72,6 @@ def test_summary_total_plan_fte_equals_year_sum(demo_wb_path, demo_recalc):
 
 def test_summary_actual_eur_seeded(demo_wb_path, demo_recalc):
     """Fresh demo workbook: Summary Actual EUR reflects seeded actuals data."""
-    from budget_planner.config import DEMO_CURRENT_MONTH
-
     wb = openpyxl.load_workbook(demo_wb_path, data_only=True)
     summary = wb["Summary"]
     first_wp = _find_summary_first_wp_row(summary)
@@ -86,19 +84,14 @@ def test_summary_actual_eur_seeded(demo_wb_path, demo_recalc):
         f"WP1 first calendar year Act EUR should be > 0 in demo mode, got {val}"
     )
 
-    # Find the first calendar year group that starts after DEMO_CURRENT_MONTH
-    # (all its months are beyond the seeded range, so actuals should be 0)
-    unseeded_year_idx = None
-    for y, (group_start, _span) in enumerate(_CAL_GROUPS):
-        if group_start >= DEMO_CURRENT_MONTH:
-            unseeded_year_idx = y
-            break
-    assert unseeded_year_idx is not None, "All calendar years fall within demo seed range"
-    col_unseeded = _YEAR_GROUP_START + unseeded_year_idx * _COLS_PER_YEAR + 2
-    val_unseeded = summary.cell(row, col_unseeded).value
-    assert val_unseeded is None or val_unseeded == 0, (
-        f"WP1 calendar year {unseeded_year_idx + 1} Act EUR should be 0, got {val_unseeded}"
-    )
+    # Each calendar-year Act EUR sums exactly that year's WP1 cells on Actuals (unseeded years → 0)
+    actuals = wb["Actuals"]
+    act_row = next(r for r in range(1, actuals.max_row + 1) if actuals.cell(r, 1).value == WORK_PACKAGES[0]["id"])
+    for y, (group_start, span) in enumerate(_CAL_GROUPS):
+        cells = [actuals.cell(act_row, MONTH_COL_START + m).value for m in range(group_start, group_start + span)]
+        expected = sum(v for v in cells if isinstance(v, (int, float)))
+        got = summary.cell(row, _YEAR_GROUP_START + y * _COLS_PER_YEAR + 2).value or 0
+        assert got == expected, f"WP1 calendar year {y + 1} Act EUR {got} != Actuals sum {expected}"
     wb.close()
 
 

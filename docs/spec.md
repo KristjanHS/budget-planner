@@ -256,7 +256,7 @@ Each WP has a single contiguous active range and a single `Type` from `{flat, fr
 
 `reader.py` extracts structured data from an existing workbook so `rebuild_workbook()` can regenerate all sheets while preserving user-entered values. Most fragile module.
 
-**Config trust boundary.** Init seeds = `config.py` public defaults ← optional overlay file applied at import (`budget_planner/overlay_settings.py`; dir from `BUDGET_PLANNER_OVERLAY_DIR`, `""` disables, tests pin it off). Rebuild never consults either: it reads the workbook's own Config sheet.
+**Config trust boundary.** Init seeds = `config.py` public defaults ← optional overlay file applied at import (`overlay_dir_from_env()`; dir from `BUDGET_PLANNER_OVERLAY_DIR`, else the same key in the dotfiles `shared-settings/` layer, else none; `""` disables, tests pin it off). Rebuild never consults either: it reads the workbook's own Config sheet.
 
 ### Formula chain resolution
 

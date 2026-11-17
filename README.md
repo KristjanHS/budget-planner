@@ -69,7 +69,7 @@ Indirect costs are a flat 25% on top of direct personnel costs.
 
 ## Local overlay values
 
-`config.py` ships generic placeholder seeds (14-month project from November 2026, round effort figures and rates). Real values live outside the repo in `settings.env` (`KEY=VALUE`: `PROJECT_TITLE`, `PROJECT_START` as `YYYY-MM-DD`, `PROJECT_MONTHS` (1–120), `RP_LENGTH` (months per reporting period, 1–120), `DEFAULT_RATE`, `GRADE_RATE_{SENIOR,MID,JUNIOR}`, `WP1_NAME`…`WP9_NAME`) inside the directory named by `BUDGET_PLANNER_OVERLAY_DIR` (default `../budget-planner-overlay`; empty string disables it — the test suite does). Generated workbooks in `output/` are gitignored because they embed those values.
+`config.py` ships generic placeholder seeds (14-month project from November 2026, round effort figures and rates). Real values live outside the repo in an overlay file, `settings.env` (`KEY=VALUE`: `PROJECT_TITLE`, `PROJECT_START` as `YYYY-MM-DD`, `PROJECT_MONTHS` (1–120), `RP_LENGTH` (months per reporting period, 1–120), `DEFAULT_RATE`, `GRADE_RATE_{SENIOR,MID,JUNIOR}`, `WP1_NAME`…`WP9_NAME`) inside the directory named by `BUDGET_PLANNER_OVERLAY_DIR`. Unset, the same key is read from the dotfiles layer `${DOTFILES_DIR:-../dotfiles}/shared-settings/settings.env` (`KEY=value` lines, parsed, never sourced; `../dotfiles` is beside the main checkout); no key there means no overlay and the placeholders stand. An empty string disables the overlay — the test suite does. Generated workbooks in `output/` are gitignored because they embed those values.
 
 ## Modifying
 

@@ -8,7 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from budget_planner.overlay_settings import OVERLAY_DIR_ENV, load_overlay, overlay_dir_from_env
+from budget_planner.overlay_settings import (
+    DOTFILES_DIR_ENV,
+    DOTFILES_LAYER,
+    OVERLAY_DIR_ENV,
+    SETTINGS_FILE,
+    load_overlay,
+    overlay_dir_from_env,
+)
 
 _DUMP = (
     "import json, budget_planner.config as c;"
@@ -32,7 +39,7 @@ def test_settings_env_overlays_config_constants(tmp_path):
     assert month_cols == 30  # derived layout follows the overlaid length
 
 
-def test_absent_companion_keeps_placeholders(tmp_path):
+def test_absent_overlay_dir_keeps_placeholders(tmp_path):
     from budget_planner import config
 
     start, months, mid, wp1, _ = _config_in_subprocess(tmp_path / "missing")
@@ -50,11 +57,55 @@ def test_unknown_key_is_rejected(tmp_path):
         load_overlay(tmp_path)
 
 
-def test_overlay_dir_env_resolution():
-    assert overlay_dir_from_env({OVERLAY_DIR_ENV: ""}) is None
-    assert overlay_dir_from_env({OVERLAY_DIR_ENV: "/x/y"}) == Path("/x/y")
-    default = overlay_dir_from_env({})
-    assert default is not None and default.name == "budget-planner-overlay"
+def _dotfiles_with_pointer(root, line):
+    layer = root / "dotfiles" / DOTFILES_LAYER
+    layer.parent.mkdir(parents=True)
+    layer.write_text(f"# shared layer\nOTHER_KEY=1\n{line}\n")
+    return root / "dotfiles"
+
+
+def test_env_overlay_dir_wins_over_dotfiles_pointer(tmp_path):
+    dotfiles = _dotfiles_with_pointer(tmp_path, f"{OVERLAY_DIR_ENV}=/from/pointer")
+    env = {OVERLAY_DIR_ENV: "/from/env", DOTFILES_DIR_ENV: str(dotfiles)}
+    assert overlay_dir_from_env(env) == Path("/from/env")
+
+
+def test_empty_env_disables_even_with_pointer(tmp_path):
+    dotfiles = _dotfiles_with_pointer(tmp_path, f"{OVERLAY_DIR_ENV}=/from/pointer")
+    assert overlay_dir_from_env({OVERLAY_DIR_ENV: "", DOTFILES_DIR_ENV: str(dotfiles)}) is None
+
+
+def test_unset_env_follows_dotfiles_pointer(tmp_path):
+    dotfiles = _dotfiles_with_pointer(tmp_path, f"{OVERLAY_DIR_ENV}='/from/pointer'")
+    assert overlay_dir_from_env({DOTFILES_DIR_ENV: str(dotfiles)}) == Path("/from/pointer")
+
+
+def test_unset_env_without_pointer_or_layer_means_no_overlay(tmp_path):
+    dotfiles = _dotfiles_with_pointer(tmp_path, "UNRELATED=x")
+    assert overlay_dir_from_env({DOTFILES_DIR_ENV: str(dotfiles)}) is None
+    assert overlay_dir_from_env({DOTFILES_DIR_ENV: str(tmp_path / "absent")}) is None
+
+
+def test_default_dotfiles_dir_sits_beside_the_main_checkout(tmp_path):
+    _dotfiles_with_pointer(tmp_path, f"{OVERLAY_DIR_ENV}=/from/pointer")
+    main = tmp_path / "repo"
+    (main / ".git" / "worktrees" / "wt").mkdir(parents=True)
+    worktree = main / ".claude" / "worktrees" / "wt"
+    worktree.mkdir(parents=True)
+    (worktree / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'wt'}\n")
+    assert overlay_dir_from_env({}, repo=main) == Path("/from/pointer")
+    assert overlay_dir_from_env({}, repo=worktree) == Path("/from/pointer")
+
+
+def test_unset_env_loads_overlay_named_by_pointer(tmp_path):
+    overlay = tmp_path / "overlay"
+    overlay.mkdir()
+    (overlay / SETTINGS_FILE).write_text("PROJECT_MONTHS=30\n")
+    dotfiles = _dotfiles_with_pointer(tmp_path, f"{OVERLAY_DIR_ENV}={overlay}")
+    env = {k: v for k, v in os.environ.items() if k != OVERLAY_DIR_ENV}
+    env[DOTFILES_DIR_ENV] = str(dotfiles)
+    out = subprocess.run([sys.executable, "-c", _DUMP], env=env, capture_output=True, text=True, check=True)
+    assert json.loads(out.stdout)[1] == 30
 
 
 def test_malformed_line_without_equals_is_rejected(tmp_path):
@@ -120,8 +171,6 @@ def test_fraction_windows_fit_any_overlaid_length(tmp_path, n):
 def test_rp_length_overlay_drives_reporting_periods(tmp_path):
     (tmp_path / "settings.env").write_text("PROJECT_MONTHS=14\nRP_LENGTH=4\n")
     env = {**os.environ, OVERLAY_DIR_ENV: str(tmp_path)}
-    dump = (
-        "import json, budget_planner.config as c; print(json.dumps([[r['start'], r['end']] for r in c.REPORTING_PERIODS]))"
-    )
+    dump = "import json, budget_planner.config as c; print(json.dumps([[r['start'], r['end']] for r in c.REPORTING_PERIODS]))"
     out = subprocess.run([sys.executable, "-c", dump], env=env, capture_output=True, text=True, check=True)
     assert json.loads(out.stdout) == [[1, 4], [5, 8], [9, 12], [13, 14]]

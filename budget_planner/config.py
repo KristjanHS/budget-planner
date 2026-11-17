@@ -13,25 +13,25 @@ from datetime import datetime
 from budget_planner.overlay_settings import load_overlay, overlay_dir_from_env
 
 # Optional local overlay; resolution rules live in overlay_dir_from_env().
-_PRIVATE = load_overlay(overlay_dir_from_env())
+_OVERLAY = load_overlay(overlay_dir_from_env())
 
 # ── PROJECT PARAMETERS ──
 
-PROJECT_TITLE: str = _PRIVATE.get("PROJECT_TITLE", "Programme Project Budget Plan")
-PROJECT_START: datetime = _PRIVATE.get("PROJECT_START", datetime(2026, 11, 1))  # First month (day must be 1)
+PROJECT_TITLE: str = _OVERLAY.get("PROJECT_TITLE", "Programme Project Budget Plan")
+PROJECT_START: datetime = _OVERLAY.get("PROJECT_START", datetime(2026, 11, 1))  # First month (day must be 1)
 # Total duration in months; the default 14 spans two calendar years, the first one partial (Nov-Dec)
-PROJECT_MONTHS: int = _PRIVATE.get("PROJECT_MONTHS", 14)
-DEFAULT_RATE: int = _PRIVATE.get("DEFAULT_RATE", 10000)  # EUR per person-month (per-WP default rate)
+PROJECT_MONTHS: int = _OVERLAY.get("PROJECT_MONTHS", 14)
+DEFAULT_RATE: int = _OVERLAY.get("DEFAULT_RATE", 10000)  # EUR per person-month (per-WP default rate)
 EU_ANNUAL_CEILING_PM = 12.0  # Max PM per calendar year across all EU grants (≈215 days)
 CFS_THRESHOLD = 430_000  # EUR — CFS audit certificate required above this
-DEFAULT_RP_LENGTH: int = _PRIVATE.get("RP_LENGTH", 6)  # Months per reporting period
+DEFAULT_RP_LENGTH: int = _OVERLAY.get("RP_LENGTH", 6)  # Months per reporting period
 
 # ── GRADE RATES ──
 # EUR per person-month by job grade (bookkeeping-provided bands)
 GRADE_RATES = {
-    "Senior": _PRIVATE.get("GRADE_RATE_SENIOR", 12500),
-    "Mid": _PRIVATE.get("GRADE_RATE_MID", 10000),
-    "Junior": _PRIVATE.get("GRADE_RATE_JUNIOR", 7500),
+    "Senior": _OVERLAY.get("GRADE_RATE_SENIOR", 12500),
+    "Mid": _OVERLAY.get("GRADE_RATE_MID", 10000),
+    "Junior": _OVERLAY.get("GRADE_RATE_JUNIOR", 7500),
 }
 DEFAULT_GRADE = "Mid"
 
@@ -52,7 +52,7 @@ def _months(lo, hi):
 
 
 def _wp_name(n, default):
-    return _PRIVATE.get(f"WP{n}_NAME", default)
+    return _OVERLAY.get(f"WP{n}_NAME", default)
 
 
 WORK_PACKAGES = [
